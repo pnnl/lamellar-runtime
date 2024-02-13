@@ -186,11 +186,11 @@ impl AmeSchedulerQueue for WorkStealingInner {
     fn submit_am(
         //unserialized request
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
-        // println!("submitting_req");
+        // println!("[{:?}] submitting_req", std::thread::current().id());
         // println!("submit req {:?}",self.num_tasks.load(Ordering::Relaxed)+1);
         let num_tasks = self.num_tasks.clone();
         let max_tasks = self.max_tasks.clone();
@@ -198,17 +198,17 @@ impl AmeSchedulerQueue for WorkStealingInner {
         let future = move |_cur_task| async move {
             num_tasks.fetch_add(1, Ordering::Relaxed);
             max_tasks.fetch_add(1, Ordering::Relaxed);
-            // println!("[{:?}] submit am exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
+            // println!("[{:?}] submit am exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),_cur_task);
             ame.process_msg(am, scheduler, stall_mark, false).await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             // let mut reqs = OUTSTANDING_REQS.lock();
             // reqs.remove(cur_task);
-            // println!("[{:?}] submit am done {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task, reqs);
+            // println!("[{:?}] submit am done {:?} {:?} TaskId: {:?} ", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),_cur_task);
         };
         let work_inj = self.work_inj.clone();
         // let schedule = move |runnable| work_inj.push(runnable);
         let schedule = move |runnable| work_inj.push(runnable);
-        // let (runnable, task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
+        // let (runnable, task) = unsafe { async_task::spawn(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
         let (runnable, task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked( future, schedule) };
         // println!("[{:?}] submit am schedule task {:?} {:?} {:?}", std::thread::current().id(),runnable.metadata(),self.num_tasks.load(Ordering::Relaxed),self.max_tasks.load(Ordering::Relaxed));
         runnable.schedule();
@@ -219,7 +219,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     fn submit_am_immediate(
         //unserialized request
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
@@ -242,7 +242,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         let work_inj = self.work_inj.clone();
         // let schedule = move |runnable| work_inj.push(runnable);
         let schedule = move |runnable| work_inj.push(runnable);
-        // let (runnable, task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
+        // let (runnable, task) = unsafe { async_task::spawn(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
         let (runnable, task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked(future, schedule) };
         // println!("[{:?}] submit am imm running task {:?} {:?} {:?}", std::thread::current().id(),runnable.metadata(),self.num_tasks.load(Ordering::Relaxed),self.max_tasks.load(Ordering::Relaxed));
         // *OUTSTANDING_REQS.lock().entry(*runnable.metadata()).or_insert(0) += 1;
@@ -254,7 +254,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     #[tracing::instrument(skip_all)]
     fn submit_work(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         data: SerializedData,
         lamellae: Arc<Lamellae>,
@@ -282,7 +282,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         let work_inj = self.work_inj.clone();
         // let schedule = move |runnable| work_inj.push(runnable);
         let schedule = move |runnable| work_inj.push(runnable);
-        // let (runnable, task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
+        // let (runnable, task) = unsafe { async_task::spawn(future, schedule) }; //safe as contents are sync+send, and no borrowed variables
         let (runnable, task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked(future, schedule) };
         // println!("[{:?}] submit work schedule task {:?} {:?} {:?}", std::thread::current().id(),runnable.metadata(),self.num_tasks.load(Ordering::Relaxed),self.max_tasks.load(Ordering::Relaxed));
 
@@ -292,12 +292,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
             let max_tasks = self.max_tasks.clone();
-            let future2 = move|_cur_task| async move {
+            let future2 = move|_cur_task: &_| async move {
                 num_tasks.fetch_add(1, Ordering::Relaxed);
                 max_tasks.fetch_add(1, Ordering::Relaxed);
                 // println!("[{:?}] submit task exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
@@ -310,8 +310,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
             let work_inj = self.work_inj.clone();
             // let schedule = move |runnable| work_inj.push(runnable);
             let schedule = move |runnable| work_inj.push(runnable);
-            // let (runnable, task) = unsafe { async_task::spawn_unchecked(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
-            let (runnable, task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked(future2, schedule) };
+            // let (runnable, task) = unsafe { async_task::spawn(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
+            let (runnable, task) =   Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn(future2, schedule) ;
             // println!("[{:?}] submit task schedule task {:?} {:?} {:?}", std::thread::current().id(),runnable.metadata(),self.num_tasks.load(Ordering::Relaxed),self.max_tasks.load(Ordering::Relaxed));
 
             runnable.schedule();
@@ -321,12 +321,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
     fn submit_immediate_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
             let max_tasks = self.max_tasks.clone();
-            let future2 = move |_cur_task| async move {
+            let future2 = move |_cur_task: &_| async move {
                 // println!("exec task {:?}",num_tasks.load(Ordering::Relaxed)+1);
                 num_tasks.fetch_add(1, Ordering::Relaxed);
                max_tasks.fetch_add(1, Ordering::Relaxed);
@@ -341,8 +341,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
             let work_inj = self.work_inj.clone();
             // let schedule = move |runnable| work_inj.push(runnable);
             let schedule = move |runnable| work_inj.push(runnable);
-            // let (runnable, task) = unsafe { async_task::spawn_unchecked(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
-            let (runnable, task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked(future2, schedule) };
+            // let (runnable, task) = unsafe { async_task::spawn(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
+            let (runnable, task) = Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn(future2, schedule) ;
             // println!("[{:?}] submit imm task schedule task {:?} {:?} {:?}", std::thread::current().id(),runnable.metadata(),self.num_tasks.load(Ordering::Relaxed),self.max_tasks.load(Ordering::Relaxed));
             // *OUTSTANDING_REQS.lock().entry(*runnable.metadata()).or_insert(0) += 1;
             runnable.run(); //try to run immediately
@@ -352,12 +352,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
     fn submit_immediate_task2<F>(&self, future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
             let max_tasks = self.max_tasks.clone();
-            let future2 = move|_cur_task| async move {
+            let future2 = move|_cur_task: &_| async move {
                 num_tasks.fetch_add(1, Ordering::Relaxed);
                 max_tasks.fetch_add(1, Ordering::Relaxed);
                 // println!("[{:?}] submit imm2 task exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
@@ -371,8 +371,8 @@ impl AmeSchedulerQueue for WorkStealingInner {
             let imm_inj = self.imm_inj.clone();
             // let schedule = move |runnable| imm_inj.push(runnable);
             let schedule = move |runnable| imm_inj.push(runnable);
-            // let (runnable, task) = unsafe { async_task::spawn_unchecked(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
-            let (runnable, task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked(future2, schedule) };
+            // let (runnable, task) = unsafe { async_task::spawn(future2, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
+            let (runnable, task) = Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn(future2, schedule) ;
             // println!("[{:?}] submit imm2 task schedule task {:?} {:?} {:?}", std::thread::current().id(),runnable.metadata(),self.num_tasks.load(Ordering::Relaxed),self.max_tasks.load(Ordering::Relaxed));
 
             runnable.schedule(); //try to run immediately
@@ -410,7 +410,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // let schedule = move |runnable| work_inj.push(runnable);
             let schedule = move |runnable| work_inj.push(runnable);
             
-            // let (runnable, mut task) = unsafe { async_task::spawn_unchecked(future, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
+            // let (runnable, mut task) = unsafe { async_task::spawn(future, schedule) }; //safe //safe as contents are sync+send... may need to do something to enforce lifetime bounds
             let (runnable, mut task) = unsafe {  Builder::new().metadata(TASK_ID.fetch_add(1, Ordering::Relaxed)).spawn_unchecked(future2, schedule) };
             let waker = runnable.waker();
             // *OUTSTANDING_REQS.lock().entry(*runnable.metadata()).or_insert(0) += 1;
@@ -549,13 +549,13 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 }
 
-impl SchedulerQueue for WorkStealing {
+impl SchedulerQueue for Arc<WorkStealing> {
     fn submit_am(
         //unserialized request
         &self,
         am: Am,
     ) {
-        self.inner.submit_am(self, self.ame.clone(), am);
+        self.inner.submit_am(self.clone(), self.ame.clone(), am);
     }
 
     fn submit_am_immediate(
@@ -563,33 +563,33 @@ impl SchedulerQueue for WorkStealing {
         &self,
         am: Am,
     ) {
-        self.inner.submit_am_immediate(self, self.ame.clone(), am);
+        self.inner.submit_am_immediate(self.clone(), self.ame.clone(), am);
     }
 
     // fn submit_return(&self, src, pe)
 
     fn submit_work(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
         self.inner
-            .submit_work(self, self.ame.clone(), data, lamellae);
+            .submit_work(self.clone(), self.ame.clone(), data, lamellae);
     }
 
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         self.inner.submit_task(future);
     }
 
     fn submit_immediate_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         self.inner.submit_immediate_task(future);
     }
 
     fn submit_immediate_task2<F>(&self, future: F)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send+  'static,
     {
         self.inner.submit_immediate_task2(future);
     }
@@ -601,7 +601,7 @@ impl SchedulerQueue for WorkStealing {
 
     fn submit_task_node<F>(&self, future: F, _node: usize)
     where
-        F: Future<Output = ()>,
+        F: Future<Output = ()> + Send + 'static,
     {
         self.inner.submit_task(future);
     }
@@ -749,7 +749,7 @@ impl WorkStealing {
         let sched = WorkStealing {
             inner: inner.clone(),
             ame: Arc::new(ActiveMessageEngineType::RegisteredActiveMessages(
-                RegisteredActiveMessages::new(batcher),
+                Arc::new(RegisteredActiveMessages::new(batcher)),
             )),
             max_num_threads: num_workers,
         };

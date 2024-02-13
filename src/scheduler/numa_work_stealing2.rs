@@ -134,7 +134,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     fn submit_am(
         //unserialized request
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     ) {
@@ -159,7 +159,7 @@ impl AmeSchedulerQueue for NumaWorkStealing2Inner {
     //this is a serialized request
     fn submit_work(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         data: SerializedData,
         lamellae: Arc<Lamellae>,

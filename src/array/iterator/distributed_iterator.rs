@@ -121,7 +121,7 @@ impl<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> DistIterCollectHand
 
         // safe because only a single reference to array on each PE
         // we calculate my_start so that each pes local vals are guaranteed to not overwrite another pes values.
-        unsafe { array.put(my_start, local_vals) };
+        let _ = unsafe { array.put(my_start, local_vals) };
         array.into()
     }
 }

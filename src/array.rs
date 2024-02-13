@@ -395,7 +395,7 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
 }
-impl<T:Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
+impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());

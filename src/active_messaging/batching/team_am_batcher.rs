@@ -182,7 +182,7 @@ impl Batcher for TeamAmBatcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -208,7 +208,7 @@ impl Batcher for TeamAmBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(
+                    TeamAmBatcher::create_tx_task(
                         batch,
                         // stall_mark,
                         // scheduler,
@@ -222,7 +222,7 @@ impl Batcher for TeamAmBatcher {
         } else if size >= MAX_BATCH_SIZE {
             //batch is full, transfer now
             // println!("remote size: {:?}",size);
-            scheduler.submit_immediate_task(self.create_tx_task(
+            scheduler.submit_immediate_task(TeamAmBatcher::create_tx_task(
                 batch,
                 // stall_mark,
                 // scheduler,
@@ -240,7 +240,7 @@ impl Batcher for TeamAmBatcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -266,7 +266,7 @@ impl Batcher for TeamAmBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(
+                    TeamAmBatcher::create_tx_task(
                         batch,
                         // stall_mark,
                         // scheduler,
@@ -280,7 +280,7 @@ impl Batcher for TeamAmBatcher {
         } else if size >= MAX_BATCH_SIZE {
             //batch is full, transfer now
             // println!("return size: {:?}",size);
-            scheduler.submit_immediate_task(self.create_tx_task(
+            scheduler.submit_immediate_task(TeamAmBatcher::create_tx_task(
                 batch,
                 // stall_mark,
                 // scheduler,
@@ -297,7 +297,7 @@ impl Batcher for TeamAmBatcher {
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -330,7 +330,7 @@ impl Batcher for TeamAmBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(
+                    TeamAmBatcher::create_tx_task(
                         batch,
                         // stall_mark,
                         // scheduler,
@@ -344,7 +344,7 @@ impl Batcher for TeamAmBatcher {
         } else if size >= MAX_BATCH_SIZE {
             //batch is full, transfer now
             // println!("data size: {:?}",size);
-            scheduler.submit_immediate_task(self.create_tx_task(
+            scheduler.submit_immediate_task(TeamAmBatcher::create_tx_task(
                 batch,
                 // stall_mark,
                 // scheduler,
@@ -359,7 +359,7 @@ impl Batcher for TeamAmBatcher {
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         let batch = match req_data.dst {
@@ -385,7 +385,7 @@ impl Batcher for TeamAmBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(
+                    TeamAmBatcher::create_tx_task(
                         batch,
                         // stall_mark,
                         // scheduler,
@@ -399,7 +399,7 @@ impl Batcher for TeamAmBatcher {
         } else if size >= MAX_BATCH_SIZE {
             //batch is full, transfer now
             // println!("unit size: {:?}",size);
-            scheduler.submit_immediate_task(self.create_tx_task(
+            scheduler.submit_immediate_task(TeamAmBatcher::create_tx_task(
                 batch,
                 // stall_mark,
                 // scheduler,
@@ -416,8 +416,8 @@ impl Batcher for TeamAmBatcher {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
     ) {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
@@ -435,7 +435,15 @@ impl Batcher for TeamAmBatcher {
                 Cmd::Data => ame.exec_data_am(&msg, data, &mut i, &ser_data).await,
                 Cmd::Unit => ame.exec_unit_am(&msg, data, &mut i).await,
                 Cmd::BatchedMsg => {
-                    self.exec_batched_am(&msg, batch.cnt, data, &mut i, &lamellae, scheduler, &ame);
+                    self.exec_batched_am(
+                        &msg,
+                        batch.cnt,
+                        data,
+                        &mut i,
+                        &lamellae,
+                        scheduler.clone(),
+                        &ame,
+                    );
                 }
             }
         }
@@ -457,7 +465,6 @@ impl TeamAmBatcher {
     }
     #[tracing::instrument(skip_all)]
     async fn create_tx_task(
-        &self,
         batch: TeamAmBatcherInner,
         lamellae: Arc<Lamellae>,
         arch: Arc<LamellarArchRT>,
@@ -707,8 +714,8 @@ impl TeamAmBatcher {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
     ) {
         for _team in 0..batch_cnt {
             let team_header: TeamHeader =
@@ -731,7 +738,7 @@ impl TeamAmBatcher {
                             data,
                             i,
                             lamellae,
-                            scheduler,
+                            scheduler.clone(),
                             ame,
                             batched_am_header.am_id,
                             world.clone(),
@@ -742,7 +749,7 @@ impl TeamAmBatcher {
                             data,
                             i,
                             lamellae,
-                            scheduler,
+                            scheduler.clone(),
                             ame,
                             batched_am_header.am_id,
                             world.clone(),
@@ -762,8 +769,8 @@ impl TeamAmBatcher {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
         am_id: AmId,
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
@@ -782,6 +789,8 @@ impl TeamAmBatcher {
             team: team.team.clone(),
             team_addr: team.team.remote_ptr_addr,
         };
+        let scheduler_clone = scheduler.clone();
+        let ame_clone = ame.clone();
         scheduler.submit_task(async move {
             let am = match am
                 .exec(
@@ -800,7 +809,7 @@ impl TeamAmBatcher {
                     panic!("Should not be returning local data or AM from remote  am");
                 }
             };
-            ame.process_msg(am, scheduler, 0, false).await;
+            ame_clone.process_msg(am, scheduler_clone, 0, false).await;
         });
     }
 
@@ -811,8 +820,8 @@ impl TeamAmBatcher {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
         am_id: AmId,
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
@@ -831,6 +840,9 @@ impl TeamAmBatcher {
             team: team.team.clone(),
             team_addr: team.team.remote_ptr_addr,
         };
-        scheduler.submit_task(ame.exec_local_am(req_data, am.as_local(), world, team));
+        scheduler.submit_task(
+            ame.clone()
+                .exec_local_am(req_data, am.as_local(), world, team),
+        );
     }
 }

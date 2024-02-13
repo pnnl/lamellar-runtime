@@ -1,7 +1,6 @@
 mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
-pub use rdma::{AtomicArrayGet, AtomicArrayPut};
 
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
 use crate::array::native_atomic::NativeAtomicElement;

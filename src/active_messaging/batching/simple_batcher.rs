@@ -67,7 +67,7 @@ impl Batcher for SimpleBatcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_remote_am_to_batch");
@@ -103,7 +103,7 @@ impl Batcher for SimpleBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(batch).await;
+                    SimpleBatcher::create_tx_task(batch).await;
                 }
             });
         } else if size >= MAX_BATCH_SIZE {
@@ -112,7 +112,7 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_remote_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(self.create_tx_task(batch));
+            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
         }
     }
 
@@ -123,7 +123,7 @@ impl Batcher for SimpleBatcher {
         am: LamellarArcAm,
         am_id: AmId,
         am_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_return_am_to_batch");
@@ -159,7 +159,7 @@ impl Batcher for SimpleBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(batch).await;
+                    SimpleBatcher::create_tx_task(batch).await;
                 }
             });
         } else if size >= MAX_BATCH_SIZE {
@@ -168,7 +168,7 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_return_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(self.create_tx_task(batch));
+            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
         }
     }
 
@@ -178,7 +178,7 @@ impl Batcher for SimpleBatcher {
         req_data: ReqMetaData,
         data: LamellarResultArc,
         data_size: usize,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_data_am_to_batch");
@@ -217,7 +217,7 @@ impl Batcher for SimpleBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(batch).await;
+                    SimpleBatcher::create_tx_task(batch).await;
                 }
             });
         } else if size >= MAX_BATCH_SIZE {
@@ -226,7 +226,7 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_data_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(self.create_tx_task(batch));
+            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
         }
     }
 
@@ -234,7 +234,7 @@ impl Batcher for SimpleBatcher {
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         mut stall_mark: usize,
     ) {
         // println!("add_unit_am_to_batch");
@@ -266,7 +266,7 @@ impl Batcher for SimpleBatcher {
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
-                    self.create_tx_task(batch).await;
+                    SimpleBatcher::create_tx_task(batch).await;
                 }
             });
         } else if size >= MAX_BATCH_SIZE {
@@ -275,7 +275,7 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_unit_am_to_batch submit imm task",
             //     std::thread::current().id()
             // );
-            scheduler.submit_immediate_task(self.create_tx_task(batch));
+            scheduler.submit_immediate_task(SimpleBatcher::create_tx_task(batch));
         }
     }
 
@@ -285,8 +285,8 @@ impl Batcher for SimpleBatcher {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
     ) {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
@@ -298,8 +298,10 @@ impl Batcher for SimpleBatcher {
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, scheduler, ame),
-                Cmd::ReturnAm => self.exec_return_am(&msg, data, &mut i, &lamellae, scheduler, ame),
+                Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, scheduler.clone(), ame),
+                Cmd::ReturnAm => {
+                    self.exec_return_am(&msg, data, &mut i, &lamellae, scheduler.clone(), ame)
+                }
                 Cmd::Data => ame.exec_data_am(&msg, data, &mut i, &ser_data).await,
                 Cmd::Unit => ame.exec_unit_am(&msg, data, &mut i).await,
                 Cmd::BatchedMsg => panic!("should not recieve a batched msg within a batched msg"),
@@ -323,7 +325,7 @@ impl SimpleBatcher {
     }
 
     #[tracing::instrument(skip_all)]
-    async fn create_tx_task(&self, batch: SimpleBatcherInner) {
+    async fn create_tx_task(batch: SimpleBatcherInner) {
         // println!("[{:?}] create_tx_task", std::thread::current().id());
         let (buf, size) = batch.swap();
 
@@ -525,8 +527,8 @@ impl SimpleBatcher {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
     ) {
         // println!("exec_am");
         let am_header: AmHeader =
@@ -548,6 +550,8 @@ impl SimpleBatcher {
             team_addr: team.team.remote_ptr_addr,
         };
         // println!("[{:?}] exec_am submit task", std::thread::current().id());
+        let scheduler_clone = scheduler.clone();
+        let ame_clone = ame.clone();
         scheduler.submit_task(async move {
             let am = match am
                 .exec(
@@ -566,7 +570,7 @@ impl SimpleBatcher {
                     panic!("Should not be returning local data or AM from remote  am");
                 }
             };
-            ame.process_msg(am, scheduler, 0, false).await;
+            ame_clone.process_msg(am, scheduler_clone, 0, false).await;
         });
     }
 
@@ -577,8 +581,8 @@ impl SimpleBatcher {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
-        ame: &RegisteredActiveMessages,
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
+        ame: &Arc<RegisteredActiveMessages>,
     ) {
         // println!("exec_return_am");
         let am_header: AmHeader =
@@ -602,6 +606,9 @@ impl SimpleBatcher {
         //     "[{:?}] exec_return_am submit task",
         //     std::thread::current().id()
         // );
-        scheduler.submit_task(ame.exec_local_am(req_data, am.as_local(), world, team));
+        scheduler.submit_task(
+            ame.clone()
+                .exec_local_am(req_data, am.as_local(), world, team),
+        );
     }
 }

@@ -103,7 +103,13 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
         reqs.push(array.fetch_add(i, add_val));
     }
     for (i, req) in reqs.drain(0..).enumerate() {
-        println!("i: {:?} {:?}", i, array.block_on(req));
+        println!(
+            "{:?} i: {:?}/{:?} {:?}",
+            std::thread::current().id(),
+            i,
+            array.len(),
+            array.block_on(req)
+        );
     }
     array.barrier();
     array.print();

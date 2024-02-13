@@ -32,10 +32,11 @@ fn main() {
     let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
     let c = LocalLockArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                             //initialize
-    a.dist_iter_mut()
+    let a_init = a
+        .dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
-    b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
+    let b_init = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
         //identity matrix
         let row = i / dim;
         let col = i % dim;
@@ -45,10 +46,14 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    c.dist_iter_mut().for_each(|x| *x = 0.0);
+    let c_init = c.dist_iter_mut().for_each(|x| *x = 0.0);
     let a = a.into_read_only();
     let b = b.into_read_only();
-    c.wait_all();
+    c.block_on(async move {
+        a_init.await;
+        b_init.await;
+        c_init.await;
+    });
     c.barrier();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
@@ -58,8 +63,9 @@ fn main() {
     let m_blks_pe = m_blks / num_pes;
     let n_blks = n / blocksize; //a blk col b blk col(because b is col major)
     let p_blks = p / blocksize; // b blk row(b is col major) c blk col
+    let p_blks_pe = p_blks / num_pes;
 
-    println!("{blocksize} {m_blks} {m_blks_pe} {n_blks} {p_blks}");
+    println!("{blocksize} {m_blks} {m_blks_pe} {n_blks} {p_blks} {p_blks_pe}");
 
     // this is a "hack" until we support something like (0..n_blks).dist_iter()
     // we construct a global array where each pe will contain the sequence (0..n_blks)
@@ -87,14 +93,15 @@ fn main() {
     let a = a.clone();
     let b = b.clone();
     let c_clone = c.clone();
-    nblks_array.dist_iter().for_each(move |k_blk| {
+    let gemm = nblks_array.dist_iter().for_each(move |k_blk| {
         // let a = a.clone();
         // let b = b.clone();
         let c_clone = c_clone.clone();
-        // println!("kblk {k_blk}");
+        // println!("[{:?}] kblk {k_blk}", my_pe);
         // async move {
         //iterate over the submatrix cols of b, use dist_iter() so that we can launch transfers in parallel
-        for j_blk in 0..p_blks {
+        let my_p_blks = (p_blks_pe * my_pe..p_blks).chain(0..p_blks_pe * my_pe); //start with the local block then proceed in round robin fashion (should hopefully help all PEs requesting data from the same PE at the same time)
+        for j_blk in my_p_blks {
             // println!("\tjblk {j_blk}");
             // iterate over submatrix rows of b
 
@@ -127,18 +134,19 @@ fn main() {
             //         b_block_vec[j * blocksize + i] = *elem
             //     }
             // }
-
+            // println!("[{:?}] kblk {k_blk} jblk {j_blk}", my_pe);
             // println!("b {b_block:?}");
             // let b_block_vec = Arc::new(b_block_vec); //we will be sharing this submatrix in multiple tasks
             //--------------
             let a = a.clone();
             let c_clone = c_clone.clone();
-            m_blks_pe_array.local_iter().for_each_with_schedule(
+            let _inner_gemm = m_blks_pe_array.local_iter().for_each_with_schedule(
                 Schedule::Chunk(m_blks_pe_array.len()),
                 move |i_blk| {
                     // for i_blk in 0..m_blks_pe {
                     // println!("\t\tiblk {i_blk}");
                     // iterate of the local submatrix rows of a
+
                     let c = c_clone.clone();
                     let b_block_vec = b_block.clone();
                     // a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
@@ -201,13 +209,36 @@ fn main() {
                             // c.add(row_offset+col_offset,c_vec[row*blocksize + col]); -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
                         }
                     }
+                    // println!("[{:?}] kblk {k_blk} jblk {j_blk} iblk {i_blk}", my_pe);
                     // });
                 },
             );
+            c.block_on(_inner_gemm); //inner_gemm.await;
+                                     // println!(
+                                     //     "[{:?} {:?}] kblk {k_blk} jblk {j_blk} done",
+                                     //     my_pe,
+                                     //     std::thread::current().id()
+                                     // );
         }
+        // println!(
+        //     "[{:?} {:?}] kblk {k_blk} done",
+        //     my_pe,
+        //     std::thread::current().id()
+        // );
         // }
     });
+    world.block_on(gemm);
+    println!(
+        "[{:?}] block_on done {:?}",
+        my_pe,
+        start.elapsed().as_secs_f64()
+    );
     world.wait_all();
+    println!(
+        "[{:?}] wait_all done {:?}",
+        my_pe,
+        start.elapsed().as_secs_f64()
+    );
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();
 

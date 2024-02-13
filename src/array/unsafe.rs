@@ -173,6 +173,8 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             None,
         )
         .expect("trying to create array on non team member");
+        // println!("new unsafe array darc {:?}", data);
+        // data.print();
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data: data,

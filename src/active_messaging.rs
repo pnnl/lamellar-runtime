@@ -1188,7 +1188,7 @@ pub(crate) trait ActiveMessageEngine {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         stall_mark: usize,
         immediate: bool,
     );
@@ -1198,7 +1198,7 @@ pub(crate) trait ActiveMessageEngine {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
     );
 
     fn get_team_and_world(
@@ -1234,7 +1234,7 @@ pub(crate) trait ActiveMessageEngine {
 
 #[derive(Debug)]
 pub(crate) enum ActiveMessageEngineType {
-    RegisteredActiveMessages(RegisteredActiveMessages),
+    RegisteredActiveMessages(Arc<RegisteredActiveMessages>),
 }
 
 #[async_trait]
@@ -1242,7 +1242,7 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
     async fn process_msg(
         &self,
         am: Am,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         stall_mark: usize,
         immediate: bool,
     ) {
@@ -1259,7 +1259,7 @@ impl ActiveMessageEngine for ActiveMessageEngineType {
         msg: Msg,
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
     ) {
         match self {
             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {

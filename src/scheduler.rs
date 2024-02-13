@@ -51,32 +51,32 @@ pub(crate) enum AmeScheduler {
 pub(crate) trait AmeSchedulerQueue {
     fn submit_am(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     );
     fn submit_am_immediate(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         am: Am,
     );
     fn submit_work(
         &self,
-        scheduler: &(impl SchedulerQueue + Sync + std::fmt::Debug),
+        scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
         ame: Arc<ActiveMessageEngineType>,
         msg: SerializedData,
         lamellae: Arc<Lamellae>,
     ); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn submit_immediate_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn submit_immediate_task2<F>(&self, future: F)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn exec_task(&self);
 
     fn block_on<F>(&self, future: F) -> F::Output
@@ -92,7 +92,7 @@ pub(crate) trait AmeSchedulerQueue {
 #[enum_dispatch(SchedulerQueue)]
 #[derive(Debug)]
 pub(crate) enum Scheduler {
-    WorkStealing,
+    WorkStealing(Arc<WorkStealing>),
     // NumaWorkStealing,
     // NumaWorkStealing2,
 }
@@ -103,16 +103,16 @@ pub(crate) trait SchedulerQueue {
     fn submit_work(&self, msg: SerializedData, lamellae: Arc<Lamellae>); //serialized active message
     fn submit_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn submit_immediate_task<F>(&self, future: F)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn submit_immediate_task2<F>(&self, future: F)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn submit_task_node<F>(&self, future: F, node: usize)
     where
-        F: Future<Output = ()>;
+        F: Future<Output = ()> + Send + 'static;
     fn exec_task(&self);
     fn block_on<F>(&self, future: F) -> F::Output
     where
@@ -133,11 +133,8 @@ pub(crate) fn create_scheduler(
     // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
 ) -> Scheduler {
     match sched {
-        SchedulerType::WorkStealing => Scheduler::WorkStealing(work_stealing::WorkStealing::new(
-            num_pes,
-            num_workers,
-            panic,
-            my_pe,
+        SchedulerType::WorkStealing => Scheduler::WorkStealing(Arc::new(
+            work_stealing::WorkStealing::new(num_pes, num_workers, panic, my_pe),
         )), // SchedulerType::NumaWorkStealing => {
             //     Scheduler::NumaWorkStealing(numa_work_stealing::NumaWorkStealing::new(num_pes))
             // }

@@ -97,7 +97,11 @@ impl CmdMsg {
     }
     #[tracing::instrument(skip_all)]
     fn hash(&self) -> usize {
-        self.daddr + self.dsize + self.cmd as usize + self.msg_hash
+        let mut res = self.daddr + self.dsize + self.cmd as usize + self.msg_hash;
+        if res == 0 {
+            res = 1
+        }
+        res
     }
     #[tracing::instrument(skip_all)]
     fn calc_hash(&mut self) {
@@ -105,7 +109,7 @@ impl CmdMsg {
     }
     #[tracing::instrument(skip_all)]
     fn check_hash(&self) -> bool {
-        if self.cmd_hash == self.hash() {
+        if self.cmd_hash == self.hash() && self.cmd_hash != 0 {
             true
         } else {
             false
@@ -588,8 +592,11 @@ impl InnerCQ {
                 Cmd::Clear => None,
                 // Cmd::Free => panic!("should not see free in recv buffer"),
                 Cmd::Tx | Cmd::Print | Cmd::Free | Cmd::Release => {
-                    // println!("received cmd src {:?} {:?} ",src,cmd);
-                    let res = Some(cmd);
+                    if cmd.daddr == 0 {
+                        println!("received cmd src {:?} {:?} ", src, cmd);
+                        return None;
+                    }
+                    let res = Some(cmd.clone());
                     let cmd = &mut recv_buffer[src];
                     cmd.daddr = 0;
                     cmd.dsize = 0;

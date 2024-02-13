@@ -275,7 +275,7 @@ fn gen_array_names(
         id_gen_name,
     )
 }
-fn create_buf_ops2(
+fn create_buf_ops(
     typeident: syn::Type,
     array_type: syn::Ident,
     byte_array_type: syn::Ident,
@@ -1432,7 +1432,7 @@ fn create_buffered_ops(
 
     let ro_optypes = vec![OpType::ReadOnly]; //, vec![OpType::Arithmetic, OpType::Access];
 
-    let buf_op_impl = create_buf_ops2(
+    let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("ReadOnlyArray"),
         quote::format_ident!("ReadOnlyByteArray"),
@@ -1441,7 +1441,7 @@ fn create_buffered_ops(
     );
     expanded.extend(buf_op_impl);
 
-    let buf_op_impl = create_buf_ops2(
+    let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("UnsafeArray"),
         quote::format_ident!("UnsafeByteArray"),
@@ -1451,7 +1451,7 @@ fn create_buffered_ops(
     expanded.extend(buf_op_impl);
 
     for (array_type, _byte_array_type_weak, byte_array_type) in atomic_array_types {
-        let buf_op_impl = create_buf_ops2(
+        let buf_op_impl = create_buf_ops(
             typeident.clone(),
             array_type.clone(),
             byte_array_type.clone(),
