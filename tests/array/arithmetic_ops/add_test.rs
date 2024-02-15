@@ -436,7 +436,7 @@ macro_rules! input_test{
             //  array.add(input_array.clone(),1);
             //  check_results!($array,array,num_pes,"LocalLockArray<T>");
             // LocalLockArray<T>------------------------------
-            array.batch_add(&input_array.blocking_read_local_data(),1);
+            let _ = array.batch_add(&input_array.blocking_read_local_data(),1);
             check_results!($array,array,num_pes,"&LocalLockArray<T>");
             println!("passed &LocalLockArray<T>");
 
@@ -445,7 +445,7 @@ macro_rules! input_test{
             //  array.add(input_array.clone(),1);
             //  check_results!($array,array,num_pes,"GlobalLockArray<T>");
             // GlobalLockArray<T>------------------------------
-            array.batch_add(&input_array.blocking_read_local_data(),1);
+            let _ = array.batch_add(&input_array.blocking_read_local_data(),1);
             check_results!($array,array,num_pes,"&GlobalLockArray<T>");
             println!("passed &GlobalLockArray<T>");
        }

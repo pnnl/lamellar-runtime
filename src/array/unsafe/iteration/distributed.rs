@@ -2,7 +2,7 @@ use crate::active_messaging::SyncSend;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::private::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{ArrayOps, AsyncTeamFrom, AsyncTeamInto, Distribution, LamellarArray, TeamFrom};
+use crate::array::{ArrayOps, AsyncTeamFrom, Distribution, LamellarArray};
 
 use crate::array::iterator::Schedule;
 use crate::lamellar_team::LamellarTeamRT;

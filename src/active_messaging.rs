@@ -1177,13 +1177,7 @@ pub trait ActiveMessaging {
 
 #[async_trait]
 pub(crate) trait ActiveMessageEngine {
-    async fn process_msg(
-        self,
-        am: Am,
-        scheduler: Arc<Executor>,
-        stall_mark: usize,
-        immediate: bool,
-    );
+    async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool);
 
     async fn exec_msg(
         self,

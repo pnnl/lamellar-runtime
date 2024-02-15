@@ -3,7 +3,7 @@ use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::{LocalIterator, Monotonic};
 use crate::array::iterator::{private::*, IterRequest};
 use crate::array::operations::ArrayOps;
-use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamFrom, TeamInto};
+use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamInto};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;

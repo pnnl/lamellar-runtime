@@ -82,6 +82,7 @@ impl LamellarRequestResult {
         }
 
         self.req.update_counters();
+
         added
     }
 }
@@ -133,7 +134,8 @@ impl LamellarRequestAddResult for LamellarRequestHandleInner {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         // println!(
-        //     "update counter team {} world {}",
+        //     "[{:?}] update counter team {} world {}",
+        //     std::thread::current().id(),
         //     _team_reqs - 1,
         //     _world_req - 1
         // );
@@ -255,7 +257,12 @@ impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
         // );
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        // println!("update counter team {} world {}",_team_reqs-1,_world_req-1);
+        // println!(
+        //     "[{:?}] multi update counter team {} world {}",
+        //     std::thread::current().id(),
+        //     _team_reqs - 1,
+        //     _world_req - 1
+        // );
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
@@ -395,7 +402,12 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
     fn update_counters(&self) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        // println!("update counter team {} world {}",_team_reqs-1,_world_req-1);
+        // println!(
+        //     "[{:?}] local update counter team {} world {}",
+        //     std::thread::current().id(),
+        //     _team_reqs - 1,
+        //     _world_req - 1
+        // );
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }

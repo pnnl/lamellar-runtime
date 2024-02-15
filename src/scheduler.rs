@@ -51,10 +51,16 @@ pub(crate) struct ReqId {
     pub(crate) sub_id: usize,
 }
 
+/// Indicates the executor backend
+/// Default is a work stealing executor
+/// If the "tokio-executor" feature is enabled,the tokio executor can also be used
+/// allowing seemless integration with tokio based applications
 #[derive(Debug)]
 pub enum ExecutorType {
+    /// The default work stealing executor
     LamellarWorkStealing,
     #[cfg(feature = "tokio-executor")]
+    /// The tokio executor
     Tokio,
     // Dyn(impl LamellarExecutor),
 }
@@ -132,13 +138,18 @@ impl Scheduler {
         let max_ams = self.max_ams.clone();
         let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
         let ame = self.active_message_engine.clone();
-        let executor = self.executor.clone();
         let am_future = async move {
             num_ams.fetch_add(1, Ordering::Relaxed);
-            max_ams.fetch_add(1, Ordering::Relaxed);
+            let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
-            ame.process_msg(am, executor, am_stall_mark, false).await;
+            // println!("[{:?}] submit_am {:?}", std::thread::current().id(), am_id);
+            ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] submit_am_done {:?}",
+            //     std::thread::current().id(),
+            //     am_id
+            // );
             // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
         };
         self.executor.submit_task(am_future);
@@ -150,13 +161,22 @@ impl Scheduler {
         let max_ams = self.max_ams.clone();
         let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
         let ame = self.active_message_engine.clone();
-        let executor = self.executor.clone();
         let am_future = async move {
             num_ams.fetch_add(1, Ordering::Relaxed);
-            max_ams.fetch_add(1, Ordering::Relaxed);
+            let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
-            ame.process_msg(am, executor, am_stall_mark, false).await;
+            // println!(
+            //     "[{:?}] submit_am_immediate {:?}",
+            //     std::thread::current().id(),
+            //     am_id
+            // );
+            ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] submit_am_immediate done {:?}",
+            //     std::thread::current().id(),
+            //     am_id
+            // );
             // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
         };
         self.executor.submit_immediate_task(am_future);
@@ -169,8 +189,13 @@ impl Scheduler {
         let executor = self.executor.clone();
         let am_future = async move {
             num_ams.fetch_add(1, Ordering::Relaxed);
-            max_ams.fetch_add(1, Ordering::Relaxed);
+            let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
+            // println!(
+            //     "[{:?}] submit_remote_am {:?}",
+            //     std::thread::current().id(),
+            //     am_id
+            // );
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
                 ame.exec_msg(msg, data, lamellae, executor).await;
@@ -179,6 +204,11 @@ impl Scheduler {
                 panic!("should i be here?");
             }
             num_ams.fetch_sub(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] submit_remote_am done {:?}",
+            //     std::thread::current().id(),
+            //     am_id
+            // );
             // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
         };
         self.executor.submit_task(am_future);
@@ -192,9 +222,19 @@ impl Scheduler {
         let max_tasks = self.max_tasks.clone();
         let future = async move {
             num_tasks.fetch_add(1, Ordering::Relaxed);
-            max_tasks.fetch_add(1, Ordering::Relaxed);
+            let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] execing new task {:?}",
+            //     std::thread::current().id(),
+            //     task_id
+            // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] done new task {:?} ",
+            //     std::thread::current().id(),
+            //     task_id
+            // );
         };
         self.executor.submit_task(future);
     }
@@ -207,9 +247,19 @@ impl Scheduler {
         let max_tasks = self.max_tasks.clone();
         let future = async move {
             num_tasks.fetch_add(1, Ordering::Relaxed);
-            max_tasks.fetch_add(1, Ordering::Relaxed);
+            let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] execing new task immediate {:?}",
+            //     std::thread::current().id(),
+            //     task_id
+            // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] done new task immediate {:?} ",
+            //     std::thread::current().id(),
+            //     task_id
+            // );
         };
         self.executor.submit_immediate_task(future);
     }

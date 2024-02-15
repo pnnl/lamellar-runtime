@@ -395,7 +395,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let index_vec = index.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
             // println!("num_reqs {:?}",num_reqs);
-            let the_array: UnsafeArray<T> = self.clone();
             self.inner
                 .data
                 .team

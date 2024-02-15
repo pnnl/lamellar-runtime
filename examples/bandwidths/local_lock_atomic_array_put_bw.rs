@@ -67,7 +67,6 @@ fn main() {
         let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == num_pes - 1 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                let array_clone = array.clone();
                 let local_data = array.blocking_read_local_data();
                 while *(&local_data[(j + num_bytes as usize) - 1]) == 255 as u8 {
                     println!(

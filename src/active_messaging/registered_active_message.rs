@@ -96,16 +96,10 @@ pub(crate) struct UnitHeader {
 }
 
 #[async_trait]
-impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
-    //#[tracing::instrument(skip_all)]
-    async fn process_msg(
-        self,
-        am: Am,
-        executor: Arc<Executor>,
-        stall_mark: usize,
-        immediate: bool,
-    ) {
-        // println!("[{:?}] {am:?}", std::thread::current().id());
+impl ActiveMessageEngine for RegisteredActiveMessages {
+    // #[tracing::instrument(skip_all)]
+    async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool) {
+        // println!("[{:?}] process_msg {am:?}", std::thread::current().id());
         match am {
             Am::All(req_data, am) => {
                 // println!("{:?}",am.get_id());
@@ -127,6 +121,12 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                             )
                             .await;
                     } else {
+                        // println!(
+                        //     "[{:?}] {:?} all {:?}",
+                        //     std::thread::current().id(),
+                        //     am_id,
+                        //     am_size
+                        // );
                         self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
                             .await;
                     }
@@ -134,8 +134,7 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                 let world = LamellarTeam::new(None, req_data.world.clone(), true);
                 let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
                 if req_data.team.arch.team_pe(req_data.src).is_ok() {
-                    self.clone()
-                        .exec_local_am(req_data, am.as_local(), world, team)
+                    self.exec_local_am(req_data, am.as_local(), world, team)
                         .await;
                 }
             }
@@ -143,8 +142,7 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                 if req_data.dst == Some(req_data.src) {
                     let world = LamellarTeam::new(None, req_data.world.clone(), true);
                     let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
-                    self.clone()
-                        .exec_local_am(req_data, am.as_local(), world, team)
+                    self.exec_local_am(req_data, am.as_local(), world, team)
                         .await;
                 } else {
                     let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
@@ -154,6 +152,12 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                             .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                             .await;
                     } else {
+                        // println!(
+                        //     "[{:?}] {:?} pe {:?}",
+                        //     std::thread::current().id(),
+                        //     am_id,
+                        //     am_size
+                        // );
                         self.send_am(req_data, am, am_id, am_size, Cmd::Am).await;
                     }
                 }
@@ -161,7 +165,7 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
             Am::Local(req_data, am) => {
                 let world = LamellarTeam::new(None, req_data.world.clone(), true);
                 let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
-                self.clone().exec_local_am(req_data, am, world, team).await;
+                self.exec_local_am(req_data, am, world, team).await;
             }
             Am::Return(req_data, am) => {
                 // println!("Am::Return");
@@ -172,6 +176,12 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                         .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                         .await;
                 } else {
+                    // println!(
+                    //     "[{:?}] {:?} return {:?}",
+                    //     std::thread::current().id(),
+                    //     am_id,
+                    //     am_size
+                    // );
                     self.send_am(req_data, am, am_id, am_size, Cmd::ReturnAm)
                         .await;
                 }
@@ -184,6 +194,7 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                         .add_data_am_to_batch(req_data, data, data_size, stall_mark)
                         .await;
                 } else {
+                    // println!("[{:?}] data {:?}", std::thread::current().id(), data_size);
                     self.send_data_am(req_data, data, data_size).await;
                 }
             }
@@ -193,6 +204,11 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                         .add_unit_am_to_batch(req_data, stall_mark)
                         .await;
                 } else {
+                    // println!(
+                    //     "[{:?}]  unit {:?}",
+                    //     std::thread::current().id(),
+                    //     *UNIT_HEADER_LEN
+                    // );
                     self.send_unit_am(req_data).await;
                 }
             }
@@ -207,13 +223,13 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
         lamellae: Arc<Lamellae>,
         executor: Arc<Executor>,
     ) {
-        // println!("exec_msg");
+        // println!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         let data = ser_data.data_as_bytes();
         let mut i = 0;
         match msg.cmd {
             Cmd::Am => {
                 let return_am = self.exec_am(&msg, data, &mut i, &lamellae).await;
-                let process_task = self.process_msg(return_am, executor.clone(), 0, false);
+                let process_task = self.process_msg(return_am, 0, false);
                 executor.submit_task(process_task);
             }
             Cmd::ReturnAm => {
@@ -232,7 +248,7 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
                     .await;
                 let am_tasks = futures::stream::FuturesUnordered::new();
                 for am in ams.into_iter() {
-                    am_tasks.push(self.clone().process_msg(am, executor.clone(), 0, false));
+                    am_tasks.push(self.clone().process_msg(am, 0, false));
                 }
                 executor.submit_task(futures::future::join_all(am_tasks));
             }
@@ -248,7 +264,7 @@ impl RegisteredActiveMessages {
 
     //#[tracing::instrument(skip_all)]
     async fn send_am(
-        self: &Arc<Self>,
+        &self,
         req_data: ReqMetaData,
         am: LamellarArcAm,
         am_id: AmId,
@@ -293,26 +309,11 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    //#[tracing::instrument(skip_all)]
-    async fn send_data_am(
-        self: &Arc<Self>,
-        req_data: ReqMetaData,
-        data: LamellarResultArc,
-        data_size: usize,
-    ) {
+    // #[tracing::instrument(skip_all)]
+    async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         // println!("send_data_am");
-        let header = self.create_header(&req_data, Cmd::Data);
-        let mut darcs = vec![];
-        data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
-        let darc_list_size = crate::serialized_size(&darcs, false);
-        let data_header = DataHeader {
-            size: data_size,
-            req_id: req_data.id,
-            darc_list_size: darc_list_size,
-        };
 
         let data_buf = self
-            .create_data_buf(
                 header,
                 data_size + darc_list_size + *DATA_HEADER_LEN,
                 &req_data.lamellae,
@@ -333,8 +334,8 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    //#[tracing::instrument(skip_all)]
-    async fn send_unit_am(self: &Arc<Self>, req_data: ReqMetaData) {
+    // #[tracing::instrument(skip_all)]
+    async fn send_unit_am(&self, req_data: ReqMetaData) {
         // println!("send_unit_am");
 
         let header = self.create_header(&req_data, Cmd::Unit);
@@ -353,8 +354,8 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn create_header(self: &Arc<Self>, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
+    // #[tracing::instrument(skip_all)]
+    fn create_header(&self, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
             cmd: cmd,
@@ -364,7 +365,7 @@ impl RegisteredActiveMessages {
 
     //#[tracing::instrument(skip_all)]
     async fn create_data_buf(
-        self: &Arc<Self>,
+        &self,
         header: SerializeHeader,
         size: usize,
         lamellae: &Arc<Lamellae>,
@@ -389,7 +390,7 @@ impl RegisteredActiveMessages {
     #[async_recursion]
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_local_am(
-        self: Arc<Self>,
+        &self,
         req_data: ReqMetaData,
         am: LamellarArcLocalAm,
         world: Arc<LamellarTeam>,
@@ -407,7 +408,7 @@ impl RegisteredActiveMessages {
             .await
         {
             LamellarReturn::LocalData(data) => {
-                // println!("local am data return");
+                // println!("[{:?}] local am data return", std::thread::current().id());
                 self.send_data_to_user_handle(
                     req_data.id,
                     req_data.src,
@@ -415,13 +416,12 @@ impl RegisteredActiveMessages {
                 );
             }
             LamellarReturn::LocalAm(am) => {
-                // println!("local am am return");
-                self.clone()
-                    .exec_local_am(req_data, am.as_local(), world, team)
+                // println!("[{:?}] local am am return", std::thread::current().id());
+                self.exec_local_am(req_data, am.as_local(), world, team)
                     .await;
             }
             LamellarReturn::Unit => {
-                // println!("local am unit return");
+                // println!("[{:?}] local am unit return", std::thread::current().id());
                 self.send_data_to_user_handle(req_data.id, req_data.src, InternalResult::Unit);
             }
             LamellarReturn::RemoteData(_) | LamellarReturn::RemoteAm(_) => {
@@ -432,7 +432,7 @@ impl RegisteredActiveMessages {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_am(
-        self: &Arc<Self>,
+        &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
@@ -481,7 +481,7 @@ impl RegisteredActiveMessages {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_return_am(
-        self: &Arc<Self>,
+        &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
@@ -505,14 +505,13 @@ impl RegisteredActiveMessages {
             team: team.team.clone(),
             team_addr: team.team.remote_ptr_addr,
         };
-        self.clone()
-            .exec_local_am(req_data, am.as_local(), world, team)
+        self.exec_local_am(req_data, am.as_local(), world, team)
             .await;
     }
 
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_data_am(
-        self: &Arc<Self>,
+        &self,
         msg: &Msg,
         data_buf: &[u8],
         i: &mut usize,
@@ -537,8 +536,8 @@ impl RegisteredActiveMessages {
         );
     }
 
-    //#[tracing::instrument(skip_all)]
-    pub(crate) async fn exec_unit_am(self: &Arc<Self>, msg: &Msg, data: &[u8], i: &mut usize) {
+    // #[tracing::instrument(skip_all)]
+    pub(crate) async fn exec_unit_am(&self, msg: &Msg, data: &[u8], i: &mut usize) {
         // println!("exec_unit_am");
         let unit_header: UnitHeader =
             crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();
