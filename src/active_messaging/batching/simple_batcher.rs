@@ -86,7 +86,7 @@ impl Batcher for SimpleBatcher {
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
-            // println!("remote batch_id {batch_id} created {dst:?}");
+            // println!("remote batch_id {batch_id} created ");
             let cur_stall_mark = self.stall_mark.clone();
             // println!(
             //     "[{:?}] add_remote_am_to_batch submit task",
@@ -104,7 +104,7 @@ impl Batcher for SimpleBatcher {
                 SimpleBatcher::create_tx_task(batch).await;
             }
         } else if size >= MAX_BATCH_SIZE {
-            // println!("remote size: {:?} {dst:?}",size);
+            // println!("remote size: {:?} ", size);
             // println!(
             //     "[{:?}] add_remote_am_to_batch submit imm task",
             //     std::thread::current().id()
@@ -236,7 +236,7 @@ impl Batcher for SimpleBatcher {
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
-            // println!("unit batch_id {batch_id} created {dst:?}");
+            // println!("unit batch_id {batch_id} created ");
             let cur_stall_mark = self.stall_mark.clone();
             // println!(
             //     "[{:?}] add_unit_am_to_batch submit task",
@@ -254,7 +254,7 @@ impl Batcher for SimpleBatcher {
                 SimpleBatcher::create_tx_task(batch).await;
             }
         } else if size >= MAX_BATCH_SIZE {
-            // println!("unit size: {:?} {dst:?}",size);
+            // println!("unit size: {:?} ", size);
             // println!(
             //     "[{:?}] add_unit_am_to_batch submit imm task",
             //     std::thread::current().id()
@@ -288,7 +288,9 @@ impl Batcher for SimpleBatcher {
                 }
                 Cmd::Data => ame.exec_data_am(&msg, data, &mut i, &ser_data).await,
                 Cmd::Unit => ame.exec_unit_am(&msg, data, &mut i).await,
-                Cmd::BatchedMsg => panic!("should not recieve a batched msg within a batched msg"),
+                Cmd::BatchedMsg => {
+                    panic!("should not recieve a batched msg within a Simple Batcher batched msg")
+                }
             }
         }
         return_ams
@@ -312,6 +314,7 @@ impl SimpleBatcher {
     #[tracing::instrument(skip_all)]
     async fn create_tx_task(batch: SimpleBatcherInner) {
         // println!("[{:?}] create_tx_task", std::thread::current().id());
+        async_std::task::yield_now().await; // force this to renter the task queue so other requests can hopefully come in before sending the batch
         let (buf, size) = batch.swap();
 
         if size > 0 {
@@ -533,7 +536,10 @@ impl SimpleBatcher {
             team: team.team.clone(),
             team_addr: team.team.remote_ptr_addr,
         };
-        // println!("[{:?}] exec_am submit task", std::thread::current().id());
+        // println!(
+        //     "[{:?}] simple batcher exec_am submit task",
+        //     std::thread::current().id()
+        // );
         let am = match am
             .exec(
                 team.team.world_pe,

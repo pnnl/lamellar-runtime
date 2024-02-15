@@ -7,25 +7,23 @@ use rand::seq::SliceRandom;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         #[allow(unused_unsafe)]
-        unsafe {
-            $array.dist_iter_mut().for_each(move |x| *x = $init_val)
-        };
+        let _ = unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
         $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
+        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
         // println!("----------------------------------------------");
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
@@ -92,7 +90,7 @@ macro_rules! add_test{
 
             for idx in 0..array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                    let _ = array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
             }
             array.wait_all();
@@ -121,7 +119,7 @@ macro_rules! add_test{
             indices.shuffle(&mut rng);
             for idx in indices.iter() {//0..num_updates{
                 // let idx = rand_idx.sample(&mut rng);
-                array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                let _ = array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
             }
             array.wait_all();
             array.barrier();
@@ -156,7 +154,7 @@ macro_rules! add_test{
             sub_array.barrier();
             for idx in 0..sub_array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                    let _ = sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
             }
             sub_array.wait_all();
@@ -182,7 +180,7 @@ macro_rules! add_test{
             indices.shuffle(&mut rng);
             for idx in indices.iter(){ // in 0..num_updates{
                 // let idx = rand_idx.sample(&mut rng);
-                sub_array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                let _ = sub_array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -218,7 +216,7 @@ macro_rules! add_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     for _i in 0..(pe_max_val as usize){
-                        sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                        let _ = sub_array.add(idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                     }
                 }
                 sub_array.wait_all();
@@ -244,7 +242,7 @@ macro_rules! add_test{
                 indices.shuffle(&mut rng);
                 for idx in indices.iter() {//0..num_updates{
                     // let idx = rand_idx.sample(&mut rng);
-                    sub_array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
+                    let _ = sub_array.add(*idx,(10_usize.pow((my_pe*2)as u32)) as $t);
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
@@ -319,10 +317,10 @@ macro_rules! input_test{
             #[allow(unused_unsafe)]
             unsafe {
                 if $dist == lamellar::array::Distribution::Block{
-                    input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
+                    let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
                 }
                 else{
-                    input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+                    let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
                 }
             }
             input_array.wait_all();
@@ -330,51 +328,51 @@ macro_rules! input_test{
             input_array.print();
             //individual T------------------------------
             for i in 0..array.len(){
-                array.batch_add(i,1);
+                let _ = array.batch_add(i,1);
             }
             check_results!($array,array,num_pes,"T");
             println!("passed T");
             //individual T------------------------------
             for i in 0..array.len(){
-                array.batch_add(&i,1);
+                let _ = array.batch_add(&i,1);
             }
             check_results!($array,array,num_pes,"&T");
             println!("passed &T");
             //&[T]------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
             let slice = &vec[..];
-            array.batch_add(slice,1);
+            let _ = array.batch_add(slice,1);
             check_results!($array,array,num_pes,"&[T]");
             println!("passed &[T]");
             //scoped &[T]------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
                 let slice = &vec[..];
-                array.batch_add(slice,1);
+                let _ = array.batch_add(slice,1);
             }
             check_results!($array,array,num_pes,"scoped &[T]");
             println!("passed scoped &[T]");
             // Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
-            array.batch_add(vec,1);
+            let _ = array.batch_add(vec,1);
             check_results!($array,array,num_pes,"Vec<T>");
             println!("passed Vec<T>");
             // &Vec<T>------------------------------
             let vec=(0..array.len()).collect::<Vec<usize>>();
-            array.batch_add(&vec,1);
+            let _ = array.batch_add(&vec,1);
             check_results!($array,array,num_pes,"&Vec<T>");
             println!("passed &Vec<T>");
             // Scoped Vec<T>------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
-                array.batch_add(vec,1);
+                let _ = array.batch_add(vec,1);
             }
             check_results!($array,array,num_pes,"scoped Vec<T>");
             println!("passed scoped Vec<T>");
             // Scoped &Vec<T>------------------------------
             {
                 let vec=(0..array.len()).collect::<Vec<usize>>();
-                array.batch_add(&vec,1);
+                let _ = array.batch_add(&vec,1);
             }
             check_results!($array,array,num_pes,"scoped &Vec<T>");
             println!("passed scoped &Vec<T>");
@@ -387,7 +385,7 @@ macro_rules! input_test{
                 for i in 0..array.len(){
                     slice[i]=i;
                 }
-                array.batch_add(slice,1);
+                let _ = array.batch_add(slice,1);
                 check_results!($array,array,num_pes,"LMR<T>");
                 println!("passed LMR<T>");
             }
@@ -402,7 +400,7 @@ macro_rules! input_test{
                     slice[i]=i;
                 }
 
-                array.batch_add(slice,1);
+                let _ = array.batch_add(slice,1);
                 check_results!($array,array,num_pes,"SMR<T>");
                 println!("passed SMR<T>");
             }
@@ -411,7 +409,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"UnsafeArray<T>");
             // UnsafeArray<T>------------------------------
-            array.batch_add(unsafe{input_array.local_data()},1);
+            let _ = array.batch_add(unsafe{input_array.local_data()},1);
             check_results!($array,array,num_pes,"&UnsafeArray<T>");
             println!("passed &UnsafeArray<T>");
 
@@ -420,7 +418,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"ReadOnlyArray<T>");
             // ReadOnlyArray<T>------------------------------
-            array.batch_add(input_array.local_data(),1);
+            let _ = array.batch_add(input_array.local_data(),1);
             check_results!($array,array,num_pes,"&ReadOnlyArray<T>");
             println!("passed &ReadOnlyArray<T>");
 
@@ -429,7 +427,7 @@ macro_rules! input_test{
             // array.add(input_array.clone(),1);
             // check_results!($array,array,num_pes,"AtomicArray<T>");
             // AtomicArray<T>------------------------------
-            array.batch_add(&input_array.local_data(),1);
+            let _ = array.batch_add(&input_array.local_data(),1);
             check_results!($array,array,num_pes,"&AtomicArray<T>");
             println!("passed &AtomicArray<T>");
 
@@ -438,7 +436,7 @@ macro_rules! input_test{
             //  array.add(input_array.clone(),1);
             //  check_results!($array,array,num_pes,"LocalLockArray<T>");
             // LocalLockArray<T>------------------------------
-            array.batch_add(&input_array.blocking_read_local_data(),1);
+            let _ = array.batch_add(&input_array.blocking_read_local_data(),1);
             check_results!($array,array,num_pes,"&LocalLockArray<T>");
             println!("passed &LocalLockArray<T>");
 
@@ -447,7 +445,7 @@ macro_rules! input_test{
             //  array.add(input_array.clone(),1);
             //  check_results!($array,array,num_pes,"GlobalLockArray<T>");
             // GlobalLockArray<T>------------------------------
-            array.batch_add(&input_array.blocking_read_local_data(),1);
+            let _ = array.batch_add(&input_array.blocking_read_local_data(),1);
             check_results!($array,array,num_pes,"&GlobalLockArray<T>");
             println!("passed &GlobalLockArray<T>");
        }

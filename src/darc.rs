@@ -1263,46 +1263,6 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
         let block_on_fut =
             { DarcInner::block_on_outstanding(wrapped.clone(), DarcMode::Dropped, 0) };
         block_on_fut.await;
-        // wrapped.wait_all();
-        // // let inner = unsafe {&*wrapped.inner}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc (but still allow async wait cause T is not send)
-        // while wrapped.dist_cnt.load(Ordering::SeqCst) != 0
-        //     || wrapped.local_cnt.load(Ordering::SeqCst) != 0
-        // {
-        //     if wrapped.local_cnt.load(Ordering::SeqCst) == 0 {
-        //         wrapped.send_finished();
-        //     }
-        //     if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-        //         let ref_cnts_slice = std::slice::from_raw_parts_mut(
-        //             wrapped.ref_cnt_addr as *mut usize,
-        //             wrapped.num_pes,
-        //         );
-
-        //         println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
-        //             The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-        //             The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-        //             the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
-        //             To view backtrace set RUST_LIB_BACKTRACE=1\n\
-        //             {}",
-        //             mode_refs,
-        //             wrapped.local_cnt.load(Ordering::SeqCst),
-        //             wrapped.dist_cnt.load(Ordering::SeqCst),
-        //             *crate::DEADLOCK_TIMEOUT,
-        //             std::backtrace::Backtrace::capture()
-        //         );
-        //         timeout = std::time::Instant::now();
-        //     }
-        //     async_std::task::yield_now().await;
-        // }
-        // // let team = wrapped.team();
-        // let rdma = &self.team.lamellae;
-        // for pe in self.team.arch.team_iter() {
-        //     // println!("putting {:?} to {:?} @ {:x}",&mode_refs[self.my_pe..=self.my_pe],pe,self.mode_addr + self.my_pe * std::mem::size_of::<u8>());
-        //     rdma.put(
-        //         pe,
-        //         &mode_refs_u8[self.my_pe..=self.my_pe],
-        //         self.mode_addr + self.my_pe * std::mem::size_of::<DarcMode>(),
-        //     );
-        // }
 
         // println!(
         //     "[{:?}] past block_on_outstanding {:x}",

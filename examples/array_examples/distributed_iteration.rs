@@ -21,10 +21,10 @@ fn main() {
     // we currently provide the "for_each" driver which will execute a closure on every element in the distributed array (concurrently)
 
     //for example lets initialize our arrays, where we store the value of my_pe to each local element a pe owns
-    block_dist_iter
+    let _ = block_dist_iter
         .enumerate()
         .for_each(move |(i, elem)| elem.store(i));
-    cyclic_dist_iter.for_each(move |elem| elem.store(my_pe));
+    let _ = cyclic_dist_iter.for_each(move |elem| elem.store(my_pe));
     //for_each is asynchronous so we must wait on the array for the operations to complete
     // we are working on providing a request handle which can be used to check for completion
     block_array.wait_all();
@@ -54,7 +54,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block skip enumerate step_by");
-    block_array
+    let _ = block_array
         .dist_iter()
         .skip(2)
         .enumerate()
@@ -91,7 +91,7 @@ fn main() {
     println!("--------------------------------------------------------");
     println!("cyclic skip enumerate");
 
-    cyclic_array
+    let _ = cyclic_array
         .dist_iter()
         .enumerate()
         .skip(2)
@@ -130,7 +130,7 @@ fn main() {
     println!("cyclic enumerate map async for each");
     cyclic_array.print();
     let barray = block_array.clone();
-    cyclic_array
+    let _ = cyclic_array
         .dist_iter()
         .enumerate()
         .map(move |(i, elem)| {
@@ -178,7 +178,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block enumerate filter");
-    block_array
+    let _ = block_array
         .dist_iter()
         .enumerate()
         .filter(|(_, elem)| elem.load() % 4 == 0)
@@ -196,7 +196,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block enumerate filter_map");
-    block_array
+    let _ = block_array
         .dist_iter()
         .enumerate()
         .filter_map(|(i, elem)| {
@@ -238,7 +238,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block skip enumerate");
-    block_array
+    let _ = block_array
         .dist_iter()
         .skip(10)
         .enumerate()
@@ -257,7 +257,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block skip  step_by enumerate");
-    block_array
+    let _ = block_array
         .dist_iter()
         .skip(10)
         .step_by(3)
@@ -277,7 +277,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block take skip enumerate");
-    block_array
+    let _ = block_array
         .dist_iter()
         .take(60)
         .skip(10)
@@ -297,7 +297,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block take skip take enumerate");
-    block_array
+    let _ = block_array
         .dist_iter()
         .take(60)
         .skip(10)

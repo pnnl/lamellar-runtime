@@ -2,7 +2,7 @@ use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 
 fn initialize_array(array: &UnsafeArray<usize>) {
-    unsafe { array.dist_iter_mut().for_each(|x| *x = 0) };
+    let _ = unsafe { array.dist_iter_mut().for_each(|x| *x = 0) };
     array.wait_all();
     array.barrier();
 }

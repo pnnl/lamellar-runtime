@@ -134,7 +134,7 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             1
         };
         let timer = Instant::now();
-        team.exec_am_all(TeamAM { secs }); //everynode that has a handle can launch on a given team;
+        let _ = team.exec_am_all(TeamAM { secs }); //everynode that has a handle can launch on a given team;
         team.wait_all(); //wait until all requests return
         team.barrier(); // barriers only apply to team members, its a no op for non team members
         timer.elapsed().as_secs_f64()
@@ -168,7 +168,7 @@ fn main() {
     }
     world.barrier();
     let timer = Instant::now();
-    world.exec_am_all(TeamAM { secs: 1 });
+    let _ = world.exec_am_all(TeamAM { secs: 1 });
     world.wait_all();
     world.barrier();
     let elapsed = timer.elapsed().as_secs_f64();
@@ -213,6 +213,6 @@ fn main() {
         3,                                      //block size
         (num_pes as f64 / 3.0).ceil() as usize, //num pes in team
     );
-        let blk_stride_team = world.create_team_from_arch(arch);
+    let blk_stride_team = world.create_team_from_arch(arch);
     test_team(&world, blk_stride_team, "blk stride team");
 }

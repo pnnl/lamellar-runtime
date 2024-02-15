@@ -1,22 +1,10 @@
-use crate::scheduler::{LamellarExecutor, SchedulerStatus};
+use crate::scheduler::LamellarExecutor;
 
 use tokio::runtime::Runtime;
 
 use tracing::*;
 
-use async_task::{Builder, Runnable};
-use core_affinity::CoreId;
-use crossbeam::deque::Worker;
 use futures::Future;
-use futures_lite::FutureExt;
-use rand::prelude::*;
-use std::panic;
-use std::process;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use std::sync::Arc; //, Weak};
-use std::thread;
-
-static TASK_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug)]
 pub(crate) struct TokioRt {

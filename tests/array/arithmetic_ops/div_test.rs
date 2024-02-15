@@ -2,23 +2,23 @@ use lamellar::array::prelude::*;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         }
         $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
+        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
@@ -79,7 +79,7 @@ macro_rules! div_test{
             // array.print();
             for idx in 0..array.len(){
                 for _i in 0..(max_updates as usize){
-                    array.div(idx,2 as $t);
+                    let _ = array.div(idx,2 as $t);
                 }
             }
             array.wait_all();
@@ -106,7 +106,7 @@ macro_rules! div_test{
             // // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(max_updates as usize){
-                    sub_array.div(idx,2 as $t);
+                    let _ = sub_array.div(idx,2 as $t);
                 }
             }
             sub_array.wait_all();
@@ -132,7 +132,7 @@ macro_rules! div_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     for _i in 0..(max_updates as usize){
-                        sub_array.div(idx,2 as $t);
+                        let _ = sub_array.div(idx,2 as $t);
                     }
                 }
                 sub_array.wait_all();

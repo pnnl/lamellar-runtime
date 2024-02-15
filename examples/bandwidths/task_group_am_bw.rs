@@ -57,7 +57,7 @@ fn main() {
                 let sub_timer = Instant::now();
                 let d = _data.clone();
                 sub_time += sub_timer.elapsed().as_secs_f64();
-                task_group.exec_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
+                let _ = task_group.exec_am_pe(num_pes - 1, DataAM { data: d }); //we explicity  captured _data and transfer it even though we do nothing with it
 
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

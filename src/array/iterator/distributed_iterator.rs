@@ -36,19 +36,16 @@ use take::*;
 
 pub(crate) use consumer::*;
 
-use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::{IterRequest, Schedule};
+use crate::array::iterator::Schedule;
 use crate::array::{
     operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, GenericAtomicArray,
-    LamellarArray, LamellarArrayPut, NativeAtomicArray, TeamFrom, UnsafeArray,
+    LamellarArray, NativeAtomicArray,
 };
-use crate::lamellar_request::LamellarRequest;
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
 use crate::active_messaging::SyncSend;
 
-use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use futures::Future;
 use std::marker::PhantomData;

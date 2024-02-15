@@ -370,27 +370,38 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
-        let mut executor = match std::env::var("LAMELLAR_EXECUTOR") {
+        let executor = match std::env::var("LAMELLAR_EXECUTOR") {
             Ok(val) => {
                 let executor = val.parse::<usize>().unwrap();
                 if executor == 0 {
                     ExecutorType::LamellarWorkStealing
-                }
-                // else if scheduler == 1 {
-                //     ExecutorType::NumaWorkStealing
-                // } else if scheduler == 2 {
-                //     ExecutorType::NumaWorkStealing2
-                // }
-                else {
+                } else if executor == 1 {
+                    #[cfg(feature = "tokio-executor")]
+                    {
+                        ExecutorType::Tokio
+                    }
+                    #[cfg(not(feature = "tokio-executor"))]
+                    {
+                        println!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled,  defaulting to lamellar work stealing executor");
+                        ExecutorType::LamellarWorkStealing
+                    }
+                } else {
+                    println!("[LAMELLAR WARNING]: invalid executor selected defaulting to lamellar work stealing executor");
                     ExecutorType::LamellarWorkStealing
                 }
             }
-            Err(_) => ExecutorType::LamellarWorkStealing,
+            Err(_) => {
+                #[cfg(feature = "tokio-executor")]
+                {
+                    ExecutorType::Tokio
+                }
+                #[cfg(not(feature = "tokio-executor"))]
+                {
+                    ExecutorType::LamellarWorkStealing
+                }
+            }
         };
-        #[cfg(feature = "tokio-executor")]
-        {
-            executor = ExecutorType::Tokio;
-        }
+        println!("executor: {:?}", executor);
 
         let num_threads = match std::env::var("LAMELLAR_THREADS") {
             Ok(n) => {

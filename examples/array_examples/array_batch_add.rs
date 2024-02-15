@@ -38,7 +38,7 @@ fn main() {
 
         array.barrier();
         let timer = std::time::Instant::now();
-        array.batch_add(indices.clone(), 1);
+        let _ = array.batch_add(indices.clone(), 1);
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
@@ -53,7 +53,7 @@ fn main() {
 
         array.barrier();
         let mut timer = std::time::Instant::now();
-        array.batch_add(indices.clone(), 1);
+        let _ = array.batch_add(indices.clone(), 1);
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
@@ -74,7 +74,7 @@ fn main() {
             if bufs[pe].len() == num_per_batch {
                 let mut buf = Vec::with_capacity(num_per_batch);
                 std::mem::swap(&mut bufs[pe], &mut buf);
-                world.exec_am_pe(
+                let _ = world.exec_am_pe(
                     pe,
                     AddAm {
                         array: array.clone(),
@@ -85,7 +85,7 @@ fn main() {
         }
         for (pe, buf) in bufs.drain(..).enumerate() {
             if buf.len() > 0 {
-                world.exec_am_pe(
+                let _ = world.exec_am_pe(
                     pe,
                     AddAm {
                         array: array.clone(),

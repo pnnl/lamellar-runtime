@@ -428,6 +428,12 @@ impl<T: Clone> TeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
     }
 }
 
+impl<T: Clone> TeamFrom<(Vec<T>, Distribution)> for Vec<T> {
+    fn team_from(vals: (Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        vals.0.to_vec()
+    }
+}
+
 impl<T: Dist> TeamTryFrom<&T> for LamellarArrayRdmaInput<T> {
     fn team_try_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::team_from(val, team))
@@ -503,6 +509,20 @@ impl<T: Clone> TeamTryFrom<(&Vec<T>, Distribution)> for Vec<T> {
     }
 }
 
+// #[async_trait]
+// impl<T: Clone> AsyncTeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
+//     async fn team_from(vals: (&Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         vals.0.to_vec()
+//     }
+// }
+
+#[async_trait]
+impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for Vec<T> {
+    async fn team_from(input: (Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        input.0
+    }
+}
+
 #[async_trait]
 /// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 /// and to be used within an async context
@@ -557,6 +577,7 @@ pub trait TeamFrom<T: ?Sized> {
 /// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 /// and to be used within an async context
 pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> {
+    /// Converts to this type from the input type
     async fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
 }
 

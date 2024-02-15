@@ -19,7 +19,7 @@ fn main() {
 
     //add 1 to each element of array
     for i in 0..global_length {
-        array.add(i, 1);
+        let _ = array.add(i, 1);
     }
     //wait for all the local add operations to finish
     array.wait_all();

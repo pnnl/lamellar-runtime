@@ -33,10 +33,11 @@ fn main() {
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
 
     //initialize matrices
-    a.dist_iter_mut()
+    let _ = a
+        .dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
-    b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
+    let _ = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
         //need global index so use dist_iter
         //identity matrix
         let row = i / dim;
@@ -47,7 +48,7 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    c.dist_iter_mut().for_each(|x| x.store(0.0));
+    let _ = c.dist_iter_mut().for_each(|x| x.store(0.0));
 
     world.wait_all();
     world.barrier();
@@ -67,7 +68,8 @@ fn main() {
         .for_each(|(j, col)| {
             let col = col.clone();
             let c = c.clone();
-            a.local_iter() //LocalIterator (each pe will iterate through only its local data -- in parallel)
+            let _ = a
+                .local_iter() //LocalIterator (each pe will iterate through only its local data -- in parallel)
                 .chunks(n) // chunk by the row size
                 .enumerate()
                 .for_each(move |(i, row)| {

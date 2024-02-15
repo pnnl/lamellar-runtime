@@ -14,7 +14,7 @@ fn for_each_with_schedule(
 ) {
     let timer = Instant::now();
     let tc = thread_cnts.clone();
-    array
+    let _ = array
         .local_iter()
         .filter(|e| e.load() % 2 == 0)
         .for_each_with_schedule(schedule, move |e| {
@@ -109,7 +109,7 @@ fn main() {
     let _my_pe = world.my_pe();
     let _num_pes = world.num_pes();
     let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    block_array
+    let _ = block_array
         .dist_iter_mut()
         .enumerate()
         .for_each(move |(i, e)| e.store(i));

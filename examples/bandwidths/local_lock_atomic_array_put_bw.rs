@@ -21,7 +21,7 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    array
+    let _ = array
         .dist_iter_mut()
         .for_each(move |elem| *elem = 255 as u8);
     array.wait_all();
@@ -55,7 +55,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(..num_bytes as usize);
-                unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg) };
+                let _ = unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -67,7 +67,6 @@ fn main() {
         let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == num_pes - 1 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                let array_clone = array.clone();
                 let local_data = array.blocking_read_local_data();
                 while *(&local_data[(j + num_bytes as usize) - 1]) == 255 as u8 {
                     println!(
@@ -97,7 +96,7 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        array
+        let _ = array
             .dist_iter_mut()
             .for_each(move |elem| *elem = 255 as u8);
         array.wait_all();

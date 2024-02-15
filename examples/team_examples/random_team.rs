@@ -177,7 +177,7 @@ fn main() {
                 team_pe: t,
             };
             println!("launching {:?} to pe {:?}", d, i);
-            team.exec_am_pe(i, d);
+            let _ = team.exec_am_pe(i, d);
         }
 
         let p = rand_arch.team_id(my_pe);
