@@ -28,10 +28,11 @@ fn main() {
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                          //initialize matrices
 
-    a.dist_iter_mut()
+    let _ = a
+        .dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
-    b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
+    let _ = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
         //identity matrix
         let row = i / dim;
         let col = i % dim;
@@ -41,7 +42,7 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    c.dist_iter_mut().for_each(|x| x.store(0.0));
+    let _ = c.dist_iter_mut().for_each(|x| x.store(0.0));
 
     world.wait_all();
     world.barrier();
@@ -73,7 +74,7 @@ fn main() {
                         let b_val = b_c.at(j + k * n);
                         sum += a_val.await * b_val.await;
                     }
-                    c_c.store(j + i * m, sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
+                    let _ = c_c.store(j + i * m, sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
                 }
             }
         });

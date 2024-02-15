@@ -148,7 +148,7 @@ fn dft_lamellar(
     let timer = Instant::now();
     for pe in 0..num_pes {
         for k in 0..spectrum_slice.len() {
-            world.exec_am_local(LocalSumAM {
+            let _ = world.exec_am_local(LocalSumAM {
                 spectrum: add_spec.clone(),
                 signal: signal.clone(),
                 global_sig_len: global_sig_len,
@@ -159,7 +159,7 @@ fn dft_lamellar(
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
         add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice().unwrap() });
-        world.exec_am_pe(
+        let _ = world.exec_am_pe(
             pe,
             RemoteSumAM {
                 spectrum: spectrum.clone(),
@@ -203,6 +203,7 @@ fn dft_lamellar_am_group(
             );
         }
         let spec = spectrum.clone();
+        let world_clone = world.clone();
         pe_groups.push_back(async move {
             let res = local_sum_group.exec().await;
             let vec = (0..local_len)
@@ -214,7 +215,7 @@ fn dft_lamellar_am_group(
                     }
                 })
                 .collect::<Vec<_>>();
-            world
+            world_clone
                 .exec_am_pe(
                     pe,
                     RemoteSumAM {
@@ -225,7 +226,7 @@ fn dft_lamellar_am_group(
                 .await;
         });
     }
-    world.block_on(pe_groups.collect::<Vec<_>>());
+    world.block_on(async move { pe_groups.collect::<Vec<_>>().await });
 
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
@@ -261,6 +262,7 @@ fn dft_lamellar_am_group_static(
             );
         }
         let spec = spectrum.clone();
+        let world_clone = world.clone();
         pe_groups.push_back(async move {
             let res = local_sum_group.exec().await;
             let vec = (0..local_len)
@@ -272,7 +274,7 @@ fn dft_lamellar_am_group_static(
                     }
                 })
                 .collect::<Vec<_>>();
-            world
+            world_clone
                 .exec_am_pe(
                     pe,
                     RemoteSumAM {
@@ -283,7 +285,9 @@ fn dft_lamellar_am_group_static(
                 .await;
         });
     }
-    world.block_on(pe_groups.collect::<Vec<_>>());
+    world.block_on(async move {
+        pe_groups.collect::<Vec<_>>().await;
+    });
 
     world.barrier();
     let time = timer.elapsed().as_secs_f64();
@@ -331,7 +335,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
     let timer = Instant::now();
     let signal_clone = signal.clone();
     unsafe {
-        spectrum
+        let _ = spectrum
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(k, spec_bin)| {
@@ -362,7 +366,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
 fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) -> f64 {
     let timer = Instant::now();
     let signal_clone = signal.clone();
-    spectrum
+    let _ = spectrum
         .dist_iter_mut()
         .enumerate()
         .for_each(move |(k, spec_bin)| {
@@ -392,7 +396,7 @@ fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f6
     unsafe {
         for (i, x) in signal.onesided_iter().into_iter().enumerate() {
             let x = (*x).clone();
-            spectrum
+            let _ = spectrum
                 .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(k, spec_bin)| {
@@ -428,7 +432,7 @@ fn dft_lamellar_array_opt(
             .enumerate()
             .for_each(|(i, chunk)| {
                 let signal = chunk.clone();
-                spectrum
+                let _ = spectrum
                     .dist_iter_mut()
                     .enumerate()
                     .for_each(move |(k, spec_bin)| {
@@ -470,7 +474,7 @@ fn dft_lamellar_array_opt_test(
             .enumerate()
             .for_each(|(i, chunk)| {
                 let signal = chunk.clone();
-                spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
+                let _ = spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
                     Schedule::Dynamic,
                     move |(k, spec_bin)| {
                         let mut sum = 0f64;
@@ -512,7 +516,7 @@ fn dft_lamellar_array_opt_2(
         .enumerate()
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
-            spectrum
+            let _ = spectrum
                 .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(k, mut spec_bin)| {
@@ -553,7 +557,7 @@ fn dft_lamellar_array_opt_3(
         .enumerate()
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
-            spectrum
+            let _ = spectrum
                 .dist_iter_mut() //this locks the LocalLockArray
                 .enumerate()
                 .for_each(move |(k, spec_bin)| {
@@ -635,7 +639,7 @@ fn main() {
                 *i = rng.gen_range(0.0..1.0);
             }
             let full_signal_clone = full_signal.clone();
-            full_signal_array
+            let _ = full_signal_array
                 .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(i, x)| *x = full_signal_clone.as_mut_slice().unwrap()[i]);
@@ -752,7 +756,7 @@ fn main() {
 
             //--------------lamellar array--------------------------
             unsafe {
-                full_spectrum_array
+                let _ = full_spectrum_array
                     .dist_iter_mut()
                     .for_each(|elem| *elem = 0.0);
             }
@@ -800,7 +804,7 @@ fn main() {
 
             //------------optimized lamellar array----------------
             unsafe {
-                full_spectrum_array
+                let _ = full_spectrum_array
                     .dist_iter_mut()
                     .for_each(|elem| *elem = 0.0);
             }
@@ -819,7 +823,7 @@ fn main() {
 
             //--------------lamellar array--------------------------
             unsafe {
-                full_spectrum_array
+                let _ = full_spectrum_array
                     .dist_iter_mut()
                     .for_each(|elem| *elem = 0.0);
             }
@@ -867,7 +871,7 @@ fn main() {
             // ));
 
             world.barrier();
-            full_spectrum_array
+            let _ = full_spectrum_array
                 .dist_iter_mut()
                 .for_each(|elem| elem.store(0.0));
             full_spectrum_array.wait_all();
@@ -894,7 +898,7 @@ fn main() {
             ));
 
             world.barrier();
-            full_spectrum_array
+            let _ = full_spectrum_array
                 .dist_iter_mut()
                 .for_each(|elem| *elem = 0.0);
             full_spectrum_array.wait_all();

@@ -2,22 +2,22 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
+        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
@@ -64,7 +64,7 @@ macro_rules! load_store_test{
             array.barrier();
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
-                    array.store(idx,my_pe as $t);
+                    let _ = array.store(idx,my_pe as $t);
                 }
             }
             array.wait_all();
@@ -97,7 +97,7 @@ macro_rules! load_store_test{
             sub_array.barrier();
             for idx in 0..sub_array.len(){
                 if idx%num_pes == my_pe{
-                    sub_array.store(idx,my_pe as $t);
+                    let _ = sub_array.store(idx,my_pe as $t);
                 }
             }
             sub_array.wait_all();
@@ -133,7 +133,7 @@ macro_rules! load_store_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        sub_array.store(idx,my_pe as $t);
+                        let _ = sub_array.store(idx,my_pe as $t);
                     }
                 }
                 sub_array.wait_all();

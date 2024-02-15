@@ -39,10 +39,11 @@ fn main() {
     let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
                                                                          //initialize
-    a.dist_iter_mut()
+    let _ = a
+        .dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32);
-    b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
+    let _ = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
         //identity matrix
         let row = i / dim;
         let col = i % dim;
@@ -52,7 +53,7 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    c.dist_iter_mut().for_each(|x| x.store(0.0));
+    let _ = c.dist_iter_mut().for_each(|x| x.store(0.0));
     world.wait_all();
     world.barrier();
     let a = a.into_read_only();
@@ -88,7 +89,7 @@ fn main() {
     let a = a.clone();
     let b = b.clone();
     let c_clone = c.clone();
-    nblks_array.dist_iter().for_each(move |block| {
+    let _ = nblks_array.dist_iter().for_each(move |block| {
         //iterate over the submatrix cols of b, use dist_iter() so that we can launch transfers in parallel
         // for j_blk in 0..p_blks {
         // iterate over submatrix rows of b

@@ -30,7 +30,7 @@ impl LamellarAM for DataAM {
             for _i in 0..self.width {
                 let pe = pes.sample(&mut rng);
                 // println!("sending {:?} to {:?}",path,pe);
-                lamellar::team.exec_am_pe(
+                let _ = lamellar::team.exec_am_pe(
                     pe,
                     DataAM {
                         array: self.array.clone(),
@@ -86,7 +86,7 @@ fn main() {
     let width = 5;
     for _i in 0..width {
         let pe = pes.sample(&mut rng) / 2; //since both teams consist of half the number of pes as the world
-        first_half_team.exec_am_pe(
+        let _ = first_half_team.exec_am_pe(
             pe,
             DataAM {
                 array: array.clone(),
@@ -95,7 +95,7 @@ fn main() {
                 path: vec![my_pe],
             },
         );
-        odd_team.exec_am_pe(
+        let _ = odd_team.exec_am_pe(
             pe,
             DataAM {
                 array: array.clone(),

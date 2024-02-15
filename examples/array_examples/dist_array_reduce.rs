@@ -154,7 +154,7 @@ fn main() {
             .for_each(|x| println!("x: {:?}", x))
     });
     let block_array = block_array.into_read_only();
-    block_array.sum();
+    let _ = block_array.sum();
     // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
     // block_array.for_each(|x| println!("x: {:?}", x));
     // cyclic_array.for_each_mut(|x| *x += *x);

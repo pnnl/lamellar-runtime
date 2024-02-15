@@ -2,7 +2,7 @@ use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 
 fn initialize_array(array: &UnsafeArray<usize>) {
-    unsafe { array.dist_iter_mut().for_each(|x| *x = 0) };
+    let _ = unsafe { array.dist_iter_mut().for_each(|x| *x = 0) };
     array.wait_all();
     array.barrier();
 }
@@ -20,7 +20,7 @@ fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();
-    world.block_on(async {
+    world.clone().block_on(async move {
         let _num_pes = world.num_pes();
         let my_pe = world.my_pe();
         let total_len = args

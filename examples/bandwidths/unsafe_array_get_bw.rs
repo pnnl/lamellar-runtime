@@ -20,7 +20,7 @@ fn main() {
             *i = my_pe as u8;
         }
 
-        array
+        let _ = array
             .local_iter_mut()
             .for_each(move |elem| *elem = num_pes as u8);
     }
@@ -57,7 +57,7 @@ fn main() {
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
 
                 unsafe {
-                    array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                    let _ = array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
                 }
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;

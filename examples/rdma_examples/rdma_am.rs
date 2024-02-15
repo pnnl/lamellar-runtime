@@ -144,7 +144,7 @@ fn main() {
     world.barrier();
     let mut index = 0;
     while index * num_pes < ARRAY_LEN {
-        world.exec_am_all(RdmaLocalMRAM {
+        let _ = world.exec_am_all(RdmaLocalMRAM {
             array: local_array.clone(),
             orig_pe: my_pe,
             index: index,

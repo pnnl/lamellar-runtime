@@ -114,11 +114,11 @@ for toolchain in stable; do #nightly; do
         #   done
         fi
       cd ..
-      # cur_tasks=`squeue -u frie869 | wc -l`
-      # while [ $cur_tasks -gt 1 ]; do
-      #   cur_tasks=`squeue -u frie869 | wc -l`
-      #   sleep 5
-      # done
+      cur_tasks=`squeue -u frie869 | grep " R " | wc -l`
+      while [ $cur_tasks -gt 3 ]; do
+        cur_tasks=`squeue -u frie869 | grep " R " | wc -l`
+        sleep 5
+      done
     done
     cd ..
     wait

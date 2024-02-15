@@ -76,7 +76,7 @@ fn main() {
         if my_pe == num_pes - 1 {
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                world.exec_am_pe(
+                let _ = world.exec_am_pe(
                     0,
                     DataAM {
                         array: array.clone(),

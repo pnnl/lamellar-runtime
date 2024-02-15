@@ -24,7 +24,7 @@ fn main() {
         //     *i = num_pes as u8;
         // }
     }
-    array
+    let _ = array
         .dist_iter_mut()
         .for_each(move |elem| *elem = num_pes as u8);
     array.wait_all();
@@ -59,7 +59,7 @@ fn main() {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
                 unsafe {
-                    array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                    let _ = array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
                 }
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };

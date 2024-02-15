@@ -24,7 +24,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
         unsafe {
-            $array
+            let _ = $array
                 .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(i, x)| *x = i as $t);
@@ -32,21 +32,21 @@ macro_rules! initialize_array {
         $array.wait_all();
     };
     (AtomicArray,$array:ident,$t:ty) => {
-        $array
+        let _ = $array
             .dist_iter()
             .enumerate()
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
     (LocalLockArray,$array:ident,$t:ty) => {
-        $array
+        let _ = $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
     };
     (GlobalLockArray,$array:ident,$t:ty) => {
-        $array
+        let _ = $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
@@ -55,7 +55,8 @@ macro_rules! initialize_array {
     (ReadOnlyArray,$array:ident,$t:ty) => {
         let temp = $array.into_unsafe();
         unsafe {
-            temp.dist_iter_mut()
+            let _ = temp
+                .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(i, x)| *x = i as $t);
         }
@@ -68,7 +69,7 @@ macro_rules! initialize_array_range {
     (UnsafeArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         unsafe {
-            subarray
+            let _ = subarray
                 .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(i, x)| *x = i as $t);
@@ -77,7 +78,7 @@ macro_rules! initialize_array_range {
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        subarray
+        let _ = subarray
             .dist_iter()
             .enumerate()
             .for_each(move |(i, x)| x.store(i as $t));
@@ -85,7 +86,7 @@ macro_rules! initialize_array_range {
     }};
     (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        subarray
+        let _ = subarray
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
@@ -93,7 +94,7 @@ macro_rules! initialize_array_range {
     }};
     (GlobalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        subarray
+        let _ = subarray
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
@@ -103,7 +104,7 @@ macro_rules! initialize_array_range {
         let temp = $array.into_unsafe();
         let subarray = temp.sub_array($range);
         unsafe {
-            subarray
+            let _ = subarray
                 .dist_iter_mut()
                 .enumerate()
                 .for_each(move |(i, x)| *x = i as $t);

@@ -23,7 +23,7 @@ fn main() {
         // }
     }
     unsafe {
-        array
+        let _ = array
             .local_iter_mut()
             .for_each(move |elem| *elem = num_pes as u8);
     }

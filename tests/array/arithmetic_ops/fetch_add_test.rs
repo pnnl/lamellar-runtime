@@ -6,12 +6,12 @@ use rand::distributions::Uniform;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
+        let _ = unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
         $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().enumerate().for_each(move |(_i, x)| {
+        let _ = $array.dist_iter().enumerate().for_each(move |(_i, x)| {
             // println!("{:?} {:?}", i, x.load());
             x.store($init_val)
         });
@@ -19,12 +19,12 @@ macro_rules! initialize_array {
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
@@ -287,7 +287,7 @@ macro_rules! fetch_add_test{
 macro_rules! initialize_array2 {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         #[allow(unused_unsafe)]
-        unsafe {
+        let _ = unsafe {
             $array
                 .dist_iter_mut()
                 .enumerate()
@@ -297,7 +297,7 @@ macro_rules! initialize_array2 {
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().enumerate().for_each(move |(i, x)| {
+        let _ = $array.dist_iter().enumerate().for_each(move |(i, x)| {
             // println!("{:?} {:?}", i, x.load());
             x.store(i)
         });
@@ -305,7 +305,7 @@ macro_rules! initialize_array2 {
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array
+        let _ = $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i);
@@ -313,7 +313,7 @@ macro_rules! initialize_array2 {
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array
+        let _ = $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i);
@@ -407,11 +407,11 @@ macro_rules! input_test{
             initialize_array2!($array, array, init_val);
             if $dist == lamellar::array::Distribution::Block{
                 #[allow(unused_unsafe)]
-                unsafe { input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i%array_total_len});}
+                let _ = unsafe { input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i%array_total_len})};
             }
             else{
                 #[allow(unused_unsafe)]
-                unsafe { input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i/num_pes});}
+                let _ = unsafe { input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {/*println!("i: {:?}",i);*/ *x = i/num_pes})};
             }
 
             array.wait_all();

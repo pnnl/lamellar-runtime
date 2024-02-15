@@ -38,7 +38,7 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             1
         };
         let timer = Instant::now();
-        team.exec_am_all(TeamAM {
+        let _ = team.exec_am_all(TeamAM {
             secs: secs,
             orig_pe: my_pe,
         }); //everynode that has a handle can launch on a given team;
@@ -76,7 +76,7 @@ fn main() {
     }
     world.barrier();
     let timer = Instant::now();
-    world.exec_am_all(TeamAM {
+    let _ = world.exec_am_all(TeamAM {
         secs: 1,
         orig_pe: my_pe,
     });

@@ -20,7 +20,7 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    array
+    let _ = array
         .dist_iter_mut()
         .for_each(move |elem| *elem = 255 as u8); //this is can be pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, local lock tends to perform better
     let mut array = array.into_atomic(); //so we simply convert the LocalLockArray array to atomic after initalization
@@ -53,7 +53,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(..num_bytes as usize);
-                unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg) };
+                let _ = unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg) };
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
@@ -103,7 +103,7 @@ fn main() {
         //     }
         // };
         let temp = array.into_local_lock();
-        temp.dist_iter_mut().for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
+        let _ = temp.dist_iter_mut().for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
         array = temp.into_atomic();
         world.barrier();
     }

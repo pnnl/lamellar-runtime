@@ -18,17 +18,17 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         }
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
+        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
     };
 }
 
@@ -57,7 +57,7 @@ macro_rules! put_test{
                 for tx in (my_pe..num_txs).step_by(num_pes){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    unsafe {array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)));}
+                    unsafe {let _ = array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)));}
                 }
                 array.wait_all();
                 array.barrier();
@@ -91,7 +91,7 @@ macro_rules! put_test{
                 for tx in (my_pe..num_txs).step_by(num_pes){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    unsafe {sub_array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)));}
+                    unsafe {let _ = sub_array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)));}
                 }
                 array.wait_all();
                 sub_array.barrier();
@@ -128,7 +128,7 @@ macro_rules! put_test{
                     for tx in (my_pe..num_txs).step_by(num_pes){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        unsafe {sub_array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)));}
+                        unsafe {let _ = sub_array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)));}
                     }
                     array.wait_all();
                     sub_array.barrier();

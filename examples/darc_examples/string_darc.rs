@@ -19,19 +19,22 @@ impl LamellarAm for StringDarcAm {
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let string_data = LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe)).unwrap();
+    world.clone().block_on(async move {
+        let string_data =
+            LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe)).unwrap();
 
-    println!("[PE: {}] {}", my_pe, world.block_on(string_data.read()));
+        println!("[PE: {}] {}", my_pe, string_data.read().await);
 
-    if my_pe == 0 {
-        world.block_on(world.exec_am_pe(
-            1,
-            StringDarcAm {
-                new_data: String::from("Modified string from 0"),
-                data: string_data.clone(),
-            },
-        ));
-    }
-    world.barrier();
-    println!("[PE: {}] {}", my_pe, world.block_on(string_data.read()));
+        if my_pe == 0 {
+            world.block_on(world.exec_am_pe(
+                1,
+                StringDarcAm {
+                    new_data: String::from("Modified string from 0"),
+                    data: string_data.clone(),
+                },
+            ));
+        }
+        world.barrier();
+        println!("[PE: {}] {}", my_pe, string_data.read().await);
+    });
 }

@@ -5,22 +5,22 @@ use rand::distributions::Uniform;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
+        let _ = unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
         $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
+        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
         $array.wait_all();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
         $array.wait_all();
         $array.barrier();
     };
@@ -85,7 +85,7 @@ macro_rules! sub_test{
 
                         for idx in 0..array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    array.sub(idx,1 as $t);
+                    let _ = array.sub(idx,1 as $t);
                 }
             }
             array.wait_all();
@@ -107,7 +107,7 @@ macro_rules! sub_test{
 
                         for _i in 0..num_updates  as usize{
                 let idx = rand_idx.sample(&mut rng);
-                array.sub(idx,1 as $t);
+                let _ = array.sub(idx,1 as $t);
             }
             array.wait_all();
             array.barrier();
@@ -133,7 +133,7 @@ macro_rules! sub_test{
                         // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    sub_array.sub(idx,1 as $t);
+                    let _ = sub_array.sub(idx,1 as $t);
                 }
             }
             sub_array.wait_all();
@@ -155,7 +155,7 @@ macro_rules! sub_test{
 
                         for _i in 0..num_updates as usize{
                 let idx = rand_idx.sample(&mut rng);
-                sub_array.sub(idx,1 as $t);
+                let _ = sub_array.sub(idx,1 as $t);
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -181,7 +181,7 @@ macro_rules! sub_test{
                 sub_array.barrier();
                                 for idx in 0..sub_array.len(){
                     for _i in 0..(pe_max_val as usize){
-                        sub_array.sub(idx,1 as $t);
+                        let _ = sub_array.sub(idx,1 as $t);
                     }
                 }
                 sub_array.wait_all();
@@ -203,7 +203,7 @@ macro_rules! sub_test{
 
                                 for _i in 0..num_updates as usize{
                     let idx = rand_idx.sample(&mut rng);
-                    sub_array.sub(idx,1 as $t);
+                    let _ = sub_array.sub(idx,1 as $t);
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
