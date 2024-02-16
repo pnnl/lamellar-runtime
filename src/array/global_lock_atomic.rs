@@ -453,7 +453,7 @@ impl<T: Dist> GlobalLockArray<T> {
     // }
 
     // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.   
+    // /// Return the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.
     // ///
     // /// Calling this function will result in a local read lock being captured on the array
     // ///
@@ -477,7 +477,7 @@ impl<T: Dist> GlobalLockArray<T> {
     // }
 
     // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [GlobalLockMutLocalData], which allows safe immutable access to local elements.   
+    // /// Return the calling PE's local data as a [GlobalLockMutLocalData], which allows safe immutable access to local elements.
     // ///
     // /// Calling this function will result in a local read lock being captured on the array
     // ///

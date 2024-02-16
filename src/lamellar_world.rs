@@ -79,8 +79,8 @@ impl ActiveMessaging for LamellarWorld {
     where
         F: Future,
     {
-        // trace_span!("block_on").in_scope(|| 
-            self.team_rt.scheduler.block_on(f)
+        // trace_span!("block_on").in_scope(||
+        self.team_rt.scheduler.block_on(f)
         // )
     }
 }

@@ -491,8 +491,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        // trace_span!("block_on").in_scope(|| 
-            self.team.scheduler.block_on(f)
+        // trace_span!("block_on").in_scope(||
+        self.team.scheduler.block_on(f)
         // )
     }
 }

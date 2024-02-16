@@ -467,8 +467,8 @@ impl ActiveMessaging for LamellarTaskGroup {
     where
         F: Future,
     {
-        // tracing::trace_span!("block_on").in_scope(|| 
-            self.team.scheduler.block_on(f)
+        // tracing::trace_span!("block_on").in_scope(||
+        self.team.scheduler.block_on(f)
         // )
     }
 }

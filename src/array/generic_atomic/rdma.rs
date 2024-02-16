@@ -38,9 +38,7 @@ impl<T: Dist> LamellarArrayGet<T> for GenericAtomicArray<T> {
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         match buf.team_try_into(&self.array.team_rt()) {
-            Ok(buf) => self
-                .internal_get(index, buf)
-                .into_future(),
+            Ok(buf) => self.internal_get(index, buf).into_future(),
             Err(_) => Box::pin(async move { () }),
         }
     }
@@ -71,9 +69,7 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
         buf: U,
     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         match buf.team_try_into(&self.array.team_rt()) {
-            Ok(buf) => self
-                .internal_put(index, buf)
-                .into_future(),
+            Ok(buf) => self.internal_put(index, buf).into_future(),
             Err(_) => Box::pin(async move { () }),
         }
     }
