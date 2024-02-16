@@ -70,7 +70,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.shl(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn shl(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -105,7 +105,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_shl(indices,3);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_shl<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -144,7 +144,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.fetch_shl(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_shl(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -181,7 +181,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_fetch_shl(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_shl<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -218,7 +218,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.shl(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn shr<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -253,7 +253,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_shr(indices,3);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_shr<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -292,7 +292,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.fetch_shl(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_shr<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -329,7 +329,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_fetch_shr(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_shr<'a>(
         &self,
         index: impl OpInput<'a, usize>,

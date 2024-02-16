@@ -428,17 +428,17 @@ pub struct LamellarTaskGroup {
 }
 
 impl ActiveMessaging for LamellarTaskGroup {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         self.wait_all();
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn barrier(&self) {
         self.team.barrier();
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -447,7 +447,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_all_inner(am).into_future()
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -455,7 +455,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_pe_inner(pe, am).into_future()
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -467,7 +467,9 @@ impl ActiveMessaging for LamellarTaskGroup {
     where
         F: Future,
     {
-        tracing::trace_span!("block_on").in_scope(|| self.team.scheduler.block_on(f))
+        // tracing::trace_span!("block_on").in_scope(|| 
+            self.team.scheduler.block_on(f)
+        // )
     }
 }
 

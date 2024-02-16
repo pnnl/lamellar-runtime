@@ -13,13 +13,15 @@ fn impl_lamellar_active_message_trait(
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let trace_name = quote! {stringify!(#am_name)};
+    // let trace_name = quote! {stringify!(#am_name)};
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                 Box::pin( async move {
                     #am_body
-                }.instrument(#lamellar::tracing::trace_span!(#trace_name)))
+                }
+                // .instrument(#lamellar::tracing::trace_span!(#trace_name)))
+            )
             }
 
             fn get_id(&self) -> &'static str{
@@ -437,7 +439,7 @@ pub(crate) fn generate_am(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::tracing::*;
+            // use __lamellar::tracing::*;
             #expanded
         };
     };
@@ -445,7 +447,7 @@ pub(crate) fn generate_am(
     let rt_expanded = quote_spanned! {
         expanded.span()=>
         const _: () = {
-            use tracing::*;
+            // //use tracing::*;
             #expanded
         };
     };

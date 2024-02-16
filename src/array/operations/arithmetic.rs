@@ -117,7 +117,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.add(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -152,7 +152,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_add(indices,10);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -191,7 +191,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_add(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -228,7 +228,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_add(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_add<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -265,7 +265,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.sub(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -300,7 +300,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_sub(indices,10);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -339,7 +339,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_sub(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -376,7 +376,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_sub(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_sub<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -413,7 +413,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.mul(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -448,7 +448,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_mul(indices,10);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -487,7 +487,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_mul(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -524,7 +524,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_mul(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_mul<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -561,7 +561,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.div(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -596,7 +596,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_div(indices,10);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -635,7 +635,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_div(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -672,7 +672,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_div(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_div<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -709,7 +709,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.rem(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn rem<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -744,7 +744,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_rem(indices,10);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_rem<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -783,7 +783,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.fetch_rem(idx,val);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn fetch_rem<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -820,7 +820,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let req = array.batch_fetch_rem(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_fetch_rem<'a>(
         &self,
         index: impl OpInput<'a, usize>,

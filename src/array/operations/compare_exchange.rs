@@ -118,7 +118,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let req = array.compare_exchange(idx,current,val);
     /// let result = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn compare_exchange<'a>(
         &self,
         index: usize,
@@ -162,7 +162,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let req = array.batch_compare_exchange(indices,current,10);
     /// let results = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -287,7 +287,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = array.compare_exchange_epsilon(idx,current,val,epsilon);
     /// let result = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
@@ -333,7 +333,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon);
     /// let results = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,

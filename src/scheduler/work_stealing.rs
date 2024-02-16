@@ -6,7 +6,7 @@ use crate::scheduler::batching::BatcherType;
 use crate::scheduler::registered_active_message::RegisteredActiveMessages;
 use crate::scheduler::{AmeScheduler, AmeSchedulerQueue, SchedulerQueue};
 
-use tracing::*;
+//use tracing::*;
 
 use async_task::{Builder, Runnable};
 use core_affinity::CoreId;
@@ -50,7 +50,7 @@ pub(crate) struct WorkStealingThread {
 
 
 impl WorkStealingThread {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
@@ -64,7 +64,7 @@ impl WorkStealingThread {
             .spawn(move || {
                 // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
                 // let mut num_task_executed = 0;
-                let _span = trace_span!("WorkStealingThread::run");
+                // let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::thread_rng();
@@ -182,7 +182,7 @@ pub(crate) struct WorkStealingInner {
 }
 
 impl AmeSchedulerQueue for WorkStealingInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn submit_am(
         //unserialized request
         &self,
@@ -215,7 +215,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         task.detach();
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn submit_am_immediate(
         //unserialized request
         &self,
@@ -251,7 +251,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     }
 
     //this is a serialized request
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn submit_work(
         &self,
         scheduler: impl SchedulerQueue + Sync + Send + Clone + std::fmt::Debug + 'static,
@@ -294,7 +294,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        trace_span!("submit_task").in_scope(|| {
+        // trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
             let max_tasks = self.max_tasks.clone();
             let future2 = move|_cur_task: &_| async move {
@@ -316,14 +316,14 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
             runnable.schedule();
             task.detach();
-        });
+        // });
     }
 
     fn submit_immediate_task<F>(&self, future: F)
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        trace_span!("submit_task").in_scope(|| {
+        // trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
             let max_tasks = self.max_tasks.clone();
             let future2 = move |_cur_task: &_| async move {
@@ -347,14 +347,14 @@ impl AmeSchedulerQueue for WorkStealingInner {
             // *OUTSTANDING_REQS.lock().entry(*runnable.metadata()).or_insert(0) += 1;
             runnable.run(); //try to run immediately
             task.detach();
-        });
+        // });
     }
 
     fn submit_immediate_task2<F>(&self, future: F)
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        trace_span!("submit_task").in_scope(|| {
+        // trace_span!("submit_task").in_scope(|| {
             let num_tasks = self.num_tasks.clone();
             let max_tasks = self.max_tasks.clone();
             let future2 = move|_cur_task: &_| async move {
@@ -377,14 +377,14 @@ impl AmeSchedulerQueue for WorkStealingInner {
 
             runnable.schedule(); //try to run immediately
             task.detach();
-        });
+        // });
     }
 
     fn block_on<F>(&self, future: F) -> F::Output
     where
         F: Future,
     {
-        trace_span!("block_on").in_scope(|| {
+        // trace_span!("block_on").in_scope(|| {
             // println!(
             //     "[{:?}] work stealing block on -- num tasks {:?} max tasks {:?}  tasks executed {:?}",
             //     std::thread::current().id(),
@@ -457,10 +457,10 @@ impl AmeSchedulerQueue for WorkStealingInner {
                 panic!("task not ready");
             }
             
-        })
+        // })
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.active());
         self.active.store(FINISHED, Ordering::SeqCst);
@@ -480,12 +480,12 @@ impl AmeSchedulerQueue for WorkStealingInner {
         // );
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn shutdown_threads(&self) {
         self.active.store(FINISHED, Ordering::SeqCst);
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn force_shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.active());
         self.active.store(PANIC, Ordering::SeqCst);
@@ -511,7 +511,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         // );
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_task(&self) {
         let mut rng = rand::thread_rng();
         let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
@@ -542,7 +542,7 @@ impl AmeSchedulerQueue for WorkStealingInner {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn active(&self) -> bool {
         // println!("sched active {:?} {:?}",self.active.load(Ordering::SeqCst) , self.num_tasks.load(Ordering::SeqCst));
         self.active.load(Ordering::SeqCst) == ACTIVE || self.num_tasks.load(Ordering::SeqCst) > 3
@@ -633,7 +633,7 @@ impl SchedulerQueue for Arc<WorkStealing> {
 }
 
 impl WorkStealingInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(
         stall_mark: Arc<AtomicUsize>,
         num_workers: usize,
@@ -659,7 +659,7 @@ impl WorkStealingInner {
         sched
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn init(&mut self, num_workers: usize, my_pe: usize) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<Runnable<usize>>> =
             vec![];
@@ -717,7 +717,7 @@ pub(crate) struct WorkStealing {
     max_num_threads: usize, //including the main thread
 }
 impl WorkStealing {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(
         num_pes: usize,
         num_workers: usize,
@@ -759,7 +759,7 @@ impl WorkStealing {
 
 impl Drop for WorkStealingInner {
     //when is this called with respect to world?
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {

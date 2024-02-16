@@ -817,7 +817,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
         self.inner.data.team.scheduler.block_on(f)
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         let pe = self.inner.pe_for_dist_index(index)?;
         let offset = self.inner.pe_offset_for_dist_index(pe, index)?;
@@ -1168,7 +1168,7 @@ impl UnsafeArrayInner {
     }
 
     //index is relative to (sub)array (i.e. index=0 doesnt necessarily live on pe=0)
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         if self.size > index {
             let global_index = index + self.offset;
@@ -1190,7 +1190,7 @@ impl UnsafeArrayInner {
     }
 
     //index relative to subarray, return offset relative to subarray
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         let global_index = self.offset + index;
         let num_elems_local = self.num_elems_pe(pe);
@@ -1246,7 +1246,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns local offset relative to full array
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
         // let global_index = self.offset + index;
         let global_index = self.global_index_from_local(index)?;
@@ -1275,7 +1275,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to original full length array
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn global_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         match self.distribution {
@@ -1352,7 +1352,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to subarrayy
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         let my_start_index = self.start_index_for_pe(my_pe)?; //None means subarray doesnt exist on this PE
@@ -1381,7 +1381,7 @@ impl UnsafeArrayInner {
     }
 
     //return index relative to the subarray
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn start_index_for_pe(&self, pe: usize) -> Option<usize> {
         match self.distribution {
             Distribution::Block => {
@@ -1428,7 +1428,7 @@ impl UnsafeArrayInner {
     }
 
     //return index relative to the subarray
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn end_index_for_pe(&self, pe: usize) -> Option<usize> {
         self.start_index_for_pe(pe)?;
         match self.distribution {
@@ -1449,7 +1449,7 @@ impl UnsafeArrayInner {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn num_elems_pe(&self, pe: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
@@ -1501,12 +1501,12 @@ impl UnsafeArrayInner {
             }
         }
     }
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn num_elems_local(&self) -> usize {
         self.num_elems_pe(self.data.my_pe)
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn local_as_mut_slice(&self) -> &mut [u8] {
         let slice =
             self.data.mem_region.as_casted_mut_slice::<u8>().expect(
@@ -1549,7 +1549,7 @@ impl UnsafeArrayInner {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn local_as_mut_ptr(&self) -> *mut u8 {
         let ptr =
             self.data.mem_region.as_casted_mut_ptr::<u8>().expect(

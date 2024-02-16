@@ -88,7 +88,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.store(idx,val);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn store<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         self.inner_array().initiate_batch_op(
             val,
@@ -123,7 +123,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_store(indices,10);
     /// array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_store<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -161,7 +161,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.swap(idx,new);
     /// let old = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn swap<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let result = self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -198,7 +198,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_swap(indices,10);
     /// let old_vals = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_swap<'a>(
         &self,
         index: impl OpInput<'a, usize>,

@@ -145,7 +145,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn initiate_batch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -212,7 +212,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         })
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn initiate_batch_fetch_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -274,7 +274,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 panic!("should not be here");
                 // Box::pin(async { Vec::new() })
             };
-        Box::pin(async {
+        Box::pin(async move {
             let mut results = Vec::with_capacity(std::cmp::max(i_len, v_len));
             unsafe {
                 results.set_len(std::cmp::max(i_len, v_len));
@@ -290,7 +290,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         })
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn initiate_batch_result_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -350,7 +350,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 //no vals no indices
                 Box::pin(async { Vec::new() })
             };
-        Box::pin(async {
+        Box::pin(async move {
             let mut results = Vec::with_capacity(std::cmp::max(i_len, v_len));
             unsafe {
                 results.set_len(std::cmp::max(i_len, v_len));

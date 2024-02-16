@@ -63,7 +63,7 @@ impl std::fmt::Debug for TeamAmBatcherInner {
 }
 
 impl TeamAmBatcherInner {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn new(pe: Option<usize>) -> TeamAmBatcherInner {
         TeamAmBatcherInner {
             batch: Arc::new(Mutex::new((HashMap::new(), HashMap::new(), Vec::new()))),
@@ -73,7 +73,7 @@ impl TeamAmBatcherInner {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -118,7 +118,7 @@ impl TeamAmBatcherInner {
         //println!("updated size: {:?}", self.size.load(Ordering::SeqCst));
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_am(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
         match data {
             LamellarData::Am(am, id) => {
@@ -137,7 +137,7 @@ impl TeamAmBatcherInner {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_non_am(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
         let mut batch = self.batch.lock();
         let size = size + *BATCH_HEADER_LEN;
@@ -145,7 +145,7 @@ impl TeamAmBatcherInner {
         self.size.fetch_add(size, Ordering::SeqCst)
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn swap(
         &self,
     ) -> (
@@ -175,7 +175,7 @@ pub(crate) struct TeamAmBatcher {
 
 #[async_trait]
 impl Batcher for TeamAmBatcher {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_remote_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -233,7 +233,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -291,7 +291,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_data_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -355,7 +355,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn add_unit_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -410,7 +410,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -451,7 +451,7 @@ impl Batcher for TeamAmBatcher {
 }
 
 impl TeamAmBatcher {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(num_pes: usize, stall_mark: Arc<AtomicUsize>) -> TeamAmBatcher {
         let mut batched_ams = Vec::new();
         for pe in 0..num_pes {
@@ -463,7 +463,7 @@ impl TeamAmBatcher {
             stall_mark: stall_mark,
         }
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn create_tx_task(
         batch: TeamAmBatcherInner,
         lamellae: Arc<Lamellae>,
@@ -491,7 +491,7 @@ impl TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn serialize_am_batch(am_batch: TeamMap, data_slice: &mut [u8], i: &mut usize, cmd: Cmd) {
         if am_batch.len() > 0 {
             let batch_header = BatchHeader {
@@ -542,7 +542,7 @@ impl TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn serialize_non_am_batch(
         non_am_batch: Vec<(ReqMetaData, LamellarData, usize)>,
         data_slice: &mut [u8],
@@ -571,7 +571,7 @@ impl TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn serialize_am(
         req_data: ReqMetaData,
         am: LamellarArcAm,
@@ -607,7 +607,7 @@ impl TeamAmBatcher {
         *i += am_size;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn serialize_data(
         req_data: ReqMetaData,
         data: LamellarResultArc,
@@ -650,7 +650,7 @@ impl TeamAmBatcher {
         *i += data_size;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn serialize_unit(req_data: ReqMetaData, data_buf: &mut [u8], i: &mut usize) {
         let batch_header = BatchHeader {
             cmd: Cmd::Unit,
@@ -676,7 +676,7 @@ impl TeamAmBatcher {
         *i += *UNIT_HEADER_LEN;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn create_header(src: usize) -> SerializeHeader {
         let msg = Msg {
             src: src as u16,
@@ -685,7 +685,7 @@ impl TeamAmBatcher {
         SerializeHeader { msg: msg }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
@@ -706,7 +706,7 @@ impl TeamAmBatcher {
         data.unwrap()
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_batched_am(
         &self,
         msg: &Msg,
@@ -762,7 +762,7 @@ impl TeamAmBatcher {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_am(
         &self,
         msg: &Msg,
@@ -813,7 +813,7 @@ impl TeamAmBatcher {
         });
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn exec_return_am(
         &self,
         msg: &Msg,

@@ -242,12 +242,12 @@ pub use serde::*;
 pub extern crate serde_with;
 // pub use serde_with::*;
 
-#[doc(hidden)]
-pub extern crate tracing;
+// #[doc(hidden)]
+// pub extern crate tracing;
 #[doc(hidden)]
 pub use parking_lot;
-#[doc(hidden)]
-pub use tracing::*;
+// #[doc(hidden)]
+// pub use tracing::*;
 
 #[doc(hidden)]
 pub use async_trait;

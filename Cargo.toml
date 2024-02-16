@@ -13,8 +13,8 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
-#rofisys = { version ="0.3", optional = true }
-rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
+rofisys = { version ="0.3", optional = true }
+#rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -28,8 +28,8 @@ rand = "0.8.5"
 parking_lot = {version = "0.12.1", features = ["arc_lock", "send_guard", "serde"] }
 indexmap = "1.9.1" #lamellar_alloc
 core_affinity = "0.5.10"
-log = "0.4.19"
-simple_logger = "4.0.0"
+#log = "0.4.19"
+#simple_logger = "4.0.0"
 async-task = "4.3.0"
 async-trait = "0.1.58"
 async-std = "1.12.0"
@@ -38,18 +38,18 @@ libc = { version = "0.2.137", optional = true }
 enum_dispatch = "0.3.8"
 memoffset = "0.7.1"
 shared_memory = "0.12.4"
-raw_sync = "0.1.5"
+#raw_sync = "0.1.5"
 paste = "1.0.9"
 newtype_derive = "0.1.6"
 custom_derive = "0.1.7"
 glob = "0.3.0"
 thread_local = "1.1.4"
-tracing = "0.1.37"
-tracing-futures = "0.2.5"
-tracing-flame = "0.2.0"
+#tracing = "0.1.37"
+#tracing-futures = "0.2.5"
+#tracing-flame = "0.2.0"
 pin-project = "1.0.12"
-enum-as-inner = "0.5.1"
-itertools = "0.10.5"
+#enum-as-inner = "0.5.1"
+#itertools = "0.10.5"
 serde_with = "3.0.0"
 pin-weak = "1.1.0"
 async-lock = "2.8.0"

@@ -245,28 +245,28 @@ pub enum OpInputEnum<'a, T: Dist> {
 }
 
 impl<'a, T: Dist> OpInputEnum<'_, T> {
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
-        match self {
-            OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
-            OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
-            OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
-            OpInputEnum::NativeAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
-            OpInputEnum::GenericAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
-            OpInputEnum::LocalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
-            OpInputEnum::GlobalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
-            // OpInputEnum::MemoryRegion(mr) => Box::new(
-            //     unsafe { mr.as_slice() }
-            //         .expect("memregion not local")
-            //         .iter()
-            //         .map(|elem| *elem),
-            // ),
-            // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
-            // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
-            // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
-        }
-    }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
+    // pub(crate) fn iter(&self) -> Box<dyn Iterator<Item = T> + '_> {
+    //     match self {
+    //         OpInputEnum::Val(v) => Box::new(std::iter::repeat(v).map(|elem| *elem)),
+    //         OpInputEnum::Slice(s) => Box::new(s.iter().map(|elem| *elem)),
+    //         OpInputEnum::Vec(v) => Box::new(v.iter().map(|elem| *elem)),
+    //         OpInputEnum::NativeAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
+    //         OpInputEnum::GenericAtomicLocalData(a) => Box::new(a.iter().map(|elem| elem.load())),
+    //         OpInputEnum::LocalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
+    //         OpInputEnum::GlobalLockLocalData(a) => Box::new(a.iter().map(|elem| *elem)),
+    //         // OpInputEnum::MemoryRegion(mr) => Box::new(
+    //         //     unsafe { mr.as_slice() }
+    //         //         .expect("memregion not local")
+    //         //         .iter()
+    //         //         .map(|elem| *elem),
+    //         // ),
+    //         // OpInputEnum::UnsafeArray(a) => Box::new(unsafe{a.local_data()}.iter().map(|elem| *elem)),
+    //         // OpInputEnum::ReadOnlyArray(a) => Box::new(a.local_data().iter().map(|elem| *elem)),
+    //         // OpInputEnum::AtomicArray(a) => Box::new(a.local_data().iter().map(|elem| elem.load())),
+    //     }
+    // }
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
         match self {
             OpInputEnum::Val(_) => 1,
@@ -285,7 +285,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn first(&self) -> T {
         match self {
             OpInputEnum::Val(v) => *v,
@@ -302,7 +302,7 @@ impl<'a, T: Dist> OpInputEnum<'_, T> {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn into_vec_chunks(self, chunk_size: usize) -> Vec<Vec<T>> {
         match self {
             OpInputEnum::Val(v) => vec![vec![v]],
@@ -442,7 +442,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &T {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -496,7 +496,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut dyn Iterator<Item = T> {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -529,21 +529,21 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self[..]).as_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self[..]).as_op_input()
     }
 }
 
 // impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(mut self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let len = self.len();
 //         let mut iters = vec![];
@@ -570,7 +570,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let num = if len < 1000 {
@@ -598,14 +598,14 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 }
 
 // impl<'a, T: Dist, I: Iterator<Item=T>> OpInput<'a, T> for I {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         self.collect::<Vec<T>>().as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = unsafe { self.as_slice() }.expect("mem region not local");
 //         let len = slice.len();
@@ -629,14 +629,14 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-// //     #[tracing::instrument(skip_all)]
+// //     //#[tracing::instrument(skip_all)]
 // //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 // //         LamellarMemoryRegion::from(self).as_op_input()
 // //     }
 // // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for OneSidedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         // LamellarMemoryRegion::from(self).as_op_input()
 //         (&self).as_op_input()
@@ -644,21 +644,21 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         LamellarMemoryRegion::from(self).as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         LamellarMemoryRegion::from(self).as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = unsafe { self.local_as_slice() };
 //         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -673,7 +673,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
-//     #[tracing::instrument(skip_all)]
+//     //#[tracing::instrument(skip_all)]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = self.local_as_slice();
 //         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -688,7 +688,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -728,7 +728,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
@@ -774,7 +774,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array.clone() {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
@@ -784,7 +784,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
@@ -800,7 +800,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
 
@@ -846,7 +846,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
         // let len = slice.len();
@@ -932,16 +932,16 @@ pub type OpResultOffsets = Vec<(usize, usize, usize)>; //reqid,offset,len
 #[doc(hidden)]
 pub struct OpReqOffsets(Arc<Mutex<HashMap<usize, OpResultOffsets>>>); //pe
 impl OpReqOffsets {
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn new() -> Self {
-        OpReqOffsets(Arc::new(Mutex::new(HashMap::new())))
-    }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
+    // pub(crate) fn new() -> Self {
+    //     OpReqOffsets(Arc::new(Mutex::new(HashMap::new())))
+    // }
+    //#[tracing::instrument(skip_all)]
     pub fn insert(&self, index: usize, indices: OpResultOffsets) {
         let mut map = self.0.lock();
         map.insert(index, indices);
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, OpResultOffsets>> {
         self.0.lock()
     }
@@ -966,16 +966,16 @@ pub type PeOpResults = Arc<Mutex<Vec<u8>>>;
 #[doc(hidden)]
 pub struct OpResults(Arc<Mutex<HashMap<usize, PeOpResults>>>);
 impl OpResults {
-    #[tracing::instrument(skip_all)]
-    pub(crate) fn new() -> Self {
-        OpResults(Arc::new(Mutex::new(HashMap::new())))
-    }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
+    // pub(crate) fn new() -> Self {
+    //     OpResults(Arc::new(Mutex::new(HashMap::new())))
+    // }
+    //#[tracing::instrument(skip_all)]
     pub fn insert(&self, index: usize, val: PeOpResults) {
         let mut map = self.0.lock();
         map.insert(index, val);
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, PeOpResults>> {
         self.0.lock()
     }
@@ -1042,14 +1042,14 @@ pub(crate) struct ArrayOpResultHandleInner<T> {
 #[async_trait]
 impl LamellarRequest for ArrayOpHandle {
     type Output = ();
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for req in self.reqs.drain(..) {
             req.into_future().await;
         }
         ()
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for req in &self.reqs {
             req.get();
@@ -1061,7 +1061,7 @@ impl LamellarRequest for ArrayOpHandle {
 #[async_trait]
 impl LamellarRequest for ArrayOpHandleInner {
     type Output = ();
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -1070,7 +1070,7 @@ impl LamellarRequest for ArrayOpHandleInner {
         }
         ()
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -1085,7 +1085,7 @@ impl LamellarRequest for ArrayOpHandleInner {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
     type Output = T;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.req
             .into_future()
@@ -1093,7 +1093,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
             .pop()
             .expect("should have a single request")
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         self.req.get().pop().expect("should have a single request")
     }
@@ -1102,7 +1102,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
     type Output = Vec<T>;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         let mut res = vec![];
         for req in self.reqs.drain(..) {
@@ -1110,7 +1110,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
         }
         res
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         let mut res = vec![];
         for req in &self.reqs {
@@ -1122,7 +1122,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
 }
 
 impl<T: Dist> ArrayOpFetchHandleInner<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get_result(&self) -> Vec<T> {
         if self.req_cnt > 0 {
             let mut res_vec = Vec::with_capacity(self.req_cnt);
@@ -1164,7 +1164,7 @@ impl<T: Dist> ArrayOpFetchHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
     type Output = Vec<T>;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -1173,7 +1173,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
         }
         self.get_result()
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {
@@ -1188,7 +1188,7 @@ impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
     type Output = Result<T, T>;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         self.req
             .into_future()
@@ -1196,7 +1196,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
             .pop()
             .expect("should have a single request")
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         self.req.get().pop().expect("should have a single request")
     }
@@ -1205,7 +1205,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
     type Output = Vec<Result<T, T>>;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         // println!("num_reqs: {}",self.reqs.len());
         let mut res = vec![];
@@ -1214,7 +1214,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
         }
         res
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         let mut res = vec![];
         for req in &self.reqs {
@@ -1225,7 +1225,7 @@ impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
 }
 
 impl<T: Dist> ArrayOpResultHandleInner<T> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get_result(&self) -> Vec<Result<T, T>> {
         // println!("req_cnt: {:?}", self.req_cnt);
         if self.req_cnt > 0 {
@@ -1286,7 +1286,7 @@ impl<T: Dist> ArrayOpResultHandleInner<T> {
 #[async_trait]
 impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
     type Output = Vec<Result<T, T>>;
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn into_future(mut self: Box<Self>) -> Self::Output {
         // println!("comp size: {}",self.complete.len());
         for comp in &self.complete {
@@ -1296,7 +1296,7 @@ impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
         }
         self.get_result()
     }
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn get(&self) -> Self::Output {
         for comp in &self.complete {
             while comp.load(Ordering::Relaxed) == false {

@@ -178,18 +178,14 @@ fn main(){
 Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 
-``` lamellar = "0.6" ```
+``` lamellar = "0.6.1" ```
 
-If planning to use within a distributed HPC system a few more steps may be necessary (this also works on single workstations):
+If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 
-1. ensure Libfabric (with support for the verbs provider) is installed on your system <https://github.com/ofiwg/libfabric> 
-2. set the OFI_DIR environment variable to the install location of Libfabric, this directory should contain both the following directories:
-    * lib
-    * include
-3. copy the following to your Cargo.toml file:
+```lamellar = { version = "0.6.1", features = ["enable-rofi"]}```
 
-```lamellar = { version = "0.6", features = ["enable-rofi"]}```
-
+NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
+If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
 
 For both environments, build your application as normal
 
@@ -230,6 +226,7 @@ Lamellar exposes a number of environment variables that can used to control appl
 
 NEWS
 ----
+* February 2023: Alpha release -- v0.6.1
 * November 2023: Alpha release -- v0.6
 * January 2023: Alpha release -- v0.5
 * March 2022: Alpha release -- v0.4
@@ -259,11 +256,8 @@ At the time of release, Lamellar has been tested with the following external pac
 
 | **GCC** | **CLANG** | **ROFI**  | **OFI**       | **IB VERBS**  | **MPI**       | **SLURM** |
 |--------:|----------:|----------:|--------------:|--------------:|--------------:|----------:|
-| 7.1.0   | 8.0.1     | 0.1.0     | 1.9.0 -1.14.0 | 1.13          | mvapich2/2.3a | 17.02.7   |
+| 7.1.0   | 8.0.1     | 0.1.0     | 1.20          | 1.13          | mvapich2/2.3a | 17.02.7   |
 
-The OFI_DIR environment variable must be specified with the location of the OFI (libfabrics) installation.
-The ROFI_DIR environment variable must be specified with the location of the ROFI installation (otherwise rofi-sys crate will build for you automatically).
-(See https://github.com/pnnl/rofi for instructions installing ROFI (and libfabrics))
 
 BUILDING PACKAGE
 ----------------
@@ -292,6 +286,13 @@ Note: we do an explicit build instead of `cargo run --examples` as they are inte
 
 HISTORY
 -------
+- version 0.6.1
+  - Clean up apis for lock based data structures
+  - N-way dissemination barrier
+  - Fixes for AM visibility issues
+  - Better error messages
+  - Update Rofi lamellae to utilize rofi v0.3
+  - Various fixes for Darcs
 - version 0.6
   - LamellarArrays
     - additional iterator methods

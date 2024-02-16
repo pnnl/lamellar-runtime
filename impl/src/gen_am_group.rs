@@ -18,7 +18,7 @@ fn impl_am_group_remote_lamellar_active_message_trait(
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-    let trace_name = quote! {stringify!(#am_group_am_name)};
+    // let trace_name = quote! {stringify!(#am_group_am_name)};
     // println!("ret_contatiner: {}", ret_contatiner.to_string());
     // println!("ret_push: {}", ret_push.to_string());
     // println!("ret_stmt: {}", ret_stmt.to_string());
@@ -32,7 +32,8 @@ fn impl_am_group_remote_lamellar_active_message_trait(
                         #ret_push
                     }
                     #ret_stmt
-                    }.instrument(#lamellar::tracing::trace_span!(#trace_name))
+                    }
+                    // }.instrument(#lamellar::tracing::trace_span!(#trace_name))
                 )
             }
             fn get_id(&self) -> &'static str{
@@ -515,7 +516,7 @@ pub(crate) fn generate_am_group(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            use __lamellar::tracing::*;
+            // use __lamellar::tracing::*;
             #expanded
         };
     };
@@ -523,7 +524,7 @@ pub(crate) fn generate_am_group(
     let rt_expanded = quote_spanned! {
         expanded.span()=>
         const _: () = {
-            use tracing::*;
+            // //use tracing::*;
             #expanded
         };
     };

@@ -67,7 +67,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.load(53);
     /// let val = array.block_on(req);
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
@@ -108,7 +108,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let vals = array.block_on(req);
     /// assert_eq!(vals.len(),indices.len());
     ///```
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn batch_load<'a>(
         &self,
         index: impl OpInput<'a, usize>,

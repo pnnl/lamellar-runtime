@@ -98,7 +98,7 @@ pub(crate) struct UnitHeader {
 
 #[async_trait]
 impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn process_msg(
         &self,
         am: Am,
@@ -229,7 +229,7 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn exec_msg(
         &self,
         msg: Msg,
@@ -263,12 +263,12 @@ impl ActiveMessageEngine for Arc<RegisteredActiveMessages> {
 }
 
 impl RegisteredActiveMessages {
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) fn new(batcher: BatcherType) -> RegisteredActiveMessages {
         RegisteredActiveMessages { batcher: batcher }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn send_am(
         self: &Arc<Self>,
         req_data: ReqMetaData,
@@ -315,7 +315,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn send_data_am(
         self: &Arc<Self>,
         req_data: ReqMetaData,
@@ -355,7 +355,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn send_unit_am(self: &Arc<Self>, req_data: ReqMetaData) {
         // println!("send_unit_am");
 
@@ -375,7 +375,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     fn create_header(self: &Arc<Self>, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
@@ -384,7 +384,7 @@ impl RegisteredActiveMessages {
         SerializeHeader { msg: msg }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     async fn create_data_buf(
         self: &Arc<Self>,
         header: SerializeHeader,
@@ -409,7 +409,7 @@ impl RegisteredActiveMessages {
     }
 
     #[async_recursion]
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_local_am(
         self: Arc<Self>,
         req_data: ReqMetaData,
@@ -452,7 +452,7 @@ impl RegisteredActiveMessages {
         }
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_am(
         self: &Arc<Self>,
         msg: &Msg,
@@ -503,7 +503,7 @@ impl RegisteredActiveMessages {
                                                          //TODO: compare against: scheduler.submit_am(ame, am).await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_return_am(
         self: &Arc<Self>,
         msg: &Msg,
@@ -534,7 +534,7 @@ impl RegisteredActiveMessages {
             .await;
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_data_am(
         self: &Arc<Self>,
         msg: &Msg,
@@ -561,7 +561,7 @@ impl RegisteredActiveMessages {
         );
     }
 
-    #[tracing::instrument(skip_all)]
+    //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_unit_am(self: &Arc<Self>, msg: &Msg, data: &[u8], i: &mut usize) {
         // println!("exec_unit_am");
         let unit_header: UnitHeader =
