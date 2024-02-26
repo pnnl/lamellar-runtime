@@ -2,7 +2,7 @@ use crate::active_messaging::LamellarArcLocalAm;
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::IterRequest;
+use crate::array::iterator::{private::*, IterRequest};
 use crate::array::{ArrayOps, Distribution, LamellarArray, UnsafeArray};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
@@ -15,6 +15,14 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct Sum<I> {
     pub(crate) iter: I,
+}
+
+impl<I: IterClone> IterClone for Sum<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Sum {
+            iter: self.iter.iter_clone(Sealed),
+        }
+    }
 }
 
 impl<I> IterConsumer for Sum<I>
@@ -35,7 +43,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(SumAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             schedule,
         })
     }
@@ -100,6 +108,15 @@ pub(crate) struct SumAm<I> {
     pub(crate) schedule: IterSchedule,
 }
 
+impl<I: IterClone> IterClone for SumAm<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        SumAm {
+            iter: self.iter.iter_clone(Sealed),
+            schedule: self.schedule.clone(),
+        }
+    }
+}
+
 #[lamellar_impl::rt_am_local]
 impl<I> LamellarAm for SumAm<I>
 where
@@ -107,7 +124,7 @@ where
     I::Item: Dist + ArrayOps + std::iter::Sum,
 {
     async fn exec(&self) -> I::Item {
-        let iter = self.schedule.init_iter(self.iter.clone());
+        let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         iter.sum::<I::Item>()
     }
 }

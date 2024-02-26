@@ -5,7 +5,9 @@ use crate::array::iterator::local_iterator::{
     IndexedLocalIterator, LocalIterator, LocalIteratorLauncher,
 };
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
+use crate::array::iterator::{
+    private::*, LamellarArrayIterators, LamellarArrayMutIterators, Schedule,
+};
 use crate::array::local_lock_atomic::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
@@ -24,6 +26,18 @@ pub struct LocalLockDistIter<'a, T: Dist> {
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist> IterClone for LocalLockDistIter<'a, T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalLockDistIter {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIter<'a, T> {
@@ -46,6 +60,18 @@ pub struct LocalLockLocalIter<'a, T: Dist> {
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist> IterClone for LocalLockLocalIter<'a, T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalLockLocalIter {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Dist> std::fmt::Debug for LocalLockLocalIter<'a, T> {
@@ -155,13 +181,24 @@ impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalIter<'static, T> 
     }
 }
 
-#[derive(Clone)]
 pub struct LocalLockDistIterMut<'a, T: Dist> {
     data: LocalLockArray<T>,
     lock: Arc<RwLockWriteGuardArc<Box<()>>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist> IterClone for LocalLockDistIterMut<'a, T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalLockDistIterMut {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIterMut<'a, T> {
@@ -176,13 +213,24 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIterMut<'a, T> {
     }
 }
 
-#[derive(Clone)]
 pub struct LocalLockLocalIterMut<'a, T: Dist> {
     data: LocalLockArray<T>,
     lock: Arc<RwLockWriteGuardArc<Box<()>>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist> IterClone for LocalLockLocalIterMut<'a, T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalLockLocalIterMut {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Dist> std::fmt::Debug for LocalLockLocalIterMut<'a, T> {

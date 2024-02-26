@@ -5,6 +5,16 @@ pub struct Zip<A, B> {
     a: A,
     b: B,
 }
+
+impl<A: IterClone, B: IterClone> IterClone for Zip<A, B> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Zip {
+            a: self.a.clone(),
+            b: self.b.clone(),
+        }
+    }
+}
+
 impl<A, B> Zip<A, B>
 where
     A: IndexedDistributedIterator,
@@ -81,12 +91,12 @@ where
         in_elems
     }
     // fn global_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.a.global_index(index); 
+    //     let g_index = self.a.global_index(index);
     //                                               // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }
     // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.a.subarray_index(index); 
+    //     let g_index = self.a.subarray_index(index);
     //                                                 // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     g_index
     // }
@@ -99,9 +109,9 @@ where
     }
 }
 
-impl<A,B> IndexedDistributedIterator for Zip<A, B>
+impl<A, B> IndexedDistributedIterator for Zip<A, B>
 where
     A: IndexedDistributedIterator,
     B: IndexedDistributedIterator,
-{}
-
+{
+}

@@ -5,6 +5,16 @@ pub struct Monotonic<I> {
     iter: I,
     cur_index: usize,
 }
+
+impl<I: IterClone> IterClone for Monotonic<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Monotonic {
+            iter: self.iter.iter_clone(Sealed),
+            cur_index: self.cur_index,
+        }
+    }
+}
+
 impl<I> Monotonic<I>
 where
     I: DistributedIterator,

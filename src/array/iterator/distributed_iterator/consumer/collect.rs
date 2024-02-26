@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::{DistributedIterator, Monotonic};
-use crate::array::iterator::IterRequest;
+use crate::array::iterator::{private::*, IterRequest};
 use crate::array::operations::ArrayOps;
 use crate::array::{Distribution, TeamFrom, TeamInto};
 use crate::lamellar_request::LamellarRequest;
@@ -19,6 +19,16 @@ pub struct Collect<I, A> {
     pub(crate) iter: Monotonic<I>,
     pub(crate) distribution: Distribution,
     pub(crate) _phantom: PhantomData<A>,
+}
+
+impl<I: IterClone, A> IterClone for Collect<I, A> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Collect {
+            iter: self.iter.iter_clone(Sealed),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
 }
 
 impl<I, A> IterConsumer for Collect<I, A>
@@ -42,7 +52,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CollectAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             schedule,
         })
     }
@@ -70,6 +80,16 @@ pub struct CollectAsync<I, A, B> {
     pub(crate) _phantom: PhantomData<(A, B)>,
 }
 
+impl<I: IterClone, A, B> IterClone for CollectAsync<I, A, B> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        CollectAsync {
+            iter: self.iter.iter_clone(Sealed),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
+
 impl<I, A, B> IterConsumer for CollectAsync<I, A, B>
 where
     I: DistributedIterator,
@@ -92,7 +112,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CollectAsyncAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             schedule,
         })
     }
@@ -115,7 +135,7 @@ where
 
 impl<I, A, B> Clone for CollectAsync<I, A, B>
 where
-    I: DistributedIterator,
+    I: DistributedIterator + Clone,
     I::Item: Future<Output = B> + Send + 'static,
     B: Dist + ArrayOps,
     A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
@@ -190,7 +210,7 @@ where
     A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
 {
     async fn exec(&self) -> Vec<I::Item> {
-        let iter = self.schedule.init_iter(self.iter.clone());
+        let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         iter.collect::<Vec<_>>()
     }
 }
@@ -216,7 +236,7 @@ where
     A: for<'a> TeamFrom<(&'a Vec<B>, Distribution)> + SyncSend + Clone + 'static,
 {
     async fn exec(&self) -> Vec<(usize, B)> {
-        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         let mut res = vec![];
         while let Some((index, elem)) = iter.next() {
             res.push((index, elem.await));

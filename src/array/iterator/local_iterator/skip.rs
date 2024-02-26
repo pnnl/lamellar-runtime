@@ -8,6 +8,16 @@ pub struct Skip<I> {
     skip_offset: usize,
 }
 
+impl<I: IterClone> IterClone for Skip<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Skip {
+            iter: self.iter.iter_clone(Sealed),
+            skip_count: self.skip_count,
+            skip_offset: self.skip_offset,
+        }
+    }
+}
+
 impl<I> Skip<I>
 where
     I: IndexedLocalIterator,

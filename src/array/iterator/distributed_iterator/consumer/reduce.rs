@@ -2,7 +2,7 @@ use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::IterRequest;
+use crate::array::iterator::{private::*, IterRequest};
 use crate::array::{ArrayOps, Distribution, LamellarArray, UnsafeArray};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
@@ -16,6 +16,15 @@ use std::sync::Arc;
 pub struct Reduce<I, F> {
     pub(crate) iter: I,
     pub(crate) op: F,
+}
+
+impl<I: IterClone, F: Clone> IterClone for Reduce<I, F> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Reduce {
+            iter: self.iter.iter_clone(Sealed),
+            op: self.op.clone(),
+        }
+    }
 }
 
 impl<I, F> IterConsumer for Reduce<I, F>
@@ -38,7 +47,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ReduceAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             op: self.op.clone(),
             schedule,
         })
@@ -120,6 +129,16 @@ pub(crate) struct ReduceAm<I, F> {
     pub(crate) schedule: IterSchedule,
 }
 
+impl<I: IterClone, F: Clone> IterClone for ReduceAm<I, F> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        ReduceAm {
+            op: self.op.clone(),
+            iter: self.iter.iter_clone(Sealed),
+            schedule: self.schedule.clone(),
+        }
+    }
+}
+
 #[lamellar_impl::rt_am_local]
 impl<I, F> LamellarAm for ReduceAm<I, F>
 where
@@ -128,7 +147,7 @@ where
     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
 {
     async fn exec(&self) -> Option<I::Item> {
-        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         match iter.next() {
             Some(mut accum) => {
                 while let Some(elem) = iter.next() {

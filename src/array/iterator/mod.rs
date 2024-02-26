@@ -19,6 +19,13 @@ pub trait IterRequest {
     fn wait(self: Box<Self>) -> Self::Output;
 }
 
+pub(crate) mod private {
+    pub struct Sealed;
+    pub trait IterClone: Sized {
+        fn iter_clone(&self, _: Sealed) -> Self;
+    }
+}
+
 /// The Schedule type controls how elements of a LamellarArray are distributed to threads when
 /// calling `for_each_with_schedule` on a local or distributed iterator.
 ///

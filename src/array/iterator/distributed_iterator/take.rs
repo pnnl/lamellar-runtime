@@ -8,6 +8,16 @@ pub struct Take<I> {
     cur_index: usize,
 }
 
+impl<I: IterClone> IterClone for Take<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Take {
+            iter: self.iter.iter_clone(Sealed),
+            count: self.count,
+            cur_index: self.cur_index,
+        }
+    }
+}
+
 impl<I> Take<I>
 where
     I: IndexedDistributedIterator,

@@ -1,5 +1,6 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::private::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{ArrayOps, Distribution, TeamFrom};
 
@@ -49,7 +50,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item) + SyncSend + Clone + 'static,
     {
         let for_each = ForEach {
-            iter: iter.clone(),
+            iter: iter.iter_clone(Sealed),
             op,
         };
         match sched {
@@ -82,7 +83,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         Fut: Future<Output = ()> + Send + 'static,
     {
         let for_each = ForEachAsync {
-            iter: iter.clone(),
+            iter: iter.iter_clone(Sealed),
             op: op.clone(),
         };
         match sched {
@@ -115,7 +116,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
     {
         let reduce = Reduce {
-            iter: iter.clone(),
+            iter: iter.iter_clone(Sealed),
             op,
         };
         match sched {
@@ -179,7 +180,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
         let collect = Collect {
-            iter: iter.clone().monotonic(),
+            iter: iter.iter_clone(Sealed).monotonic(),
             distribution: d,
             _phantom: PhantomData,
         };
@@ -238,7 +239,9 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
     where
         I: LocalIterator + 'static,
     {
-        let count = Count { iter: iter.clone() };
+        let count = Count {
+            iter: iter.iter_clone(Sealed),
+        };
         match sched {
             Schedule::Static => self.sched_static(count),
             Schedule::Dynamic => self.sched_dynamic(count),
@@ -265,7 +268,9 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum,
     {
-        let sum = Sum { iter: iter.clone() };
+        let sum = Sum {
+            iter: iter.iter_clone(Sealed),
+        };
         match sched {
             Schedule::Static => self.sched_static(sum),
             Schedule::Dynamic => self.sched_dynamic(sum),

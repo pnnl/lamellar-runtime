@@ -5,6 +5,16 @@ pub struct FilterMap<I, F> {
     iter: I,
     f: F,
 }
+
+impl<I: IterClone, F: Clone> IterClone for FilterMap<I, F> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        FilterMap {
+            iter: self.iter.iter_clone(Sealed),
+            f: self.f.clone(),
+        }
+    }
+}
+
 impl<I, F> FilterMap<I, F>
 where
     I: DistributedIterator,

@@ -47,7 +47,7 @@ where
         if self.cur_i < self.end_i {
             // let size = std::cmp::min(self.chunk_size, self.end_i-self.cur_i);
             let start_i = self.cur_i * self.chunk_size;
-            let iter = self.iter.clone().init(start_i, self.chunk_size);
+            let iter = self.iter.iter_clone(Sealed).init(start_i, self.chunk_size);
             // println!("new Chunk {:?} {:?} {:?} {:?}",self.cur_i, self.end_i, start_i,start_i+self.chunk_size);
             let chunk = Chunk { iter: iter };
             self.cur_i += 1;
@@ -73,7 +73,7 @@ where
     //     Some(g_index)
     // }
     // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.iter.subarray_index(index * self.chunk_size)? / self.chunk_size; 
+    //     let g_index = self.iter.subarray_index(index * self.chunk_size)? / self.chunk_size;
     //                                                                                         // println!("enumerate index: {:?} global_index {:?}", index,g_index);
     //     Some(g_index)
     // }
@@ -85,11 +85,7 @@ where
     }
 }
 
-impl<I> IndexedDistributedIterator for Chunks<I>
-where
-    I: IndexedDistributedIterator,
-{}
-
+impl<I> IndexedDistributedIterator for Chunks<I> where I: IndexedDistributedIterator {}
 
 #[derive(Clone)]
 pub struct Chunk<I> {

@@ -37,7 +37,7 @@ use take::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::{IterRequest, Schedule};
+use crate::array::iterator::{private::*, IterRequest, Schedule};
 use crate::array::{
     operations::ArrayOps, AtomicArray, Distribution, GenericAtomicArray, LamellarArray,
     LamellarArrayPut, NativeAtomicArray, TeamFrom, UnsafeArray,
@@ -292,7 +292,7 @@ pub trait DistIteratorLauncher {
 /// The functions in this trait are available on all distributed iterators.
 /// Additonaly functionality can be found in the [IndexedDistributedIterator] trait:
 /// these methods are only available for distributed iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-pub trait DistributedIterator: SyncSend + Clone + 'static {
+pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// The type of item this distributed iterator produces
     type Item: Send;
 
@@ -809,7 +809,7 @@ pub trait DistributedIterator: SyncSend + Clone + 'static {
 }
 
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length
-pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + Clone + 'static {
+pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + IterClone + 'static {
     /// yields the global array index along with each element
     ///
     /// # Examples
@@ -938,6 +938,17 @@ pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
     _marker: PhantomData<&'a T>,
 }
 
+impl<'a, T: Dist, A: LamellarArray<T>> IterClone for DistIter<'a, T, A> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        DistIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
+}
+
 impl<'a, T: Dist, A: LamellarArray<T>> std::fmt::Debug for DistIter<'a, T, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -1032,12 +1043,22 @@ impl<
 /// let dist_iter = array.dist_iter_mut().for_each(move |e| *e = my_pe );
 /// world.block_on(dist_iter);
 ///```
-#[derive(Clone)]
 pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist, A: LamellarArray<T>> IterClone for DistIterMut<'a, T, A> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        DistIterMut {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Dist, A: LamellarArray<T>> std::fmt::Debug for DistIterMut<'a, T, A> {

@@ -5,6 +5,16 @@ pub struct Zip<A, B> {
     a: A,
     b: B,
 }
+
+impl<A: IterClone, B: IterClone> IterClone for Zip<A, B> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Zip {
+            a: self.a.iter_clone(Sealed),
+            b: self.b.iter_clone(Sealed),
+        }
+    }
+}
+
 impl<A, B> Zip<A, B>
 where
     A: IndexedLocalIterator,

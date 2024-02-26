@@ -5,7 +5,7 @@ use crate::array::iterator::distributed_iterator::{
 };
 use crate::array::iterator::local_iterator::{IndexedLocalIterator, LocalIterator};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators};
+use crate::array::iterator::{private::*, LamellarArrayIterators, LamellarArrayMutIterators};
 use crate::array::*;
 use crate::memregion::Dist;
 
@@ -15,6 +15,16 @@ pub struct AtomicDistIter<T: Dist> {
     data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
+}
+
+impl<T: Dist> IterClone for AtomicDistIter<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        AtomicDistIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for AtomicDistIter<T> {
@@ -46,6 +56,16 @@ pub struct AtomicLocalIter<T: Dist> {
     data: AtomicArray<T>,
     cur_i: usize,
     end_i: usize,
+}
+
+impl<T: Dist> IterClone for AtomicLocalIter<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        AtomicLocalIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for AtomicLocalIter<T> {

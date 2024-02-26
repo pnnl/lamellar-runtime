@@ -8,6 +8,16 @@ pub struct StepBy<I> {
     add_one: usize, //if we dont align perfectly we will need to add 1 to our iteration index calculation
 }
 
+impl<I: IterClone> IterClone for StepBy<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        StepBy {
+            iter: self.iter.iter_clone(Sealed),
+            step_size: self.step_size,
+            add_one: self.add_one,
+        }
+    }
+}
+
 impl<I> StepBy<I>
 where
     I: IndexedDistributedIterator,

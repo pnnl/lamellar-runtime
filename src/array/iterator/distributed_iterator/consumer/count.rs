@@ -1,7 +1,7 @@
 use crate::active_messaging::LamellarArcLocalAm;
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
-use crate::array::iterator::IterRequest;
+use crate::array::iterator::{private::*, IterRequest};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::SchedulerQueue;
@@ -17,6 +17,14 @@ use std::sync::{
 #[derive(Clone, Debug)]
 pub struct Count<I> {
     pub(crate) iter: I,
+}
+
+impl<I: IterClone> IterClone for Count<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Count {
+            iter: self.iter.iter_clone(Sealed),
+        }
+    }
 }
 
 impl<I> IterConsumer for Count<I>
@@ -36,7 +44,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CountAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             schedule,
         })
     }
@@ -121,13 +129,25 @@ pub(crate) struct CountAm<I> {
     pub(crate) schedule: IterSchedule,
 }
 
+impl<I> IterClone for CountAm<I>
+where
+    I: IterClone,
+{
+    fn iter_clone(&self, _: Sealed) -> Self {
+        CountAm {
+            iter: self.iter.iter_clone(Sealed),
+            schedule: self.schedule.clone(),
+        }
+    }
+}
+
 #[lamellar_impl::rt_am_local]
 impl<I> LamellarAm for CountAm<I>
 where
     I: DistributedIterator + 'static,
 {
     async fn exec(&self) -> usize {
-        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         let mut count: usize = 0;
         while let Some(_) = iter.next() {
             count += 1;

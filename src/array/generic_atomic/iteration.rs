@@ -4,7 +4,9 @@ use crate::array::iterator::distributed_iterator::{
 };
 use crate::array::iterator::local_iterator::{LocalIterator, LocalIteratorLauncher};
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
+use crate::array::iterator::{
+    private::*, LamellarArrayIterators, LamellarArrayMutIterators, Schedule,
+};
 use crate::array::*;
 use crate::memregion::Dist;
 // use parking_lot::{
@@ -18,6 +20,16 @@ pub struct GenericAtomicDistIter<T: Dist> {
     data: GenericAtomicArray<T>,
     cur_i: usize,
     end_i: usize,
+}
+
+impl<T: Dist> IterClone for GenericAtomicDistIter<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        GenericAtomicDistIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for GenericAtomicDistIter<T> {
@@ -40,6 +52,16 @@ pub struct GenericAtomicLocalIter<T: Dist> {
     end_i: usize,
 }
 
+impl<T: Dist> IterClone for GenericAtomicLocalIter<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        GenericAtomicLocalIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+        }
+    }
+}
+
 impl<T: Dist> std::fmt::Debug for GenericAtomicLocalIter<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -51,32 +73,6 @@ impl<T: Dist> std::fmt::Debug for GenericAtomicLocalIter<T> {
         )
     }
 }
-
-// impl<T: Dist> GenericAtomicDistIter<T> {
-//     pub(crate) fn new(data: GenericAtomicArray<T>, cur_i: usize, cnt: usize) -> Self {
-//         // println!("new dist iter {:?} {:? } {:?}",cur_i, cnt, cur_i+cnt);
-//         GenericAtomicDistIter {
-//             data,
-//             cur_i,
-//             end_i: cur_i + cnt,
-//         }
-//     }
-// }
-// impl<T: Dist + 'static> GenericAtomicDistIter<T> {
-//     pub fn for_each<F>(&self, op: F) -> DistIterForEachHandle
-//     where
-//         F: Fn(GenericAtomicElement<T>) + SyncSend + Clone + 'static,
-//     {
-//         self.data.clone().for_each(self, op)
-//     }
-//     pub fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
-//     where
-//         F: Fn(GenericAtomicElement<T>) -> Fut + SyncSend + Clone + 'static,
-//         Fut: Future<Output = ()> + Send + 'static,
-//     {
-//         self.data.clone().for_each_async(self, op)
-//     }
-// }
 
 impl<T: Dist> DistributedIterator for GenericAtomicDistIter<T> {
     type Item = GenericAtomicElement<T>;

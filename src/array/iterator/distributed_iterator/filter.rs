@@ -5,6 +5,16 @@ pub struct Filter<I, F> {
     iter: I,
     f: F,
 }
+
+impl<I: IterClone, F: Clone> IterClone for Filter<I, F> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Filter {
+            iter: self.iter.iter_clone(Sealed),
+            f: self.f.clone(),
+        }
+    }
+}
+
 impl<I, F> Filter<I, F>
 where
     I: DistributedIterator,

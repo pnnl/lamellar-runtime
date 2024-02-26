@@ -6,7 +6,9 @@ use crate::array::iterator::local_iterator::{
     IndexedLocalIterator, LocalIterator, LocalIteratorLauncher,
 };
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
+use crate::array::iterator::{
+    private::*, LamellarArrayIterators, LamellarArrayMutIterators, Schedule,
+};
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::global_rw_darc::GlobalRwDarcReadGuard;
@@ -20,6 +22,18 @@ pub struct GlobalLockDistIter<T: Dist> {
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'static T>,
+}
+
+impl<T: Dist> IterClone for GlobalLockDistIter<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        GlobalLockDistIter {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for GlobalLockDistIter<T> {
@@ -42,6 +56,18 @@ pub struct GlobalLockLocalIter<T: Dist> {
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'static T>,
+}
+
+impl<T: Dist> IterClone for GlobalLockLocalIter<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        GlobalLockLocalIter {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for GlobalLockLocalIter<T> {
@@ -151,13 +177,24 @@ impl<T: Dist + 'static> IndexedLocalIterator for GlobalLockLocalIter<T> {
     }
 }
 
-#[derive(Clone)]
 pub struct GlobalLockDistIterMut<T: Dist> {
     data: GlobalLockArray<T>,
     lock: Arc<GlobalRwDarcCollectiveWriteGuard<()>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'static T>,
+}
+
+impl<T: Dist> IterClone for GlobalLockDistIterMut<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        GlobalLockDistIterMut {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for GlobalLockDistIterMut<T> {
@@ -172,13 +209,24 @@ impl<T: Dist> std::fmt::Debug for GlobalLockDistIterMut<T> {
     }
 }
 
-#[derive(Clone)]
 pub struct GlobalLockLocalIterMut<T: Dist> {
     data: GlobalLockArray<T>,
     lock: Arc<GlobalRwDarcWriteGuard<()>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'static T>,
+}
+
+impl<T: Dist> IterClone for GlobalLockLocalIterMut<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        GlobalLockLocalIterMut {
+            data: self.data.clone(),
+            lock: self.lock.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<T: Dist> std::fmt::Debug for GlobalLockLocalIterMut<T> {

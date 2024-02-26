@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
-use crate::array::iterator::IterRequest;
+use crate::array::iterator::{private::*, IterRequest};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 
@@ -18,6 +18,19 @@ where
 {
     pub(crate) iter: I,
     pub(crate) op: F,
+}
+
+impl<I, F> IterClone for ForEach<I, F>
+where
+    I: LocalIterator + 'static,
+    F: Fn(I::Item) + SyncSend + Clone + 'static,
+{
+    fn iter_clone(&self, _: Sealed) -> Self {
+        ForEach {
+            iter: self.iter.iter_clone(Sealed),
+            op: self.op.clone(),
+        }
+    }
 }
 
 impl<I, F> IterConsumer for ForEach<I, F>
@@ -42,7 +55,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ForEachAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             op: self.op.clone(),
             schedule,
         })
@@ -71,6 +84,20 @@ where
     // pub(crate) _phantom: PhantomData<Fut>,
 }
 
+impl<I, F, Fut> IterClone for ForEachAsync<I, F, Fut>
+where
+    I: LocalIterator + 'static,
+    F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+    Fut: Future<Output = ()> + Send + 'static,
+{
+    fn iter_clone(&self, _: Sealed) -> Self {
+        ForEachAsync {
+            iter: self.iter.iter_clone(Sealed),
+            op: self.op.clone(),
+        }
+    }
+}
+
 impl<I, F, Fut> IterConsumer for ForEachAsync<I, F, Fut>
 where
     I: LocalIterator + 'static,
@@ -91,7 +118,7 @@ where
     }
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ForEachAsyncAm {
-            iter: self.clone(),
+            iter: self.iter_clone(Sealed),
             op: self.op.clone(),
             schedule,
             // _phantom: self._phantom.clone(),
@@ -111,7 +138,7 @@ where
 
 impl<I, F, Fut> Clone for ForEachAsync<I, F, Fut>
 where
-    I: LocalIterator + 'static,
+    I: LocalIterator + Clone + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
@@ -163,7 +190,7 @@ where
 {
     async fn exec(&self) {
         // println!("foreacham: {:?}", std::thread::current().id());
-        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         while let Some(elem) = iter.next() {
             (&self.op)(elem);
         }
@@ -191,7 +218,7 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {
-        let mut iter = self.schedule.init_iter(self.iter.clone());
+        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         while let Some(elem) = iter.next() {
             (&self.op)(elem).await;
         }

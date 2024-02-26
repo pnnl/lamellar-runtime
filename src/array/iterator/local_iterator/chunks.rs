@@ -8,6 +8,17 @@ pub struct Chunks<I> {
     chunk_size: usize,
 }
 
+impl<I: IterClone> IterClone for Chunks<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Chunks {
+            iter: self.iter.iter_clone(Sealed),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            chunk_size: self.chunk_size,
+        }
+    }
+}
+
 impl<I> Chunks<I>
 where
     I: IndexedLocalIterator,
@@ -43,7 +54,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             let start_i = self.cur_i * self.chunk_size;
-            let iter = self.iter.clone().init(start_i, self.chunk_size);
+            let iter = self.iter.iter_clone(Sealed).init(start_i, self.chunk_size);
             let chunk = Chunk { iter: iter };
             self.cur_i += 1;
             Some(chunk)

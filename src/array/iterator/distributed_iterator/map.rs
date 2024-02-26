@@ -5,6 +5,16 @@ pub struct Map<I, F> {
     iter: I,
     f: F,
 }
+
+impl<I: IterClone, F: Clone> IterClone for Map<I, F> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Map {
+            iter: self.iter.iter_clone(Sealed),
+            f: self.f.clone(),
+        }
+    }
+}
+
 impl<I, F> Map<I, F>
 where
     I: DistributedIterator,

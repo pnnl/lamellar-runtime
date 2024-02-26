@@ -1,23 +1,13 @@
-use crate::array::iterator::local_iterator::{
-    IndexedLocalIterator, LocalIterator, LocalIteratorLauncher,
-};
-use crate::array::iterator::{LamellarArrayIterators, LamellarArrayMutIterators, Schedule};
+use crate::array::iterator::local_iterator::{IndexedLocalIterator, LocalIterator};
+use crate::array::iterator::private::*;
 use crate::array::local_lock_atomic::*;
-use crate::array::{operations::ArrayOps, AtomicArray, Distribution, LamellarArray, TeamFrom};
+use crate::array::LamellarArray;
 use crate::memregion::Dist;
-use crate::LamellarTeamRT;
 
-use crate::active_messaging::SyncSend;
-
-use enum_dispatch::enum_dispatch;
-use futures::Future;
-use std::marker::PhantomData;
-use std::pin::Pin;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct LocalLockLocalChunks<T: Dist> {
-    // data: &'a [T],
     chunk_size: usize,
     index: usize,     //global index within the array local data
     end_index: usize, //global index within the array local data
@@ -26,7 +16,19 @@ pub struct LocalLockLocalChunks<T: Dist> {
     lock_guard: Arc<RwLockReadGuardArc<Box<()>>>,
 }
 
-#[derive(Clone)]
+impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalLockLocalChunks {
+            chunk_size: self.chunk_size,
+            index: self.index,
+            end_index: self.end_index,
+            array: self.array.clone(),
+            lock: self.lock.clone(),
+            lock_guard: self.lock_guard.clone(),
+        }
+    }
+}
+
 pub struct LocalLockLocalChunksMut<T: Dist> {
     // data: &'a mut [T],
     chunk_size: usize,
@@ -35,6 +37,19 @@ pub struct LocalLockLocalChunksMut<T: Dist> {
     array: LocalLockArray<T>,
     lock: LocalRwDarc<()>,
     lock_guard: Arc<RwLockWriteGuardArc<Box<()>>>,
+}
+
+impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalLockLocalChunksMut {
+            chunk_size: self.chunk_size,
+            index: self.index,
+            end_index: self.end_index,
+            array: self.array.clone(),
+            lock: self.lock.clone(),
+            lock_guard: self.lock_guard.clone(),
+        }
+    }
 }
 
 #[derive(Debug)]

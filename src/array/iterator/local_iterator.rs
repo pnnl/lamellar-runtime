@@ -34,7 +34,7 @@ use zip::*;
 
 pub(crate) use consumer::*;
 
-use crate::array::iterator::Schedule;
+use crate::array::iterator::{private::*, Schedule};
 use crate::array::{operations::ArrayOps, AtomicArray, Distribution, LamellarArray, TeamFrom};
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
@@ -202,7 +202,7 @@ pub trait LocalIteratorLauncher {
 /// The functions in this trait are available on all local iterators.
 /// Additonaly functionality can be found in the [IndexedLocalIterator] trait:
 /// these methods are only available for local iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-pub trait LocalIterator: SyncSend + Clone + 'static {
+pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// The type of item this distributed iterator produces
     type Item: Send;
 
@@ -727,7 +727,7 @@ pub trait LocalIterator: SyncSend + Clone + 'static {
 }
 
 /// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length
-pub trait IndexedLocalIterator: LocalIterator + SyncSend + Clone + 'static {
+pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// yields the local (to the calling PE) index along with each element
     ///
     /// # Examples
@@ -973,6 +973,17 @@ pub struct LocalIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
     _marker: PhantomData<&'a T>,
 }
 
+impl<'a, T: Dist, A: LamellarArray<T>> IterClone for LocalIter<'a, T, A> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalIter {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
+}
+
 impl<'a, T: Dist, A: LamellarArray<T>> std::fmt::Debug for LocalIter<'a, T, A> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -1071,12 +1082,22 @@ impl<
 /// let local_iter = array.local_iter_mut().for_each(move|e| e.store(my_pe) );
 /// world.block_on(local_iter);
 ///```
-#[derive(Clone)]
 pub struct LocalIterMut<'a, T: Dist, A: LamellarArray<T>> {
     data: A,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
+}
+
+impl<'a, T: Dist, A: LamellarArray<T>> IterClone for LocalIterMut<'a, T, A> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        LocalIterMut {
+            data: self.data.clone(),
+            cur_i: self.cur_i,
+            end_i: self.end_i,
+            _marker: PhantomData,
+        }
+    }
 }
 
 impl<'a, T: Dist, A: LamellarArray<T>> std::fmt::Debug for LocalIterMut<'a, T, A> {

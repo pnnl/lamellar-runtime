@@ -8,6 +8,16 @@ pub struct Skip<I> {
     skip_index: usize,
 }
 
+impl<I: IterClone> IterClone for Skip<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Skip {
+            iter: self.iter.iter_clone(Sealed),
+            count: self.count,
+            skip_index: self.skip_index,
+        }
+    }
+}
+
 impl<I> Skip<I>
 where
     I: IndexedDistributedIterator,

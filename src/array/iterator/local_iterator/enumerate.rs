@@ -5,6 +5,16 @@ pub struct Enumerate<I> {
     iter: I,
     cur_index: usize,
 }
+
+impl<I: IterClone> IterClone for Enumerate<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Enumerate {
+            iter: self.iter.iter_clone(Sealed),
+            cur_index: self.cur_index,
+        }
+    }
+}
+
 impl<I> Enumerate<I>
 where
     I: IndexedLocalIterator,

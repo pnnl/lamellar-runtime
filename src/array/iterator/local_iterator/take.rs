@@ -7,6 +7,15 @@ pub struct Take<I> {
     take_count: usize,
 }
 
+impl<I: IterClone> IterClone for Take<I> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        Take {
+            iter: self.iter.iter_clone(Sealed),
+            take_count: self.take_count,
+        }
+    }
+}
+
 impl<I> Take<I>
 where
     I: IndexedLocalIterator,

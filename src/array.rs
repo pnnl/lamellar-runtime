@@ -786,7 +786,7 @@ pub(crate) mod private {
     use std::sync::Arc;
     #[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-    pub trait LamellarArrayPrivate<T: Dist> {
+    pub trait LamellarArrayPrivate<T: Dist>: Clone {
         // // fn my_pe(&self) -> usize;
         fn inner_array(&self) -> &UnsafeArray<T>;
         fn local_as_ptr(&self) -> *const T;
