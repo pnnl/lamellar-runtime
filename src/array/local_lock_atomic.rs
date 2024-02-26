@@ -1,4 +1,5 @@
 mod iteration;
+mod local_chunks;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::private::LamellarArrayPrivate;

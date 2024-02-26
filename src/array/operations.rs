@@ -471,7 +471,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     }
 }
 
-impl<'a, T: Dist> OpInput<'a, T> for &'a mut dyn Iterator<Item = T> {
+impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         self.collect::<Vec<_>>().as_op_input()
     }

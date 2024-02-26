@@ -53,6 +53,7 @@ pin-project = "1.0.12"
 serde_with = "3.0.0"
 pin-weak = "1.1.0"
 async-lock = "2.8.0"
+itertools = "0.12.1"
 
 
 [dev-dependencies]
@@ -299,6 +300,8 @@ path="examples/active_message_examples/am_local.rs"
 name="am_local_memregions"
 path="examples/active_message_examples/am_local_memregions.rs"
 
+
+
 ##---------------Array Examples -------------------##
 [[example]]
 name="dist_array_reduce"
@@ -359,6 +362,10 @@ path="examples/array_examples/global_lock_array.rs"
 #[[example]]
 #name="2d_array"
 #path="examples/array_examples/2d_array.rs"
+
+#[[example]]
+#name="histo"
+#path="examples/array_examples/histo.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]

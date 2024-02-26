@@ -119,6 +119,7 @@ for toolchain in stable; do #nightly; do
         cur_tasks=`squeue -u frie869 | grep " R " | wc -l`
         sleep 5
       done
+      
     done
     cd ..
     wait
