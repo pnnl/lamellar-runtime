@@ -363,9 +363,9 @@ path="examples/array_examples/global_lock_array.rs"
 #name="2d_array"
 #path="examples/array_examples/2d_array.rs"
 
-#[[example]]
-#name="histo"
-#path="examples/array_examples/histo.rs"
+[[example]]
+name="histo"
+path="examples/array_examples/histo.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]

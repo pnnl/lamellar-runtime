@@ -69,8 +69,9 @@ fn main() {
             let col = col.clone();
             let c = c.clone();
             let _ = a
-                .local_iter() //LocalIterator (each pe will iterate through only its local data -- in parallel)
-                .chunks(n) // chunk by the row size
+                // .local_iter() //LocalIterator (each pe will iterate through only its local data -- in parallel)
+                // .chunks(n) // chunk by the row size
+                .local_chunks(n)
                 .enumerate()
                 .for_each(move |(i, row)| {
                     let sum = unsafe { col.iter().zip(row).map(|(&i1, &i2)| i1 * i2).sum::<f32>() }; // dot product using rust iters... but MatrixMultiply is faster
@@ -85,10 +86,16 @@ fn main() {
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();
+    let sum = world.block_on(c.sum());
 
     println!("Elapsed: {:?}", elapsed);
     if my_pe == 0 {
-        println!("elapsed {:?} Gflops: {:?}", elapsed, num_gops / elapsed,);
+        println!(
+            "elapsed {:?} Gflops: {:?} {:?}",
+            elapsed,
+            num_gops / elapsed,
+            sum
+        );
     }
     // unsafe {
     //     world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {

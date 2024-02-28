@@ -2,6 +2,7 @@ mod iteration;
 
 pub(crate) mod operations;
 mod rdma;
+mod local_chunks;
 
 use crate::active_messaging::*;
 // use crate::array::r#unsafe::operations::BUFOPS;

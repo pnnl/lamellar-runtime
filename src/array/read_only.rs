@@ -1,5 +1,6 @@
 mod iteration;
 mod rdma;
+mod local_chunks;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::DarcMode;
