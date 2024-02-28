@@ -4,7 +4,6 @@ use crate::array::read_only::*;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 
-
 #[derive(Clone)]
 pub struct ReadOnlyLocalChunks<T: Dist> {
     chunk_size: usize,
@@ -24,10 +23,8 @@ impl<T: Dist> IterClone for ReadOnlyLocalChunks<T> {
     }
 }
 
-
-
 impl<T: Dist + 'static> LocalIterator for ReadOnlyLocalChunks<T> {
-    type Item =  &'static [T];
+    type Item = &'static [T];
     type Array = ReadOnlyArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
@@ -60,10 +57,12 @@ impl<T: Dist + 'static> LocalIterator for ReadOnlyLocalChunks<T> {
             //     "start_i {} end_i {} self.index {} self.end_index {}",
             //     start_i, end_i, self.index, self.end_index
             // );
-            Some(unsafe{std::slice::from_raw_parts_mut(
-                self.array.array.local_as_mut_ptr().offset(start_i as isize),
-                end_i - start_i,
-            )})
+            Some(unsafe {
+                std::slice::from_raw_parts_mut(
+                    self.array.array.local_as_mut_ptr().offset(start_i as isize),
+                    end_i - start_i,
+                )
+            })
         } else {
             None
         }

@@ -13,7 +13,7 @@ pub struct LocalLockLocalChunks<T: Dist> {
     end_index: usize, //global index within the array local data
     array: LocalLockArray<T>,
     lock: LocalRwDarc<()>,
-    lock_guard: Arc<RwLockReadGuardArc<Box<()>>>,
+    lock_guard: Arc<RwLockReadGuardArc<()>>,
 }
 
 impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
@@ -36,7 +36,7 @@ pub struct LocalLockLocalChunksMut<T: Dist> {
     end_index: usize, //global index within the array local data
     array: LocalLockArray<T>,
     lock: LocalRwDarc<()>,
-    lock_guard: Arc<RwLockWriteGuardArc<Box<()>>>,
+    lock_guard: Arc<RwLockWriteGuardArc<()>>,
 }
 
 impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
@@ -56,7 +56,7 @@ impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
 pub struct LocalLockMutChunkLocalData<'a, T: Dist> {
     data: &'a mut [T],
     _index: usize,
-    _lock_guard: Arc<RwLockWriteGuardArc<Box<()>>>,
+    _lock_guard: Arc<RwLockWriteGuardArc<()>>,
 }
 
 impl<T: Dist> Deref for LocalLockMutChunkLocalData<'_, T> {
@@ -71,8 +71,8 @@ impl<T: Dist> DerefMut for LocalLockMutChunkLocalData<'_, T> {
     }
 }
 
-impl<T: Dist + 'static> LocalIterator for LocalLockLocalChunks<T> {
-    type Item = LocalLockLocalData<'static, T>;
+impl<T: Dist> LocalIterator for LocalLockLocalChunks<T> {
+    type Item = LocalLockLocalData<T>;
     type Array = LocalLockArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
@@ -108,14 +108,7 @@ impl<T: Dist + 'static> LocalIterator for LocalLockLocalChunks<T> {
             //     start_i, end_i, self.index, self.end_index
             // );
             Some(LocalLockLocalData {
-                array: self.array.clone(),
-                data: unsafe {
-                    std::slice::from_raw_parts_mut(
-                        self.array.array.local_as_mut_ptr().offset(start_i as isize),
-                        end_i - start_i,
-                    )
-                },
-                index: 0,
+                array: self.array.sub_array(start_i..end_i),
                 lock: self.lock.clone(),
                 lock_guard: self.lock_guard.clone(),
             })
@@ -132,7 +125,7 @@ impl<T: Dist + 'static> LocalIterator for LocalLockLocalChunks<T> {
     }
 }
 
-impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalChunks<T> {
+impl<T: Dist> IndexedLocalIterator for LocalLockLocalChunks<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
         if index * self.chunk_size < self.array.len() {
             Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
@@ -181,6 +174,7 @@ impl<T: Dist + 'static> LocalIterator for LocalLockLocalChunksMut<T> {
             //     start_i, end_i, self.index, self.end_index
             // );
             Some(LocalLockMutChunkLocalData {
+                //TODO we can probably do this similar to non mut way to avoid the unsafe...
                 data: unsafe {
                     std::slice::from_raw_parts_mut(
                         self.array.array.local_as_mut_ptr().offset(start_i as isize),
@@ -215,7 +209,19 @@ impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalChunksMut<T> {
 }
 
 impl<T: Dist> LocalLockArray<T> {
-    pub fn read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunks<T> {
+    pub async fn read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunks<T> {
+        let lock = Arc::new(self.lock.read().await);
+        LocalLockLocalChunks {
+            chunk_size,
+            index: 0,
+            end_index: 0,
+            array: self.clone(),
+            lock: self.lock.clone(),
+            lock_guard: lock,
+        }
+    }
+
+    pub fn blocking_read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunks<T> {
         let lock = Arc::new(self.array.block_on(self.lock.read()));
         LocalLockLocalChunks {
             chunk_size,
@@ -227,7 +233,19 @@ impl<T: Dist> LocalLockArray<T> {
         }
     }
 
-    pub fn write_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksMut<T> {
+    pub async fn write_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksMut<T> {
+        let lock = Arc::new(self.lock.write().await);
+        LocalLockLocalChunksMut {
+            chunk_size,
+            index: 0,
+            end_index: 0,
+            array: self.clone(),
+            lock: self.lock.clone(),
+            lock_guard: lock,
+        }
+    }
+
+    pub fn blocking_write_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksMut<T> {
         let lock = Arc::new(self.array.block_on(self.lock.write()));
         LocalLockLocalChunksMut {
             chunk_size,

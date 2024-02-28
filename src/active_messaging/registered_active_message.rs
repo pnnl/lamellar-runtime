@@ -312,8 +312,18 @@ impl RegisteredActiveMessages {
     // #[tracing::instrument(skip_all)]
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
         // println!("send_data_am");
+        let header = self.create_header(&req_data, Cmd::Data);
+        let mut darcs = vec![];
+        data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
+        let darc_list_size = crate::serialized_size(&darcs, false);
+        let data_header = DataHeader {
+            size: data_size,
+            req_id: req_data.id,
+            darc_list_size: darc_list_size,
+        };
 
         let data_buf = self
+            .create_data_buf(
                 header,
                 data_size + darc_list_size + *DATA_HEADER_LEN,
                 &req_data.lamellae,

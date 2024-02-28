@@ -36,8 +36,7 @@ use take::*;
 
 pub(crate) use consumer::*;
 
-use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::{private::*, IterRequest, Schedule};
+use crate::array::iterator::{private::*, Schedule};
 use crate::array::{
     operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, GenericAtomicArray,
     LamellarArray, NativeAtomicArray,

@@ -2,8 +2,6 @@ use crate::scheduler::LamellarExecutor;
 
 use tokio::runtime::Runtime;
 
-use tracing::*;
-
 use futures::Future;
 
 #[derive(Debug)]
@@ -18,9 +16,9 @@ impl LamellarExecutor for TokioRt {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        trace_span!("submit_task").in_scope(|| {
+        // trace_span!("submit_task").in_scope(|| {
             self.rt.spawn(async move { task.await });
-        });
+        // });
     }
 
     fn submit_immediate_task<F>(&self, task: F)
@@ -28,26 +26,28 @@ impl LamellarExecutor for TokioRt {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        trace_span!("submit_task").in_scope(|| {
+        // trace_span!("submit_task").in_scope(|| {
             self.rt.spawn(async move { task.await });
-        });
+        // });
     }
 
     fn block_on<F: Future>(&self, task: F) -> F::Output {
-        trace_span!("block_on").in_scope(|| self.rt.block_on(task))
+        // trace_span!("block_on").in_scope(|| 
+            self.rt.block_on(task)
+        // )
     }
 
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     fn shutdown(&self) {
         // i think we just let tokio do this on drop
     }
 
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     fn force_shutdown(&self) {
         // i think we just let tokio do this on drop
     }
 
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     fn exec_task(&self) {
         // I dont think tokio has a way to do this
     }

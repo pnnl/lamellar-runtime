@@ -38,7 +38,7 @@ impl WorkStealingThread {
         builder
             .spawn(move || {
                 // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
-                let _span = trace_span!("WorkStealingThread::run");
+                // let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::thread_rng();
@@ -131,16 +131,16 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        trace_span!("submit_task").in_scope(|| {
-            let work_inj = self.work_inj.clone();
-            let schedule = move |runnable| work_inj.push(runnable);
-            let (runnable, task) = Builder::new()
-                .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-                .spawn(move |_task_id| async move { task.await }, schedule);
+        // trace_span!("submit_task").in_scope(|| {
+        let work_inj = self.work_inj.clone();
+        let schedule = move |runnable| work_inj.push(runnable);
+        let (runnable, task) = Builder::new()
+            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
+            .spawn(move |_task_id| async move { task.await }, schedule);
 
-            runnable.schedule();
-            task.detach();
-        });
+        runnable.schedule();
+        task.detach();
+        // });
     }
 
     fn submit_immediate_task<F>(&self, task: F)
@@ -148,44 +148,44 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        trace_span!("submit_task").in_scope(|| {
-            let imm_inj = self.imm_inj.clone();
-            let schedule = move |runnable| imm_inj.push(runnable);
-            let (runnable, task) = Builder::new()
-                .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-                .spawn(move |_task_id| async move { task.await }, schedule);
+        // trace_span!("submit_task").in_scope(|| {
+        let imm_inj = self.imm_inj.clone();
+        let schedule = move |runnable| imm_inj.push(runnable);
+        let (runnable, task) = Builder::new()
+            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
+            .spawn(move |_task_id| async move { task.await }, schedule);
 
-            runnable.schedule(); //try to run immediately
-            task.detach();
-        });
+        runnable.schedule(); //try to run immediately
+        task.detach();
+        // });
     }
 
     fn block_on<F: Future>(&self, task: F) -> F::Output {
-        trace_span!("block_on").in_scope(|| {
-            let work_inj = self.work_inj.clone();
-            let schedule = move |runnable| work_inj.push(runnable);
-            let (runnable, mut task) = unsafe {
-                Builder::new()
-                    .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-                    .spawn_unchecked(move |_task_id| async move { task.await }, schedule)
-            };
-            let waker = runnable.waker();
-            runnable.run(); //try to run immediately
-            while !task.is_finished() {
-                self.exec_task(); //try to execute another task while this one is not ready
-            }
-            let cx = &mut async_std::task::Context::from_waker(&waker);
-            if let async_std::task::Poll::Ready(output) = task.poll(cx) {
-                output
-            } else {
-                println!(
-                    "[{:?}] work stealing block on failed --  task id{:?}",
-                    std::thread::current().id(),
-                    task.metadata()
-                );
-                panic!("task not ready");
-            }
-        })
+        // trace_span!("block_on").in_scope(|| {
+        let work_inj = self.work_inj.clone();
+        let schedule = move |runnable| work_inj.push(runnable);
+        let (runnable, mut task) = unsafe {
+            Builder::new()
+                .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
+                .spawn_unchecked(move |_task_id| async move { task.await }, schedule)
+        };
+        let waker = runnable.waker();
+        runnable.run(); //try to run immediately
+        while !task.is_finished() {
+            self.exec_task(); //try to execute another task while this one is not ready
+        }
+        let cx = &mut async_std::task::Context::from_waker(&waker);
+        if let async_std::task::Poll::Ready(output) = task.poll(cx) {
+            output
+        } else {
+            println!(
+                "[{:?}] work stealing block on failed --  task id{:?}",
+                std::thread::current().id(),
+                task.metadata()
+            );
+            panic!("task not ready");
+        }
+        // })
     }
 
     //#[tracing::instrument(skip_all)]
@@ -275,7 +275,7 @@ impl WorkStealing {
         ws.init();
         ws
     }
-    #[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all)]
     fn init(&mut self) {
         let mut work_workers: std::vec::Vec<crossbeam::deque::Worker<Runnable<usize>>> = vec![];
         for _i in 0..self.max_num_threads {
