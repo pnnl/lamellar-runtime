@@ -194,11 +194,11 @@ fn main() {
         let world_c = world.clone();
         world.block_on(async move {
             for _ in 0..my_pe {
-                world_c.barrier();
+                world_c.async_barrier().await;
             }
             println!("[{:?}] sub_team_path: {:?}", my_pe, sub_team_path.await);
             for _ in my_pe..num_pes {
-                world_c.barrier();
+                world_c.async_barrier().await;
             }
         });
     } else {

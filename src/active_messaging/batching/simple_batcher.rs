@@ -56,6 +56,7 @@ impl SimpleBatcherInner {
 pub(crate) struct SimpleBatcher {
     batched_ams: Arc<Vec<SimpleBatcherInner>>,
     stall_mark: Arc<AtomicUsize>,
+    executor: Arc<Executor>,
 }
 
 #[async_trait]
@@ -92,17 +93,19 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_remote_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                && batch_id == batch.batch_id.load(Ordering::SeqCst)
-            {
-                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                async_std::task::yield_now().await;
-            }
-            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                //this batch is still valid
-                SimpleBatcher::create_tx_task(batch).await;
-            }
+            self.executor.submit_task(async move {
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
+                    SimpleBatcher::create_tx_task(batch).await;
+                }
+            });
         } else if size >= MAX_BATCH_SIZE {
             // println!("remote size: {:?} ", size);
             // println!(
@@ -145,17 +148,19 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_rerturn_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                && batch_id == batch.batch_id.load(Ordering::SeqCst)
-            {
-                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                async_std::task::yield_now().await;
-            }
-            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                //this batch is still valid
-                SimpleBatcher::create_tx_task(batch).await;
-            }
+            self.executor.submit_task(async move {
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
+                    SimpleBatcher::create_tx_task(batch).await;
+                }
+            });
         } else if size >= MAX_BATCH_SIZE {
             // println!("return size: {:?} {dst:?}",size);
             // println!(
@@ -200,17 +205,19 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_data_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                && batch_id == batch.batch_id.load(Ordering::SeqCst)
-            {
-                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                async_std::task::yield_now().await;
-            }
-            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                //this batch is still valid
-                SimpleBatcher::create_tx_task(batch).await;
-            }
+            self.executor.submit_task(async move {
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
+                    SimpleBatcher::create_tx_task(batch).await;
+                }
+            });
         } else if size >= MAX_BATCH_SIZE {
             // println!("data size: {:?} {dst:?}",size);
             // println!(
@@ -242,17 +249,19 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_unit_am_to_batch submit task",
             //     std::thread::current().id()
             // );
-            while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
-                && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
-                && batch_id == batch.batch_id.load(Ordering::SeqCst)
-            {
-                stall_mark = cur_stall_mark.load(Ordering::Relaxed);
-                async_std::task::yield_now().await;
-            }
-            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
-                //this batch is still valid
-                SimpleBatcher::create_tx_task(batch).await;
-            }
+            self.executor.submit_task(async move {
+                while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
+                    && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
+                    && batch_id == batch.batch_id.load(Ordering::SeqCst)
+                {
+                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    async_std::task::yield_now().await;
+                }
+                if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                    //this batch is still valid
+                    SimpleBatcher::create_tx_task(batch).await;
+                }
+            });
         } else if size >= MAX_BATCH_SIZE {
             // println!("unit size: {:?} ", size);
             // println!(
@@ -270,18 +279,17 @@ impl Batcher for SimpleBatcher {
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
-    ) -> Vec<Am> {
+    ) {
         let data = ser_data.data_as_bytes();
         let mut i = 0;
         // println!("executing batched msg {:?}", data.len());
-        let mut return_ams = Vec::new();
         while i < data.len() {
             let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => return_ams.push(self.exec_am(&msg, data, &mut i, &lamellae, ame).await),
+                Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, ame),
                 Cmd::ReturnAm => {
                     self.exec_return_am(&msg, data, &mut i, &lamellae, ame)
                         .await
@@ -293,13 +301,16 @@ impl Batcher for SimpleBatcher {
                 }
             }
         }
-        return_ams
     }
 }
 
 impl SimpleBatcher {
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn new(num_pes: usize, stall_mark: Arc<AtomicUsize>) -> SimpleBatcher {
+    pub(crate) fn new(
+        num_pes: usize,
+        stall_mark: Arc<AtomicUsize>,
+        executor: Arc<Executor>,
+    ) -> SimpleBatcher {
         let mut batched_ams = Vec::new();
         for pe in 0..num_pes {
             batched_ams.push(SimpleBatcherInner::new(Some(pe)));
@@ -308,13 +319,13 @@ impl SimpleBatcher {
         SimpleBatcher {
             batched_ams: Arc::new(batched_ams),
             stall_mark: stall_mark,
+            executor: executor,
         }
     }
 
     //#[tracing::instrument(skip_all)]
     async fn create_tx_task(batch: SimpleBatcherInner) {
         // println!("[{:?}] create_tx_task", std::thread::current().id());
-        async_std::task::yield_now().await; // force this to renter the task queue so other requests can hopefully come in before sending the batch
         let (buf, size) = batch.swap();
 
         if size > 0 {
@@ -509,14 +520,15 @@ impl SimpleBatcher {
     }
 
     // #[tracing::instrument(skip_all)]
-    async fn exec_am(
+    // async
+    fn exec_am(
         &self,
         msg: &Msg,
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
-    ) -> Am {
+    ) {
         // println!("exec_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -540,25 +552,27 @@ impl SimpleBatcher {
         //     "[{:?}] simple batcher exec_am submit task",
         //     std::thread::current().id()
         // );
-        let am = match am
-            .exec(
-                team.team.world_pe,
-                team.team.num_world_pes,
-                false,
-                world.clone(),
-                team.clone(),
-            )
-            .await
-        {
-            LamellarReturn::Unit => Am::Unit(req_data),
-            LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
-            LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
-            LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) => {
-                panic!("Should not be returning local data or AM from remote  am");
-            }
-        };
-        // ame.process_msg(am, 0, false).await;
-        am
+        let ame = ame.clone();
+        self.executor.submit_task(async move {
+            let am = match am
+                .exec(
+                    team.team.world_pe,
+                    team.team.num_world_pes,
+                    false,
+                    world.clone(),
+                    team.clone(),
+                )
+                .await
+            {
+                LamellarReturn::Unit => Am::Unit(req_data),
+                LamellarReturn::RemoteData(data) => Am::Data(req_data, data),
+                LamellarReturn::RemoteAm(am) => Am::Return(req_data, am),
+                LamellarReturn::LocalData(_) | LamellarReturn::LocalAm(_) => {
+                    panic!("Should not be returning local data or AM from remote  am");
+                }
+            };
+            ame.process_msg(am, 0, false).await;
+        });
     }
 
     // #[tracing::instrument(skip_all)]

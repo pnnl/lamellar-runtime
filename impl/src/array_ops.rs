@@ -1687,9 +1687,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
             use __lamellar::darc::prelude::*;
             use __lamellar::array::{
                 ArrayOpCmd,
-                OpResultOffsets,
-                PeOpResults,
-                OpResults,
                 IdxVal,
                 ReadOnlyByteArray,
                 UnsafeByteArray,

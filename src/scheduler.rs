@@ -115,14 +115,14 @@ pub(crate) struct Scheduler {
 
 impl Scheduler {
     pub(crate) fn new(
-        executor: Executor,
+        executor: Arc<Executor>,
         active_message_engine: RegisteredActiveMessages,
         am_stall_mark: Arc<AtomicUsize>,
         status: Arc<AtomicU8>,
         panic: Arc<AtomicU8>,
     ) -> Self {
         Self {
-            executor: Arc::new(executor),
+            executor: executor,
             active_message_engine,
             num_ams: Arc::new(AtomicUsize::new(0)),
             max_ams: Arc::new(AtomicUsize::new(0)),
@@ -186,7 +186,6 @@ impl Scheduler {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
         let ame = self.active_message_engine.clone();
-        let executor = self.executor.clone();
         let am_future = async move {
             num_ams.fetch_add(1, Ordering::Relaxed);
             let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
@@ -198,7 +197,7 @@ impl Scheduler {
             // );
             if let Some(header) = data.deserialize_header() {
                 let msg = header.msg;
-                ame.exec_msg(msg, data, lamellae, executor).await;
+                ame.exec_msg(msg, data, lamellae).await;
             } else {
                 data.print();
                 panic!("should i be here?");
@@ -265,17 +264,20 @@ impl Scheduler {
     }
 
     pub(crate) fn exec_task(&self) {
-        if std::thread::current().id() == *crate::MAIN_THREAD {
-            self.executor.exec_task();
-        } else {
-            std::thread::yield_now();
-        }
+        // if std::thread::current().id() == *crate::MAIN_THREAD {
+        self.executor.exec_task();
+        // } else {
+        //     std::thread::yield_now();
+        // }
     }
 
     pub(crate) fn block_on<F: Future>(&self, task: F) -> F::Output {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             println!(
-                "trying to call block on within a worker thread {:?}",
+                "[LAMELLAR WARNING] trying to call block on within a worker thread {:?} this may result in deadlock.
+                Typically this means you are running within an async context. If you have something like:
+                world.block_on(my_future) you can simply change to my_future.await. If this is not the case,
+                please file an issue on github.",
                 std::backtrace::Backtrace::capture()
             )
         }
@@ -331,28 +333,40 @@ pub(crate) fn create_scheduler(
 ) -> Scheduler {
     let am_stall_mark = Arc::new(AtomicUsize::new(0));
     let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
-    let executor = match executor {
+    let executor: Arc<Executor> = Arc::new(match executor {
         ExecutorType::LamellarWorkStealing => {
             WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
         }
         #[cfg(feature = "tokio-executor")]
         ExecutorType::Tokio => TokioRt::new(num_workers).into(),
-    };
+    });
 
     let batcher = match std::env::var("LAMELLAR_BATCHER") {
         Ok(n) => {
             let n = n.parse::<usize>().unwrap();
             if n == 1 {
-                BatcherType::Simple(SimpleBatcher::new(num_pes, am_stall_mark.clone()))
+                BatcherType::Simple(SimpleBatcher::new(
+                    num_pes,
+                    am_stall_mark.clone(),
+                    executor.clone(),
+                ))
             } else {
-                BatcherType::TeamAm(TeamAmBatcher::new(num_pes, am_stall_mark.clone()))
+                BatcherType::TeamAm(TeamAmBatcher::new(
+                    num_pes,
+                    am_stall_mark.clone(),
+                    executor.clone(),
+                ))
             }
         }
-        Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(num_pes, am_stall_mark.clone())),
+        Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(
+            num_pes,
+            am_stall_mark.clone(),
+            executor.clone(),
+        )),
     };
     Scheduler::new(
-        executor,
-        RegisteredActiveMessages::new(batcher),
+        executor.clone(),
+        RegisteredActiveMessages::new(batcher, executor),
         am_stall_mark,
         status,
         panic,

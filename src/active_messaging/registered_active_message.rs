@@ -64,6 +64,7 @@ crate::inventory::collect!(RegisteredAm);
 #[derive(Debug, Clone)]
 pub(crate) struct RegisteredActiveMessages {
     batcher: BatcherType,
+    executor: Arc<Executor>,
 }
 
 lazy_static! {
@@ -100,6 +101,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     // #[tracing::instrument(skip_all)]
     async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool) {
         // println!("[{:?}] process_msg {am:?}", std::thread::current().id());
+
         match am {
             Am::All(req_data, am) => {
                 // println!("{:?}",am.get_id());
@@ -109,27 +111,33 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 if req_data.team.lamellae.backend() != Backend::Local
                     && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err())
                 {
-                    // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
-                    if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
-                        self.batcher
-                            .add_remote_am_to_batch(
-                                req_data.clone(),
-                                am.clone(),
-                                am_id,
-                                am_size,
-                                stall_mark,
-                            )
-                            .await;
-                    } else {
-                        // println!(
-                        //     "[{:?}] {:?} all {:?}",
-                        //     std::thread::current().id(),
-                        //     am_id,
-                        //     am_size
-                        // );
-                        self.send_am(req_data.clone(), am.clone(), am_id, am_size, Cmd::Am)
-                            .await;
-                    }
+                    let ame = self.clone();
+                    let req_data_clone = req_data.clone();
+                    let am_clone = am.clone();
+                    self.executor.submit_task(async move {
+                        //spawn a task so that we can the execute the local am immediately
+                        // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
+                        if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {
+                            ame.batcher
+                                .add_remote_am_to_batch(
+                                    req_data_clone.clone(),
+                                    am_clone.clone(),
+                                    am_id,
+                                    am_size,
+                                    stall_mark,
+                                )
+                                .await;
+                        } else {
+                            // println!(
+                            //     "[{:?}] {:?} all {:?}",
+                            //     std::thread::current().id(),
+                            //     am_id,
+                            //     am_size
+                            // );
+                            ame.send_am(req_data_clone, am_clone, am_id, am_size, Cmd::Am)
+                                .await;
+                        }
+                    });
                 }
                 let world = LamellarTeam::new(None, req_data.world.clone(), true);
                 let team = LamellarTeam::new(Some(world.clone()), req_data.team.clone(), true);
@@ -216,21 +224,13 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     }
 
     //#[tracing::instrument(skip_all)]
-    async fn exec_msg(
-        self,
-        msg: Msg,
-        ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
-        executor: Arc<Executor>,
-    ) {
+    async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>) {
         // println!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         let data = ser_data.data_as_bytes();
         let mut i = 0;
         match msg.cmd {
             Cmd::Am => {
-                let return_am = self.exec_am(&msg, data, &mut i, &lamellae).await;
-                let process_task = self.process_msg(return_am, 0, false);
-                executor.submit_task(process_task);
+                self.exec_am(&msg, data, &mut i, &lamellae).await;
             }
             Cmd::ReturnAm => {
                 self.exec_return_am(&msg, data, &mut i, &lamellae).await;
@@ -242,15 +242,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 self.exec_unit_am(&msg, data, &mut i).await;
             }
             Cmd::BatchedMsg => {
-                let ams = self
-                    .batcher
+                self.batcher
                     .exec_batched_msg(msg, ser_data, lamellae, &self)
                     .await;
-                let am_tasks = futures::stream::FuturesUnordered::new();
-                for am in ams.into_iter() {
-                    am_tasks.push(self.clone().process_msg(am, 0, false));
-                }
-                executor.submit_task(futures::future::join_all(am_tasks));
             }
         }
     }
@@ -258,8 +252,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
 
 impl RegisteredActiveMessages {
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn new(batcher: BatcherType) -> RegisteredActiveMessages {
-        RegisteredActiveMessages { batcher: batcher }
+    pub(crate) fn new(batcher: BatcherType, executor: Arc<Executor>) -> RegisteredActiveMessages {
+        RegisteredActiveMessages { batcher, executor }
     }
 
     //#[tracing::instrument(skip_all)]
@@ -397,6 +391,7 @@ impl RegisteredActiveMessages {
         data.unwrap()
     }
 
+    //we can remove this by cloning self and submitting to the executor
     #[async_recursion]
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn exec_local_am(
@@ -447,7 +442,7 @@ impl RegisteredActiveMessages {
         data: &[u8],
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
-    ) -> Am {
+    ) {
         // println!("exec_am");
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -485,8 +480,12 @@ impl RegisteredActiveMessages {
                 panic!("Should not be returning local data or AM from remote  am");
             }
         };
-        am
-        // self.process_msg(am, 0, false).await; //0 just means we will force a stall_count loop
+        let ame = self.clone();
+        self.executor.submit_task(async move {
+            ame.process_msg(am, 0, false).await;
+        });
+        //compare against:
+        // ame.process_msg(am, 0, true).await;
     }
 
     //#[tracing::instrument(skip_all)]

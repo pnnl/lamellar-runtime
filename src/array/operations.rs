@@ -1,13 +1,13 @@
-use crate::active_messaging::LamellarArcAm;
+// use crate::active_messaging::LamellarArcAm;
 use crate::array::atomic::*;
 use crate::array::generic_atomic::*;
 use crate::array::global_lock_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
-use crate::array::{AmDist, Dist, LamellarArrayRequest, LamellarEnv, LamellarWriteArray};
-use crate::lamellar_request::LamellarRequest;
-use crate::scheduler::Scheduler;
-use crate::LamellarTeamRT;
+use crate::array::{AmDist, Dist, LamellarEnv, LamellarWriteArray};
+// use crate::lamellar_request::LamellarRequest;
+// use crate::scheduler::Scheduler;
+// use crate::LamellarTeamRT;
 
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAtomicOps};
@@ -24,13 +24,13 @@ pub use read_only::ReadOnlyOps;
 pub(crate) mod shift;
 pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps};
 
-use async_trait::async_trait;
-use parking_lot::Mutex;
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+// use async_trait::async_trait;
+// use parking_lot::Mutex;
+// use std::collections::HashMap;
+// use std::marker::PhantomData;
+// use std::pin::Pin;
+// use std::sync::atomic::{AtomicBool, Ordering};
+// use std::sync::Arc;
 use std::u8;
 
 #[doc(hidden)]
@@ -896,436 +896,483 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
     }
 }
 
-#[doc(hidden)]
-pub trait BufferOp: Sync + Send {
-    fn add_ops(
-        &self,
-        op: *const u8,
-        op_data: *const u8,
-        team: Pin<Arc<LamellarTeamRT>>,
-    ) -> (bool, Arc<AtomicBool>);
-    fn add_fetch_ops(
-        &self,
-        pe: usize,
-        op: *const u8,
-        op_data: *const u8,
-        req_ids: &Vec<usize>,
-        res_map: OpResults,
-        team: Pin<Arc<LamellarTeamRT>>,
-    ) -> (bool, Arc<AtomicBool>, Option<OpResultOffsets>);
+// #[doc(hidden)]
+// pub trait BufferOp: Sync + Send {
+//     fn add_ops(
+//         &self,
+//         op: *const u8,
+//         op_data: *const u8,
+//         team: Pin<Arc<LamellarTeamRT>>,
+//     ) -> (bool, Arc<AtomicBool>);
+//     fn add_fetch_ops(
+//         &self,
+//         pe: usize,
+//         op: *const u8,
+//         op_data: *const u8,
+//         req_ids: &Vec<usize>,
+//         res_map: OpResults,
+//         team: Pin<Arc<LamellarTeamRT>>,
+//     ) -> (bool, Arc<AtomicBool>, Option<OpResultOffsets>);
 
-    fn into_arc_am(
-        &self,
-        pe: usize,
-        sub_array: std::ops::Range<usize>,
-    ) -> (
-        Vec<LamellarArcAm>,
-        usize,
-        Arc<AtomicBool>,
-        Arc<Mutex<Vec<u8>>>,
-    );
-}
+//     fn into_arc_am(
+//         &self,
+//         pe: usize,
+//         sub_array: std::ops::Range<usize>,
+//     ) -> (
+//         Vec<LamellarArcAm>,
+//         usize,
+//         Arc<AtomicBool>,
+//         Arc<Mutex<Vec<u8>>>,
+//     );
+// }
 
-#[doc(hidden)]
-pub type OpResultOffsets = Vec<(usize, usize, usize)>; //reqid,offset,len
+// #[doc(hidden)]
+// pub type OpResultOffsets = Vec<(usize, usize, usize)>; //reqid,offset,len
 
-#[doc(hidden)]
-pub struct OpReqOffsets(Arc<Mutex<HashMap<usize, OpResultOffsets>>>); //pe
-impl OpReqOffsets {
-    //#[tracing::instrument(skip_all)]
-    // pub(crate) fn new() -> Self {
-    //     OpReqOffsets(Arc::new(Mutex::new(HashMap::new())))
-    // }
-    //#[tracing::instrument(skip_all)]
-    pub fn insert(&self, index: usize, indices: OpResultOffsets) {
-        let mut map = self.0.lock();
-        map.insert(index, indices);
-    }
-    //#[tracing::instrument(skip_all)]
-    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, OpResultOffsets>> {
-        self.0.lock()
-    }
-}
+// #[doc(hidden)]
+// pub struct OpReqOffsets(Arc<Mutex<HashMap<usize, OpResultOffsets>>>); //pe
+// impl OpReqOffsets {
+//     //#[tracing::instrument(skip_all)]
+//     // pub(crate) fn new() -> Self {
+//     //     OpReqOffsets(Arc::new(Mutex::new(HashMap::new())))
+//     // }
+//     //#[tracing::instrument(skip_all)]
+//     pub fn insert(&self, index: usize, indices: OpResultOffsets) {
+//         let mut map = self.0.lock();
+//         map.insert(index, indices);
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, OpResultOffsets>> {
+//         self.0.lock()
+//     }
+// }
 
-impl Clone for OpReqOffsets {
-    fn clone(&self) -> Self {
-        OpReqOffsets(self.0.clone())
-    }
-}
+// impl Clone for OpReqOffsets {
+//     fn clone(&self) -> Self {
+//         OpReqOffsets(self.0.clone())
+//     }
+// }
 
-impl std::fmt::Debug for OpReqOffsets {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let map = self.0.lock();
-        write!(f, "{:?} {:?}", map.len(), map)
-    }
-}
+// impl std::fmt::Debug for OpReqOffsets {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let map = self.0.lock();
+//         write!(f, "{:?} {:?}", map.len(), map)
+//     }
+// }
 
-#[doc(hidden)]
-pub type PeOpResults = Arc<Mutex<Vec<u8>>>;
+// #[doc(hidden)]
+// pub type PeOpResults = Arc<Mutex<Vec<u8>>>;
 
-#[doc(hidden)]
-pub struct OpResults(Arc<Mutex<HashMap<usize, PeOpResults>>>);
-impl OpResults {
-    //#[tracing::instrument(skip_all)]
-    // pub(crate) fn new() -> Self {
-    //     OpResults(Arc::new(Mutex::new(HashMap::new())))
-    // }
-    //#[tracing::instrument(skip_all)]
-    pub fn insert(&self, index: usize, val: PeOpResults) {
-        let mut map = self.0.lock();
-        map.insert(index, val);
-    }
-    //#[tracing::instrument(skip_all)]
-    pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, PeOpResults>> {
-        self.0.lock()
-    }
-}
+// #[doc(hidden)]
+// pub struct OpResults(Arc<Mutex<HashMap<usize, PeOpResults>>>);
+// impl OpResults {
+//     //#[tracing::instrument(skip_all)]
+//     // pub(crate) fn new() -> Self {
+//     //     OpResults(Arc::new(Mutex::new(HashMap::new())))
+//     // }
+//     //#[tracing::instrument(skip_all)]
+//     pub fn insert(&self, index: usize, val: PeOpResults) {
+//         let mut map = self.0.lock();
+//         map.insert(index, val);
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     pub(crate) fn lock(&self) -> parking_lot::MutexGuard<HashMap<usize, PeOpResults>> {
+//         self.0.lock()
+//     }
+// }
 
-impl Clone for OpResults {
-    fn clone(&self) -> Self {
-        OpResults(self.0.clone())
-    }
-}
+// impl Clone for OpResults {
+//     fn clone(&self) -> Self {
+//         OpResults(self.0.clone())
+//     }
+// }
 
-impl std::fmt::Debug for OpResults {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let map = self.0.lock();
-        write!(f, "{:?} {:?}", map.len(), map)
-    }
-}
+// impl std::fmt::Debug for OpResults {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let map = self.0.lock();
+//         write!(f, "{:?} {:?}", map.len(), map)
+//     }
+// }
 
-pub(crate) struct ArrayOpHandle {
-    pub(crate) reqs: Vec<Box<ArrayOpHandleInner>>,
-}
+// pub(crate) struct ArrayOpHandle {
+//     pub(crate) reqs: Vec<Box<ArrayOpHandleInner>>,
+// }
 
-#[derive(Debug)]
-pub(crate) struct ArrayOpHandleInner {
-    pub(crate) complete: Vec<Arc<AtomicBool>>,
-    pub(crate) scheduler: Arc<Scheduler>,
-}
+// #[derive(Debug)]
+// pub(crate) struct ArrayOpHandleInner {
+//     pub(crate) complete: Vec<Arc<AtomicBool>>,
+//     pub(crate) scheduler: Arc<Scheduler>,
+// }
 
-pub(crate) struct ArrayOpFetchHandle<T: Dist> {
-    pub(crate) req: Box<ArrayOpFetchHandleInner<T>>,
-}
+// pub(crate) struct ArrayOpFetchHandle<T: Dist> {
+//     pub(crate) req: Box<ArrayOpFetchHandleInner<T>>,
+// }
 
-pub(crate) struct ArrayOpBatchFetchHandle<T: Dist> {
-    pub(crate) reqs: Vec<Box<ArrayOpFetchHandleInner<T>>>,
-}
+// pub(crate) struct ArrayOpBatchFetchHandle<T: Dist> {
+//     pub(crate) reqs: Vec<Box<ArrayOpFetchHandleInner<T>>>,
+// }
 
-#[derive(Debug)]
-pub(crate) struct ArrayOpFetchHandleInner<T: Dist> {
-    pub(crate) indices: OpReqOffsets,
-    pub(crate) complete: Vec<Arc<AtomicBool>>,
-    pub(crate) results: OpResults,
-    pub(crate) req_cnt: usize,
-    pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) _phantom: PhantomData<T>,
-}
+// #[derive(Debug)]
+// pub(crate) struct ArrayOpFetchHandleInner<T: Dist> {
+//     pub(crate) indices: OpReqOffsets,
+//     pub(crate) complete: Vec<Arc<AtomicBool>>,
+//     pub(crate) results: OpResults,
+//     pub(crate) req_cnt: usize,
+//     pub(crate) scheduler: Arc<Scheduler>,
+//     pub(crate) _phantom: PhantomData<T>,
+// }
 
-pub(crate) struct ArrayOpResultHandle<T: Dist> {
-    pub(crate) req: Box<ArrayOpResultHandleInner<T>>,
-}
-pub(crate) struct ArrayOpBatchResultHandle<T: Dist> {
-    pub(crate) reqs: Vec<Box<ArrayOpResultHandleInner<T>>>,
-}
+// pub(crate) struct ArrayOpResultHandle<T: Dist> {
+//     pub(crate) req: Box<ArrayOpResultHandleInner<T>>,
+// }
+// pub(crate) struct ArrayOpBatchResultHandle<T: Dist> {
+//     pub(crate) reqs: Vec<Box<ArrayOpResultHandleInner<T>>>,
+// }
 
-#[derive(Debug)]
-pub(crate) struct ArrayOpResultHandleInner<T> {
-    pub(crate) indices: OpReqOffsets,
-    pub(crate) complete: Vec<Arc<AtomicBool>>,
-    pub(crate) results: OpResults,
-    pub(crate) req_cnt: usize,
-    pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) _phantom: PhantomData<T>,
-}
+// #[derive(Debug)]
+// pub(crate) struct ArrayOpResultHandleInner<T> {
+//     pub(crate) indices: OpReqOffsets,
+//     pub(crate) complete: Vec<Arc<AtomicBool>>,
+//     pub(crate) results: OpResults,
+//     pub(crate) req_cnt: usize,
+//     pub(crate) scheduler: Arc<Scheduler>,
+//     pub(crate) _phantom: PhantomData<T>,
+// }
 
-#[async_trait]
-impl LamellarRequest for ArrayOpHandle {
-    type Output = ();
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        for req in self.reqs.drain(..) {
-            req.into_future().await;
-        }
-        ()
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        for req in &self.reqs {
-            req.get();
-        }
-        ()
-    }
-}
+// #[async_trait]
+// impl LamellarRequest for ArrayOpHandle {
+//     type Output = ();
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         for req in self.reqs.drain(..) {
+//             req.into_future().await;
+//         }
+//         ()
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         for req in &self.reqs {
+//             req.get();
+//         }
+//         ()
+//     }
+//     fn ready(&self) -> bool {
+//         self.reqs.iter().all(|req| req.ready())
+//     }
+//     fn set_waker(&mut self, waker: futures::task::Waker) {
+//         for req in &mut self.reqs {
+//             req.set_waker(waker.clone());
+//         }
+//     }
+// }
 
-#[async_trait]
-impl LamellarRequest for ArrayOpHandleInner {
-    type Output = ();
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        for comp in self.complete {
-            while comp.load(Ordering::Relaxed) == false {
-                async_std::task::yield_now().await;
-            }
-        }
-        ()
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        for comp in &self.complete {
-            while comp.load(Ordering::Relaxed) == false {
-                // std::thread::yield_now();
-                self.scheduler.exec_task();
-            }
-        }
-        ()
-    }
-}
+// #[async_trait]
+// impl LamellarRequest for ArrayOpHandleInner {
+//     type Output = ();
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         for comp in self.complete {
+//             while comp.load(Ordering::Relaxed) == false {
+//                 async_std::task::yield_now().await;
+//             }
+//         }
+//         ()
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         for comp in &self.complete {
+//             while comp.load(Ordering::Relaxed) == false {
+//                 // std::thread::yield_now();
+//                 self.scheduler.exec_task();
+//             }
+//         }
+//         ()
+//     }
 
-#[async_trait]
-impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
-    type Output = T;
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.req
-            .into_future()
-            .await
-            .pop()
-            .expect("should have a single request")
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        self.req.get().pop().expect("should have a single request")
-    }
-}
+//     fn ready(&self) -> bool {
+//         self.complete
+//             .iter()
+//             .all(|comp| comp.load(Ordering::Relaxed))
+//     }
 
-#[async_trait]
-impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
-    type Output = Vec<T>;
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        let mut res = vec![];
-        for req in self.reqs.drain(..) {
-            res.extend(req.into_future().await);
-        }
-        res
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        let mut res = vec![];
-        for req in &self.reqs {
-            res.extend(req.get());
-        }
-        // println!("res: {:?}",res);
-        res
-    }
-}
+//     fn set_waker(&mut self, waker: futures::task::Waker) {
+//         self.complete.iter()
+// }
 
-impl<T: Dist> ArrayOpFetchHandleInner<T> {
-    //#[tracing::instrument(skip_all)]
-    fn get_result(&self) -> Vec<T> {
-        if self.req_cnt > 0 {
-            let mut res_vec = Vec::with_capacity(self.req_cnt);
-            unsafe {
-                res_vec.set_len(self.req_cnt);
-            }
-            // println!("req_cnt: {:?}", self.req_cnt);
+// #[async_trait]
+// impl<T: Dist> LamellarRequest for ArrayOpFetchHandle<T> {
+//     type Output = T;
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         self.req
+//             .into_future()
+//             .await
+//             .pop()
+//             .expect("should have a single request")
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         self.req.get().pop().expect("should have a single request")
+//     }
 
-            for (pe, res) in self.results.lock().iter() {
-                let res = res.lock();
-                for (rid, offset, len) in self.indices.lock().get(pe).unwrap().iter() {
-                    let len = *len;
-                    if len == std::mem::size_of::<T>() + 1 {
-                        panic!(
-                            "unexpected results len {:?} {:?}",
-                            len,
-                            std::mem::size_of::<T>() + 1
-                        );
-                    }
-                    let res_t = unsafe {
-                        std::slice::from_raw_parts(
-                            res.as_ptr().offset(*offset as isize) as *const T,
-                            len / std::mem::size_of::<T>(),
-                        )
-                    };
-                    // println!("rid {:?} offset {:?} len {:?} {:?}",rid,offset,len,res.len());
-                    // println!("res {:?} {:?}",res.len(),&res[offset..offset+len]);
-                    // println!("res {:?} {:?}",res_t,res_t.len());
-                    res_vec[*rid] = res_t[0];
-                }
-            }
-            res_vec
-        } else {
-            vec![]
-        }
-    }
-}
+//     fn ready(&self) -> bool {
+//         self.req.ready()
+//     }
+// }
 
-#[async_trait]
-impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
-    type Output = Vec<T>;
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        for comp in &self.complete {
-            while comp.load(Ordering::Relaxed) == false {
-                async_std::task::yield_now().await;
-            }
-        }
-        self.get_result()
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        for comp in &self.complete {
-            while comp.load(Ordering::Relaxed) == false {
-                // std::thread::yield_now();
-                self.scheduler.exec_task();
-            }
-        }
-        self.get_result()
-    }
-}
+// #[async_trait]
+// impl<T: Dist> LamellarRequest for ArrayOpBatchFetchHandle<T> {
+//     type Output = Vec<T>;
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         let mut res = vec![];
+//         for req in self.reqs.drain(..) {
+//             res.extend(req.into_future().await);
+//         }
+//         res
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         let mut res = vec![];
+//         for req in &self.reqs {
+//             res.extend(req.get());
+//         }
+//         // println!("res: {:?}",res);
+//         res
+//     }
 
-#[async_trait]
-impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
-    type Output = Result<T, T>;
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.req
-            .into_future()
-            .await
-            .pop()
-            .expect("should have a single request")
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        self.req.get().pop().expect("should have a single request")
-    }
-}
+//     fn ready(&self) -> bool {
+//         self.reqs.iter().all(|req| req.ready())
+//     }
+// }
 
-#[async_trait]
-impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
-    type Output = Vec<Result<T, T>>;
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        // println!("num_reqs: {}",self.reqs.len());
-        let mut res = vec![];
-        for req in self.reqs.drain(..) {
-            res.extend(req.into_future().await);
-        }
-        res
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        let mut res = vec![];
-        for req in &self.reqs {
-            res.extend(req.get());
-        }
-        res
-    }
-}
+// impl<T: Dist> ArrayOpFetchHandleInner<T> {
+//     //#[tracing::instrument(skip_all)]
+//     fn get_result(&self) -> Vec<T> {
+//         if self.req_cnt > 0 {
+//             let mut res_vec = Vec::with_capacity(self.req_cnt);
+//             unsafe {
+//                 res_vec.set_len(self.req_cnt);
+//             }
+//             // println!("req_cnt: {:?}", self.req_cnt);
 
-impl<T: Dist> ArrayOpResultHandleInner<T> {
-    //#[tracing::instrument(skip_all)]
-    fn get_result(&self) -> Vec<Result<T, T>> {
-        // println!("req_cnt: {:?}", self.req_cnt);
-        if self.req_cnt > 0 {
-            let mut res_vec = Vec::with_capacity(self.req_cnt);
-            unsafe {
-                res_vec.set_len(self.req_cnt);
-            }
+//             for (pe, res) in self.results.lock().iter() {
+//                 let res = res.lock();
+//                 for (rid, offset, len) in self.indices.lock().get(pe).unwrap().iter() {
+//                     let len = *len;
+//                     if len == std::mem::size_of::<T>() + 1 {
+//                         panic!(
+//                             "unexpected results len {:?} {:?}",
+//                             len,
+//                             std::mem::size_of::<T>() + 1
+//                         );
+//                     }
+//                     let res_t = unsafe {
+//                         std::slice::from_raw_parts(
+//                             res.as_ptr().offset(*offset as isize) as *const T,
+//                             len / std::mem::size_of::<T>(),
+//                         )
+//                     };
+//                     // println!("rid {:?} offset {:?} len {:?} {:?}",rid,offset,len,res.len());
+//                     // println!("res {:?} {:?}",res.len(),&res[offset..offset+len]);
+//                     // println!("res {:?} {:?}",res_t,res_t.len());
+//                     res_vec[*rid] = res_t[0];
+//                 }
+//             }
+//             res_vec
+//         } else {
+//             vec![]
+//         }
+//     }
+// }
 
-            for (pe, res) in self.results.lock().iter() {
-                let res = res.lock();
-                // println!("{pe} {:?}",res.len());
-                // let mut rids = std::collections::HashSet::new();
-                let res_offsets_lock = self.indices.lock();
-                let res_offsets = res_offsets_lock.get(pe).unwrap();
-                // println!("{pe} {:?} {:?}",res_offsets[0],res_offsets.last());
-                for (rid, offset, len) in res_offsets.iter() {
-                    // if rids.contains(rid){
-                    //     println!("uhhh ohhhhh not sure this should be possible {:?}",rid);
-                    // }
-                    // else{
-                    //     rids.insert(rid);
-                    // }
-                    let ok: bool;
-                    let mut offset = *offset;
-                    let mut len = *len;
-                    if len == std::mem::size_of::<T>() + 1 {
-                        ok = res[offset] == 0;
-                        offset += 1;
-                        len -= 1;
-                    } else {
-                        panic!(
-                            "unexpected results len {:?} {:?}",
-                            len,
-                            std::mem::size_of::<T>() + 1
-                        );
-                    };
-                    let res_t = unsafe {
-                        std::slice::from_raw_parts(
-                            res.as_ptr().offset(offset as isize) as *const T,
-                            len / std::mem::size_of::<T>(),
-                        )
-                    };
+// #[async_trait]
+// impl<T: Dist> LamellarRequest for ArrayOpFetchHandleInner<T> {
+//     type Output = Vec<T>;
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         for comp in &self.complete {
+//             while comp.load(Ordering::Relaxed) == false {
+//                 async_std::task::yield_now().await;
+//             }
+//         }
+//         self.get_result()
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         for comp in &self.complete {
+//             while comp.load(Ordering::Relaxed) == false {
+//                 // std::thread::yield_now();
+//                 self.scheduler.exec_task();
+//             }
+//         }
+//         self.get_result()
+//     }
+//     fn ready(&self) -> bool {
+//         self.complete
+//             .iter()
+//             .all(|comp| comp.load(Ordering::Relaxed))
+//     }
+// }
 
-                    if ok {
-                        res_vec[*rid] = Ok(res_t[0]);
-                    } else {
-                        res_vec[*rid] = Err(res_t[0]);
-                    }
-                }
-            }
-            res_vec
-        } else {
-            vec![]
-        }
-    }
-}
+// #[async_trait]
+// impl<T: Dist> LamellarRequest for ArrayOpResultHandle<T> {
+//     type Output = Result<T, T>;
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         self.req
+//             .into_future()
+//             .await
+//             .pop()
+//             .expect("should have a single request")
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         self.req.get().pop().expect("should have a single request")
+//     }
 
-#[async_trait]
-impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
-    type Output = Vec<Result<T, T>>;
-    //#[tracing::instrument(skip_all)]
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        // println!("comp size: {}",self.complete.len());
-        for comp in &self.complete {
-            while comp.load(Ordering::Relaxed) == false {
-                async_std::task::yield_now().await;
-            }
-        }
-        self.get_result()
-    }
-    //#[tracing::instrument(skip_all)]
-    fn get(&self) -> Self::Output {
-        for comp in &self.complete {
-            while comp.load(Ordering::Relaxed) == false {
-                // std::thread::yield_now();
-                self.scheduler.exec_task();
-            }
-        }
-        self.get_result()
-    }
-}
+//     fn ready(&self) -> bool {
+//         self.req.ready()
+//     }
+// }
+
+// #[async_trait]
+// impl<T: Dist> LamellarRequest for ArrayOpBatchResultHandle<T> {
+//     type Output = Vec<Result<T, T>>;
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         // println!("num_reqs: {}",self.reqs.len());
+//         let mut res = vec![];
+//         for req in self.reqs.drain(..) {
+//             res.extend(req.into_future().await);
+//         }
+//         res
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         let mut res = vec![];
+//         for req in &self.reqs {
+//             res.extend(req.get());
+//         }
+//         res
+//     }
+
+//     fn ready(&self) -> bool {
+//         self.reqs.iter().all(|req| req.ready())
+//     }
+// }
+
+// impl<T: Dist> ArrayOpResultHandleInner<T> {
+//     //#[tracing::instrument(skip_all)]
+//     fn get_result(&self) -> Vec<Result<T, T>> {
+//         // println!("req_cnt: {:?}", self.req_cnt);
+//         if self.req_cnt > 0 {
+//             let mut res_vec = Vec::with_capacity(self.req_cnt);
+//             unsafe {
+//                 res_vec.set_len(self.req_cnt);
+//             }
+
+//             for (pe, res) in self.results.lock().iter() {
+//                 let res = res.lock();
+//                 // println!("{pe} {:?}",res.len());
+//                 // let mut rids = std::collections::HashSet::new();
+//                 let res_offsets_lock = self.indices.lock();
+//                 let res_offsets = res_offsets_lock.get(pe).unwrap();
+//                 // println!("{pe} {:?} {:?}",res_offsets[0],res_offsets.last());
+//                 for (rid, offset, len) in res_offsets.iter() {
+//                     // if rids.contains(rid){
+//                     //     println!("uhhh ohhhhh not sure this should be possible {:?}",rid);
+//                     // }
+//                     // else{
+//                     //     rids.insert(rid);
+//                     // }
+//                     let ok: bool;
+//                     let mut offset = *offset;
+//                     let mut len = *len;
+//                     if len == std::mem::size_of::<T>() + 1 {
+//                         ok = res[offset] == 0;
+//                         offset += 1;
+//                         len -= 1;
+//                     } else {
+//                         panic!(
+//                             "unexpected results len {:?} {:?}",
+//                             len,
+//                             std::mem::size_of::<T>() + 1
+//                         );
+//                     };
+//                     let res_t = unsafe {
+//                         std::slice::from_raw_parts(
+//                             res.as_ptr().offset(offset as isize) as *const T,
+//                             len / std::mem::size_of::<T>(),
+//                         )
+//                     };
+
+//                     if ok {
+//                         res_vec[*rid] = Ok(res_t[0]);
+//                     } else {
+//                         res_vec[*rid] = Err(res_t[0]);
+//                     }
+//                 }
+//             }
+//             res_vec
+//         } else {
+//             vec![]
+//         }
+//     }
+// }
+
+// #[async_trait]
+// impl<T: Dist> LamellarRequest for ArrayOpResultHandleInner<T> {
+//     type Output = Vec<Result<T, T>>;
+//     //#[tracing::instrument(skip_all)]
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         // println!("comp size: {}",self.complete.len());
+//         for comp in &self.complete {
+//             while comp.load(Ordering::Relaxed) == false {
+//                 async_std::task::yield_now().await;
+//             }
+//         }
+//         self.get_result()
+//     }
+//     //#[tracing::instrument(skip_all)]
+//     fn get(&self) -> Self::Output {
+//         for comp in &self.complete {
+//             while comp.load(Ordering::Relaxed) == false {
+//                 // std::thread::yield_now();
+//                 self.scheduler.exec_task();
+//             }
+//         }
+//         self.get_result()
+//     }
+
+//     fn ready(&self) -> bool {
+//         self.complete
+//             .iter()
+//             .all(|comp| comp.load(Ordering::Relaxed))
+//     }
+// }
 
 /// Supertrait specifying that array elements must be [Sized] and must be able to be used in remote operations [Dist].
 pub trait ElementOps: Dist + Sized {}
 impl<T> ElementOps for T where T: Dist {}
 
-#[doc(hidden)]
-pub struct LocalOpResult<T: Dist> {
-    val: T,
-}
+// #[doc(hidden)]
+// pub struct LocalOpResult<T: Dist> {
+//     val: T,
+// }
 
-#[async_trait]
-impl<T: Dist> LamellarArrayRequest for LocalOpResult<T> {
-    type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.val
-    }
-    fn wait(self: Box<Self>) -> Self::Output {
-        self.val
-    }
-}
+// #[async_trait]
+// impl<T: Dist> LamellarArrayRequest for LocalOpResult<T> {
+//     type Output = T;
+//     async fn into_future(mut self: Box<Self>) -> Self::Output {
+//         self.val
+//     }
+//     fn wait(self: Box<Self>) -> Self::Output {
+//         self.val
+//     }
+//     fn ready(&self) -> bool {
+//         true
+//     }
+// }
 
 impl<T: ElementArithmeticOps> ArithmeticOps<T> for LamellarWriteArray<T> {}

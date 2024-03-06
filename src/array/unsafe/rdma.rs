@@ -496,7 +496,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
+    /// Performs a blocking "Get" of the data in this array starting at the provided index into the specified buffer
     ///
     /// The length of the Get is dictated by the length of the buffer.
     ///
@@ -1044,7 +1044,12 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
             .pes_for_range(self.index, self.buf.len())
             .into_iter()
         {
-            // println!("pe {:?}",pe);
+            // println!(
+            //     "InitSmallGetAm pe {:?} index {:?} len {:?}",
+            //     pe,
+            //     self.index,
+            //     self.buf.len()
+            // );
             let remote_am = UnsafeRemoteSmallGetAm {
                 array: self.array.clone().into(),
                 start_index: self.index,
@@ -1059,7 +1064,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                     let mut cur_index = 0;
                     for req in reqs.drain(..) {
                         let data = req.await;
-                        // println!("data recv {:?}",data.len());
+                        // println!("data recv {:?}", data.len());
                         u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
                         cur_index += data.len();
                     }
@@ -1098,9 +1103,12 @@ impl LamellarAm for UnsafeRemoteSmallGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
-        // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
+        // println!(
+        //     "in remotegetam index {:?} len {:?}",
+        //     self.start_index, self.len
+        // );
         // let _lock = self.array.lock.read();
-        unsafe {
+        let vals = unsafe {
             match self
                 .array
                 .local_elements_for_range(self.start_index, self.len)
@@ -1108,7 +1116,9 @@ impl LamellarAm for UnsafeRemoteSmallGetAm {
                 Some((elems, _)) => elems.to_vec(),
                 None => vec![],
             }
-        }
+        };
+        // println!("done remotegetam len {:?}", vals.len());
+        vals
     }
 }
 

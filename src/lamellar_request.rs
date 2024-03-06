@@ -5,6 +5,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::one_sided::MemRegionHandleInner;
 use crate::scheduler::Scheduler;
 use async_trait::async_trait;
+use futures::task::Waker;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -25,6 +26,8 @@ pub trait LamellarRequest: Sync + Send {
     type Output;
     async fn into_future(mut self: Box<Self>) -> Self::Output;
     fn get(&self) -> Self::Output;
+    fn ready(&self) -> bool;
+    fn set_waker(&mut self, waker: Waker);
 }
 
 #[doc(hidden)]
@@ -89,6 +92,7 @@ impl LamellarRequestResult {
 
 pub(crate) struct LamellarRequestHandleInner {
     pub(crate) ready: AtomicBool,
+    pub(crate) waker: Mutex<Option<Waker>>,
     pub(crate) data: Cell<Option<InternalResult>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
@@ -128,6 +132,9 @@ impl LamellarRequestAddResult for LamellarRequestHandleInner {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
         self.ready.store(true, Ordering::SeqCst);
+        if let Some(waker) = self.waker.lock().take() {
+            waker.wake();
+        }
     }
     //#[tracing::instrument(skip_all)]
     fn update_counters(&self) {
@@ -209,6 +216,14 @@ impl<T: AmDist> LamellarRequest for LamellarRequestHandle<T> {
         }
         self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
+
+    fn ready(&self) -> bool {
+        self.inner.ready.load(Ordering::SeqCst)
+    }
+
+    fn set_waker(&mut self, waker: Waker) {
+        *self.inner.waker.lock() = Some(waker);
+    }
 }
 
 #[derive(Debug)]
@@ -216,6 +231,7 @@ pub(crate) struct LamellarMultiRequestHandleInner {
     pub(crate) cnt: AtomicUsize,
     pub(crate) arch: Arc<LamellarArchRT>,
     pub(crate) data: Mutex<HashMap<usize, InternalResult>>,
+    pub(crate) waker: Mutex<Option<Waker>>,
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
@@ -247,6 +263,11 @@ impl LamellarRequestAddResult for LamellarMultiRequestHandleInner {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
         self.data.lock().insert(pe, data);
         self.cnt.fetch_sub(1, Ordering::SeqCst);
+        if self.cnt.load(Ordering::SeqCst) == 0 {
+            if let Some(waker) = self.waker.lock().take() {
+                waker.wake();
+            }
+        }
     }
     //#[tracing::instrument(skip_all)]
     fn update_counters(&self) {
@@ -348,7 +369,7 @@ impl<T: AmDist> LamellarMultiRequest for LamellarMultiRequestHandle<T> {
 pub(crate) struct LamellarLocalRequestHandleInner {
     // pub(crate) ready: AtomicBool,
     pub(crate) ready: (Mutex<bool>, Condvar),
-    // pub(crate) ready_cv: Condvar,
+    pub(crate) waker: Mutex<Option<Waker>>,
     pub(crate) data: Cell<Option<LamellarAny>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
     pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
     pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
@@ -397,6 +418,9 @@ impl LamellarRequestAddResult for LamellarLocalRequestHandleInner {
         // self.ready.store(true, Ordering::SeqCst);
         *self.ready.0.lock() = true;
         self.ready.1.notify_one();
+        if let Some(waker) = self.waker.lock().take() {
+            waker.wake();
+        }
     }
     //#[tracing::instrument(skip_all)]
     fn update_counters(&self) {
@@ -445,5 +469,15 @@ impl<T: SyncSend + 'static> LamellarRequest for LamellarLocalRequestHandle<T> {
             self.inner.scheduler.exec_task();
         }
         self.process_result(self.inner.data.replace(None).expect("result should exist"))
+    }
+
+    fn ready(&self) -> bool {
+        let ready = *self.inner.ready.0.lock();
+        // println!("ready: {}", ready);
+        ready
+    }
+
+    fn set_waker(&mut self, waker: Waker) {
+        *self.inner.waker.lock() = Some(waker);
     }
 }

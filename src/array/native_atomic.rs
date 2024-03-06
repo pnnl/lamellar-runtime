@@ -989,6 +989,10 @@ impl<T: Dist> NativeAtomicArray<T> {
         // println!("native into_read_only");
         self.array.into()
     }
+
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_  {
+        self.array.async_barrier()
+    }
 }
 
 impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {

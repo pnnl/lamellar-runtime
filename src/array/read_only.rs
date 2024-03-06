@@ -1,51 +1,50 @@
 mod iteration;
-mod rdma;
 mod local_chunks;
+mod rdma;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
-use std::any::TypeId;
 use std::sync::Arc;
 
-type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
+// type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
 
 // type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd,Vec<u8>) -> LamellarArcAm;
 // type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd,Vec<u8>,Vec<usize>) -> LamellarArcAm;
 
-lazy_static! {
-    pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
-        let mut map = HashMap::new();
-        for op in crate::inventory::iter::<ReadOnlyArrayOpBuf> {
-            map.insert(op.id.clone(), op.op);
-        }
-        map
-    };
+// lazy_static! {
+// pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
+//     let mut map = HashMap::new();
+//     for op in crate::inventory::iter::<ReadOnlyArrayOpBuf> {
+//         map.insert(op.id.clone(), op.op);
+//     }
+//     map
+// };
 
-    // pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
-    //     let mut map = HashMap::new();
-    //     for op in crate::inventory::iter::<ReadOnlyArrayMultiMultiOps> {
-    //         map.insert(op.id.clone(), op.op);
-    //     }
-    //     map
-    // };
+// pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
+//     let mut map = HashMap::new();
+//     for op in crate::inventory::iter::<ReadOnlyArrayMultiMultiOps> {
+//         map.insert(op.id.clone(), op.op);
+//     }
+//     map
+// };
 
-    // pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
-    //     let mut map = HashMap::new();
-    //     for op in crate::inventory::iter::<ReadOnlyArrayMultiSingleOps> {
-    //         map.insert(op.id.clone(), op.op);
-    //     }
-    //     map
-    // };
+// pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
+//     let mut map = HashMap::new();
+//     for op in crate::inventory::iter::<ReadOnlyArrayMultiSingleOps> {
+//         map.insert(op.id.clone(), op.op);
+//     }
+//     map
+// };
 
-}
+// }
 
-#[doc(hidden)]
-pub struct ReadOnlyArrayOpBuf {
-    pub id: TypeId,
-    pub op: BufFn,
-}
+// #[doc(hidden)]
+// pub struct ReadOnlyArrayOpBuf {
+//     pub id: TypeId,
+//     pub op: BufFn,
+// }
 
 // #[doc(hidden)]
 // pub struct ReadOnlyArrayMultiMultiOps {
@@ -59,7 +58,7 @@ pub struct ReadOnlyArrayOpBuf {
 //     pub op: MultiSingleFn,
 // }
 
-crate::inventory::collect!(ReadOnlyArrayOpBuf);
+// crate::inventory::collect!(ReadOnlyArrayOpBuf);
 // crate::inventory::collect!(ReadOnlyArrayMultiMultiOps);
 // crate::inventory::collect!(ReadOnlyArrayMultiSingleOps);
 
@@ -335,6 +334,10 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
         // println!("readonly into_global_lock");
         self.array.into()
     }
+
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+        self.array.async_barrier()
+    }
 }
 
 impl<T: Dist + 'static> ReadOnlyArray<T> {
@@ -565,6 +568,7 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn barrier(&self) {
         self.array.barrier();
     }
+
     fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());

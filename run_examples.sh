@@ -66,12 +66,17 @@ root=$PWD
 #  cd ..
 # done
 
+local_results_dir=async_backends
+results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}
 ### test using rofi verbs lamellae
-rm -r ${output_dir}/rofiverbs_lamellae
+rm -r ${results_dir}
+
 rm -r rofiverbs_lamellae
-mkdir -p ${output_dir}/rofiverbs_lamellae
+mkdir -p rofiverbs_lamellae
+mkdir -p ${results_dir}
 ln -s ${output_dir}/rofiverbs_lamellae rofiverbs_lamellae
-cd rofiverbs_lamellae
+
+cd rofiverbs_lamellae/${local_results_dir}
 for toolchain in stable; do #nightly; do
   features=""
   if [ "${toolchain}" = "nightly" ]; then
@@ -114,7 +119,6 @@ for toolchain in stable; do #nightly; do
         #   done
         fi
       cd ..
-      sleep 5
       cur_tasks=`squeue -u frie869 | grep " R " | wc -l`
       while [ $cur_tasks -gt 3 ]; do
         cur_tasks=`squeue -u frie869 | grep " R " | wc -l`

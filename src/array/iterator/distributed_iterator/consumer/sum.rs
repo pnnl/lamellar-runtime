@@ -3,7 +3,7 @@ use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::{private::*, IterRequest};
-use crate::array::{ArrayOps, Distribution, LamellarArray, UnsafeArray};
+use crate::array::{ArrayOps, Distribution, UnsafeArray};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::Dist;
@@ -69,11 +69,20 @@ impl<T> RemoteIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
+    async fn async_reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
+        unsafe {
+            local_sums.local_as_mut_slice()[0] = local_sum;
+        };
+        local_sums.async_barrier().await;
+        let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
+        buffered_iter.into_iter().map(|&e| e).sum()
+    }
+
     fn reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
         unsafe {
             local_sums.local_as_mut_slice()[0] = local_sum;
         };
-        local_sums.barrier();
+        local_sums.tasking_barrier();
         let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
         buffered_iter.into_iter().map(|&e| e).sum()
     }
@@ -93,7 +102,7 @@ where
             .await
             .into_iter()
             .sum();
-        self.reduce_remote_vals(local_sum, local_sums)
+        self.async_reduce_remote_vals(local_sum, local_sums).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);

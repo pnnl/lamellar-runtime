@@ -20,12 +20,14 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::task::Waker;
 use std::time::Instant;
 
 #[derive(Debug)]
 pub(crate) struct TaskGroupRequestHandleInner {
     cnt: Arc<AtomicUsize>,
     data: Mutex<HashMap<usize, InternalResult>>, //<sub_id, result>
+    wakers: Mutex<HashMap<usize, Waker>>,
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
@@ -52,6 +54,9 @@ impl LamellarRequestAddResult for TaskGroupRequestHandleInner {
     }
     fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
         self.data.lock().insert(sub_id, data);
+        if let Some(waker) = self.wakers.lock().remove(&sub_id) {
+            waker.wake();
+        }
     }
     fn update_counters(&self) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -128,6 +133,14 @@ impl<T: AmDist> LamellarRequest for TaskGroupRequestHandle<T> {
         }
         self.process_result(res.expect("result should exist"))
     }
+
+    fn ready(&self) -> bool {
+        self.inner.data.lock().contains_key(&self.sub_id)
+    }
+
+    fn set_waker(&mut self, waker: std::task::Waker) {
+        self.inner.wakers.lock().insert(self.sub_id, waker);
+    }
 }
 
 #[derive(Debug)]
@@ -135,6 +148,7 @@ pub(crate) struct TaskGroupMultiRequestHandleInner {
     cnt: Arc<AtomicUsize>,
     arch: Arc<LamellarArchRT>,
     data: Mutex<HashMap<usize, HashMap<usize, InternalResult>>>, //<sub_id, <pe, result>>
+    wakers: Mutex<HashMap<usize, Waker>>,
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
@@ -165,6 +179,10 @@ impl LamellarRequestAddResult for TaskGroupMultiRequestHandleInner {
         map.entry(sub_id)
             .or_insert_with(|| HashMap::new())
             .insert(pe, data);
+
+        if let Some(waker) = self.wakers.lock().remove(&sub_id) {
+            waker.wake();
+        }
     }
     fn update_counters(&self) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -286,6 +304,7 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
 pub(crate) struct TaskGroupLocalRequestHandleInner {
     cnt: Arc<AtomicUsize>,
     data: Mutex<HashMap<usize, LamellarAny>>, //<sub_id, result>
+    wakers: Mutex<HashMap<usize, Waker>>,
     team_outstanding_reqs: Arc<AtomicUsize>,
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
@@ -316,6 +335,9 @@ impl LamellarRequestAddResult for TaskGroupLocalRequestHandleInner {
             InternalResult::Remote(_, _) => panic!("unexpected result type"),
             InternalResult::Unit => self.data.lock().insert(sub_id, Box::new(()) as LamellarAny),
         };
+        if let Some(waker) = self.wakers.lock().remove(&sub_id) {
+            waker.wake();
+        }
     }
     fn update_counters(&self) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
@@ -357,6 +379,14 @@ impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
             res = self.inner.data.lock().remove(&self.sub_id);
         }
         self.process_result(res.unwrap())
+    }
+
+    fn ready(&self) -> bool {
+        self.inner.data.lock().contains_key(&self.sub_id)
+    }
+
+    fn set_waker(&mut self, waker: futures::task::Waker) {
+        self.inner.wakers.lock().insert(self.sub_id, waker);
     }
 }
 
@@ -438,6 +468,10 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.team.barrier();
     }
 
+    fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send {
+        self.team.async_barrier()
+    }
+
     //#[tracing::instrument(skip_all)]
     fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
     where
@@ -491,6 +525,7 @@ impl LamellarTaskGroup {
         let req = Arc::new(TaskGroupRequestHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
+            wakers: Mutex::new(HashMap::new()),
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
@@ -501,6 +536,7 @@ impl LamellarTaskGroup {
             cnt: cnt.clone(),
             arch: team.arch.clone(),
             data: Mutex::new(HashMap::new()),
+            wakers: Mutex::new(HashMap::new()),
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
@@ -512,6 +548,7 @@ impl LamellarTaskGroup {
         let local_req = Arc::new(TaskGroupLocalRequestHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
+            wakers: Mutex::new(HashMap::new()),
             team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),

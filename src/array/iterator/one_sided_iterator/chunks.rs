@@ -1,4 +1,5 @@
-use crate::array::iterator::one_sided_iterator::*;
+use crate::array::iterator::one_sided_iterator::{private::*, *};
+
 // use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
 use crate::memregion::OneSidedMemoryRegion;
@@ -15,6 +16,15 @@ where
     iter: I,
     index: usize,
     chunk_size: usize,
+    state: ChunkState<I::ElemType>,
+}
+
+enum ChunkState<I: Dist> {
+    Pending(
+        OneSidedMemoryRegion<I>,
+        Box<dyn LamellarArrayRequest<Output = ()>>,
+    ),
+    Finished,
 }
 
 impl<I> Chunks<I>
@@ -23,55 +33,126 @@ where
 {
     pub(crate) fn new(iter: I, chunk_size: usize) -> Chunks<I> {
         // let array = iter.array().clone(); //.to_base::<u8>();
-        // println!("len: {:?}",array.len());
-        // let mem_region = iter.array().team().alloc_one_sided_mem_region(chunk_size);//*iter.array().size_of_elem());
+        // println!(" Chunks size: {:?}", chunk_size);
+
         let chunks = Chunks {
             iter,
-            // array,
-            // mem_region: mem_region.clone(),
             index: 0,
             chunk_size,
+            state: ChunkState::Finished,
         };
-        // chunks.fill_buffer(0,&mem_region);
         chunks
     }
 
-    fn get_buffer(&self, size: usize) -> OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> {
-        let mem_region: OneSidedMemoryRegion<<I as OneSidedIterator>::ElemType> =
-            self.array().team_rt().alloc_one_sided_mem_region(size);
+    fn get_buffer(
+        array: <I as OneSidedIteratorInner>::Array,
+        index: usize,
+        size: usize,
+    ) -> (
+        OneSidedMemoryRegion<I::ElemType>,
+        Box<dyn LamellarArrayRequest<Output = ()>>,
+    ) {
+        // println!(" get chunk of len: {:?}", size);
+        let mem_region: OneSidedMemoryRegion<I::ElemType> =
+            array.team_rt().alloc_one_sided_mem_region(size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the mem_region as this is the only reference
-        unsafe {
-            self.array().internal_get(self.index, &mem_region).wait();
-        }
-        mem_region
+        let req = unsafe { array.internal_get(index, &mem_region) };
+        (mem_region, req)
     }
 }
 
-impl<I> OneSidedIterator for Chunks<I>
+impl<I> OneSidedIterator for Chunks<I> where I: OneSidedIterator + Send {}
+
+impl<I> OneSidedIteratorInner for Chunks<I>
 where
     I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
     type Item = OneSidedMemoryRegion<I::ElemType>;
     type Array = I::Array;
-    fn next(&mut self) -> Option<Self::Item> {
-        // println!("{:?} {:?}",self.index,self.array.len()/std::mem::size_of::<<Self as OneSidedIterator>::ElemType>());
-        let array = self.array();
-        if self.index < array.len() {
-            let size = std::cmp::min(self.chunk_size, array.len() - self.index);
 
-            let mem_region = self.get_buffer(size);
-            self.index += size;
-            Some(mem_region)
-        } else {
-            None
+    fn init(&mut self) {
+        let array = self.array();
+        let size = std::cmp::min(self.chunk_size, array.len() - self.index);
+        let (new_mem_region, new_req) = Self::get_buffer(array, self.index, size);
+        self.state = ChunkState::Pending(new_mem_region, new_req);
+    }
+    fn next(&mut self) -> Option<Self::Item> {
+        let array = self.array();
+        let mut cur_state = ChunkState::Finished;
+        std::mem::swap(&mut self.state, &mut cur_state);
+        match cur_state {
+            ChunkState::Pending(mem_region, req) => {
+                if self.index + 1 < array.len() {
+                    //prefetch
+                    let size = std::cmp::min(self.chunk_size, array.len() - self.index);
+                    self.index += size;
+                    let (new_mem_region, new_req) = Self::get_buffer(array, self.index, size);
+                    self.state = ChunkState::Pending(new_mem_region, new_req);
+                } else {
+                    self.state = ChunkState::Finished;
+                }
+                req.wait();
+                Some(mem_region)
+            }
+            ChunkState::Finished => None,
+        }
+    }
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let array = self.array();
+        let this = self.as_mut().project();
+        let mut cur_state = ChunkState::Finished;
+
+        std::mem::swap(&mut *this.state, &mut cur_state);
+
+        match cur_state {
+            ChunkState::Pending(mem_region, mut req) => {
+                if !req.ready() {
+                    req.set_waker(cx.waker().clone());
+                    *this.state = ChunkState::Pending(mem_region, req);
+
+                    // println!("not ready");
+                    return Poll::Pending;
+                }
+                if *this.index + 1 < array.len() {
+                    // println!("got chunk! {:?}", *this.index);
+                    //prefetch
+                    let size = std::cmp::min(*this.chunk_size, array.len() - *this.index);
+                    *this.index += size;
+                    let (new_mem_region, new_req) = Self::get_buffer(array, *this.index, size);
+                    *this.state = ChunkState::Pending(new_mem_region, new_req);
+                } else {
+                    // println!("finished chunks!");
+                    *this.state = ChunkState::Finished;
+                }
+                Poll::Ready(Some(mem_region))
+            }
+            ChunkState::Finished => Poll::Ready(None),
         }
     }
 
     fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
         self.index += count * self.chunk_size;
+    }
+
+    fn advance_index_pin(self: Pin<&mut Self>, count: usize) {
+        // println!(
+        //     "advance_index_pin {:?} {:?} {:?}",
+        //     self.index,
+        //     count,
+        //     count * self.chunk_size,
+        // );
+        let this = self.project();
+        *this.index += count * *this.chunk_size;
+        // println!(
+        //     "after advance_index_pin {:?} {:?} {:?} ",
+        //     *this.index,
+        //     count,
+        //     count * *this.chunk_size,
+        // );
     }
 
     fn array(&self) -> Self::Array {

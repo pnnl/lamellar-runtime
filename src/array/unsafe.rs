@@ -1,8 +1,8 @@
 mod iteration;
 
+mod local_chunks;
 pub(crate) mod operations;
 mod rdma;
-mod local_chunks;
 
 use crate::active_messaging::*;
 // use crate::array::r#unsafe::operations::BUFOPS;
@@ -630,6 +630,14 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     pub fn into_global_lock(self) -> GlobalLockArray<T> {
         // println!("readonly into_global_lock");
         self.into()
+    }
+
+    pub(crate) fn tasking_barrier(&self) {
+        self.inner.data.team.tasking_barrier();
+    }
+
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+        self.inner.data.team.async_barrier()
     }
 }
 

@@ -1126,6 +1126,8 @@ pub trait ActiveMessaging {
     ///```
     fn barrier(&self);
 
+    fn async_barrier(&self) -> impl Future<Output = ()> + Send;
+
     #[doc(alias("One-sided", "onesided"))]
     /// Run a future to completion on the current thread
     ///
@@ -1179,13 +1181,7 @@ pub trait ActiveMessaging {
 pub(crate) trait ActiveMessageEngine {
     async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool);
 
-    async fn exec_msg(
-        self,
-        msg: Msg,
-        ser_data: SerializedData,
-        lamellae: Arc<Lamellae>,
-        scheduler: Arc<Executor>,
-    );
+    async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>);
 
     fn get_team_and_world(
         &self,

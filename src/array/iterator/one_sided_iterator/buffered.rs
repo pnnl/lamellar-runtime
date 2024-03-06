@@ -24,6 +24,13 @@ where
             OneSidedMemoryRegion<u8>,
         )>,
     >,
+    state: BufferedState,
+}
+
+enum BufferedState {
+    Ready,
+    Pending,
+    Finished,
 }
 
 impl<I> Buffered<I>
@@ -41,6 +48,7 @@ where
             buf_size: buf_size,
             // buf: mem_region,
             reqs: VecDeque::new(),
+            state: BufferedState::Pending,
         };
         for _ in 0..buf.buf_size {
             buf.initiate_buffer();
@@ -115,6 +123,10 @@ where
         } else {
             None
         }
+    }
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Poll::Ready(None)
     }
     fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());

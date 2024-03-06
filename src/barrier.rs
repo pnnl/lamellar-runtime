@@ -276,10 +276,10 @@ impl Barrier {
         } else {
             if let Ok(val) = std::env::var("LAMELLAR_BARRIER_WARNING") {
                 if val != "0" && val != "false" && val != "no" && val != "off" {
-                    println!("[LAMELLAR WARNING] You are calling barrier from within the main thread (aka from a synchronous context), this is experimental and may result in deadlock! Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
+                    println!("[LAMELLAR WARNING] You are calling barrier from within an async context, this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
                 }
             } else {
-                println!("[LAMELLAR WARNING] You are calling barrier from within a worker thread (aka within an async context), this is experimental and may result in deadlock! Set  LAMELLAR_BARRIER_WARNING=0 to disable this warning");
+                println!("[LAMELLAR WARNING] You are calling barrier from within an async context), this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
             }
             self.tasking_barrier()
         }

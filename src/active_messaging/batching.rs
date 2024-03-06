@@ -61,7 +61,7 @@ pub(crate) trait Batcher {
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
-    ) -> Vec<Am>;
+    );
 }
 
 #[derive(Debug, Clone)]
@@ -155,7 +155,7 @@ impl Batcher for BatcherType {
         ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
-    ) -> Vec<Am> {
+    ) {
         match self {
             BatcherType::Simple(batcher) => {
                 batcher.exec_batched_msg(msg, ser_data, lamellae, ame).await

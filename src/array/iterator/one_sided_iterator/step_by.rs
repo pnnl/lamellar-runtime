@@ -1,4 +1,4 @@
-use crate::array::iterator::one_sided_iterator::*;
+use crate::array::iterator::one_sided_iterator::{private::*, *};
 // use crate::array::LamellarArrayRequest;
 // use crate::memregion::OneSidedMemoryRegion;
 
@@ -21,20 +21,47 @@ where
     }
 }
 
-impl<I> OneSidedIterator for StepBy<I>
+impl<I> OneSidedIterator for StepBy<I> where I: OneSidedIterator + Send {}
+
+impl<I> OneSidedIteratorInner for StepBy<I>
 where
     I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
-    type Item = <I as OneSidedIterator>::Item;
+    type Item = <I as OneSidedIteratorInner>::Item;
     type Array = I::Array;
+
+    fn init(&mut self) {
+        self.iter.init()
+    }
+
     fn next(&mut self) -> Option<Self::Item> {
         let res = self.iter.next()?;
         self.iter.advance_index(self.step_size - 1);
         Some(res)
     }
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut this = self.project();
+        match this.iter.as_mut().poll_next(cx) {
+            Poll::Ready(Some(res)) => {
+                // println!("step by {:?}", *this.step_size);
+                this.iter.advance_index_pin(*this.step_size - 1);
+                Poll::Ready(Some(res))
+            }
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => {
+                // println!("step by pending");
+                Poll::Pending
+            }
+        }
+    }
     fn advance_index(&mut self, count: usize) {
         self.iter.advance_index(count * self.step_size);
+    }
+    fn advance_index_pin(self: Pin<&mut Self>, count: usize) {
+        let step_size = self.step_size;
+        self.project().iter.advance_index_pin(count * step_size);
     }
     fn array(&self) -> Self::Array {
         self.iter.array()

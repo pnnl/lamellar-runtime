@@ -25,56 +25,68 @@ use zip::*;
 // mod buffered;
 // use buffered::*;
 
-use crate::array::{LamellarArray, LamellarArrayInternalGet};
+use crate::array::{LamellarArray, LamellarArrayInternalGet, LamellarArrayRequest};
 use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion, SubRegion};
 
 use crate::LamellarTeamRT;
 
 // use async_trait::async_trait;
 // use futures::{ready, Stream};
+use futures::Stream;
 use pin_project::pin_project;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::Arc;
-// use std::task::{Context, Poll};
+use std::task::{Context, Poll};
 
 //TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
 // i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
+pub(crate) mod private {
+    use crate::array::LamellarArrayInternalGet;
+    use crate::memregion::Dist;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+    pub trait OneSidedIteratorInner {
+        /// The type of item self distributed iterator produces
+        type Item: Send;
 
+        /// The underlying element type of the Array self iterator belongs to
+        type ElemType: Dist + 'static;
+
+        /// The orgininal array that created self iterator
+        type Array: LamellarArrayInternalGet<Self::ElemType> + Send;
+
+        fn init(&mut self);
+        /// Return the next element in the iterator, otherwise return None
+        fn next(&mut self) -> Option<Self::Item>;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>>;
+
+        /// advance the internal iterator localtion by count elements
+        fn advance_index(&mut self, count: usize);
+
+        fn advance_index_pin(self: Pin<&mut Self>, count: usize);
+
+        /// Return the original array self distributed iterator belongs too
+        fn array(&self) -> Self::Array;
+
+        /// The size of the returned Item
+        fn item_size(&self) -> usize {
+            std::mem::size_of::<Self::Item>()
+        }
+    }
+}
 /// An interface for dealing with one sided iterators of LamellarArrays
 ///
-/// The functions in this trait are available on all [one-sided iterators](crate::array::iterator::one_sided_iterator)
+/// The functions in self trait are available on all [one-sided iterators](crate::array::iterator::one_sided_iterator)
 /// (which run over the data of a distributed array on a single PE).  Typically
 /// the provided iterator functions are optimized versions of the standard Iterator equivalents to reduce data movement assoicated with handling distributed arrays
 ///
 /// Additonaly functionality can be found by converting these iterators into Standard Iterators (with potential loss in data movement optimizations)
 ///
 /// Note that currently One Sided Iterators will iterate over the distributed array serially, we are planning a parallel version in a future release.
-pub trait OneSidedIterator {
-    /// The type of item this distributed iterator produces
-    type Item: Send;
-
-    /// The underlying element type of the Array this iterator belongs to
-    type ElemType: Dist + 'static;
-
-    /// The orgininal array that created this iterator
-    type Array: LamellarArrayInternalGet<Self::ElemType> + Send;
-
-    /// Return the next element in the iterator, otherwise return None
-    fn next(&mut self) -> Option<Self::Item>;
-
-    /// advance the internal iterator localtion by count elements
-    fn advance_index(&mut self, count: usize);
-
-    /// Return the original array this distributed iterator belongs too
-    fn array(&self) -> Self::Array;
-
-    /// The size of the returned Item
-    fn item_size(&self) -> usize {
-        std::mem::size_of::<Self::Item>()
-    }
-
+pub trait OneSidedIterator: private::OneSidedIteratorInner {
     // /// Buffer (fetch/get) the next element in the array into the provided memory region (transferring data from a remote PE if necessary)
     // fn buffered_next(
     //     &mut self,
@@ -99,7 +111,7 @@ pub trait OneSidedIterator {
     /// array.wait_all();
     /// if my_pe == 0 {
     ///     for chunk in array.onesided_iter().chunks(5).into_iter() { //convert into a standard Iterator
-    ///         // SAFETY: chunk is safe in this instance because this will be the only handle to the memory region,
+    ///         // SAFETY: chunk is safe in self instance because self will be the only handle to the memory region,
     ///         // and the runtime has verified that data is already placed in it
     ///         println!("PE: {my_pe} chunk: {:?}",unsafe {chunk.as_slice()});
     ///     }
@@ -182,7 +194,7 @@ pub trait OneSidedIterator {
         StepBy::new(self, step_size)
     }
 
-    /// Iterates over tuples `(A,B)` where the `A` items are from this iterator and the `B` items are from the iter in the argument.
+    /// Iterates over tuples `(A,B)` where the `A` items are from self iterator and the `B` items are from the iter in the argument.
     /// If the two iterators or of unequal length, the returned iterator will be equal in length to the shorter of the two.
     ///
     /// # Examples
@@ -230,7 +242,7 @@ pub trait OneSidedIterator {
     //     Buffered::new(self, buf_size)
     // }
 
-    /// Convert this one-sided iterator into a standard Rust Iterator, enabling one to use any of the functions available on `Iterator`s
+    /// Convert self one-sided iterator into a standard Rust Iterator, enabling one to use any of the functions available on `Iterator`s
     ///
     /// # Examples
     ///```
@@ -250,11 +262,27 @@ pub trait OneSidedIterator {
     ///```text
     /// Sum: 2.0
     ///```
-    fn into_iter(self) -> OneSidedIteratorIter<Self>
+    fn into_iter(mut self) -> OneSidedIteratorIter<Self>
     where
         Self: Sized + Send,
     {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            println!(
+                "[LAMELLAR WARNING] Trying to convert a lamellar one sided iterator into a standard iterator within a worker thread {:?} self may result in deadlock.
+                 Please use into_stream() instead",
+                std::backtrace::Backtrace::capture()
+            )
+        }
+        self.init();
         OneSidedIteratorIter { iter: self }
+    }
+
+    fn into_stream(mut self) -> OneSidedStream<Self>
+    where
+        Self: Sized + Send,
+    {
+        self.init();
+        OneSidedStream { iter: self }
     }
 }
 
@@ -284,9 +312,42 @@ impl<I> Iterator for OneSidedIteratorIter<I>
 where
     I: OneSidedIterator,
 {
-    type Item = <I as OneSidedIterator>::Item;
+    type Item = <I as private::OneSidedIteratorInner>::Item;
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
+    }
+}
+
+#[pin_project]
+pub struct OneSidedStream<I> {
+    #[pin]
+    pub(crate) iter: I,
+}
+
+impl<I> Stream for OneSidedStream<I>
+where
+    I: OneSidedIterator,
+{
+    type Item = <I as private::OneSidedIteratorInner>::Item;
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // let me = self.get_mut();
+        // println!("OneSidedStream polling");
+        let this = self.project();
+        let res = this.iter.poll_next(cx);
+        match res {
+            Poll::Ready(Some(res)) => {
+                // println!("OneSidedStream ready");
+                Poll::Ready(Some(res))
+            }
+            Poll::Ready(None) => {
+                // println!("OneSidedStream finished");
+                Poll::Ready(None)
+            }
+            Poll::Pending => {
+                // println!("OneSidedStream pending");
+                Poll::Pending
+            }
+        }
     }
 }
 
@@ -316,7 +377,15 @@ pub struct OneSidedIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     index: usize,
     buf_index: usize,
     ptr: SendNonNull<T>,
+    state: State,
     _marker: PhantomData<&'a T>,
+}
+
+pub(crate) enum State {
+    // Ready,
+    Pending(Box<dyn LamellarArrayRequest<Output = ()>>),
+    Buffered,
+    Finished,
 }
 
 impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, A> {
@@ -327,8 +396,9 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
     ) -> OneSidedIter<'a, T, A> {
         let buf_0 = team.alloc_one_sided_mem_region(buf_size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-        // but safe with respect to the buf_0 as this is the only reference
-        unsafe { array.internal_get(0, &buf_0).wait() };
+        // but safe with respect to the buf_0 as self is the only reference
+
+        // let req = unsafe { array.internal_get(0, &buf_0) };
         let ptr = unsafe {
             SendNonNull(
                 NonNull::new(buf_0.as_mut_ptr().expect("data should be local"))
@@ -341,6 +411,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
             index: 0,
             buf_index: 0,
             ptr: ptr,
+            state: State::Finished,
             _marker: PhantomData,
         };
 
@@ -351,50 +422,263 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
 impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSidedIterator
     for OneSidedIter<'a, T, A>
 {
+}
+
+impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
+    private::OneSidedIteratorInner for OneSidedIter<'a, T, A>
+{
     type ElemType = T;
     type Item = &'a T;
     type Array = A;
+
+    fn init(&mut self) {
+        let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+        self.state = State::Pending(req);
+    }
+
+    // fn next(&mut self) -> Option<Self::Item> {
+    //     let mut cur_state = State::Finished;
+    //     std::mem::swap(&mut self.state, &mut cur_state);
+    //     match cur_state {
+    //         State::Pending(req) => {
+    //             req.wait(); //need to wait here because we use the same underlying buffer
+    //             if self.index + 1 < self.array.len() {
+    //                 // still have remaining elements
+    //                 self.index += 1;
+    //                 let buf_index = self.buf_index as isize;
+    //                 self.buf_index += 1;
+    //                 if self.buf_index == self.buf_0.len() {
+    //                     //prefetch the next data
+    //                     self.buf_index = 0;
+    //                     if self.index + self.buf_0.len() < self.array.len() {
+    //                         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+    //                         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+    //                         let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+    //                         self.state = State::Pending(req);
+    //                     } else if self.index < self.array.len() {
+    //                         let sub_region =
+    //                             self.buf_0.sub_region(0..(self.array.len() - self.index));
+    //                         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+    //                         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+    //                         // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+    //                         let req = unsafe { self.array.internal_get(self.index, sub_region) };
+    //                         self.state = State::Pending(req);
+    //                     } else {
+    //                         self.state = State::Finished;
+    //                     }
+    //                 }
+    //             } else {
+    //                 self.state = State::Finished;
+    //             };
+    //             unsafe { self.ptr.0.as_ptr().offset(buf_index).as_ref() } //this is an option
+    //         }
+    //         State::Buffered => {
+    //             self.state = State::Finished;
+    //             unsafe { self.ptr.0.as_ptr().offset(self.buf_index as isize).as_ref() }
+    //         }
+    //         State::Finished => None,
+    //     }
+    // }
+
     fn next(&mut self) -> Option<Self::Item> {
-        // println!("next {:?} {:?} {:?} {:?}",self.index,self.array.len(),self.buf_index,self.buf_0.len());
-        let res = if self.index < self.array.len() {
-            if self.buf_index == self.buf_0.len() {
-                // println!("need to get new data");
-                //need to get new data
-                self.buf_index = 0;
-                // self.fill_buffer(self.index);
-                if self.index + self.buf_0.len() < self.array.len() {
-                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-                    // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+        let mut cur_state = State::Finished;
+        std::mem::swap(&mut self.state, &mut cur_state);
+        match cur_state {
+            State::Pending(req) => {
+                req.wait();
+                self.state = State::Buffered;
+                self.index += 1;
+                self.buf_index += 1;
+                unsafe {
+                    self.ptr
+                        .0
+                        .as_ptr()
+                        .offset(self.buf_index as isize - 1)
+                        .as_ref()
+                }
+            }
+            State::Buffered => {
+                //once here the we never go back to pending
+                if self.index < self.array.len() {
+                    if self.buf_index == self.buf_0.len() {
+                        //need to get new data
+                        self.buf_index = 0;
+                        if self.index + self.buf_0.len() < self.array.len() {
+                            // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                            // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                            unsafe {
+                                self.array.internal_get(self.index, &self.buf_0).wait();
+                            }
+                        } else {
+                            let sub_region =
+                                self.buf_0.sub_region(0..(self.array.len() - self.index));
+                            // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                            // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                            // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                            unsafe {
+                                self.array.internal_get(self.index, sub_region).wait();
+                            }
+                        }
+                    }
+                    self.index += 1;
+                    self.buf_index += 1;
                     unsafe {
-                        self.array.internal_get(self.index, &self.buf_0).wait();
+                        self.ptr
+                            .0
+                            .as_ptr()
+                            .offset(self.buf_index as isize - 1)
+                            .as_ref()
                     }
                 } else {
-                    let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
-                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-                    // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
-                    // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                    self.state = State::Finished;
+                    None
+                }
+            }
+            State::Finished => None,
+        }
+    }
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut cur_state = State::Finished;
+        std::mem::swap(&mut self.state, &mut cur_state);
+        let res = match cur_state {
+            State::Pending(mut req) => {
+                if !req.ready() {
+                    req.set_waker(cx.waker().clone());
+                    self.state = State::Pending(req);
+                    return Poll::Pending;
+                } else {
+                    self.state = State::Buffered;
+                    self.index += 1;
+                    self.buf_index += 1;
                     unsafe {
-                        self.array.internal_get(self.index, sub_region).wait();
+                        self.ptr
+                            .0
+                            .as_ptr()
+                            .offset(self.buf_index as isize - 1)
+                            .as_ref()
                     }
                 }
             }
-            // self.spin_for_valid(self.buf_index);
-            self.index += 1;
-            self.buf_index += 1;
-            unsafe {
-                self.ptr
-                    .0
-                    .as_ptr()
-                    .offset(self.buf_index as isize - 1)
-                    .as_ref()
+            State::Buffered => {
+                if self.index < self.array.len() {
+                    if self.buf_index == self.buf_0.len() {
+                        //need to get new data
+                        self.buf_index = 0;
+                        let mut req = if self.index + self.buf_0.len() < self.array.len() {
+                            // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                            // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                            unsafe { self.array.internal_get(self.index, &self.buf_0) }
+                        } else {
+                            let sub_region =
+                                self.buf_0.sub_region(0..(self.array.len() - self.index));
+                            // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                            // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                            // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                            unsafe { self.array.internal_get(self.index, sub_region) }
+                        };
+                        req.set_waker(cx.waker().clone());
+                        self.state = State::Pending(req);
+
+                        return Poll::Pending;
+                    }
+                    self.index += 1;
+                    self.buf_index += 1;
+                    unsafe {
+                        self.ptr
+                            .0
+                            .as_ptr()
+                            .offset(self.buf_index as isize - 1)
+                            .as_ref()
+                    }
+                } else {
+                    self.state = State::Finished;
+                    None
+                }
             }
-        } else {
-            None
+            State::Finished => None,
         };
-        res
+        Poll::Ready(res)
     }
 
+    // fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    //     let mut cur_state = State::Finished;
+    //     std::mem::swap(&mut self.state, &mut cur_state);
+    //     let res = match cur_state {
+    //         State::Pending(mut req) => {
+    //             if !req.ready() {
+    //                 req.set_waker(cx.waker().clone());
+    //                 self.state = State::Pending(req);
+    //                 return Poll::Pending;
+    //             }
+
+    //             let res = if self.index + 1 < self.array.len() {
+    //                 self.index += 1;
+    //                 let buf_index = self.buf_index as isize;
+    //                 self.buf_index += 1;
+    //                 if self.buf_index == self.buf_0.len() {
+    //                     //prefetch the next data
+    //                     self.buf_index = 0;
+    //                     // self.fill_buffer(self.index);
+    //                     if self.index + self.buf_0.len() < self.array.len() {
+    //                         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+    //                         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+    //                         let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+    //                         self.state = State::Pending(req);
+    //                     } else if self.index < self.array.len() {
+    //                         let sub_region =
+    //                             self.buf_0.sub_region(0..(self.array.len() - self.index));
+    //                         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+    //                         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+    //                         // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+    //                         let req = unsafe { self.array.internal_get(self.index, sub_region) };
+    //                         self.state = State::Pending(req);
+    //                     } else {
+    //                         self.state = State::Finished;
+    //                     }
+    //                 }
+    //                 // self.spin_for_valid(self.buf_index);
+
+    //                 unsafe { self.ptr.0.as_ptr().offset(buf_index).as_ref() }
+    //             } else {
+    //                 self.state = State::Finished;
+    //                 None
+    //             };
+    //             Poll::Ready(res)
+    //         }
+    //         State::Finished => Poll::Ready(None),
+    //     };
+    //     res
+    // }
+
     fn advance_index(&mut self, count: usize) {
+        let this = Pin::new(self);
+        this.advance_index_pin(count);
+        // self.index += count;
+        // self.buf_index += count;
+        // if self.buf_index == self.buf_0.len() {
+        //     self.buf_index = 0;
+        //     // self.fill_buffer(0);
+        //     if self.index + self.buf_0.len() < self.array.len() {
+        //         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+        //         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+        //         unsafe {
+        //             self.array.internal_get(self.index, &self.buf_0).wait();
+        //         }
+        //     } else {
+        //         let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
+        //         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+        //         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+        //         // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+        //         unsafe {
+        //             self.array.internal_get(self.index, sub_region).wait();
+        //         }
+        //     }
+        // }
+    }
+
+    fn advance_index_pin(mut self: Pin<&mut Self>, count: usize) {
+        // let this = self.as_mut().project();
         self.index += count;
         self.buf_index += count;
         if self.buf_index == self.buf_0.len() {
@@ -402,18 +686,16 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send> OneSi
             // self.fill_buffer(0);
             if self.index + self.buf_0.len() < self.array.len() {
                 // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-                // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
-                unsafe {
-                    self.array.internal_get(self.index, &self.buf_0).wait();
-                }
+                // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+                let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+                self.state = State::Pending(req);
             } else {
                 let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
                 // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-                // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
+                // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
                 // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
-                unsafe {
-                    self.array.internal_get(self.index, sub_region).wait();
-                }
+                let req = unsafe { self.array.internal_get(self.index, sub_region) };
+                self.state = State::Pending(req);
             }
         }
     }

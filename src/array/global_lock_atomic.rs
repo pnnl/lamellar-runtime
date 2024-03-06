@@ -612,6 +612,10 @@ impl<T: Dist> GlobalLockArray<T> {
         // println!("GlobalLock into_read_only");
         self.array.into()
     }
+
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+        self.array.async_barrier()
+    }
 }
 
 impl<T: Dist + 'static> GlobalLockArray<T> {
@@ -921,6 +925,12 @@ impl<T: Dist + AmDist> LamellarRequest for GlobalLockArrayReduceHandle<T> {
     }
     fn get(&self) -> Self::Output {
         self.req.get()
+    }
+    fn ready(&self) -> bool {
+        self.req.ready()
+    }
+    fn set_waker(&mut self, waker: futures::task::Waker) {
+        self.req.set_waker(waker)
     }
 }
 

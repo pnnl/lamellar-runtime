@@ -379,6 +379,12 @@ impl LamellarTeam {
         self.team.barrier()
     }
 
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        self.team.async_barrier()
+    }
+
     #[doc(hidden)]
     pub fn exec_am_group_pe<F, O>(
         &self,
@@ -483,6 +489,12 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.barrier();
+    }
+
+    fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        self.team.async_barrier()
     }
 
     fn block_on<F: Future>(&self, f: F) -> F::Output {
@@ -1299,7 +1311,7 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn wait_all(&self) {
+    pub(crate) fn wait_all(&self) {
         let mut temp_now = Instant::now();
         while self.panic.load(Ordering::SeqCst) == 0
             && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
@@ -1382,6 +1394,7 @@ impl LamellarTeamRT {
             cnt: AtomicUsize::new(self.num_pes),
             arch: self.arch.clone(),
             data: Mutex::new(HashMap::new()),
+            waker: Mutex::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
@@ -1453,6 +1466,7 @@ impl LamellarTeamRT {
             cnt: AtomicUsize::new(self.num_pes),
             arch: self.arch.clone(),
             data: Mutex::new(HashMap::new()),
+            waker: Mutex::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
@@ -1535,6 +1549,7 @@ impl LamellarTeamRT {
         let req = Arc::new(LamellarRequestHandleInner {
             ready: AtomicBool::new(false),
             data: Cell::new(None),
+            waker: Mutex::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
@@ -1608,6 +1623,7 @@ impl LamellarTeamRT {
         let req = Arc::new(LamellarRequestHandleInner {
             ready: AtomicBool::new(false),
             data: Cell::new(None),
+            waker: Mutex::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
@@ -1680,6 +1696,7 @@ impl LamellarTeamRT {
         let req = Arc::new(LamellarMultiRequestHandleInner {
             cnt: AtomicUsize::new(self.num_pes),
             arch: self.arch.clone(),
+            waker: Mutex::new(None),
             data: Mutex::new(HashMap::new()),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
@@ -1750,6 +1767,7 @@ impl LamellarTeamRT {
         let req = Arc::new(LamellarRequestHandleInner {
             ready: AtomicBool::new(false),
             data: Cell::new(None),
+            waker: Mutex::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),
@@ -1886,6 +1904,7 @@ impl LamellarTeamRT {
         let req = Arc::new(LamellarLocalRequestHandleInner {
             ready: (Mutex::new(false), Condvar::new()),
             data: Cell::new(None),
+            waker: Mutex::new(None),
             team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
             world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: tg_outstanding_reqs.clone(),

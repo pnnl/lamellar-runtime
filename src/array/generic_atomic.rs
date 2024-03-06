@@ -566,6 +566,10 @@ impl<T: Dist> GenericAtomicArray<T> {
             .expect("invalid local index");
         self.locks[index].lock()
     }
+
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_  {
+        self.array.async_barrier()
+    }
 }
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
@@ -736,6 +740,7 @@ impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     fn barrier(&self) {
         self.array.barrier();
     }
+
     fn wait_all(&self) {
         self.array.wait_all()
         // println!("done in wait all {:?}",std::time::SystemTime::now());

@@ -1,4 +1,4 @@
-use crate::array::iterator::one_sided_iterator::*;
+use crate::array::iterator::one_sided_iterator::{private::*, *};
 // use crate::array::LamellarArrayRequest;
 // use crate::memregion::OneSidedMemoryRegion;
 
@@ -26,11 +26,23 @@ use pin_project::pin_project;
 // }
 
 #[pin_project]
-pub struct Zip<A, B> {
+pub struct Zip<A, B>
+where
+    A: OneSidedIterator + Send,
+    B: OneSidedIterator + Send,
+{
     #[pin]
     a: A,
     #[pin]
     b: B,
+    state: ZipState<<A as OneSidedIteratorInner>::Item, <B as OneSidedIteratorInner>::Item>,
+}
+
+enum ZipState<A, B> {
+    Pending,
+    Finished,
+    AReady(A),
+    BReady(B),
 }
 
 impl<A, B> Zip<A, B>
@@ -39,7 +51,11 @@ where
     B: OneSidedIterator + Send,
 {
     pub(crate) fn new(a: A, b: B) -> Self {
-        Zip { a, b }
+        Zip {
+            a,
+            b,
+            state: ZipState::Pending,
+        }
     }
 }
 
@@ -48,17 +64,108 @@ where
     A: OneSidedIterator + Send,
     B: OneSidedIterator + Send,
 {
+}
+
+impl<A, B> OneSidedIteratorInner for Zip<A, B>
+where
+    A: OneSidedIterator + Send,
+    B: OneSidedIterator + Send,
+{
     type ElemType = A::ElemType;
-    type Item = (<A as OneSidedIterator>::Item, <B as OneSidedIterator>::Item);
+    type Item = (
+        <A as OneSidedIteratorInner>::Item,
+        <B as OneSidedIteratorInner>::Item,
+    );
     type Array = A::Array;
+
+    fn init(&mut self) {
+        self.a.init();
+        self.b.init();
+    }
     fn next(&mut self) -> Option<Self::Item> {
         let a = self.a.next()?;
         let b = self.b.next()?;
         Some((a, b))
     }
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut cur_state = ZipState::Pending;
+        let this = self.project();
+        std::mem::swap(&mut *this.state, &mut cur_state);
+
+        match cur_state {
+            ZipState::Pending => {
+                let a = this.a.poll_next(cx);
+                let b = this.b.poll_next(cx);
+                match (a, b) {
+                    (Poll::Ready(a), Poll::Ready(b)) => {
+                        if a.is_none() || b.is_none() {
+                            *this.state = ZipState::Finished;
+                            return Poll::Ready(None);
+                        }
+                        *this.state = ZipState::Pending;
+                        Poll::Ready(Some((a.unwrap(), b.unwrap())))
+                    }
+                    (Poll::Ready(a), Poll::Pending) => match a {
+                        Some(a) => {
+                            *this.state = ZipState::AReady(a);
+                            Poll::Pending
+                        }
+                        None => {
+                            *this.state = ZipState::Finished;
+                            Poll::Ready(None)
+                        }
+                    },
+                    (Poll::Pending, Poll::Ready(b)) => match b {
+                        Some(b) => {
+                            *this.state = ZipState::BReady(b);
+                            Poll::Pending
+                        }
+                        None => {
+                            *this.state = ZipState::Finished;
+                            Poll::Ready(None)
+                        }
+                    },
+                    (Poll::Pending, Poll::Pending) => Poll::Pending,
+                }
+            }
+            ZipState::AReady(a) => match this.b.poll_next(cx) {
+                Poll::Ready(b) => match b {
+                    Some(b) => {
+                        *this.state = ZipState::Pending;
+                        Poll::Ready(Some((a, b)))
+                    }
+                    None => {
+                        *this.state = ZipState::Finished;
+                        Poll::Ready(None)
+                    }
+                },
+                Poll::Pending => Poll::Pending,
+            },
+            ZipState::BReady(b) => match this.a.poll_next(cx) {
+                Poll::Ready(a) => match a {
+                    Some(a) => {
+                        *this.state = ZipState::Pending;
+                        Poll::Ready(Some((a, b)))
+                    }
+                    None => {
+                        *this.state = ZipState::Finished;
+                        Poll::Ready(None)
+                    }
+                },
+                Poll::Pending => Poll::Pending,
+            },
+            ZipState::Finished => Poll::Ready(None),
+        }
+    }
     fn advance_index(&mut self, count: usize) {
         self.a.advance_index(count);
         self.b.advance_index(count);
+    }
+    fn advance_index_pin(self: Pin<&mut Self>, count: usize) {
+        let this = self.project();
+        this.a.advance_index_pin(count);
+        this.b.advance_index_pin(count);
     }
     fn array(&self) -> Self::Array {
         self.a.array()

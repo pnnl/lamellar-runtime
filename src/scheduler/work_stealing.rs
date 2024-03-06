@@ -155,7 +155,7 @@ impl LamellarExecutor for WorkStealing {
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
             .spawn(move |_task_id| async move { task.await }, schedule);
 
-        runnable.schedule(); //try to run immediately
+        runnable.run(); //try to run immediately
         task.detach();
         // });
     }

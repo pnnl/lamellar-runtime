@@ -3,7 +3,7 @@ use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::{private::*, IterRequest};
-use crate::array::{ArrayOps, Distribution, LamellarArray, UnsafeArray};
+use crate::array::{ArrayOps, Distribution, UnsafeArray};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::Dist;
@@ -80,6 +80,21 @@ where
     T: Dist + ArrayOps,
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
+    async fn async_reduce_remote_vals(&self, local_val: Option<T>) -> Option<T> {
+        self.team.async_barrier().await;
+        let local_vals =
+            UnsafeArray::<Option<T>>::new(&self.team, self.team.num_pes, Distribution::Block);
+        unsafe {
+            local_vals.local_as_mut_slice()[0] = local_val;
+        };
+        local_vals.async_barrier().await;
+        let buffered_iter = unsafe { local_vals.buffered_onesided_iter(self.team.num_pes) };
+        buffered_iter
+            .into_iter()
+            .filter_map(|&res| res)
+            .reduce(self.op.clone())
+    }
+
     fn reduce_remote_vals(&self, local_val: Option<T>) -> Option<T> {
         self.team.tasking_barrier();
         let local_vals =
@@ -87,7 +102,7 @@ where
         unsafe {
             local_vals.local_as_mut_slice()[0] = local_val;
         };
-        local_vals.barrier();
+        local_vals.tasking_barrier();
         let buffered_iter = unsafe { local_vals.buffered_onesided_iter(self.team.num_pes) };
         buffered_iter
             .into_iter()
@@ -110,7 +125,7 @@ where
             .into_iter()
             .filter_map(|res| res)
             .reduce(self.op.clone());
-        self.reduce_remote_vals(local_val)
+        self.async_reduce_remote_vals(local_val).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         let local_val = self

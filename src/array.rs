@@ -120,9 +120,9 @@ pub use r#unsafe::{
 };
 pub(crate) mod read_only;
 pub use read_only::{
-    ReadOnlyArray, ReadOnlyArrayOpBuf,
-    /*ReadOnlyArrayMultiMultiOps, ReadOnlyArrayMultiSingleOps,*/ ReadOnlyByteArray,
-    ReadOnlyByteArrayWeak,
+    ReadOnlyArray,
+    /*ReadOnlyArrayOpBuf, ReadOnlyArrayMultiMultiOps, ReadOnlyArrayMultiSingleOps,*/
+    ReadOnlyByteArray, ReadOnlyByteArrayWeak,
 };
 
 // pub(crate) mod local_only;
@@ -194,24 +194,26 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
-// impl Dist for bool {}
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+lamellar_impl::generate_reductions_for_type_rt!(false, f32);
+lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
+impl Dist for bool {}
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
-lamellar_impl::generate_ops_for_bool_rt!();
+// lamellar_impl::generate_ops_for_bool_rt!();
 
 impl<T: Dist + ArrayOps> Dist for Option<T> {}
 impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
@@ -260,6 +262,8 @@ pub trait LamellarArrayRequest: Sync + Send {
     type Output;
     async fn into_future(mut self: Box<Self>) -> Self::Output;
     fn wait(self: Box<Self>) -> Self::Output;
+    fn ready(&self) -> bool;
+    fn set_waker(&mut self, waker: futures::task::Waker);
 }
 
 struct ArrayRdmaHandle {
@@ -279,6 +283,17 @@ impl LamellarArrayRequest for ArrayRdmaHandle {
             req.get();
         }
         ()
+    }
+    fn ready(&self) -> bool {
+        self.reqs.iter().all(|req| {
+            // println!("req: {:?}", req.ready());
+            req.ready()
+        })
+    }
+    fn set_waker(&mut self, waker: futures::task::Waker) {
+        for req in self.reqs.iter_mut() {
+            req.set_waker(waker.clone());
+        }
     }
 }
 
@@ -300,6 +315,14 @@ impl<T: Dist> LamellarArrayRequest for ArrayRdmaAtHandle<T> {
             req.get();
         }
         unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
+    }
+    fn ready(&self) -> bool {
+        self.reqs.iter().all(|req| req.ready())
+    }
+    fn set_waker(&mut self, waker: futures::task::Waker) {
+        for req in self.reqs.iter_mut() {
+            req.set_waker(waker.clone());
+        }
     }
 }
 

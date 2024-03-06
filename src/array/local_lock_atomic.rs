@@ -527,6 +527,10 @@ impl<T: Dist> LocalLockArray<T> {
         // println!("readonly into_global_lock");
         self.array.into()
     }
+
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+        self.array.async_barrier()
+    }
 }
 
 impl<T: Dist + 'static> LocalLockArray<T> {
@@ -833,6 +837,12 @@ impl<T: Dist + AmDist> LamellarRequest for LocalLockArrayReduceHandle<T> {
     }
     fn get(&self) -> Self::Output {
         self.req.get()
+    }
+    fn ready(&self) -> bool {
+        self.req.ready()
+    }
+    fn set_waker(&mut self, waker: futures::task::Waker) {
+        self.req.set_waker(waker)
     }
 }
 

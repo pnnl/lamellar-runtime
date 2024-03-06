@@ -79,7 +79,7 @@ impl LamellarAm for UpdateCntAm {
 }
 
 impl RemoteIterCountHandle {
-    async fn reduce_remote_counts(self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
+    async fn async_reduce_remote_counts(self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
         self.team
             .exec_am_all(UpdateCntAm {
                 remote_cnt: local_cnt,
@@ -88,6 +88,16 @@ impl RemoteIterCountHandle {
             .into_future()
             .await;
         self.team.async_barrier().await;
+        cnt.load(Ordering::SeqCst)
+    }
+
+    fn reduce_remote_counts(self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
+        self.team.exec_am_all(UpdateCntAm {
+            remote_cnt: local_cnt,
+            cnt: cnt.clone(),
+        });
+        self.team.wait_all();
+        self.team.tasking_barrier();
         cnt.load(Ordering::SeqCst)
     }
 }
@@ -105,7 +115,7 @@ impl IterRequest for RemoteIterCountHandle {
             .into_iter()
             .sum::<usize>();
         // println!("count: {} {:?}", count, std::thread::current().id());
-        self.reduce_remote_counts(count, cnt).await
+        self.async_reduce_remote_counts(count, cnt).await
     }
     fn wait(mut self: Box<Self>) -> Self::Output {
         self.team.tasking_barrier();
@@ -116,10 +126,7 @@ impl IterRequest for RemoteIterCountHandle {
             .map(|req| req.get())
             .into_iter()
             .sum::<usize>();
-        self.team
-            .scheduler
-            .clone()
-            .block_on(self.reduce_remote_counts(count, cnt))
+        self.reduce_remote_counts(count, cnt)
     }
 }
 

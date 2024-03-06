@@ -75,6 +75,10 @@ impl ActiveMessaging for LamellarWorld {
         self.team.barrier();
     }
 
+    fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send {
+        self.team.async_barrier()
+    }
+
     fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future,
