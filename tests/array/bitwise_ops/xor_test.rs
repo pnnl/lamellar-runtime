@@ -78,7 +78,7 @@ macro_rules! xor_test{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                 }
             }
             array.barrier();
@@ -105,7 +105,7 @@ macro_rules! xor_test{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                 }
             }
             sub_array.barrier();
@@ -133,7 +133,7 @@ macro_rules! xor_test{
                     let val = *elem;
                     check_val!($array,val,final_val,success);
                     if !success{
-                        println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                        eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                     }
                 }
                 sub_array.barrier();

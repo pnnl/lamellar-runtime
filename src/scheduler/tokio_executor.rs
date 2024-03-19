@@ -2,7 +2,7 @@ use crate::scheduler::LamellarExecutor;
 
 use tokio::runtime::Runtime;
 
-use futures::Future;
+use futures_util::Future;
 
 #[derive(Debug)]
 pub(crate) struct TokioRt {
@@ -17,7 +17,7 @@ impl LamellarExecutor for TokioRt {
         F::Output: Send,
     {
         // trace_span!("submit_task").in_scope(|| {
-            self.rt.spawn(async move { task.await });
+        self.rt.spawn(async move { task.await });
         // });
     }
 
@@ -27,13 +27,13 @@ impl LamellarExecutor for TokioRt {
         F::Output: Send,
     {
         // trace_span!("submit_task").in_scope(|| {
-            self.rt.spawn(async move { task.await });
+        self.rt.spawn(async move { task.await });
         // });
     }
 
     fn block_on<F: Future>(&self, task: F) -> F::Output {
-        // trace_span!("block_on").in_scope(|| 
-            self.rt.block_on(task)
+        // trace_span!("block_on").in_scope(||
+        self.rt.block_on(task)
         // )
     }
 

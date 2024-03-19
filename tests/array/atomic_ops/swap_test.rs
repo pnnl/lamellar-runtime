@@ -73,7 +73,7 @@ macro_rules! swap{
                 let val =  world.block_on(req);
                 check_val!($array,val,init_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",idx,val,init_val);
+                    eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                 }
             }
 
@@ -90,7 +90,7 @@ macro_rules! swap{
                 let val = val;
                 check_val!($array,val,check_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",idx,val,check_val);
+                    eprintln!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
 
@@ -117,7 +117,7 @@ macro_rules! swap{
                 let val =  world.block_on(req);
                 check_val!($array,val,init_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",idx,val,init_val);
+                    eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                 }
             }
 
@@ -134,7 +134,7 @@ macro_rules! swap{
                 let val = val;
                 check_val!($array,val,check_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",idx,val,check_val);
+                    eprintln!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
 
@@ -163,7 +163,7 @@ macro_rules! swap{
                     let val =  world.block_on(req);
                     check_val!($array,val,init_val,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",idx,val,init_val);
+                        eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                     }
                 }
 
@@ -180,7 +180,7 @@ macro_rules! swap{
                     let val = val;
                 check_val!($array,val,check_val,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                        eprintln!("{:?} {:?} {:?}",idx,val,check_val);
                     }
                 }
 

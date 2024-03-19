@@ -253,7 +253,7 @@ pub use parking_lot;
 pub use async_trait;
 
 #[doc(hidden)]
-pub use futures;
+pub use futures_util;
 
 pub mod active_messaging;
 #[doc(hidden)]
@@ -285,7 +285,6 @@ pub use utils::*;
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
-pub use crate::lamellar_request::LamellarRequest;
 pub use crate::lamellar_task_group::{
     AmGroup, AmGroupResult, BaseAmGroupReq, LamellarTaskGroup, TypedAmGroupBatchReq,
     TypedAmGroupBatchResult, TypedAmGroupResult,

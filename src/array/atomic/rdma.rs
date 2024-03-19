@@ -45,13 +45,13 @@ impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayRdmaHandle {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
         }
     }
-    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.at(index),
             AtomicArray::GenericAtomicArray(array) => array.at(index),
@@ -64,7 +64,7 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayRdmaHandle {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.put(index, buf),

@@ -7,9 +7,18 @@ pub use crate::array::r#unsafe::UnsafeArray;
 pub use crate::array::read_only::ReadOnlyArray;
 #[doc(hidden)]
 pub use crate::array::{
-    register_reduction, ArrayOps, Distribution, LamellarArray, LamellarArrayArithmeticReduce,
-    LamellarArrayCompareReduce, LamellarArrayGet, LamellarArrayPut, LamellarArrayReduce,
-    LamellarReadArray, LamellarWriteArray, SubArray,
+    register_reduction,
+    ArrayOps,
+    Distribution,
+    LamellarArray,
+    //LamellarArrayArithmeticReduce,
+    //LamellarArrayCompareReduce,
+    LamellarArrayGet,
+    LamellarArrayPut,
+    //LamellarArrayReduce,
+    LamellarReadArray,
+    LamellarWriteArray,
+    SubArray,
 };
 
 pub use crate::array::iterator::distributed_iterator::{

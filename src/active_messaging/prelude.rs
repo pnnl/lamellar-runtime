@@ -5,11 +5,12 @@
 // };
 // pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 pub use crate::active_messaging::{
-    am, local_am, typed_am_group, ActiveMessaging, AmData, AmGroupData, AmLocalData, LamellarSerde,
+    am, local_am, typed_am_group, ActiveMessaging, AmData, AmGroupData, AmHandle, AmLocalData,
+    LamellarSerde,
 };
 
 pub use crate::async_trait;
-pub use crate::futures::StreamExt;
+// pub use crate::futures_util::StreamExt;
 pub use crate::inventory;
 pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;

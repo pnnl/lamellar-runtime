@@ -326,6 +326,7 @@ fn create_buf_ops(
             quote! { #val },                                    //lhs
             quote! {slice[index].store(val, Ordering::SeqCst)}, //assign
             quote! {
+                // println!("old value: {:?}, index: {:?}",slice[index].load(Ordering::SeqCst),index);
                 res.push(slice[index].fetch_add(val, Ordering::SeqCst));
             }, //fetch_add
             quote! {
@@ -552,7 +553,7 @@ fn create_buf_ops(
     } else if array_type == "LocalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
-            quote! {let mut slice = self.data.write_local_data().await;}, //this is the lock
+            quote! {let mut slice = self.data.write_local_data().await; }, //this is the lock
         )
     } else if array_type == "GlobalLockArray" {
         (
@@ -928,6 +929,7 @@ fn create_buf_ops(
                     match self.index_size{
                         1 => {
                             let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
+                            // println!("Indices: {:?}",indices);
                             match self.op {
                                 #single_val_multi_idx_match_stmts
                             }
@@ -1277,12 +1279,14 @@ fn create_buf_ops(
         #[#am(AmGroup(false))]
         impl LamellarAM for #single_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident>{
+                // println!("in single val multi idx exec");
                 #slice
                 let val = self.val;
                 let mut res = Vec::new();
                 match self.index_size{
                     1 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
+                        // println!("indices: {:?}", indices);
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }

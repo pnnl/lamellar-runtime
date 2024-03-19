@@ -25,14 +25,15 @@ use zip::*;
 // mod buffered;
 // use buffered::*;
 
-use crate::array::{LamellarArray, LamellarArrayInternalGet, LamellarArrayRequest};
+use crate::array::{ArrayRdmaHandle, LamellarArray, LamellarArrayInternalGet};
+use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion, SubRegion};
 
 use crate::LamellarTeamRT;
 
 // use async_trait::async_trait;
-// use futures::{ready, Stream};
-use futures::Stream;
+// use futures_util::{ready, Stream};
+use futures_util::Stream;
 use pin_project::pin_project;
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -273,6 +274,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
                 std::backtrace::Backtrace::capture()
             )
         }
+        // println!("Into Iter");
         self.init();
         OneSidedIteratorIter { iter: self }
     }
@@ -281,6 +283,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     where
         Self: Sized + Send,
     {
+        // println!("Into Stream");
         self.init();
         OneSidedStream { iter: self }
     }
@@ -383,7 +386,7 @@ pub struct OneSidedIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
 
 pub(crate) enum State {
     // Ready,
-    Pending(Box<dyn LamellarArrayRequest<Output = ()>>),
+    Pending(ArrayRdmaHandle),
     Buffered,
     Finished,
 }
@@ -432,60 +435,29 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
     type Array = A;
 
     fn init(&mut self) {
+        // println!(
+        //     "Iter init: index: {:?} buf_len {:?} array_len {:?}",
+        //     self.index,
+        //     self.buf_0.len(),
+        //     self.array.len()
+        // );
         let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
         self.state = State::Pending(req);
     }
-
-    // fn next(&mut self) -> Option<Self::Item> {
-    //     let mut cur_state = State::Finished;
-    //     std::mem::swap(&mut self.state, &mut cur_state);
-    //     match cur_state {
-    //         State::Pending(req) => {
-    //             req.wait(); //need to wait here because we use the same underlying buffer
-    //             if self.index + 1 < self.array.len() {
-    //                 // still have remaining elements
-    //                 self.index += 1;
-    //                 let buf_index = self.buf_index as isize;
-    //                 self.buf_index += 1;
-    //                 if self.buf_index == self.buf_0.len() {
-    //                     //prefetch the next data
-    //                     self.buf_index = 0;
-    //                     if self.index + self.buf_0.len() < self.array.len() {
-    //                         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-    //                         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
-    //                         let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
-    //                         self.state = State::Pending(req);
-    //                     } else if self.index < self.array.len() {
-    //                         let sub_region =
-    //                             self.buf_0.sub_region(0..(self.array.len() - self.index));
-    //                         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-    //                         // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
-    //                         // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
-    //                         let req = unsafe { self.array.internal_get(self.index, sub_region) };
-    //                         self.state = State::Pending(req);
-    //                     } else {
-    //                         self.state = State::Finished;
-    //                     }
-    //                 }
-    //             } else {
-    //                 self.state = State::Finished;
-    //             };
-    //             unsafe { self.ptr.0.as_ptr().offset(buf_index).as_ref() } //this is an option
-    //         }
-    //         State::Buffered => {
-    //             self.state = State::Finished;
-    //             unsafe { self.ptr.0.as_ptr().offset(self.buf_index as isize).as_ref() }
-    //         }
-    //         State::Finished => None,
-    //     }
-    // }
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut cur_state = State::Finished;
         std::mem::swap(&mut self.state, &mut cur_state);
         match cur_state {
             State::Pending(req) => {
-                req.wait();
+                req.blocking_wait();
+                // println!(
+                //     "req ready  pending->buffered: index {} buf_index {} array_len {} buf_0_len {}",
+                //     self.index,
+                //     self.buf_index,
+                //     self.array.len(),
+                //     self.buf_0.len()
+                // );
                 self.state = State::Buffered;
                 self.index += 1;
                 self.buf_index += 1;
@@ -498,28 +470,51 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
                 }
             }
             State::Buffered => {
+                // println!(
+                //     "req ready buffered: index {} buf_index {} array_len {} buf_0_len {}",
+                //     self.index,
+                //     self.buf_index,
+                //     self.array.len(),
+                //     self.buf_0.len()
+                // );
                 //once here the we never go back to pending
                 if self.index < self.array.len() {
+                    self.state = State::Buffered;
                     if self.buf_index == self.buf_0.len() {
                         //need to get new data
                         self.buf_index = 0;
                         if self.index + self.buf_0.len() < self.array.len() {
+                            // println!(
+                            //     "full buffering more elements from array: index {} len {}",
+                            //     self.index,
+                            //     self.buf_0.len()
+                            // );
                             // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             unsafe {
-                                self.array.internal_get(self.index, &self.buf_0).wait();
+                                self.array
+                                    .internal_get(self.index, &self.buf_0)
+                                    .blocking_wait();
                             }
                         } else {
                             let sub_region =
                                 self.buf_0.sub_region(0..(self.array.len() - self.index));
+                            // println!(
+                            //     "partial buffering more elements from array: index {} len {}",
+                            //     self.index,
+                            //     sub_region.len()
+                            // );
                             // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
                             unsafe {
-                                self.array.internal_get(self.index, sub_region).wait();
+                                self.array
+                                    .internal_get(self.index, sub_region)
+                                    .blocking_wait();
                             }
                         }
                     }
+
                     self.index += 1;
                     self.buf_index += 1;
                     unsafe {
@@ -530,11 +525,25 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
                             .as_ref()
                     }
                 } else {
+                    // println!(
+                    //     "finished1: index {} buf_index {} array_len {} ",
+                    //     self.index,
+                    //     self.buf_index,
+                    //     self.array.len()
+                    // );
                     self.state = State::Finished;
                     None
                 }
             }
-            State::Finished => None,
+            State::Finished => {
+                // println!(
+                //     "finished2: index {} buf_index {} array_len {} ",
+                //     self.index,
+                //     self.buf_index,
+                //     self.array.len()
+                // );
+                None
+            }
         }
     }
 
@@ -543,11 +552,14 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
         std::mem::swap(&mut self.state, &mut cur_state);
         let res = match cur_state {
             State::Pending(mut req) => {
-                if !req.ready() {
-                    req.set_waker(cx.waker().clone());
+                if !req.ready_or_set_waker(cx.waker()) {
                     self.state = State::Pending(req);
                     return Poll::Pending;
                 } else {
+                    // println!(
+                    //     "req ready  pending->buffered: index {} buf_index {} array_len {} buf_0_len {}",
+                    //     self.index, self.buf_index, self.array.len(), self.buf_0.len()
+                    // );
                     self.state = State::Buffered;
                     self.index += 1;
                     self.buf_index += 1;
@@ -561,27 +573,46 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
                 }
             }
             State::Buffered => {
+                // println!(
+                //     "req ready buffered: index {} buf_index {} array_len {} buf_0_len {}",
+                //     self.index,
+                //     self.buf_index,
+                //     self.array.len(),
+                //     self.buf_0.len()
+                // );
                 if self.index < self.array.len() {
+                    self.state = State::Buffered;
                     if self.buf_index == self.buf_0.len() {
                         //need to get new data
                         self.buf_index = 0;
                         let mut req = if self.index + self.buf_0.len() < self.array.len() {
+                            // println!(
+                            //     "full buffering more elements from array: index {} len {}",
+                            //     self.index,
+                            //     self.buf_0.len()
+                            // );
                             // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             unsafe { self.array.internal_get(self.index, &self.buf_0) }
                         } else {
                             let sub_region =
                                 self.buf_0.sub_region(0..(self.array.len() - self.index));
+                            // println!(
+                            //     "partial buffering more elements from array: index {} len {}",
+                            //     self.index,
+                            //     sub_region.len()
+                            // );
                             // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
                             unsafe { self.array.internal_get(self.index, sub_region) }
                         };
-                        req.set_waker(cx.waker().clone());
+                        req.ready_or_set_waker(cx.waker());
                         self.state = State::Pending(req);
 
                         return Poll::Pending;
                     }
+
                     self.index += 1;
                     self.buf_index += 1;
                     unsafe {
@@ -592,11 +623,21 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
                             .as_ref()
                     }
                 } else {
+                    // println!(
+                    //     "finished: index {} buf_index {}",
+                    //     self.index, self.buf_index
+                    // );
                     self.state = State::Finished;
                     None
                 }
             }
-            State::Finished => None,
+            State::Finished => {
+                // println!(
+                //     "finished: index {} buf_index {}",
+                //     self.index, self.buf_index
+                // );
+                None
+            }
         };
         Poll::Ready(res)
     }
@@ -607,7 +648,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
     //     let res = match cur_state {
     //         State::Pending(mut req) => {
     //             if !req.ready() {
-    //                 req.set_waker(cx.waker().clone());
+    //                 req.set_waker(cx.waker());
     //                 self.state = State::Pending(req);
     //                 return Poll::Pending;
     //             }
@@ -709,7 +750,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
     // fn buffered_next(
     //     &mut self,
     //     mem_region: OneSidedMemoryRegion<u8>,
-    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    // ) -> Option<ArrayRdmaHandle> {
     //     if self.index < self.array.len() {
     //         let mem_reg_t = unsafe { mem_region.to_base::<Self::ElemType>() };
     //         let req = self.array.internal_get(self.index, &mem_reg_t);

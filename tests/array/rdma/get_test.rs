@@ -150,7 +150,7 @@ macro_rules! get_test{
                 unsafe{
                     for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
                         }
                     }
@@ -190,7 +190,7 @@ macro_rules! get_test{
                 unsafe{
                     for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
                         }
                     }
@@ -234,7 +234,7 @@ macro_rules! get_test{
                     unsafe{
                         for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
                             if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                                println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                                eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                                 success = false;
                             }
                         }

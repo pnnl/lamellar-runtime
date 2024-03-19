@@ -9,15 +9,13 @@ pub mod consumer;
 
 use crate::memregion::Dist;
 
-use async_trait::async_trait;
-
-#[doc(hidden)]
-#[async_trait]
-pub trait IterRequest {
-    type Output;
-    async fn into_future(mut self: Box<Self>) -> Self::Output;
-    fn wait(self: Box<Self>) -> Self::Output;
-}
+// #[doc(hidden)]
+// #[async_trait]
+// pub trait IterRequest {
+//     type Output;
+//     async fn into_future(mut self: Box<Self>) -> Self::Output;
+//     fn wait(self: Box<Self>) -> Self::Output;
+// }
 
 pub(crate) mod private {
     pub struct Sealed;

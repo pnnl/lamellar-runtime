@@ -12,7 +12,7 @@ use crate::memregion::Dist;
 use std::any::TypeId;
 use std::collections::HashSet;
 // use std::sync::atomic::Ordering;
-// use std::sync::Arc;
+use std::sync::Arc;
 
 lazy_static! {
     pub(crate) static ref NATIVE_ATOMICS: HashSet<TypeId> = {
@@ -496,18 +496,6 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
             AtomicElement::GenericAtomicElement(array) => array.fmt(f),
             AtomicElement::LocalGenericAtomicElement(array) => array.fmt(f),
         }
-    }
-}
-
-impl<T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum for AtomicElement<T> {
-    fn sum<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = Self>,
-    {
-        LocalGenericAtomicElement {
-            val: Mutex::new(iter.map(|e| e.load()).sum()),
-        }
-        .into()
     }
 }
 
@@ -1084,7 +1072,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
@@ -1179,8 +1167,8 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
-    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + 'static> AtomicArray<T> {
+    pub fn reduce(&self, reduction: &str) -> AmHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
@@ -1188,32 +1176,28 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-    for AtomicArray<T>
-{
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
+    pub fn sum(&self) -> AmHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn prod(&self) -> AmHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
             AtomicArray::GenericAtomicArray(array) => array.prod(),
         }
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-    for AtomicArray<T>
-{
-    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
+    pub fn max(&self) -> AmHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
         }
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn min(&self) -> AmHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),
             AtomicArray::GenericAtomicArray(array) => array.min(),

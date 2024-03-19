@@ -47,7 +47,7 @@ use crate::LamellarTeamRT;
 use crate::active_messaging::SyncSend;
 
 use enum_dispatch::enum_dispatch;
-use futures::Future;
+use futures_util::Future;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -69,12 +69,12 @@ use std::sync::Arc;
 //     type Output = ();
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         for req in self.reqs.drain(..) {
-//             req.into_future().await;
+//             req.await;
 //         }
 //     }
 //     fn wait(mut self: Box<Self>) -> Self::Output {
 //         for req in self.reqs.drain(..) {
-//             req.get();
+//             req.blocking_wait();
 //         }
 //     }
 // }
@@ -130,7 +130,7 @@ use std::sync::Arc;
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         let mut local_vals = vec![];
 //         for req in self.reqs.drain(0..) {
-//             let v = req.into_future().await;
+//             let v = req.await;
 //             local_vals.extend(v);
 //         }
 //         self.create_array(&local_vals)
@@ -138,7 +138,7 @@ use std::sync::Arc;
 //     fn wait(mut self: Box<Self>) -> Self::Output {
 //         let mut local_vals = vec![];
 //         for req in self.reqs.drain(0..) {
-//             let v = req.get();
+//             let v = req.blocking_wait();
 //             local_vals.extend(v);
 //         }
 //         self.create_array(&local_vals)
@@ -148,7 +148,7 @@ use std::sync::Arc;
 #[doc(hidden)]
 #[enum_dispatch]
 pub trait DistIteratorLauncher {
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static;
@@ -158,16 +158,12 @@ pub trait DistIteratorLauncher {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    ) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static;
 
-    fn for_each_async<I, F, Fut>(
-        &self,
-        iter: &I,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -178,17 +174,13 @@ pub trait DistIteratorLauncher {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    ) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static;
 
-    fn reduce<I, F>(
-        &self,
-        iter: &I,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    fn reduce<I, F>(&self, iter: &I, op: F) -> DistIterReduceHandle<I::Item, F>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -199,13 +191,13 @@ pub trait DistIteratorLauncher {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    ) -> DistIterReduceHandle<I::Item, F>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
         F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
 
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<I::Item, A>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -216,17 +208,13 @@ pub trait DistIteratorLauncher {
         sched: Schedule,
         iter: &I,
         d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    ) -> DistIterCollectHandle<I::Item, A>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
         A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
 
-    fn collect_async<I, A, B>(
-        &self,
-        iter: &I,
-        d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<B, A>
     where
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
@@ -238,35 +226,27 @@ pub trait DistIteratorLauncher {
         sched: Schedule,
         iter: &I,
         d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    ) -> DistIterCollectHandle<B, A>
     where
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
         A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static;
 
-    fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    fn count<I>(&self, iter: &I) -> DistIterCountHandle
     where
         I: DistributedIterator + 'static;
 
-    fn count_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterCountHandle
     where
         I: DistributedIterator + 'static;
 
-    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum<I>(&self, iter: &I) -> DistIterSumHandle<I::Item>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps + std::iter::Sum;
 
-    fn sum_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterSumHandle<I::Item>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps + std::iter::Sum;
@@ -475,7 +455,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
     /// );
     ///```
-    fn for_each<F>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each<F>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
     {
@@ -512,7 +492,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///     fut.await;
     /// }
     ///```
-    fn for_each_async<F, Fut>(&self, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
@@ -537,11 +517,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
     /// array.wait_all();
     ///```
-    fn for_each_with_schedule<F>(
-        &self,
-        sched: Schedule,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
     {
@@ -573,11 +549,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// });
     /// array.wait_all();
     ///```
-    fn for_each_async_with_schedule<F, Fut>(
-        &self,
-        sched: Schedule,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
         Fut: Future<Output = ()> + Send + 'static,
@@ -601,7 +573,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn reduce<F>(&self, op: F) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    fn reduce<F>(&self, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: Dist + ArrayOps,
@@ -624,11 +596,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn reduce_with_schedule<F>(
-        &self,
-        sched: Schedule,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = Option<Self::Item>> + Send>>
+    fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
         Self::Item: Dist + ArrayOps,
@@ -663,7 +631,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn collect<A>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect<A>(&self, d: Distribution) -> DistIterCollectHandle<Self::Item, A>
     where
         // &'static Self: DistributedIterator + 'static,
         Self::Item: Dist + ArrayOps,
@@ -708,7 +676,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-    fn collect_async<A, T>(&self, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_async<A, T>(&self, d: Distribution) -> DistIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist + ArrayOps,
@@ -732,7 +700,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().filter(|elem|  elem < 10).count();
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn count(&self) -> Pin<Box<dyn Future<Output = usize> + Send>> {
+    fn count(&self) -> DistIterCountHandle {
         self.array().count(self)
     }
 
@@ -750,7 +718,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().filter(|elem|  elem < 10).count_with_schedule(Schedule::Dynamic);
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn count_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = usize> + Send>> {
+    fn count_with_schedule(&self, sched: Schedule) -> DistIterCountHandle {
         self.array().count_with_schedule(sched, self)
     }
 
@@ -772,7 +740,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().sum();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn sum(&self) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
+    fn sum(&self) -> DistIterSumHandle<Self::Item>
     where
         Self::Item: Dist + ArrayOps + std::iter::Sum,
     {
@@ -797,7 +765,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().sum_with_schedule(Schedule::Guided);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    fn sum_with_schedule(&self, sched: Schedule) -> Pin<Box<dyn Future<Output = Self::Item> + Send>>
+    fn sum_with_schedule(&self, sched: Schedule) -> DistIterSumHandle<Self::Item>
     where
         Self::Item: Dist + ArrayOps + std::iter::Sum,
     {

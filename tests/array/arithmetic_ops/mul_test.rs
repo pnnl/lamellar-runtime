@@ -97,7 +97,7 @@ macro_rules! mul_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
 
@@ -123,7 +123,7 @@ macro_rules! mul_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
             sub_array.barrier();
@@ -149,7 +149,7 @@ macro_rules! mul_test{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",i,val,max_val);
+                        eprintln!("{:?} {:?} {:?}",i,val,max_val);
                     }
                 }
                 sub_array.barrier();

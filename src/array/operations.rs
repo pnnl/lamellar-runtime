@@ -432,11 +432,13 @@ pub trait OpInput<'a, T: Dist> {
 
 impl<'a, T: Dist> OpInput<'a, T> for T {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("val as op input");
         (vec![OpInputEnum::Val(self)], 1)
     }
 }
 impl<'a, T: Dist> OpInput<'a, T> for &T {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("ref as op input");
         (vec![OpInputEnum::Val(*self)], 1)
     }
 }
@@ -444,6 +446,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &T {
 impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("slice as op input");
         let len = self.len();
         let mut iters = vec![];
         let num = if len < 1000 {
@@ -473,6 +476,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("iter as op input");
         self.collect::<Vec<_>>().as_op_input()
     }
 }
@@ -498,6 +502,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("slice as mut op input");
         let len = self.len();
         let mut iters = vec![];
 
@@ -531,6 +536,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("vec ref as op input");
         (&self[..]).as_op_input()
     }
 }
@@ -538,6 +544,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("vec ref mut as op input");
         (&self[..]).as_op_input()
     }
 }
@@ -572,6 +579,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("vec as op input");
         let len = self.len();
         let num = if len < 1000 {
             1
@@ -690,6 +698,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
     // #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("LocalLockLocalData as_op_input {:?}", self.deref());
         let len = self.len();
         let mut iters = vec![];
         let my_pe = self.array.my_pe();
@@ -714,6 +723,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
                 let sub_data = self
                     .clone()
                     .into_sub_data(i * num_per_batch, (i + 1) * num_per_batch);
+                // println!("sub_data: {:?}", sub_data.deref());
                 iters.push(OpInputEnum::LocalLockLocalData(sub_data));
             }
             let rem = len % num_per_batch;
@@ -730,6 +740,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
 impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
     // #[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // println!("GlobalLockLocalData as_op_input");
         let len = self.len();
         let mut iters = vec![];
         let my_pe = self.array.my_pe();
@@ -763,6 +774,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
                 iters.push(OpInputEnum::GlobalLockLocalData(sub_data));
             }
         }
+
         (iters, len)
     }
 }
@@ -1045,23 +1057,23 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //     //#[tracing::instrument(skip_all)]
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         for req in self.reqs.drain(..) {
-//             req.into_future().await;
+//             req.await;
 //         }
 //         ()
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
+//     fn blocking_wait(&self) -> Self::Output {
 //         for req in &self.reqs {
-//             req.get();
+//             req.blocking_wait();
 //         }
 //         ()
 //     }
 //     fn ready(&self) -> bool {
 //         self.reqs.iter().all(|req| req.ready())
 //     }
-//     fn set_waker(&mut self, waker: futures::task::Waker) {
+//     fn set_waker(&mut self, waker: futures_util::task::Waker) {
 //         for req in &mut self.reqs {
-//             req.set_waker(waker.clone());
+//             req.set_waker(waker);
 //         }
 //     }
 // }
@@ -1079,7 +1091,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //         ()
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
+//     fn blocking_wait(&self) -> Self::Output {
 //         for comp in &self.complete {
 //             while comp.load(Ordering::Relaxed) == false {
 //                 // std::thread::yield_now();
@@ -1095,7 +1107,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //             .all(|comp| comp.load(Ordering::Relaxed))
 //     }
 
-//     fn set_waker(&mut self, waker: futures::task::Waker) {
+//     fn set_waker(&mut self, waker: futures_util::task::Waker) {
 //         self.complete.iter()
 // }
 
@@ -1105,14 +1117,14 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //     //#[tracing::instrument(skip_all)]
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         self.req
-//             .into_future()
+//
 //             .await
 //             .pop()
 //             .expect("should have a single request")
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
-//         self.req.get().pop().expect("should have a single request")
+//     fn blocking_wait(&self) -> Self::Output {
+//         self.req.blocking_wait().pop().expect("should have a single request")
 //     }
 
 //     fn ready(&self) -> bool {
@@ -1127,15 +1139,15 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         let mut res = vec![];
 //         for req in self.reqs.drain(..) {
-//             res.extend(req.into_future().await);
+//             res.extend(req.await);
 //         }
 //         res
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
+//     fn blocking_wait(&self) -> Self::Output {
 //         let mut res = vec![];
 //         for req in &self.reqs {
-//             res.extend(req.get());
+//             res.extend(req.blocking_wait());
 //         }
 //         // println!("res: {:?}",res);
 //         res
@@ -1199,7 +1211,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //         self.get_result()
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
+//     fn blocking_wait(&self) -> Self::Output {
 //         for comp in &self.complete {
 //             while comp.load(Ordering::Relaxed) == false {
 //                 // std::thread::yield_now();
@@ -1221,14 +1233,14 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //     //#[tracing::instrument(skip_all)]
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         self.req
-//             .into_future()
+//
 //             .await
 //             .pop()
 //             .expect("should have a single request")
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
-//         self.req.get().pop().expect("should have a single request")
+//     fn blocking_wait(&self) -> Self::Output {
+//         self.req.blocking_wait().pop().expect("should have a single request")
 //     }
 
 //     fn ready(&self) -> bool {
@@ -1244,15 +1256,15 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //         // println!("num_reqs: {}",self.reqs.len());
 //         let mut res = vec![];
 //         for req in self.reqs.drain(..) {
-//             res.extend(req.into_future().await);
+//             res.extend(req.await);
 //         }
 //         res
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
+//     fn blocking_wait(&self) -> Self::Output {
 //         let mut res = vec![];
 //         for req in &self.reqs {
-//             res.extend(req.get());
+//             res.extend(req.blocking_wait());
 //         }
 //         res
 //     }
@@ -1335,7 +1347,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
 //         self.get_result()
 //     }
 //     //#[tracing::instrument(skip_all)]
-//     fn get(&self) -> Self::Output {
+//     fn blocking_wait(&self) -> Self::Output {
 //         for comp in &self.complete {
 //             while comp.load(Ordering::Relaxed) == false {
 //                 // std::thread::yield_now();

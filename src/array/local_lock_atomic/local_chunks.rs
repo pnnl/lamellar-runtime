@@ -108,8 +108,10 @@ impl<T: Dist> LocalIterator for LocalLockLocalChunks<T> {
             //     start_i, end_i, self.index, self.end_index
             // );
             Some(LocalLockLocalData {
-                array: self.array.sub_array(start_i..end_i),
-                lock: self.lock.clone(),
+                array: self.array.clone(),
+                start_index: start_i,
+                end_index: end_i,
+                // lock: self.lock.clone(),
                 lock_guard: self.lock_guard.clone(),
             })
         } else {

@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use futures_util::stream::FuturesUnordered;
+use futures_util::StreamExt;
 
 pub(crate) struct ShmemBuilder {
     my_pe: usize,

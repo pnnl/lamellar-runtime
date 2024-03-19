@@ -1,16 +1,18 @@
 use crate::active_messaging::LamellarArcLocalAm;
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
-use crate::array::iterator::one_sided_iterator::OneSidedIterator;
-use crate::array::iterator::{private::*, IterRequest};
+use crate::array::iterator::private::*;
 use crate::array::{ArrayOps, Distribution, UnsafeArray};
 use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::Dist;
-
-use async_trait::async_trait;
+use futures_util::{ready, Future};
+use pin_project::pin_project;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
 pub struct Sum<I> {
@@ -33,6 +35,7 @@ where
     type AmOutput = I::Item;
     type Output = I::Item;
     type Item = I::Item;
+    type Handle = DistIterSumHandle<I::Item>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Sum {
             iter: self.iter.init(start, cnt),
@@ -50,9 +53,13 @@ where
     fn create_handle(
         self,
         team: Pin<Arc<LamellarTeamRT>>,
-        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn IterRequest<Output = Self::Output>> {
-        Box::new(RemoteIterSumHandle { reqs, team })
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle {
+        DistIterSumHandle {
+            reqs,
+            team,
+            state: State::ReqsPending(None),
+        }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -60,22 +67,32 @@ where
 }
 
 #[doc(hidden)]
-pub struct RemoteIterSumHandle<T> {
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = T>>>,
+#[pin_project]
+pub struct DistIterSumHandle<T> {
+    pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    state: State<T>,
 }
 
-impl<T> RemoteIterSumHandle<T>
+enum State<T> {
+    ReqsPending(Option<T>),
+    Summing(Pin<Box<dyn Future<Output = T>>>),
+}
+
+impl<T> DistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
-    async fn async_reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
+    async fn async_reduce_remote_vals(local_sum: T, team: Pin<Arc<LamellarTeamRT>>) -> T {
+        let local_sums =
+            UnsafeArray::<T>::async_new(&team, team.num_pes, Distribution::Block).await;
         unsafe {
             local_sums.local_as_mut_slice()[0] = local_sum;
         };
         local_sums.async_barrier().await;
-        let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
-        buffered_iter.into_iter().map(|&e| e).sum()
+        // let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
+        // buffered_iter.into_iter().map(|&e| e).sum()
+        unsafe { local_sums.sum().await }
     }
 
     fn reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
@@ -83,30 +100,83 @@ where
             local_sums.local_as_mut_slice()[0] = local_sum;
         };
         local_sums.tasking_barrier();
-        let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
-        buffered_iter.into_iter().map(|&e| e).sum()
+        // let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
+        // buffered_iter.into_iter().map(|&e| e).sum()
+        unsafe { local_sums.sum().blocking_wait() }
     }
 }
 
-#[doc(hidden)]
-#[async_trait]
-impl<T> IterRequest for RemoteIterSumHandle<T>
+impl<T> Future for DistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
     type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.team.async_barrier().await;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match &mut this.state {
+            State::ReqsPending(local_sum) => {
+                while let Some(mut req) = this.reqs.pop_front() {
+                    if !req.ready_or_set_waker(cx.waker()) {
+                        this.reqs.push_front(req);
+                        return Poll::Pending;
+                    }
+                    match local_sum {
+                        Some(sum) => {
+                            *sum = [*sum, req.val()].into_iter().sum();
+                        }
+                        None => {
+                            *local_sum = Some(req.val());
+                        }
+                    }
+                }
+                let mut sum = Box::pin(Self::async_reduce_remote_vals(
+                    local_sum.unwrap(),
+                    this.team.clone(),
+                ));
+                match Future::poll(sum.as_mut(), cx) {
+                    Poll::Ready(local_sum) => Poll::Ready(local_sum),
+                    Poll::Pending => {
+                        *this.state = State::Summing(sum);
+                        Poll::Pending
+                    }
+                }
+            }
+            State::Summing(sum) => {
+                let local_sum = ready!(Future::poll(sum.as_mut(), cx));
+                Poll::Ready(local_sum)
+            }
+        }
+    }
+}
+#[doc(hidden)]
+impl<T> LamellarRequest for DistIterSumHandle<T>
+where
+    T: Dist + ArrayOps + std::iter::Sum,
+{
+    fn blocking_wait(mut self) -> Self::Output {
         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
-        let local_sum = futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future()))
-            .await
+        let local_sum = self
+            .reqs
+            .drain(..)
+            .map(|req| req.blocking_wait())
             .into_iter()
             .sum();
-        self.async_reduce_remote_vals(local_sum, local_sums).await
+        self.reduce_remote_vals(local_sum, local_sums)
     }
-    fn wait(mut self: Box<Self>) -> Self::Output {
+
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        for req in self.reqs.iter_mut() {
+            if !req.ready_or_set_waker(waker) {
+                //only need to wait on the next unready req
+                return false;
+            }
+        }
+        true
+    }
+
+    fn val(&self) -> Self::Output {
         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
-        let local_sum = self.reqs.drain(..).map(|req| req.get()).into_iter().sum();
+        let local_sum = self.reqs.iter().map(|req| req.val()).into_iter().sum();
         self.reduce_remote_vals(local_sum, local_sums)
     }
 }

@@ -1,30 +1,31 @@
+use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
 use crate::active_messaging::*;
 use crate::lamellae::Des;
 use crate::lamellar_arch::LamellarArchRT;
+use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_request::*;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::MemRegionHandleInner;
 use crate::scheduler::{ReqId, Scheduler};
 use crate::Darc;
 
-use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
-
-use async_trait::async_trait;
-
 // use crossbeam::utils::CachePadded;
-use futures::Future;
-use futures::StreamExt;
+// use futures_util::StreamExt;
+
+use futures_util::{Future, StreamExt};
 use parking_lot::Mutex;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::task::Waker;
+use std::task::{Context, Poll, Waker};
 use std::time::Instant;
 
 #[derive(Debug)]
-pub(crate) struct TaskGroupRequestHandleInner {
+
+pub(crate) struct TaskGroupAmHandleInner {
     cnt: Arc<AtomicUsize>,
     data: Mutex<HashMap<usize, InternalResult>>, //<sub_id, result>
     wakers: Mutex<HashMap<usize, Waker>>,
@@ -36,19 +37,21 @@ pub(crate) struct TaskGroupRequestHandleInner {
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct TaskGroupRequestHandle<T: AmDist> {
-    inner: Arc<TaskGroupRequestHandleInner>,
+#[pin_project(PinnedDrop)]
+pub struct TaskGroupAmHandle<T: AmDist> {
+    inner: Arc<TaskGroupAmHandleInner>,
     sub_id: usize,
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: AmDist> Drop for TaskGroupRequestHandle<T> {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl<T: AmDist> PinnedDrop for TaskGroupAmHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
         self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
-impl LamellarRequestAddResult for TaskGroupRequestHandleInner {
+impl LamellarRequestAddResult for TaskGroupAmHandleInner {
     fn user_held(&self) -> bool {
         self.cnt.load(Ordering::SeqCst) > 0
     }
@@ -68,7 +71,7 @@ impl LamellarRequestAddResult for TaskGroupRequestHandleInner {
     }
 }
 
-impl<T: AmDist> TaskGroupRequestHandle<T> {
+impl<T: AmDist> TaskGroupAmHandle<T> {
     fn process_result(&self, data: InternalResult) -> T {
         match data {
             InternalResult::Local(x) => {
@@ -112,39 +115,71 @@ impl<T: AmDist> TaskGroupRequestHandle<T> {
     }
 }
 
-#[async_trait]
-impl<T: AmDist> LamellarRequest for TaskGroupRequestHandle<T> {
-    type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
+impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
+    fn blocking_wait(self) -> Self::Output {
         let mut res = self.inner.data.lock().remove(&self.sub_id);
         while res.is_none() {
-            async_std::task::yield_now().await;
-            res = self.inner.data.lock().remove(&self.sub_id);
-        }
-        self.process_result(res.expect("result should exist"))
-    }
-
-    fn get(&self) -> Self::Output {
-        let mut res = self.inner.data.lock().remove(&self.sub_id);
-        while res.is_none() {
-            // std::thread::yield_now();
             self.inner.scheduler.exec_task();
             res = self.inner.data.lock().remove(&self.sub_id);
         }
         self.process_result(res.expect("result should exist"))
     }
 
-    fn ready(&self) -> bool {
-        self.inner.data.lock().contains_key(&self.sub_id)
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        let data = self.inner.data.lock();
+        if data.contains_key(&self.sub_id) {
+            true
+        } else {
+            self.inner.wakers.lock().insert(self.sub_id, waker.clone());
+            self.inner
+                .wakers
+                .lock()
+                .entry(self.sub_id)
+                .and_modify(|w| {
+                    if !w.will_wake(waker) {
+                        println!("WARNING: overwriting waker {:?}", w);
+                        w.wake_by_ref();
+                    }
+                    w.clone_from(waker);
+                })
+                .or_insert(waker.clone());
+            false
+        }
     }
 
-    fn set_waker(&mut self, waker: std::task::Waker) {
-        self.inner.wakers.lock().insert(self.sub_id, waker);
+    fn val(&self) -> Self::Output {
+        let res = self
+            .inner
+            .data
+            .lock()
+            .remove(&self.sub_id)
+            .expect("result should exist");
+        self.process_result(res)
+    }
+}
+
+impl<T: AmDist> Future for TaskGroupAmHandle<T> {
+    type Output = T;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.as_mut();
+        if this.ready_or_set_waker(cx.waker()) {
+            Poll::Ready(
+                this.process_result(
+                    this.inner
+                        .data
+                        .lock()
+                        .remove(&this.sub_id)
+                        .expect("result should exist"),
+                ),
+            )
+        } else {
+            Poll::Pending
+        }
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct TaskGroupMultiRequestHandleInner {
+pub(crate) struct TaskGroupMultiAmHandleInner {
     cnt: Arc<AtomicUsize>,
     arch: Arc<LamellarArchRT>,
     data: Mutex<HashMap<usize, HashMap<usize, InternalResult>>>, //<sub_id, <pe, result>>
@@ -157,19 +192,21 @@ pub(crate) struct TaskGroupMultiRequestHandleInner {
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct TaskGroupMultiRequestHandle<T: AmDist> {
-    inner: Arc<TaskGroupMultiRequestHandleInner>,
+#[pin_project(PinnedDrop)]
+pub struct TaskGroupMultiAmHandle<T: AmDist> {
+    inner: Arc<TaskGroupMultiAmHandleInner>,
     sub_id: usize,
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T: AmDist> Drop for TaskGroupMultiRequestHandle<T> {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl<T: AmDist> PinnedDrop for TaskGroupMultiAmHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
         self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
-impl LamellarRequestAddResult for TaskGroupMultiRequestHandleInner {
+impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
     fn user_held(&self) -> bool {
         self.cnt.load(Ordering::SeqCst) > 0
     }
@@ -194,7 +231,7 @@ impl LamellarRequestAddResult for TaskGroupMultiRequestHandleInner {
     }
 }
 
-impl<T: AmDist> TaskGroupMultiRequestHandle<T> {
+impl<T: AmDist> TaskGroupMultiAmHandle<T> {
     fn process_result(&self, data: InternalResult) -> T {
         match data {
             InternalResult::Local(x) => {
@@ -238,12 +275,10 @@ impl<T: AmDist> TaskGroupMultiRequestHandle<T> {
     }
 }
 
-#[async_trait]
-impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
-    type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Vec<Self::Output> {
+impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
+    fn blocking_wait(self) -> Self::Output {
         while !self.inner.data.lock().contains_key(&self.sub_id) {
-            async_std::task::yield_now().await;
+            self.inner.scheduler.exec_task();
         }
         while self
             .inner
@@ -254,7 +289,7 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
             .len()
             < self.inner.arch.num_pes()
         {
-            async_std::task::yield_now().await;
+            self.inner.scheduler.exec_task();
         }
         let mut sub_id_map = self
             .inner
@@ -269,23 +304,29 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
         res
     }
 
-    fn get(&self) -> Vec<Self::Output> {
-        while !self.inner.data.lock().contains_key(&self.sub_id) {
-            self.inner.scheduler.exec_task();
-            // std::thread::yield_now();
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        let data = self.inner.data.lock();
+        if let Some(req) = data.get(&self.sub_id) {
+            req.len() == self.inner.arch.num_pes()
+        } else {
+            self.inner.wakers.lock().insert(self.sub_id, waker.clone());
+            self.inner
+                .wakers
+                .lock()
+                .entry(self.sub_id)
+                .and_modify(|w| {
+                    if !w.will_wake(waker) {
+                        println!("WARNING: overwriting waker {:?}", w);
+                        w.wake_by_ref();
+                    }
+                    w.clone_from(waker);
+                })
+                .or_insert(waker.clone());
+            false
         }
-        while self
-            .inner
-            .data
-            .lock()
-            .get(&self.sub_id)
-            .expect("req sub id should exist")
-            .len()
-            < self.inner.arch.num_pes()
-        {
-            self.inner.scheduler.exec_task();
-            // std::thread::yield_now();
-        }
+    }
+
+    fn val(&self) -> Self::Output {
         let mut sub_id_map = self
             .inner
             .data
@@ -300,93 +341,118 @@ impl<T: AmDist> LamellarMultiRequest for TaskGroupMultiRequestHandle<T> {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TaskGroupLocalRequestHandleInner {
-    cnt: Arc<AtomicUsize>,
-    data: Mutex<HashMap<usize, LamellarAny>>, //<sub_id, result>
-    wakers: Mutex<HashMap<usize, Waker>>,
-    team_outstanding_reqs: Arc<AtomicUsize>,
-    world_outstanding_reqs: Arc<AtomicUsize>,
-    tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
-    pub(crate) scheduler: Arc<Scheduler>,
+impl<T: AmDist> Future for TaskGroupMultiAmHandle<T> {
+    type Output = Vec<T>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.as_mut();
+        if this.ready_or_set_waker(cx.waker()) {
+            let mut sub_id_map = this
+                .inner
+                .data
+                .lock()
+                .remove(&this.sub_id)
+                .expect("req sub id should exist");
+            let mut res = Vec::new();
+            for pe in 0..sub_id_map.len() {
+                res.push(this.process_result(sub_id_map.remove(&pe).unwrap()));
+            }
+            Poll::Ready(res)
+        } else {
+            Poll::Pending
+        }
+    }
 }
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct TaskGroupLocalRequestHandle<T> {
-    inner: Arc<TaskGroupLocalRequestHandleInner>,
+#[pin_project(PinnedDrop)]
+pub struct TaskGroupLocalAmHandle<T> {
+    inner: Arc<TaskGroupAmHandleInner>,
     sub_id: usize,
     _phantom: std::marker::PhantomData<T>,
 }
 
-impl<T> Drop for TaskGroupLocalRequestHandle<T> {
-    fn drop(&mut self) {
+#[pinned_drop]
+impl<T> PinnedDrop for TaskGroupLocalAmHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
         self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
-impl LamellarRequestAddResult for TaskGroupLocalRequestHandleInner {
-    fn user_held(&self) -> bool {
-        self.cnt.load(Ordering::SeqCst) > 0
-    }
-    fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
+impl<T: 'static> TaskGroupLocalAmHandle<T> {
+    fn process_result(&self, data: InternalResult) -> T {
         match data {
-            InternalResult::Local(x) => self.data.lock().insert(sub_id, x),
-            InternalResult::Remote(_, _) => panic!("unexpected result type"),
-            InternalResult::Unit => self.data.lock().insert(sub_id, Box::new(()) as LamellarAny),
-        };
-        if let Some(waker) = self.wakers.lock().remove(&sub_id) {
-            waker.wake();
-        }
-    }
-    fn update_counters(&self) {
-        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
-        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
-            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        }
-    }
-}
-
-impl<T: 'static> TaskGroupLocalRequestHandle<T> {
-    fn process_result(&self, data: LamellarAny) -> T {
-        if let Ok(result) = data.downcast::<T>() {
-            *result
-        } else {
-            panic!("unexpected result type");
+            InternalResult::Local(x) => {
+                if let Ok(result) = x.downcast::<T>() {
+                    *result
+                } else {
+                    panic!("unexpected result type");
+                }
+            }
+            InternalResult::Remote(_result, _darcs) => {
+                panic!("unexpected remote result  of type within local am handle");
+            }
+            InternalResult::Unit => {
+                if let Ok(result) = (Box::new(()) as Box<dyn std::any::Any>).downcast::<T>() {
+                    *result
+                } else {
+                    panic!("unexpected unit result  of type ");
+                }
+            }
         }
     }
 }
 
-#[async_trait]
-impl<T: SyncSend + 'static> LamellarRequest for TaskGroupLocalRequestHandle<T> {
-    type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        let mut res = self.inner.data.lock().remove(&self.sub_id);
-        while res.is_none() {
-            async_std::task::yield_now().await;
-            res = self.inner.data.lock().remove(&self.sub_id);
-        }
-        self.process_result(res.unwrap())
-    }
-
-    fn get(&self) -> Self::Output {
+impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
+    fn blocking_wait(self) -> Self::Output {
         let mut res = self.inner.data.lock().remove(&self.sub_id);
         while res.is_none() {
             self.inner.scheduler.exec_task();
-            // std::thread::yield_now();
             res = self.inner.data.lock().remove(&self.sub_id);
         }
-        self.process_result(res.unwrap())
+        self.process_result(res.expect("result should exist"))
     }
 
-    fn ready(&self) -> bool {
-        self.inner.data.lock().contains_key(&self.sub_id)
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        let data = self.inner.data.lock();
+        if data.contains_key(&self.sub_id) {
+            true
+        } else {
+            //this can probably be optimized similar to set_waker of MultiAmHandle
+            // where we check if the waker already exists and if it wakes to same task
+            self.inner.wakers.lock().insert(self.sub_id, waker.clone());
+            false
+        }
     }
 
-    fn set_waker(&mut self, waker: futures::task::Waker) {
-        self.inner.wakers.lock().insert(self.sub_id, waker);
+    fn val(&self) -> Self::Output {
+        let res = self
+            .inner
+            .data
+            .lock()
+            .remove(&self.sub_id)
+            .expect("result should exist");
+        self.process_result(res)
+    }
+}
+
+impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
+    type Output = T;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.as_mut();
+        if this.ready_or_set_waker(cx.waker()) {
+            Poll::Ready(
+                this.process_result(
+                    this.inner
+                        .data
+                        .lock()
+                        .remove(&this.sub_id)
+                        .expect("result should exist"),
+                ),
+            )
+        } else {
+            Poll::Pending
+        }
     }
 }
 
@@ -448,9 +514,9 @@ pub struct LamellarTaskGroup {
     cnt: Arc<AtomicUsize>, // handle reference count, so that we don't need to worry about storing results if all handles are dropped
     pub(crate) counters: AMCounters,
     //these are cloned and returned to user for each request
-    req: Arc<TaskGroupRequestHandleInner>,
-    multi_req: Arc<TaskGroupMultiRequestHandleInner>,
-    local_req: Arc<TaskGroupLocalRequestHandleInner>,
+    req: Arc<TaskGroupAmHandleInner>,
+    multi_req: Arc<TaskGroupMultiAmHandleInner>,
+    local_req: Arc<TaskGroupAmHandleInner>,
     //these are cloned and passed to RT for each request (they wrap the above requests)
     rt_req: Arc<LamellarRequestResult>, //for exec_pe requests
     rt_multi_req: Arc<LamellarRequestResult>, //for exec_all requests
@@ -458,6 +524,10 @@ pub struct LamellarTaskGroup {
 }
 
 impl ActiveMessaging for LamellarTaskGroup {
+    type SinglePeAmHandle<R: AmDist> = TaskGroupAmHandle<R>;
+    type MultiAmHandle<R: AmDist> = TaskGroupMultiAmHandle<R>;
+    type LocalAmHandle<L> = TaskGroupLocalAmHandle<L>;
+
     //#[tracing::instrument(skip_all)]
     fn wait_all(&self) {
         self.wait_all();
@@ -473,28 +543,28 @@ impl ActiveMessaging for LamellarTaskGroup {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
-        self.exec_am_all_inner(am).into_future()
+        self.exec_am_all_inner(am)
     }
 
     //#[tracing::instrument(skip_all)]
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        self.exec_am_pe_inner(pe, am).into_future()
+        self.exec_am_pe_inner(pe, am)
     }
 
     //#[tracing::instrument(skip_all)]
-    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
-        self.exec_am_local_inner(am).into_future()
+        self.exec_am_local_inner(am)
     }
 
     fn block_on<F>(&self, f: F) -> F::Output
@@ -522,7 +592,7 @@ impl LamellarTaskGroup {
         let team = team.into().team.clone();
         let counters = AMCounters::new();
         let cnt = Arc::new(AtomicUsize::new(1)); //this lamellarTaskGroup instance represents 1 handle (even though we maintain a single and multi req handle)
-        let req = Arc::new(TaskGroupRequestHandleInner {
+        let req = Arc::new(TaskGroupAmHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
             wakers: Mutex::new(HashMap::new()),
@@ -531,8 +601,8 @@ impl LamellarTaskGroup {
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
             scheduler: team.scheduler.clone(),
         });
-        let rt_req = Arc::new(LamellarRequestResult { req: req.clone() });
-        let multi_req = Arc::new(TaskGroupMultiRequestHandleInner {
+        let rt_req = Arc::new(LamellarRequestResult::TgAm(req.clone()));
+        let multi_req = Arc::new(TaskGroupMultiAmHandleInner {
             cnt: cnt.clone(),
             arch: team.arch.clone(),
             data: Mutex::new(HashMap::new()),
@@ -542,10 +612,8 @@ impl LamellarTaskGroup {
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
             scheduler: team.scheduler.clone(),
         });
-        let rt_multi_req = Arc::new(LamellarRequestResult {
-            req: multi_req.clone(),
-        });
-        let local_req = Arc::new(TaskGroupLocalRequestHandleInner {
+        let rt_multi_req = Arc::new(LamellarRequestResult::TgMultiAm(multi_req.clone()));
+        let local_req = Arc::new(TaskGroupAmHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
             wakers: Mutex::new(HashMap::new()),
@@ -554,9 +622,7 @@ impl LamellarTaskGroup {
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
             scheduler: team.scheduler.clone(),
         });
-        let rt_local_req = Arc::new(LamellarRequestResult {
-            req: local_req.clone(),
-        });
+        let rt_local_req = Arc::new(LamellarRequestResult::TgAm(local_req.clone()));
         LamellarTaskGroup {
             team: team.clone(),
             id: Arc::as_ptr(&rt_req) as usize,
@@ -615,10 +681,7 @@ impl LamellarTaskGroup {
         }
     }
 
-    pub(crate) fn exec_am_all_inner<F>(
-        &self,
-        am: F,
-    ) -> Box<dyn LamellarMultiRequest<Output = F::Output>>
+    pub(crate) fn exec_am_all_inner<F>(&self, am: F) -> TaskGroupMultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -655,18 +718,14 @@ impl LamellarTaskGroup {
         };
         // println!("[{:?}] task group am all", std::thread::current().id());
         self.team.scheduler.submit_am(Am::All(req_data, func));
-        Box::new(TaskGroupMultiRequestHandle {
+        TaskGroupMultiAmHandle {
             inner: self.multi_req.clone(),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
-        })
+        }
     }
 
-    pub(crate) fn exec_am_pe_inner<F>(
-        &self,
-        pe: usize,
-        am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>>
+    pub(crate) fn exec_am_pe_inner<F>(&self, pe: usize, am: F) -> TaskGroupAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -699,17 +758,14 @@ impl LamellarTaskGroup {
         };
         // println!("[{:?}] task group am pe", std::thread::current().id());
         self.team.scheduler.submit_am(Am::Remote(req_data, func));
-        Box::new(TaskGroupRequestHandle {
+        TaskGroupAmHandle {
             inner: self.req.clone(),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
-        })
+        }
     }
 
-    pub(crate) fn exec_am_local_inner<F>(
-        &self,
-        am: F,
-    ) -> Box<dyn LamellarRequest<Output = F::Output>>
+    pub(crate) fn exec_am_local_inner<F>(&self, am: F) -> TaskGroupLocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
@@ -719,7 +775,7 @@ impl LamellarTaskGroup {
     pub(crate) fn exec_arc_am_local_inner<O: SyncSend + 'static>(
         &self,
         func: LamellarArcLocalAm,
-    ) -> Box<dyn LamellarRequest<Output = O>> {
+    ) -> TaskGroupLocalAmHandle<O> {
         // println!("task group exec am local");
         self.team.team_counters.add_send_req(1);
         self.team.world_counters.add_send_req(1);
@@ -748,11 +804,16 @@ impl LamellarTaskGroup {
         };
         // println!("[{:?}] task group am local", std::thread::current().id());
         self.team.scheduler.submit_am(Am::Local(req_data, func));
-        Box::new(TaskGroupLocalRequestHandle {
+        // Box::new(TaskGroupLocalAmHandle {
+        //     inner: self.local_req.clone(),
+        //     sub_id: req_id.sub_id,
+        //     _phantom: PhantomData,
+        // })
+        TaskGroupLocalAmHandle {
             inner: self.local_req.clone(),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
-        })
+        }
     }
 }
 
@@ -866,7 +927,7 @@ impl LamellarActiveMessage for AmGroupAm {
                         __lamellar_team.clone(),
                     )
                 })
-                .collect::<futures::stream::FuturesOrdered<_>>()
+                .collect::<futures_util::stream::FuturesOrdered<_>>()
                 .collect::<Vec<_>>()
                 .await;
             // for am in self.ams[self.si..self.ei].iter() {
@@ -1225,15 +1286,14 @@ impl AmGroup {
                         if *pe == self.team.num_pes {
                             reqs_all.push(
                                 self.team
-                                    .exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am), None)
-                                    .into_future(),
+                                    .exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am), None),
                             );
                         } else {
-                            reqs.push(
-                                self.team
-                                    .exec_arc_am_pe::<Vec<Vec<u8>>>(*pe, Arc::new(tg_am), None)
-                                    .into_future(),
-                            );
+                            reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(
+                                *pe,
+                                Arc::new(tg_am),
+                                None,
+                            ));
                         }
                         send = false;
                         start_i = i;
@@ -1250,15 +1310,14 @@ impl AmGroup {
                     if *pe == self.team.num_pes {
                         reqs_all.push(
                             self.team
-                                .exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am), None)
-                                .into_future(),
+                                .exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am), None),
                         );
                     } else {
-                        reqs.push(
-                            self.team
-                                .exec_arc_am_pe::<Vec<Vec<u8>>>(*pe, Arc::new(tg_am), None)
-                                .into_future(),
-                        );
+                        reqs.push(self.team.exec_arc_am_pe::<Vec<Vec<u8>>>(
+                            *pe,
+                            Arc::new(tg_am),
+                            None,
+                        ));
                     }
                 }
             } else {
@@ -1271,14 +1330,12 @@ impl AmGroup {
                 if *pe == self.team.num_pes {
                     reqs_all.push(
                         self.team
-                            .exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am), None)
-                            .into_future(),
+                            .exec_arc_am_all::<Vec<Vec<u8>>>(Arc::new(tg_am), None),
                     );
                 } else {
                     reqs.push(
                         self.team
-                            .exec_arc_am_pe::<Vec<Vec<u8>>>(*pe, Arc::new(tg_am), None)
-                            .into_future(),
+                            .exec_arc_am_pe::<Vec<Vec<u8>>>(*pe, Arc::new(tg_am), None),
                     );
                 }
             }
@@ -1291,8 +1348,8 @@ impl AmGroup {
         //     reqs.len(),
         //     reqs_all.len()
         // );
-        futures::future::join_all(reqs).await;
-        futures::future::join_all(reqs_all).await;
+        futures_util::future::join_all(reqs).await;
+        futures_util::future::join_all(reqs_all).await;
         // if let Some(req) = all_req{
         //     req.await;
         // }
@@ -1474,16 +1531,16 @@ impl<'a, T> Iterator for TypedAmGroupResultIter<'a, T> {
 /// This enum is used to specify the type of AmGroup request
 pub enum BaseAmGroupReq<T> {
     /// This request will execute on a single PE  and return the unit value
-    SinglePeUnit(std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send>>),
+    SinglePeUnit(AmHandle<T>),
     /// This request will return a single value of type T from a single PE
-    SinglePeVal(std::pin::Pin<Box<dyn std::future::Future<Output = Vec<T>> + Send>>),
+    SinglePeVal(AmHandle<Vec<T>>),
     /// This request will execute on all PEs and return a vec of unit values
-    AllPeUnit(std::pin::Pin<Box<dyn std::future::Future<Output = Vec<T>> + Send>>),
+    AllPeUnit(MultiAmHandle<T>),
     /// This request will execute on all PEs and return a vec of values of type T for each PE
-    AllPeVal(std::pin::Pin<Box<dyn std::future::Future<Output = Vec<Vec<T>>> + Send>>),
+    AllPeVal(MultiAmHandle<Vec<T>>),
 }
 
-impl<T> BaseAmGroupReq<T> {
+impl<T: AmDist> BaseAmGroupReq<T> {
     async fn into_result(self) -> BaseAmGroupResult<T> {
         match self {
             BaseAmGroupReq::SinglePeUnit(reqs) => BaseAmGroupResult::SinglePeUnit(reqs.await),
@@ -1523,7 +1580,7 @@ pub struct TypedAmGroupBatchResult<T> {
     reqs: BaseAmGroupResult<T>,
 }
 
-impl<T> TypedAmGroupBatchReq<T> {
+impl<T: AmDist> TypedAmGroupBatchReq<T> {
     /// Create a new TypedAmGroupBatchReq for PE with the assoicated IDs and individual Requests
     pub fn new(pe: usize, ids: Vec<usize>, reqs: BaseAmGroupReq<T>) -> Self {
         Self { pe, ids, reqs }

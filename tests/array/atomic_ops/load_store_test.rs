@@ -79,7 +79,7 @@ macro_rules! load_store_test{
                 let val = val;
                 check_val!($array,val,check_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",idx,val,check_val);
+                    eprintln!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
 
@@ -113,7 +113,7 @@ macro_rules! load_store_test{
                 let val = val;
                 check_val!($array,val,check_val,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",idx,val,check_val);
+                    eprintln!("{:?} {:?} {:?}",idx,val,check_val);
                 }
             }
 
@@ -149,7 +149,7 @@ macro_rules! load_store_test{
                     let val = val;
                 check_val!($array,val,check_val,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",idx,val,check_val);
+                        eprintln!("{:?} {:?} {:?}",idx,val,check_val);
                     }
                 }
 

@@ -11,11 +11,10 @@ use crate::scheduler::{create_scheduler, ExecutorType};
 
 //use tracing::*;
 
-use futures::Future;
+use futures_util::Future;
 use parking_lot::RwLock;
 use pin_weak::sync::PinWeak;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -44,15 +43,18 @@ pub struct LamellarWorld {
 }
 
 impl ActiveMessaging for LamellarWorld {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
     //#[tracing::instrument(skip_all)]
-    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
     //#[tracing::instrument(skip_all)]
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -60,7 +62,7 @@ impl ActiveMessaging for LamellarWorld {
         self.team.exec_am_pe(pe, am)
     }
     //#[tracing::instrument(skip_all)]
-    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {

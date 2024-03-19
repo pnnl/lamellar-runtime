@@ -9,7 +9,7 @@ use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
 
 use core::marker::PhantomData;
-use futures::Future;
+use futures_util::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -31,7 +31,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -44,7 +44,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    ) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -62,7 +62,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -76,7 +76,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    ) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -95,7 +95,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    fn reduce<I, F>(&self, iter: &I, op: F) -> LocalIterReduceHandle<I::Item, F>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
@@ -109,7 +109,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    ) -> LocalIterReduceHandle<I::Item, F>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
@@ -128,38 +128,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    // fn reduce_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
-    // where
-    //     I: LocalIterator + 'static,
-    //     I::Item: SyncSend,
-    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static
-    // {
-    //     self.reduce_async_with_schedule(Schedule::Static, iter, op)
-    // }
-
-    // fn reduce_async_with_schedule<I, F, Fut>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
-    // where
-    //     I: LocalIterator + 'static,
-    //     I::Item: SyncSend,
-    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static,
-    // {
-    //     let reduce = ReduceAsync{
-    //         iter: iter.clone(),
-    //         op,
-    //         _phantom: PhantomData,
-    //     };
-    //     match sched {
-    //         Schedule::Static => self.sched_static(reduce ),
-    //         Schedule::Dynamic => self.sched_dynamic(reduce),
-    //         Schedule::Chunk(size) => self.sched_chunk(reduce, size),
-    //         Schedule::Guided => self.sched_guided(reduce),
-    //         Schedule::WorkStealing => self.sched_work_stealing(reduce),
-    //     }
-    // }
-
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> LocalIterCollectHandle<I::Item, A>
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -173,7 +142,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    ) -> LocalIterCollectHandle<I::Item, A>
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -193,49 +162,14 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    // fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I:  LocalIterator + 'static,
-    //    I::Item: Future<Output = B> + Send  + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
-    // {
-    //     self.collect_async_with_schedule(Schedule::Static,iter,d)
-    // }
-
-    // fn collect_async_with_schedule<I, A, B>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I:  LocalIterator + 'static,
-    //    I::Item: Future<Output = B> + Send  + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
-    // {
-    //     let collect = CollectAsync{
-    //         iter: iter.clone(),
-    //         distribution: d,
-    //         _phantom: PhantomData,
-    //     };
-    //     match sched {
-    //         Schedule::Static => self.sched_static(collect ),
-    //         Schedule::Dynamic => self.sched_dynamic(collect),
-    //         Schedule::Chunk(size) => self.sched_chunk(collect, size),
-    //         Schedule::Guided => self.sched_guided(collect),
-    //         Schedule::WorkStealing => self.sched_work_stealing(collect),
-    //     }
-    // }
-
-    fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    fn count<I>(&self, iter: &I) -> LocalIterCountHandle
     where
         I: LocalIterator + 'static,
     {
         self.count_with_schedule(Schedule::Static, iter)
     }
 
-    fn count_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> LocalIterCountHandle
     where
         I: LocalIterator + 'static,
     {
@@ -251,7 +185,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum<I>(&self, iter: &I) -> LocalIterSumHandle<I::Item>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum,
@@ -259,11 +193,7 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
         self.sum_with_schedule(Schedule::Static, iter)
     }
 
-    fn sum_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> LocalIterSumHandle<I::Item>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum,

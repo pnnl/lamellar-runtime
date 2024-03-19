@@ -18,39 +18,34 @@ rofisys = { version ="0.3", optional = true }
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
+serde_with = "3.0.0"
 bincode = "1.3.3"
 anyhow = "1.0.66"
-futures = "0.3.25"
-futures-lite= "1.12.0"
+futures-util = "0.3.30"
+pin-project = "1.1.4"
+pin-weak = "1.1.0"
 lazy_static = "1.4.0"
 crossbeam = "0.8.2"
 rand = "0.8.5"
 parking_lot = {version = "0.12.1", features = ["arc_lock", "send_guard", "serde"] }
 indexmap = "1.9.1" #lamellar_alloc
 core_affinity = "0.5.10"
-#log = "0.4.19"
-#simple_logger = "4.0.0"
 async-task = "4.3.0"
 async-trait = "0.1.58"
 async-std = "1.12.0"
 async-recursion = "1.0.0"
-libc = { version = "0.2.137", optional = true }
+async-lock = "2.8.0"
 enum_dispatch = "0.3.8"
 memoffset = "0.7.1"
 shared_memory = "0.12.4"
-#raw_sync = "0.1.5"
 paste = "1.0.9"
 newtype_derive = "0.1.6"
 custom_derive = "0.1.7"
 glob = "0.3.0"
 thread_local = "1.1.4"
-pin-project = "1.1.4"
-#enum-as-inner = "0.5.1"
-#itertools = "0.10.5"
-serde_with = "3.0.0"
-pin-weak = "1.1.0"
-async-lock = "2.8.0"
 tokio = { version = "1.35.1", features = ["full"] , optional = true}
+libc = { version = "0.2.137", optional = true }
+
 
 
 [dev-dependencies]

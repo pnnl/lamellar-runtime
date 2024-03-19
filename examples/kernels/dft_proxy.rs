@@ -1,5 +1,5 @@
-// use futures::FutureExt;
-use futures::StreamExt;
+// use futures_util::FutureExt;
+use futures_util::StreamExt;
 use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
@@ -187,7 +187,7 @@ fn dft_lamellar_am_group(
 
     let timer = Instant::now();
 
-    let mut pe_groups = futures::stream::FuturesOrdered::new();
+    let mut pe_groups = futures_util::stream::FuturesOrdered::new();
     for pe in 0..num_pes {
         let mut local_sum_group = typed_am_group!(LocalSumAM2, world);
         for k in 0..local_len {
@@ -246,7 +246,7 @@ fn dft_lamellar_am_group_static(
 
     let timer = Instant::now();
 
-    let mut pe_groups = futures::stream::FuturesOrdered::new();
+    let mut pe_groups = futures_util::stream::FuturesOrdered::new();
     for pe in 0..num_pes {
         let mut local_sum_group = typed_am_group!(LocalSumAM2Static, world);
         for k in 0..local_len {
@@ -773,7 +773,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().get(),
+            //         full_spectrum_array.sum().blocking_wait(),
             //         time
             //     );
             // }
@@ -794,7 +794,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().get(),
+            //         full_spectrum_array.sum().blocking_wait(),
             //         time
             //     );
             // }
@@ -842,7 +842,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().get(),
+            //         full_spectrum_array.sum().blocking_wait(),
             //         time
             //     );
             // }

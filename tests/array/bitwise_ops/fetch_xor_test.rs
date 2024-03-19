@@ -74,7 +74,7 @@ macro_rules! fetch_xor_test{
             for (req,idx) in reqs{
                 let val =  world.block_on(req);
                 if (val & my_val) != 0 {
-                    println!("{:?} {:x} {:x} ",idx,my_val,val);
+                    eprintln!("{:?} {:x} {:x} ",idx,my_val,val);
                     success = false;
                 }
             }
@@ -87,7 +87,7 @@ macro_rules! fetch_xor_test{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                 }
             }
             array.barrier();
@@ -111,7 +111,7 @@ macro_rules! fetch_xor_test{
             for (req,idx)  in reqs{
                 let val =  world.block_on(req);
                 if (val & my_val) != 0 {
-                    println!("{:?} {:x} {:x} ",idx,my_val,val);
+                    eprintln!("{:?} {:x} {:x} ",idx,my_val,val);
                     success = false;
                 }
             }
@@ -124,7 +124,7 @@ macro_rules! fetch_xor_test{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                 }
             }
             sub_array.barrier();
@@ -149,7 +149,7 @@ macro_rules! fetch_xor_test{
                 for (req,idx)  in reqs{
                     let val =  world.block_on(req);
                     if (val & my_val) != 0 {
-                        println!("{:?} {:x} {:x} ",idx,my_val,val);
+                        eprintln!("{:?} {:x} {:x} ",idx,my_val,val);
                         success = false;
                     }
                 }
@@ -162,7 +162,7 @@ macro_rules! fetch_xor_test{
                     let val = *elem;
                     check_val!($array,val,final_val,success);
                     if !success{
-                        println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                        eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                     }
                 }
                 sub_array.barrier();

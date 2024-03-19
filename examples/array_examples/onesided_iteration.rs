@@ -28,18 +28,19 @@ fn main() {
     // we do not currently provide a mutable one sided iterator.
 
     if my_pe == 0 {
+        println!("Here");
         for elem in block_array.onesided_iter().into_iter() {
             //we can convert from a oneside iterator into a rust iterator
             print!("{:?} ", elem);
         }
         println!("");
-
+        println!("Here2");
         for elem in cyclic_array.onesided_iter().into_iter() {
             print!("{:?} ", elem);
         }
         println!("");
     }
-
+    println!("Here3");
     println!("--------------------------------------------------------");
 
     // The lamellar array iterator used above is lazy, meaning that it only accesses and returns a value as its used,

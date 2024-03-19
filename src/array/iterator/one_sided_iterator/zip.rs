@@ -6,14 +6,14 @@ use crate::array::iterator::one_sided_iterator::{private::*, *};
 use pin_project::pin_project;
 
 // struct ZipBufferedReq {
-//     reqs: Vec<Box<dyn LamellarArrayRequest<Output = ()>>>,
+//     reqs: Vec<ArrayRdmaHandle>,
 // }
 
 // impl LamellarArrayRequest for ZipBufferedReq {
 //     type Output = ();
 //     async fn into_future(mut self: Box<Self>) -> Self::Output {
 //         for req in self.reqs.drain(0..) {
-//             req.into_future().await;
+//             req.await;
 //         }
 //         ()
 //     }
@@ -176,7 +176,7 @@ where
     // fn buffered_next(
     //     &mut self,
     //     mem_region: OneSidedMemoryRegion<u8>,
-    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    // ) -> Option<ArrayRdmaHandle> {
     //     let a_sub_region = mem_region.sub_region(0..self.a.item_size());
     //     let mut reqs = vec![];
     //     reqs.push(self.a.buffered_next(a_sub_region)?);

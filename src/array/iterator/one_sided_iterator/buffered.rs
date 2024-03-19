@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::ops::Deref;
 
 use async_trait::async_trait;
-// use futures::Future;
+// use futures_util::Future;
 use pin_project::pin_project;
 #[pin_project]
 pub struct Buffered<I>
@@ -17,13 +17,7 @@ where
     index: usize,
     buf_index: usize,
     buf_size: usize,
-    reqs: VecDeque<
-        Option<(
-            usize,
-            Box<dyn LamellarArrayRequest<Output = ()>>,
-            OneSidedMemoryRegion<u8>,
-        )>,
-    >,
+    reqs: VecDeque<Option<(usize, ArrayRdmaHandle, OneSidedMemoryRegion<u8>)>>,
     state: BufferedState,
 }
 
@@ -139,10 +133,7 @@ where
         self.iter.item_size()
     }
     //im not actually sure what to do if another buffered iter is called after this one
-    fn buffered_next(
-        &mut self,
-        mem_region: OneSidedMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    fn buffered_next(&mut self, mem_region: OneSidedMemoryRegion<u8>) -> Option<ArrayRdmaHandle> {
         self.iter.buffered_next(mem_region)
     }
 
@@ -165,8 +156,8 @@ where
 //     }
 // }
 
-// use futures::task::{Context, Poll};
-// use futures::Stream;
+// use futures_util::task::{Context, Poll};
+// use futures_util::Stream;
 // use std::pin::Pin;
 
 // impl<I> Stream for Buffered<I>

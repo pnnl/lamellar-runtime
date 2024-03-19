@@ -5,13 +5,16 @@ use crate::scheduler::{LamellarExecutor, SchedulerStatus};
 use async_task::{Builder, Runnable};
 use core_affinity::CoreId;
 use crossbeam::deque::Worker;
-use futures::Future;
-use futures_lite::FutureExt;
+use futures_util::Future;
 use rand::prelude::*;
 use std::panic;
+use std::pin::Pin;
 use std::process;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use std::sync::Arc; //, Weak};
+use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
+//, Weak};
 use std::thread;
 
 static TASK_ID: AtomicUsize = AtomicUsize::new(0);
@@ -160,22 +163,22 @@ impl LamellarExecutor for WorkStealing {
         // });
     }
 
-    fn block_on<F: Future>(&self, task: F) -> F::Output {
+    fn block_on<F: Future>(&self, fut: F) -> F::Output {
         // trace_span!("block_on").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, mut task) = unsafe {
             Builder::new()
                 .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-                .spawn_unchecked(move |_task_id| async move { task.await }, schedule)
+                .spawn_unchecked(move |_task_id| async move { fut.await }, schedule)
         };
         let waker = runnable.waker();
         runnable.run(); //try to run immediately
         while !task.is_finished() {
             self.exec_task(); //try to execute another task while this one is not ready
         }
-        let cx = &mut async_std::task::Context::from_waker(&waker);
-        if let async_std::task::Poll::Ready(output) = task.poll(cx) {
+        let cx = &mut Context::from_waker(&waker);
+        if let Poll::Ready(output) = Pin::new(&mut task).poll(cx) {
             output
         } else {
             println!(

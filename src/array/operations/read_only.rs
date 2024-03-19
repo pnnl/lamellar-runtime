@@ -27,7 +27,7 @@ use crate::array::*;
 /// # Examples
 ///```
 /// use lamellar::array::prelude::*;
-/// use futures::future::join_all;
+/// use futures_util::future::join_all;
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);

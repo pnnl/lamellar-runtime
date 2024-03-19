@@ -113,7 +113,7 @@ macro_rules! fetch_rem_test{
                 for req in reqs{
                     let val =  world.block_on(req) as u128;
                     if ! insert_prev!($array,val,prevs){
-                        println!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
+                        eprintln!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
                         success = false;
                         break;
                     }
@@ -127,7 +127,7 @@ macro_rules! fetch_rem_test{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,one);
+                    eprintln!("{:?} {:?} {:?}",i,val,one);
                     break;
                 }
             }
@@ -152,7 +152,7 @@ macro_rules! fetch_rem_test{
                 for req in reqs{
                     let val =  world.block_on(req) as u128;
                     if ! insert_prev!($array,val,prevs){
-                        println!("half 1: {:?} {:?}",val,prevs);
+                        eprintln!("half 1: {:?} {:?}",val,prevs);
                         success = false;
                         break;
                     }
@@ -165,7 +165,7 @@ macro_rules! fetch_rem_test{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,one);
+                    eprintln!("{:?} {:?} {:?}",i,val,one);
                     break;
                 }
             }
@@ -190,7 +190,7 @@ macro_rules! fetch_rem_test{
                     for req in reqs{
                         let val =  world.block_on(req) as u128;
                         if ! insert_prev!($array,val,prevs){
-                            println!("pe 1: {:?} {:?}",val,prevs);
+                            eprintln!("pe 1: {:?} {:?}",val,prevs);
                             success = false;
                             break;
                         }
@@ -203,7 +203,7 @@ macro_rules! fetch_rem_test{
                     let val = *elem;
                     check_val!($array,val,one,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",i,val,one);
+                        eprintln!("{:?} {:?} {:?}",i,val,one);
                         break;
                     }
                 }

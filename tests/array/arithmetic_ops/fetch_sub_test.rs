@@ -109,7 +109,7 @@ macro_rules! fetch_sub_test{
                 for req in reqs{
                     let val =  world.block_on(req) as u128;
                     if ! insert_prev!($array,val,prevs){
-                        println!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
+                        eprintln!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
                         success = false;
                         break;
                     }
@@ -121,7 +121,7 @@ macro_rules! fetch_sub_test{
                 let val = *elem;
                 check_val!($array,val,zero,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
             array.barrier();
@@ -148,7 +148,7 @@ macro_rules! fetch_sub_test{
             let calced_sum = tot_updates as usize  * (array.len()-1);
             check_val!($array,sum,calced_sum,success);
             if !success{
-                println!("{:?} {:?} {:?}",sum,calced_sum,(array.len()-1));
+                eprintln!("{:?} {:?} {:?}",sum,calced_sum,(array.len()-1));
             }
             world.wait_all();
             world.barrier();
@@ -172,7 +172,7 @@ macro_rules! fetch_sub_test{
                 for req in reqs{
                     let val =  world.block_on(req) as u128;
                     if ! insert_prev!($array,val,prevs){
-                        println!("half 1: {:?} {:?}",val,prevs);
+                        eprintln!("half 1: {:?} {:?}",val,prevs);
                         success = false;
                         break;
                     }
@@ -184,7 +184,7 @@ macro_rules! fetch_sub_test{
                 let val = *elem;
                 check_val!($array,val,zero,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("{:?} {:?} {:?}",i,val,max_val);
                 }
             }
             sub_array.barrier();
@@ -209,7 +209,7 @@ macro_rules! fetch_sub_test{
             let calced_sum = tot_updates as usize  * (sub_array.len()-1);
             check_val!($array,sum,calced_sum,success);
             if !success{
-                println!("{:?} {:?} {:?}",sum,calced_sum,(sub_array.len()-1));
+                eprintln!("{:?} {:?} {:?}",sum,calced_sum,(sub_array.len()-1));
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -234,7 +234,7 @@ macro_rules! fetch_sub_test{
                     for req in reqs{
                         let val =  world.block_on(req) as u128;
                         if ! insert_prev!($array,val,prevs){
-                            println!("pe 1: {:?} {:?}",val,prevs);
+                            eprintln!("pe 1: {:?} {:?}",val,prevs);
                             success = false;
                             break;
                         }
@@ -246,7 +246,7 @@ macro_rules! fetch_sub_test{
                     let val = *elem;
                     check_val!($array,val,zero,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",i,val,max_val);
+                        eprintln!("{:?} {:?} {:?}",i,val,max_val);
                     }
                 }
                 sub_array.barrier();
@@ -271,7 +271,7 @@ macro_rules! fetch_sub_test{
                 let calced_sum = tot_updates as usize  * (sub_array.len()-1);
                 check_val!($array,sum,calced_sum,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",sum,calced_sum,(sub_array.len()-1));
+                    eprintln!("{:?} {:?} {:?}",sum,calced_sum,(sub_array.len()-1));
                 }
                 sub_array.wait_all();
                 sub_array.barrier();

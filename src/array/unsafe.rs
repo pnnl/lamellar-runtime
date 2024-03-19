@@ -13,7 +13,9 @@ use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::LamellarTaskGroup;
+
 use core::marker::PhantomData;
+use futures_util::{future, StreamExt};
 use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -204,7 +206,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         // array.inner.data.print();
     }
 
-    async fn async_new<U: Into<IntoLamellarTeam>>(
+    pub(crate) async fn async_new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
@@ -705,7 +707,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (local_vals, distribution) = input;
@@ -724,14 +726,16 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
         unsafe {
             local_sizes
                 .buffered_onesided_iter(team.num_pes)
-                .into_iter()
+                .into_stream()
                 .enumerate()
                 .for_each(|(i, local_size)| {
                     size += local_size;
                     if i < my_pe {
                         my_start += local_size;
                     }
-                });
+                    future::ready(())
+                })
+                .await;
         }
         let array = UnsafeArray::<T>::async_new(team.clone(), size, distribution).await;
         if local_vals.len() > 0 {
@@ -1095,11 +1099,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(byte_array, self.inner.data.team.num_pes())
     }
-    pub(crate) fn reduce_data(
-        &self,
-        op: &str,
-        byte_array: LamellarByteArray,
-    ) -> Box<dyn LamellarRequest<Output = T>> {
+    pub(crate) fn reduce_data(&self, op: &str, byte_array: LamellarByteArray) -> AmHandle<T> {
         let func = self.get_reduction_op(op, byte_array);
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
             self.inner.data.team.exec_arc_am_pe::<T>(
@@ -1152,8 +1152,8 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
-    pub unsafe fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.reduce_data(op, self.clone().into()).into_future()
+    pub unsafe fn reduce(&self, op: &str) -> AmHandle<T> {
+        self.reduce_data(op, self.clone().into())
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1188,7 +1188,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let sum = array.block_on(unsafe{array.sum()}); //Safe in this instance as we have ensured no updates are currently happening
     /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
-    pub unsafe fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub unsafe fn sum(&self) -> AmHandle<T> {
         self.reduce("sum")
     }
 
@@ -1225,7 +1225,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let prod =  array.block_on(array.prod());
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
-    pub unsafe fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub unsafe fn prod(&self) -> AmHandle<T> {
         self.reduce("prod")
     }
 
@@ -1256,7 +1256,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let max = array.block_on(max_req);
     /// assert_eq!((array.len()-1)*2,max);
     ///```
-    pub unsafe fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub unsafe fn max(&self) -> AmHandle<T> {
         self.reduce("max")
     }
 
@@ -1287,7 +1287,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let min = array.block_on(min_req);
     /// assert_eq!(0,min);
     ///```
-    pub unsafe fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub unsafe fn min(&self) -> AmHandle<T> {
         self.reduce("min")
     }
 }

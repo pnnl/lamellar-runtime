@@ -1,7 +1,8 @@
+use std::collections::VecDeque;
+
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::*;
 use crate::array::*;
-use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{
     AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
 };
@@ -14,7 +15,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //relative to inner
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()>>> {
+    ) -> VecDeque<AmHandle<()>> {
         let global_index = index + self.inner.offset;
         // let buf = buf.team_into(&self.inner.data.team);
         let buf = buf.into();
@@ -36,7 +37,7 @@ impl<T: Dist> UnsafeArray<T> {
         let mut dist_index = global_index;
         // let mut subarray_index = index;
         let mut buf_index = 0;
-        let mut reqs = vec![];
+        let mut reqs = VecDeque::new();
         for pe in start_pe..=end_pe {
             let num_elems_on_pe = (self.inner.orig_elem_per_pe * (pe + 1) as f64).round() as usize
                 - (self.inner.orig_elem_per_pe * pe as f64).round() as usize;
@@ -87,7 +88,7 @@ impl<T: Dist> UnsafeArray<T> {
                                 },
                                 pe: self.inner.data.my_pe,
                             };
-                            reqs.push(self.exec_am_pe(pe, am));
+                            reqs.push_back(self.exec_am_pe(pe, am));
                         } else {
                             let am = UnsafeSmallPutAm {
                                 array: self.clone().into(),
@@ -101,7 +102,7 @@ impl<T: Dist> UnsafeArray<T> {
                                         .to_vec()
                                 },
                             };
-                            reqs.push(self.exec_am_pe(pe, am));
+                            reqs.push_back(self.exec_am_pe(pe, am));
                         }
                     }
                     ArrayRdmaCmd::GetAm => {
@@ -116,7 +117,7 @@ impl<T: Dist> UnsafeArray<T> {
                             },
                             pe: pe,
                         };
-                        reqs.push(self.exec_am_local(am));
+                        reqs.push_back(self.exec_am_local(am).into());
                         // }
                         // else {
                         //     let am = UnsafeSmallBlockGetAm {
@@ -144,7 +145,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //global_index
         buf: U,
-    ) -> Vec<Box<dyn LamellarRequest<Output = ()>>> {
+    ) -> VecDeque<AmHandle<()>> {
         let global_index = index + self.inner.offset;
         // let buf = buf.team_into(&self.inner.data.team);
         let buf = buf.into();
@@ -153,7 +154,7 @@ impl<T: Dist> UnsafeArray<T> {
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
         let start_pe = global_index % num_pes;
-        let mut reqs = vec![];
+        let mut reqs = VecDeque::new();
         // println!("start_pe {:?} num_elems_pe {:?} buf len {:?}",start_pe,num_elems_pe,buf.len());
         match op {
             ArrayRdmaCmd::Put => {
@@ -208,7 +209,7 @@ impl<T: Dist> UnsafeArray<T> {
                             data: unsafe { temp_memreg.to_base::<u8>().into() },
                             pe: self.inner.data.my_pe,
                         };
-                        reqs.push(self.exec_am_pe(pe, am));
+                        reqs.push_back(self.exec_am_pe(pe, am));
                     } else {
                         let am = UnsafeSmallPutAm {
                             array: self.clone().into(),
@@ -223,7 +224,7 @@ impl<T: Dist> UnsafeArray<T> {
                                     .to_vec()
                             },
                         };
-                        reqs.push(self.exec_am_pe(pe, am));
+                        reqs.push_back(self.exec_am_pe(pe, am));
                     }
                     if pe + 1 == num_pes {
                         overflow += 1;
@@ -296,7 +297,7 @@ impl<T: Dist> UnsafeArray<T> {
                         num_pes: num_pes,
                         offset: offset,
                     };
-                    reqs.push(self.exec_am_local(am));
+                    reqs.push_back(self.exec_am_local(am).into());
                     if pe + 1 == num_pes {
                         overflow += 1;
                     }
@@ -613,26 +614,25 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get<U>(&self, index: usize, buf: U) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle
     where
         U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
         match buf.team_try_into(&self.team_rt()) {
-            Ok(buf) => self.internal_get(index, buf).into_future(),
-            Err(_) => Box::pin(async move { () }),
+            Ok(buf) => self.internal_get(index, buf),
+            Err(_) => ArrayRdmaHandle {
+                reqs: VecDeque::new(),
+            },
         }
     }
 
-    pub(crate) unsafe fn internal_at(
-        &self,
-        index: usize,
-    ) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    pub(crate) unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         self.blocking_get(index, &buf);
-        Box::new(ArrayRdmaAtHandle {
-            reqs: vec![],
+        ArrayRdmaAtHandle {
+            req: None,
             buf: buf,
-        })
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -679,8 +679,8 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE2: array[9] = 3
     /// PE3: array[0] = 0
     ///```
-    pub unsafe fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.internal_at(index).into_future()
+    pub unsafe fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+        self.internal_at(index)
     }
 }
 
@@ -691,11 +691,11 @@ impl<T: Dist> UnsafeArray<T> {
 //         index: usize,
 //         dst: U,
 //     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-//         self.internal_get(index, dst).into_future()
+//         self.internal_get(index, dst)
 //     }
 
 //     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-//         self.internal_at(index).into_future()
+//         self.internal_at(index)
 //     }
 // }
 
@@ -704,7 +704,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> ArrayRdmaHandle {
         let buf = buf.into();
         let reqs = if buf.len() * std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE
         {
@@ -718,12 +718,14 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
                 index: index,
                 buf: buf,
             });
-            vec![req]
+            let mut reqs = VecDeque::new();
+            reqs.push_back(req.into());
+            reqs
         };
-        Box::new(ArrayRdmaHandle { reqs: reqs })
+        ArrayRdmaHandle { reqs: reqs }
     }
 
-    unsafe fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         self.internal_at(index)
     }
 }
@@ -733,12 +735,12 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> ArrayRdmaHandle {
         let reqs = match self.inner.distribution {
             Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf.into()),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf.into()),
         };
-        Box::new(ArrayRdmaHandle { reqs: reqs })
+        ArrayRdmaHandle { reqs: reqs }
     }
 }
 
@@ -747,10 +749,12 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayRdmaHandle {
         match buf.team_try_into(&self.team_rt()) {
-            Ok(buf) => self.internal_put(index, buf).into_future(),
-            Err(_) => Box::pin(async move { () }),
+            Ok(buf) => self.internal_put(index, buf),
+            Err(_) => ArrayRdmaHandle {
+                reqs: VecDeque::new(),
+            },
         }
     }
 }
@@ -1055,7 +1059,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                 start_index: self.index,
                 len: self.buf.len(),
             };
-            reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
+            reqs.push(self.array.exec_am_pe(pe, remote_am));
         }
         unsafe {
             match self.array.inner.distribution {

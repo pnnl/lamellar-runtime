@@ -90,7 +90,7 @@ macro_rules! div_test{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("full {:?} {:?} {:?}",i,val,one);
+                   eprintln!("full {:?} {:?} {:?}",i,val,one);
                 }
             }
 
@@ -116,7 +116,7 @@ macro_rules! div_test{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("half {:?} {:?} {:?}",i,val,one);
+                    eprintln!("half {:?} {:?} {:?}",i,val,one);
                 }
             }
             sub_array.barrier();
@@ -142,7 +142,7 @@ macro_rules! div_test{
                     let val = *elem;
                     check_val!($array,val,one,success);
                     if !success{
-                        println!("pe {:?} {:?} {:?}",i,val,one);
+                        eprintln!("pe {:?} {:?} {:?}",i,val,one);
                     }
                 }
                 sub_array.barrier();

@@ -1,13 +1,17 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
-use crate::array::iterator::{private::*, IterRequest};
+use crate::array::iterator::private::*;
 use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
-use async_trait::async_trait;
+use futures_util::Future;
+use pin_project::pin_project;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
 pub struct Reduce<I, F> {
@@ -33,6 +37,7 @@ where
     type AmOutput = Option<I::Item>;
     type Output = Option<I::Item>;
     type Item = I::Item;
+    type Handle = LocalIterReduceHandle<I::Item, F>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Reduce {
             iter: self.iter.init(start, cnt),
@@ -52,77 +57,88 @@ where
     fn create_handle(
         self,
         _team: Pin<Arc<LamellarTeamRT>>,
-        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn IterRequest<Output = Self::Output>> {
-        Box::new(LocalIterReduceHandle { op: self.op, reqs })
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle {
+        LocalIterReduceHandle {
+            op: self.op,
+            reqs,
+            state: State::ReqsPending(None),
+        }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
     }
 }
 
-// #[derive(Clone, Debug)]
-// pub struct ReduceAsync<I, F, Fut> {
-//     pub(crate) iter: I,
-//     pub(crate) op: F,
-//     pub(crate) _phantom: PhantomData<Fut>,
-// }
-
-// impl<I, F, Fut> IterConsumer for ReduceAsync<I, F, Fut>
-// where
-//     I: LocalIterator + 'static,
-//     I::Item: SyncSend,
-//     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-//     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static,
-// {
-//     type AmOutput = Option<I::Item>;
-//     type Output = Option<I::Item>;
-//     fn into_am(self, schedule: IterSchedule) -> LamellarArcLocalAm {
-//         Arc::new(ReduceAsyncAm {
-//             iter: self.iter,
-//             op: self.op,
-//             schedule,
-//             _phantom: self._phantom,
-//         })
-//     }
-//     fn create_handle(
-//         self,
-//         team: Pin<Arc<LamellarTeamRT>>,
-//         reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-//     ) -> Box<dyn IterRequest<Output = Self::Output>> {
-//         Box::new(LocalIterReduceHandle { op: self.op, reqs })
-//     }
-//     fn max_elems(&self, in_elems: usize) -> usize {
-//         self.iter.elems(in_elems)
-//     }
-// }
-
 #[doc(hidden)]
+#[pin_project]
 pub struct LocalIterReduceHandle<T, F> {
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Option<T>>>>,
+    pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Option<T>>>,
     pub(crate) op: F,
+    state: State<T>,
 }
 
-#[doc(hidden)]
-#[async_trait]
-impl<T, F> IterRequest for LocalIterReduceHandle<T, F>
+enum State<T> {
+    ReqsPending(Option<T>),
+}
+
+impl<T, F> Future for LocalIterReduceHandle<T, F>
 where
-    T: SyncSend,
+    T: SyncSend + Copy + 'static,
     F: Fn(T, T) -> T + SyncSend + 'static,
 {
     type Output = Option<T>;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        futures::future::join_all(self.reqs.drain(..).map(|req| req.into_future()))
-            .await
-            .into_iter()
-            .filter_map(|res| res)
-            .reduce(self.op)
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match &mut this.state {
+            State::ReqsPending(val) => {
+                while let Some(mut req) = this.reqs.pop_front() {
+                    if !req.ready_or_set_waker(cx.waker()) {
+                        this.reqs.push_front(req);
+                        return Poll::Pending;
+                    }
+                    match val {
+                        None => *val = req.val(),
+                        Some(val1) => {
+                            if let Some(val2) = req.val() {
+                                *val = Some((this.op)(*val1, val2));
+                            }
+                        }
+                    }
+                }
+                Poll::Ready(*val)
+            }
+        }
     }
-    fn wait(mut self: Box<Self>) -> Self::Output {
+}
+
+#[doc(hidden)]
+impl<T, F> LamellarRequest for LocalIterReduceHandle<T, F>
+where
+    T: SyncSend + Copy + 'static,
+    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
+{
+    fn blocking_wait(mut self) -> Self::Output {
         self.reqs
             .drain(..)
-            .filter_map(|req| req.get())
+            .filter_map(|req| req.blocking_wait())
             .reduce(self.op)
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        for req in self.reqs.iter_mut() {
+            if !req.ready_or_set_waker(waker) {
+                //only need to wait on the next unready req
+                return false;
+            }
+        }
+        true
+    }
+
+    fn val(&self) -> Self::Output {
+        self.reqs
+            .iter()
+            .filter_map(|req| req.val())
+            .reduce(self.op.clone())
     }
 }
 

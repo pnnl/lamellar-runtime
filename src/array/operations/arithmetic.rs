@@ -234,6 +234,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
     ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+        // println!("here in batch_fetch_add");
         self.inner_array().initiate_batch_fetch_op_2(
             val,
             index,

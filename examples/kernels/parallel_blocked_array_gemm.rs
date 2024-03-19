@@ -1,4 +1,4 @@
-use futures::stream::StreamExt;
+use futures_util::stream::StreamExt;
 use lamellar::array::prelude::*;
 /// ----------------Lamellar Parallel Blocked Array GEMM---------------------------------------------------
 /// This performs a distributed GEMM by partitioning the global matrices (stored in LamellarArrya)
@@ -96,12 +96,10 @@ fn main() {
         let c = c_clone.clone();
         async move {
             //iterate over the submatrix cols of b, use dist_iter() so that we can launch transfers in parallel
-            // for j_blk in 0..p_blks {
             // iterate over submatrix rows of b
             let j_blk = block.j;
             let k_blk = block.k;
             // println!("j_blk: {}, k_blk: {}", j_blk, k_blk);
-            // let b = b_clone.clone();
             let b_block = b
                 .onesided_iter() // OneSidedIterator (each pe will iterate through entirety of b)
                 .chunks(blocksize) //chunks columns by blocksize  -- manages efficent transfer and placement of data into a local memory region
@@ -125,7 +123,6 @@ fn main() {
 
             for i_blk in 0..m_blks_pe {
                 // iterate of the local submatrix rows of a
-                // let c = c_clone.clone();
                 let b_block_vec = b_block_vec.clone();
                 let a_vec = a
                     .local_as_slice()
@@ -136,22 +133,6 @@ fn main() {
                     .flatten()
                     .copied() //get values instead of references
                     .collect::<Vec<f32>>();
-                // a.dist_iter() //DistributedIterator (each pe will iterate through only its local data -- in parallel)
-                //     .chunks(blocksize) //chunks rows by blocksize
-                //     .skip(i_blk * m_blks * blocksize + k_blk) //skip previously visited submatrices
-                //     .step_by(m_blks) //grab chunk from the next row in submatrix
-                //     .take(blocksize) //we only need to take blocksize rows
-                //     .chunks(blocksize) //currently a "hack" for Iterate::collect()
-                //     .for_each(move |a_block| {
-                //         //iterate over local submatrices is submatrix row "i_blk"
-                //         //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
-                //         let mut a_vec = vec![0.0; blocksize * blocksize];
-                //         for (i, row) in a_block.enumerate() {
-                //             for (j, elem) in row.enumerate() {
-                //                 a_vec[i * blocksize + j] = *elem;
-                //             }
-                //         }
-                // println!("a_vec: {:?}", a_vec);
                 // -------------------------------
                 let mut c_vec = vec![0.0; blocksize * blocksize]; // MatrixMultiple lib stores result in a contiguous memory segment
                 unsafe {
@@ -174,7 +155,6 @@ fn main() {
                 }
 
                 let c_slice = c.mut_local_data();
-                // let _lock = LOCK.lock();
 
                 for row in 0..blocksize {
                     let row_offset = (i_blk * blocksize + row) * n;
@@ -188,7 +168,6 @@ fn main() {
                         // c.add(row_offset+col_offset,c_vec[row*blocksize + col]); -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
                     }
                 }
-                //});
             }
         }
         // }

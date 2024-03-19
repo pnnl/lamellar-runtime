@@ -3,13 +3,13 @@
 //!
 
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::IterRequest;
-use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
 use parking_lot::Mutex;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -183,14 +183,15 @@ pub(crate) trait IterConsumer: SyncSend {
     type AmOutput;
     type Output;
     type Item;
+    type Handle;
     fn init(&self, start: usize, cnt: usize) -> Self;
     fn next(&mut self) -> Option<Self::Item>;
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm;
     fn create_handle(
         self,
         team: Pin<Arc<LamellarTeamRT>>,
-        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn IterRequest<Output = Self::Output>>;
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle;
     fn max_elems(&self, in_elems: usize) -> usize;
 }
 

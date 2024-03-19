@@ -8,9 +8,14 @@ use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
 use crate::darc::DarcMode;
+use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
+
+use pin_project::pin_project;
+
 use std::ops::{Deref, DerefMut};
+use std::task::{Context, Poll, Waker};
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
 ///
@@ -72,7 +77,9 @@ impl GlobalLockByteArrayWeak {
 #[derive(Debug)]
 pub struct GlobalLockMutLocalData<T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
-    _lock_guard: GlobalRwDarcWriteGuard<()>,
+    start_index: usize,
+    end_index: usize,
+    lock_guard: GlobalRwDarcWriteGuard<()>,
 }
 
 // impl<T: Dist> Drop for GlobalLockMutLocalData<T>{
@@ -84,12 +91,12 @@ pub struct GlobalLockMutLocalData<T: Dist> {
 impl<T: Dist> Deref for GlobalLockMutLocalData<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
     }
 }
 impl<T: Dist> DerefMut for GlobalLockMutLocalData<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &mut self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
     }
 }
 
@@ -104,7 +111,9 @@ impl<T: Dist> DerefMut for GlobalLockMutLocalData<T> {
 #[derive(Debug)]
 pub struct GlobalLockCollectiveMutLocalData<T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
-    _lock_guard: GlobalRwDarcCollectiveWriteGuard<()>,
+    start_index: usize,
+    end_index: usize,
+    lock_guard: GlobalRwDarcCollectiveWriteGuard<()>,
 }
 
 // impl<T: Dist> Drop for GlobalLockCollectiveMutLocalData<T>{
@@ -116,12 +125,12 @@ pub struct GlobalLockCollectiveMutLocalData<T: Dist> {
 impl<T: Dist> Deref for GlobalLockCollectiveMutLocalData<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
     }
 }
 impl<T: Dist> DerefMut for GlobalLockCollectiveMutLocalData<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &mut self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
     }
 }
 
@@ -135,7 +144,9 @@ impl<T: Dist> DerefMut for GlobalLockCollectiveMutLocalData<T> {
 /// When the instance is dropped the lock is released.
 pub struct GlobalLockLocalData<T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
-    lock: GlobalRwDarc<()>,
+    // lock: GlobalRwDarc<()>,
+    start_index: usize,
+    end_index: usize,
     lock_guard: GlobalRwDarcReadGuard<()>,
 }
 
@@ -149,11 +160,29 @@ impl<T: Dist> Clone for GlobalLockLocalData<T> {
     fn clone(&self) -> Self {
         GlobalLockLocalData {
             array: self.array.clone(),
-            lock: self.lock.clone(),
+            start_index: self.start_index,
+            end_index: self.end_index,
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
 }
+
+impl<T: Dist> Deref for GlobalLockLocalData<T> {
+    type Target = [T];
+    fn deref(&self) -> &Self::Target {
+        unsafe { &self.array.array.local_as_slice()[self.start_index..self.end_index] }
+    }
+}
+
+// impl<T: Dist> Drop for GlobalLockLocalData<T> {
+//     fn drop(&mut self) {
+//         println!(
+//             "release GlobalLockLocalData lock! {:?} ",
+//             std::thread::current().id(),
+//         );
+//     }
+// }
 
 impl<T: Dist> GlobalLockLocalData<T> {
     /// Convert into a smaller sub range of the local data, the original read lock is transfered to the new sub data to mainitain safety guarantees
@@ -173,8 +202,10 @@ impl<T: Dist> GlobalLockLocalData<T> {
     ///```
     pub fn into_sub_data(self, start: usize, end: usize) -> GlobalLockLocalData<T> {
         GlobalLockLocalData {
-            array: self.array.sub_array(start..end),
-            lock: self.lock,
+            array: self.array.clone(),
+            start_index: start,
+            end_index: end,
+            // lock: self.lock,
             lock_guard: self.lock_guard,
         }
     }
@@ -185,7 +216,8 @@ impl<T: Dist + serde::Serialize> serde::Serialize for GlobalLockLocalData<T> {
     where
         S: serde::Serializer,
     {
-        unsafe { self.array.array.local_as_mut_slice() }.serialize(serializer)
+        unsafe { &self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
+            .serialize(serializer)
     }
 }
 
@@ -211,17 +243,54 @@ impl<'a, T: Dist> IntoIterator for &'a GlobalLockLocalData<T> {
     type IntoIter = GlobalLockLocalDataIter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         GlobalLockLocalDataIter {
-            data: unsafe { self.array.array.local_as_mut_slice() },
+            data: unsafe {
+                &self.array.array.local_as_mut_slice()[self.start_index..self.end_index]
+            },
             index: 0,
         }
     }
 }
 
-impl<T: Dist> Deref for GlobalLockLocalData<T> {
-    type Target = [T];
+#[derive(Clone)]
+pub struct GlobalLockReadGuard<T: Dist> {
+    pub(crate) array: GlobalLockArray<T>,
+    lock_guard: GlobalRwDarcReadGuard<()>,
+}
 
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+impl<T: Dist> GlobalLockReadGuard<T> {
+    pub fn local_data(&self) -> GlobalLockLocalData<T> {
+        GlobalLockLocalData {
+            array: self.array.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            // lock: self.lock.clone(),
+            lock_guard: self.lock_guard.clone(),
+        }
+    }
+}
+
+pub struct GlobalLockWriteGuard<T: Dist> {
+    pub(crate) array: GlobalLockArray<T>,
+    lock_guard: GlobalRwDarcWriteGuard<()>,
+}
+
+impl<T: Dist> From<GlobalLockMutLocalData<T>> for GlobalLockWriteGuard<T> {
+    fn from(data: GlobalLockMutLocalData<T>) -> Self {
+        GlobalLockWriteGuard {
+            array: data.array,
+            lock_guard: data.lock_guard,
+        }
+    }
+}
+
+impl<T: Dist> GlobalLockWriteGuard<T> {
+    pub fn local_data(self) -> GlobalLockMutLocalData<T> {
+        GlobalLockMutLocalData {
+            array: self.array.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            lock_guard: self.lock_guard,
+        }
     }
 }
 
@@ -276,6 +345,40 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
+    pub fn blocking_read_lock(&self) -> GlobalLockReadGuard<T> {
+        let self_clone: GlobalLockArray<T> = self.clone();
+        self.block_on(async move {
+            GlobalLockReadGuard {
+                array: self_clone.clone(),
+                lock_guard: self_clone.lock.read().await,
+            }
+        })
+    }
+
+    pub async fn read_lock(&self) -> GlobalLockReadGuard<T> {
+        GlobalLockReadGuard {
+            array: self.clone(),
+            lock_guard: self.lock.read().await,
+        }
+    }
+
+    pub fn blocking_write_lock(&self) -> GlobalLockWriteGuard<T> {
+        let self_clone: GlobalLockArray<T> = self.clone();
+        self.block_on(async move {
+            GlobalLockWriteGuard {
+                array: self_clone.clone(),
+                lock_guard: self_clone.lock.write().await,
+            }
+        })
+    }
+
+    pub async fn write_lock(&self) -> GlobalLockWriteGuard<T> {
+        GlobalLockWriteGuard {
+            array: self.clone(),
+            lock_guard: self.lock.write().await,
+        }
+    }
+
     #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.
     ///
@@ -302,7 +405,9 @@ impl<T: Dist> GlobalLockArray<T> {
         self.block_on(async move {
             GlobalLockLocalData {
                 array: self_clone.clone(),
-                lock: self_clone.lock.clone(),
+                start_index: 0,
+                end_index: self_clone.array.num_elems_local(),
+                // lock: self_clone.lock.clone(),
                 lock_guard: self_clone.lock.read().await,
             }
         })
@@ -333,7 +438,9 @@ impl<T: Dist> GlobalLockArray<T> {
     pub async fn read_local_data(&self) -> GlobalLockLocalData<T> {
         GlobalLockLocalData {
             array: self.clone(),
-            lock: self.lock.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            // lock: self.lock.clone(),
             lock_guard: self.lock.read().await,
         }
     }
@@ -364,8 +471,10 @@ impl<T: Dist> GlobalLockArray<T> {
         self.block_on(async move {
             let lock = self_clone.lock.write().await;
             let data = GlobalLockMutLocalData {
-                array: self_clone,
-                _lock_guard: lock,
+                array: self_clone.clone(),
+                start_index: 0,
+                end_index: self_clone.array.num_elems_local(),
+                lock_guard: lock,
             };
             // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
             data
@@ -398,7 +507,9 @@ impl<T: Dist> GlobalLockArray<T> {
         let lock = self.lock.write().await;
         let data = GlobalLockMutLocalData {
             array: self.clone(),
-            _lock_guard: lock,
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            lock_guard: lock,
         };
         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         data
@@ -428,8 +539,10 @@ impl<T: Dist> GlobalLockArray<T> {
         self.block_on(async move {
             let lock = self_clone.lock.collective_write().await;
             let data = GlobalLockCollectiveMutLocalData {
-                array: self_clone,
-                _lock_guard: lock,
+                array: self_clone.clone(),
+                start_index: 0,
+                end_index: self_clone.array.num_elems_local(),
+                lock_guard: lock,
             };
             // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
             data
@@ -462,7 +575,9 @@ impl<T: Dist> GlobalLockArray<T> {
         let lock = self.lock.collective_write().await;
         let data = GlobalLockCollectiveMutLocalData {
             array: self.clone(),
-            _lock_guard: lock,
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            lock_guard: lock,
         };
         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         data
@@ -608,7 +723,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// read_only_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    pub fn into_local_lock(self) -> GlobalLockArray<T> {
         // println!("GlobalLock into_read_only");
         self.array.into()
     }
@@ -673,7 +788,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GlobalLockArray<T>
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GlobalLockArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
@@ -912,56 +1027,56 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
 }
 
 #[doc(hidden)]
+#[pin_project]
 pub struct GlobalLockArrayReduceHandle<T: Dist + AmDist> {
-    req: Box<dyn LamellarRequest<Output = T>>,
-    _lock_guard: GlobalRwDarcReadGuard<()>,
+    req: AmHandle<T>,
+    lock_guard: GlobalRwDarcReadGuard<()>,
 }
 
-#[async_trait]
 impl<T: Dist + AmDist> LamellarRequest for GlobalLockArrayReduceHandle<T> {
-    type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.req.into_future().await
+    fn blocking_wait(self) -> Self::Output {
+        self.req.blocking_wait()
     }
-    fn get(&self) -> Self::Output {
-        self.req.get()
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.req.ready_or_set_waker(waker)
     }
-    fn ready(&self) -> bool {
-        self.req.ready()
-    }
-    fn set_waker(&mut self, waker: futures::task::Waker) {
-        self.req.set_waker(waker)
+    fn val(&self) -> Self::Output {
+        self.req.val()
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for GlobalLockArray<T> {
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let lock: GlobalRwDarc<()> = self.lock.clone();
-        let lock = self.array.block_on(async move { lock.read().await });
-        Box::new(GlobalLockArrayReduceHandle {
-            req: self.array.reduce_data(op, self.clone().into()),
-            _lock_guard: lock,
-        })
-        .into_future()
+impl<T: Dist + AmDist> Future for GlobalLockArrayReduceHandle<T> {
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.req.ready_or_set_waker(cx.waker()) {
+            true => Poll::Ready(this.req.val()),
+            false => Poll::Pending,
+        }
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-    for GlobalLockArray<T>
-{
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+
+impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
+    pub fn reduce(self, op: &str) -> GlobalLockArrayReduceHandle<T> {
+        GlobalLockArrayReduceHandle {
+            req: self.array.array.reduce_data(op, self.array.clone().into()),
+            lock_guard: self.lock_guard.clone(),
+        }
+    }
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
+    pub fn sum(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn prod(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-    for GlobalLockArray<T>
-{
-    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuard<T> {
+    pub fn max(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("max")
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn min(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("min")
     }
 }

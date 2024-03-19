@@ -62,7 +62,7 @@ where
     // fn buffered_next(
     //     &mut self,
     //     mem_region: OneSidedMemoryRegion<u8>,
-    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    // ) -> Option<ArrayRdmaHandle> {
     //     self.iter.buffered_next(mem_region)
     // }
     // fn from_mem_region(&self, mem_region: OneSidedMemoryRegion<u8>) -> Option<Self::Item> {

@@ -373,7 +373,7 @@ fn impl_am_group_user(
                 }
 
                 // println!("{} pending reqs", self.pending_reqs.len());
-                let results = #lamellar::futures::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
+                let results = #lamellar::futures_util::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
             }

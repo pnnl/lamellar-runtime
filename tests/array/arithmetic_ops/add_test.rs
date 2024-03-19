@@ -100,7 +100,7 @@ macro_rules! add_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("full_0 {:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("full_0 {:?} {:?} {:?}",i,val,max_val);
                 }
             }
             if !success{
@@ -128,7 +128,7 @@ macro_rules! add_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("full_1 {:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("full_1 {:?} {:?} {:?}",i,val,max_val);
                 }
             }
             if !success{
@@ -164,7 +164,7 @@ macro_rules! add_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("half_0 {:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("half_0 {:?} {:?} {:?}",i,val,max_val);
                 }
             }
             array.wait_all();
@@ -189,7 +189,7 @@ macro_rules! add_test{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
-                    println!("half_1 {:?} {:?} {:?}",i,val,max_val);
+                    eprintln!("half_1 {:?} {:?} {:?}",i,val,max_val);
                 }
             }
             if !success{
@@ -226,7 +226,7 @@ macro_rules! add_test{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
-                        println!("small_0 {:?} {:?} {:?}",i,val,max_val);
+                        eprintln!("small_0 {:?} {:?} {:?}",i,val,max_val);
                     }
                 }
                 array.wait_all();
@@ -251,7 +251,7 @@ macro_rules! add_test{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
-                        println!("small_1 {:?} {:?} {:?}",i,val,max_val);
+                       eprintln!("small_1 {:?} {:?} {:?}",i,val,max_val);
                     }
                 }
                 if !success{
@@ -287,11 +287,12 @@ macro_rules! check_results {
             let val = *elem;
             check_val!($array_ty, val, $num_pes, success);
             if !success {
-                println!("input {:?}: {:?} {:?} {:?}", $test, i, val, $num_pes);
+                eprintln!("input {:?}: {:?} {:?} {:?}", $test, i, val, $num_pes);
             }
         }
         if !success {
-            $array.print();
+            eprintln!("failed test {:?}", $test);
+            // $array.print();
         }
         $array.barrier();
         let init_val = 0;
@@ -317,10 +318,16 @@ macro_rules! input_test{
             #[allow(unused_unsafe)]
             unsafe {
                 if $dist == lamellar::array::Distribution::Block{
-                    let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i%array_total_len});
+                    let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {
+                        // println!("i: {:?}",i);
+                        *x = i%array_total_len}
+                    );
                 }
                 else{
-                    let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {println!("i: {:?}",i);*x = i/num_pes});
+                    let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {
+                        //println!("i: {:?}",i);
+                        *x = i/num_pes}
+                    );
                 }
             }
             input_array.wait_all();

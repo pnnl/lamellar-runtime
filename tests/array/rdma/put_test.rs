@@ -64,7 +64,7 @@ macro_rules! put_test{
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe { array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size) }{
                     if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                        println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                        eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                         success = false;
                     }
                 }
@@ -98,7 +98,7 @@ macro_rules! put_test{
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size)}{
                     if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                        println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                        eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                         success = false;
                     }
                 }
@@ -135,7 +135,7 @@ macro_rules! put_test{
                     #[allow(unused_unsafe)]
                     for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size)}{
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
                         }
                     }

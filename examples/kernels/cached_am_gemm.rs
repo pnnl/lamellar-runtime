@@ -255,7 +255,7 @@ fn main() {
                 tasks += 1;
             }
             // for req in reqs {
-            //     req.get();
+            //     req.blocking_wait();
             // }
         }
 

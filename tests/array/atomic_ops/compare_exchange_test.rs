@@ -74,7 +74,7 @@ macro_rules! compare_exchange_test{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
+                            eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                         }
                     }
                     Err(val) => {
@@ -121,7 +121,7 @@ macro_rules! compare_exchange_test{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
+                            eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                         }
                     }
                     Err(val) => {
@@ -170,7 +170,7 @@ macro_rules! compare_exchange_test{
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
-                                println!("{:?} {:?} {:?}",idx,val,init_val);
+                                eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                             }
                         }
                         Err(val) => {
@@ -237,7 +237,7 @@ macro_rules! compare_exchange_epsilon_test{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
+                            eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                         }
                     }
                     Err(val) => {
@@ -284,7 +284,7 @@ macro_rules! compare_exchange_epsilon_test{
                     Ok(val) => {
                         check_val!($array,val,init_val,success);
                         if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
+                            eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                         }
                     }
                     Err(val) => {
@@ -333,7 +333,7 @@ macro_rules! compare_exchange_epsilon_test{
                         Ok(val) => {
                             check_val!($array,val,init_val,success);
                             if !success{
-                                println!("{:?} {:?} {:?}",idx,val,init_val);
+                                eprintln!("{:?} {:?} {:?}",idx,val,init_val);
                             }
                         }
                         Err(val) => {
@@ -386,11 +386,11 @@ macro_rules! check_input {
         for (i, r) in res.drain(..).enumerate() {
             if i % $num_pes == $my_pe {
                 if let Err(val) = r {
-                    println!("error i: {i} val: {val:?}");
+                    eprintln!("error i: {i} val: {val:?}");
                 }
             } else {
                 match r {
-                    Ok(val) => println!("error i: {i} val: {val:?}"),
+                    Ok(val) => println!("ok i: {i} val: {val:?}"),
                     Err(val) => {
                         if val != i {
                             println!("error i: {i} val: {val:?}");

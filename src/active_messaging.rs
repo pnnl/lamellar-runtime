@@ -639,9 +639,9 @@ use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::NetMemRegionHandle;
 use crate::scheduler::{Executor, LamellarExecutor, ReqId};
-// use log::trace;
+
 use async_trait::async_trait;
-use futures::Future;
+use futures_util::Future;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -657,6 +657,9 @@ use registered_active_message::RegisteredActiveMessages;
 pub use registered_active_message::RegisteredAm;
 
 pub(crate) mod batching;
+
+pub(crate) mod handle;
+pub use handle::*;
 
 pub(crate) const BATCH_AM_SIZE: usize = 100_000;
 
@@ -940,6 +943,9 @@ impl AMCounters {
 
 /// The interface for launching, executing, and managing Lamellar Active Messages .
 pub trait ActiveMessaging {
+    type SinglePeAmHandle<R: AmDist>;
+    type MultiAmHandle<R: AmDist>;
+    type LocalAmHandle<L>;
     #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on every PE (including originating PE).
     ///
@@ -982,7 +988,7 @@ pub trait ActiveMessaging {
     ///     assert_eq!(i,results[i]);
     /// }
     ///```
-    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
@@ -1026,7 +1032,7 @@ pub trait ActiveMessaging {
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
@@ -1073,7 +1079,7 @@ pub trait ActiveMessaging {
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.my_pe(),result);
     ///```
-    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
 
@@ -1213,40 +1219,3 @@ pub(crate) trait ActiveMessageEngine {
         req.add_result(pe, req_id.sub_id, data);
     }
 }
-
-// #[derive(Debug)]
-// pub(crate) enum ActiveMessageEngineType {
-//     RegisteredActiveMessages(RegisteredActiveMessages),
-// }
-
-// #[async_trait]
-// impl ActiveMessageEngine for ActiveMessageEngineType {
-//     async fn process_msg(
-//         self,
-//         am: Am,
-//         executor: Arc<Executor>,
-//         stall_mark: usize,
-//         immediate: bool,
-//     ) {
-//         match self {
-//             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
-//                 remote_am
-//                     .process_msg(am, executor, stall_mark, immediate)
-//                     .await;
-//             }
-//         }
-//     }
-//     async fn exec_msg(
-//         self,
-//         msg: Msg,
-//         ser_data: SerializedData,
-//         lamellae: Arc<Lamellae>,
-//         executor: Arc<Executor>,
-//     ) {
-//         match self {
-//             ActiveMessageEngineType::RegisteredActiveMessages(remote_am) => {
-//                 remote_am.exec_msg(msg, ser_data, lamellae, executor).await;
-//             }
-//         }
-//     }
-// }

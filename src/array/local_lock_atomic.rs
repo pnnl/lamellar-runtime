@@ -7,6 +7,7 @@ use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::DarcMode;
+use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 // use parking_lot::{
@@ -14,7 +15,10 @@ use crate::memregion::Dist;
 //     RawRwLock,
 // };
 use async_lock::{RwLockReadGuardArc, RwLockWriteGuardArc};
+use pin_project::pin_project;
+
 use std::ops::{Deref, DerefMut};
+use std::task::{Context, Poll, Waker};
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
 ///
@@ -76,7 +80,9 @@ impl LocalLockByteArrayWeak {
 #[derive(Debug)]
 pub struct LocalLockMutLocalData<T: Dist> {
     array: LocalLockArray<T>,
-    _lock_guard: RwLockWriteGuardArc<()>,
+    start_index: usize,
+    end_index: usize,
+    lock_guard: RwLockWriteGuardArc<()>,
 }
 
 // impl<T: Dist> Drop for LocalLockMutLocalData<T> {
@@ -88,12 +94,12 @@ pub struct LocalLockMutLocalData<T: Dist> {
 impl<T: Dist> Deref for LocalLockMutLocalData<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
     }
 }
 impl<T: Dist> DerefMut for LocalLockMutLocalData<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &mut self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
     }
 }
 
@@ -108,7 +114,9 @@ impl<T: Dist> DerefMut for LocalLockMutLocalData<T> {
 #[derive(Debug)]
 pub struct LocalLockLocalData<T: Dist> {
     pub(crate) array: LocalLockArray<T>,
-    lock: LocalRwDarc<()>,
+    // lock: LocalRwDarc<()>,
+    start_index: usize,
+    end_index: usize,
     lock_guard: Arc<RwLockReadGuardArc<()>>,
 }
 
@@ -117,7 +125,9 @@ impl<'a, T: Dist> Clone for LocalLockLocalData<T> {
         // println!("getting read lock in LocalLockLocalData clone");
         LocalLockLocalData {
             array: self.array.clone(),
-            lock: self.lock.clone(),
+            start_index: self.start_index,
+            end_index: self.end_index,
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
@@ -155,9 +165,12 @@ impl<'a, T: Dist> LocalLockLocalData<T> {
     /// assert_eq!(local_data[10],sub_data[0]);
     ///```
     pub fn into_sub_data(self, start: usize, end: usize) -> LocalLockLocalData<T> {
+        // println!("into sub data {:?} {:?}", start, end);
         LocalLockLocalData {
-            array: self.array.sub_array(start..end),
-            lock: self.lock.clone(),
+            array: self.array.clone(),
+            start_index: start,
+            end_index: end,
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
@@ -168,7 +181,8 @@ impl<'a, T: Dist + serde::Serialize> serde::Serialize for LocalLockLocalData<T> 
     where
         S: serde::Serializer,
     {
-        unsafe { self.array.array.local_as_mut_slice() }.serialize(serializer)
+        unsafe { &self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
+            .serialize(serializer)
     }
 }
 
@@ -194,7 +208,9 @@ impl<'a, T: Dist> IntoIterator for &'a LocalLockLocalData<T> {
     type IntoIter = LocalLockLocalDataIter<'a, T>;
     fn into_iter(self) -> Self::IntoIter {
         LocalLockLocalDataIter {
-            data: unsafe { self.array.array.local_as_mut_slice() },
+            data: unsafe {
+                &self.array.array.local_as_mut_slice()[self.start_index..self.end_index]
+            },
             index: 0,
         }
     }
@@ -204,7 +220,50 @@ impl<T: Dist> Deref for LocalLockLocalData<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.array.array.local_as_mut_slice() }
+        unsafe { &self.array.array.local_as_mut_slice()[self.start_index..self.end_index] }
+    }
+}
+
+#[derive(Clone)]
+pub struct LocalLockReadGuard<T: Dist> {
+    pub(crate) array: LocalLockArray<T>,
+    lock_guard: Arc<RwLockReadGuardArc<()>>,
+}
+
+impl<T: Dist> LocalLockReadGuard<T> {
+    pub fn local_data(&self) -> LocalLockLocalData<T> {
+        LocalLockLocalData {
+            array: self.array.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            // lock: self.lock.clone(),
+            lock_guard: self.lock_guard.clone(),
+        }
+    }
+}
+
+pub struct LocalLockWriteGuard<T: Dist> {
+    pub(crate) array: LocalLockArray<T>,
+    lock_guard: RwLockWriteGuardArc<()>,
+}
+
+impl<T: Dist> From<LocalLockMutLocalData<T>> for LocalLockWriteGuard<T> {
+    fn from(data: LocalLockMutLocalData<T>) -> Self {
+        LocalLockWriteGuard {
+            array: data.array,
+            lock_guard: data.lock_guard,
+        }
+    }
+}
+
+impl<T: Dist> LocalLockWriteGuard<T> {
+    pub fn local_data(self) -> LocalLockMutLocalData<T> {
+        LocalLockMutLocalData {
+            array: self.array.clone(),
+            start_index: 0,
+            end_index: self.array.num_elems_local(),
+            lock_guard: self.lock_guard,
+        }
     }
 }
 
@@ -260,6 +319,40 @@ impl<T: Dist> LocalLockArray<T> {
         }
     }
 
+    pub fn blocking_read_lock(&self) -> LocalLockReadGuard<T> {
+        let self_clone: LocalLockArray<T> = self.clone();
+        self.block_on(async move {
+            LocalLockReadGuard {
+                array: self_clone.clone(),
+                lock_guard: Arc::new(self_clone.lock.read().await),
+            }
+        })
+    }
+
+    pub async fn read_lock(&self) -> LocalLockReadGuard<T> {
+        LocalLockReadGuard {
+            array: self.clone(),
+            lock_guard: Arc::new(self.lock.read().await),
+        }
+    }
+
+    pub fn blocking_write_lock(&self) -> LocalLockWriteGuard<T> {
+        let self_clone: LocalLockArray<T> = self.clone();
+        self.block_on(async move {
+            LocalLockWriteGuard {
+                array: self_clone.clone(),
+                lock_guard: self_clone.lock.write().await,
+            }
+        })
+    }
+
+    pub async fn write_lock(&self) -> LocalLockWriteGuard<T> {
+        LocalLockWriteGuard {
+            array: self.clone(),
+            lock_guard: self.lock.write().await,
+        }
+    }
+
     #[doc(alias("One-sided", "onesided"))]
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
     ///
@@ -284,7 +377,9 @@ impl<T: Dist> LocalLockArray<T> {
         self.block_on(async move {
             LocalLockLocalData {
                 array: self_clone.clone(),
-                lock: self_clone.lock.clone(),
+                // lock: self_clone.lock.clone(),
+                start_index: 0,
+                end_index: self_clone.num_elems_local(),
                 lock_guard: Arc::new(self_clone.lock.read().await),
             }
         })
@@ -314,7 +409,9 @@ impl<T: Dist> LocalLockArray<T> {
         // println!("getting read lock in read_local_local");
         LocalLockLocalData {
             array: self.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
+            start_index: 0,
+            end_index: self.num_elems_local(),
             lock_guard: Arc::new(self.lock.read().await),
         }
     }
@@ -343,8 +440,10 @@ impl<T: Dist> LocalLockArray<T> {
         self.block_on(async move {
             let lock = self_clone.lock.write().await;
             let data = LocalLockMutLocalData {
-                array: self_clone,
-                _lock_guard: lock,
+                array: self_clone.clone(),
+                start_index: 0,
+                end_index: self_clone.num_elems_local(),
+                lock_guard: lock,
             };
             // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
             data
@@ -377,7 +476,9 @@ impl<T: Dist> LocalLockArray<T> {
         let lock = self.lock.write().await;
         let data = LocalLockMutLocalData {
             array: self.clone(),
-            _lock_guard: lock,
+            start_index: 0,
+            end_index: self.num_elems_local(),
+            lock_guard: lock,
         };
         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         data
@@ -588,7 +689,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> 
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
@@ -824,56 +925,56 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockArray<T> {
 }
 
 #[doc(hidden)]
+#[pin_project]
 pub struct LocalLockArrayReduceHandle<T: Dist + AmDist> {
-    req: Box<dyn LamellarRequest<Output = T>>,
-    _lock_guard: RwLockReadGuardArc<()>,
+    req: AmHandle<T>,
+    lock_guard: Arc<RwLockReadGuardArc<()>>,
 }
 
-#[async_trait]
 impl<T: Dist + AmDist> LamellarRequest for LocalLockArrayReduceHandle<T> {
-    type Output = T;
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
-        self.req.into_future().await
+    fn blocking_wait(self) -> Self::Output {
+        self.req.blocking_wait()
     }
-    fn get(&self) -> Self::Output {
-        self.req.get()
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.req.ready_or_set_waker(waker)
     }
-    fn ready(&self) -> bool {
-        self.req.ready()
-    }
-    fn set_waker(&mut self, waker: futures::task::Waker) {
-        self.req.set_waker(waker)
+    fn val(&self) -> Self::Output {
+        self.req.val()
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LocalLockArray<T> {
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let lock: LocalRwDarc<()> = self.lock.clone();
-        let lock = self.array.block_on(async move { lock.read().await });
-        Box::new(LocalLockArrayReduceHandle {
-            req: self.array.reduce_data(op, self.clone().into()),
-            _lock_guard: lock,
-        })
-        .into_future()
+impl<T: Dist + AmDist> Future for LocalLockArrayReduceHandle<T> {
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.req.ready_or_set_waker(cx.waker()) {
+            true => Poll::Ready(this.req.val()),
+            false => Poll::Pending,
+        }
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-    for LocalLockArray<T>
-{
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+
+impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
+    pub fn reduce(self, op: &str) -> LocalLockArrayReduceHandle<T> {
+        LocalLockArrayReduceHandle {
+            req: self.array.array.reduce_data(op, self.array.clone().into()),
+            lock_guard: self.lock_guard.clone(),
+        }
+    }
+}
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
+    pub fn sum(self) -> LocalLockArrayReduceHandle<T> {
         self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn prod(self) -> LocalLockArrayReduceHandle<T> {
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-    for LocalLockArray<T>
-{
-    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard<T> {
+    pub fn max(self) -> LocalLockArrayReduceHandle<T> {
         self.reduce("max")
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn min(self) -> LocalLockArrayReduceHandle<T> {
         self.reduce("min")
     }
 }

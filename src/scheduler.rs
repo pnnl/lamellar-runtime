@@ -6,7 +6,7 @@ use crate::active_messaging::*;
 use crate::lamellae::{Des, Lamellae, SerializedData};
 
 use enum_dispatch::enum_dispatch;
-use futures::Future;
+use futures_util::Future;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 

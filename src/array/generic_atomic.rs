@@ -567,7 +567,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.locks[index].lock()
     }
 
-    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_  {
+    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
         self.array.async_barrier()
     }
 }
@@ -589,7 +589,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray
     }
 }
 
-#[async_trait]
+// #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
@@ -824,30 +824,24 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for GenericAtomicArray<T> {
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        self.array
-            .reduce_data(op, self.clone().into())
-            .into_future()
+impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
+    pub fn reduce(&self, op: &str) -> AmHandle<T> {
+        self.array.reduce_data(op, self.clone().into())
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-    for GenericAtomicArray<T>
-{
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GenericAtomicArray<T> {
+    pub fn sum(&self) -> AmHandle<T> {
         self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn prod(&self) -> AmHandle<T> {
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-    for GenericAtomicArray<T>
-{
-    fn max(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GenericAtomicArray<T> {
+    pub fn max(&self) -> AmHandle<T> {
         self.reduce("max")
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    pub fn min(&self) -> AmHandle<T> {
         self.reduce("min")
     }
 }

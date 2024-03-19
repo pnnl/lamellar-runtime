@@ -11,6 +11,7 @@ use crate::active_messaging::RemotePtr;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
+use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
@@ -278,7 +279,7 @@ impl<T> Clone for GlobalRwDarcReadGuard<T> {
 
 impl<T> Drop for GlobalRwDarcReadGuard<T> {
     fn drop(&mut self) {
-        // println!("dropping read guard");
+        // println!("dropping global rwdarc read guard");
         if self.local_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
             let inner = self.rwlock.inner();
             let team = inner.team();
@@ -574,7 +575,6 @@ impl<T> GlobalRwDarc<T> {
             },
             Some(inner.am_counters()),
         )
-        .into_future()
         .await;
         // println!("TID: {:?} async got read lock", std::thread::current().id());
         GlobalRwDarcReadGuard {
@@ -649,7 +649,6 @@ impl<T> GlobalRwDarc<T> {
             },
             Some(inner.am_counters()),
         )
-        .into_future()
         .await;
         GlobalRwDarcWriteGuard {
             rwlock: self.darc.clone(),
@@ -720,7 +719,6 @@ impl<T> GlobalRwDarc<T> {
             },
             Some(inner.am_counters()),
         )
-        .into_future()
         .await;
         GlobalRwDarcCollectiveWriteGuard {
             rwlock: self.darc.clone(),
@@ -777,7 +775,7 @@ impl<T> GlobalRwDarc<T> {
             },
             Some(inner.am_counters()),
         )
-        .get();
+        .blocking_wait();
         GlobalRwDarcReadGuard {
             rwlock: self.darc.clone(),
             marker: PhantomData,
@@ -830,7 +828,7 @@ impl<T> GlobalRwDarc<T> {
             },
             Some(inner.am_counters()),
         )
-        .get();
+        .blocking_wait();
         GlobalRwDarcWriteGuard {
             rwlock: self.darc.clone(),
             marker: PhantomData,
@@ -899,7 +897,7 @@ impl<T> GlobalRwDarc<T> {
             },
             Some(inner.am_counters()),
         )
-        .get();
+        .blocking_wait();
         GlobalRwDarcCollectiveWriteGuard {
             rwlock: self.darc.clone(),
             collective_cnt: collective_cnt,

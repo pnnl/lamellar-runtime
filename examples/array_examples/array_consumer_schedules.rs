@@ -96,7 +96,8 @@ fn sum_with_schedule(
     let result = array.block_on(
         array
             .local_iter()
-            .filter(|e| e.load() % 2 == 0)
+            .map(|e| e.load() )
+            .filter(|e| e % 2 == 0)
             .sum_with_schedule(schedule),
     );
     array.barrier();

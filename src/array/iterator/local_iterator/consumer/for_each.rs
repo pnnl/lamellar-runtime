@@ -1,14 +1,16 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
-use crate::array::iterator::{private::*, IterRequest};
+use crate::array::iterator::private::*;
 use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
-use async_trait::async_trait;
-use futures::Future;
+use futures_util::Future;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
 pub struct ForEach<I, F>
@@ -41,6 +43,7 @@ where
     type AmOutput = ();
     type Output = ();
     type Item = I::Item;
+    type Handle = LocalIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         // println!("ForEach before init start {:?} cnt {:?}", start,cnt);
         let iter = ForEach {
@@ -63,9 +66,9 @@ where
     fn create_handle(
         self,
         _team: Pin<Arc<LamellarTeamRT>>,
-        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn IterRequest<Output = Self::Output>> {
-        Box::new(LocalIterForEachHandle { reqs })
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle {
+        LocalIterForEachHandle { reqs }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -107,6 +110,7 @@ where
     type AmOutput = ();
     type Output = ();
     type Item = I::Item;
+    type Handle = LocalIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         ForEachAsync {
             iter: self.iter.init(start, cnt),
@@ -127,9 +131,9 @@ where
     fn create_handle(
         self,
         _team: Pin<Arc<LamellarTeamRT>>,
-        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn IterRequest<Output = Self::Output>> {
-        Box::new(LocalIterForEachHandle { reqs })
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle {
+        LocalIterForEachHandle { reqs }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -152,21 +156,41 @@ where
 
 #[doc(hidden)]
 pub struct LocalIterForEachHandle {
-    pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
+    pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
+}
+
+impl Future for LocalIterForEachHandle {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        while let Some(mut req) = self.reqs.pop_front() {
+            if !req.ready_or_set_waker(cx.waker()) {
+                self.reqs.push_front(req);
+                return Poll::Pending;
+            }
+        }
+        Poll::Ready(())
+    }
 }
 
 #[doc(hidden)]
-#[async_trait]
-impl IterRequest for LocalIterForEachHandle {
-    type Output = ();
-    async fn into_future(mut self: Box<Self>) -> Self::Output {
+impl LamellarRequest for LocalIterForEachHandle {
+    fn blocking_wait(mut self) -> Self::Output {
         for req in self.reqs.drain(..) {
-            req.into_future().await;
+            req.blocking_wait();
         }
     }
-    fn wait(mut self: Box<Self>) -> Self::Output {
-        for req in self.reqs.drain(..) {
-            req.get();
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        for req in self.reqs.iter_mut() {
+            if !req.ready_or_set_waker(waker) {
+                //only need to wait on the next unready req
+                return false;
+            }
+        }
+        true
+    }
+    fn val(&self) -> Self::Output {
+        for req in self.reqs.iter() {
+            req.val();
         }
     }
 }

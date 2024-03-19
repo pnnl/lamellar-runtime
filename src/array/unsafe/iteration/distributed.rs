@@ -9,7 +9,7 @@ use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
 
 use core::marker::PhantomData;
-use futures::Future;
+use futures_util::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -39,7 +39,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
     //     }
     // }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -52,7 +52,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    ) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -71,7 +71,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -85,7 +85,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
+    ) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -105,7 +105,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    fn reduce<I, F>(&self, iter: &I, op: F) -> DistIterReduceHandle<I::Item, F>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -119,7 +119,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         op: F,
-    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
+    ) -> DistIterReduceHandle<I::Item, F>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -138,7 +138,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect<I, A>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<I::Item, A>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -152,7 +152,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    ) -> DistIterCollectHandle<I::Item, A>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
@@ -172,11 +172,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn collect_async<I, A, B>(
-        &self,
-        iter: &I,
-        d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<B, A>
     where
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
@@ -191,7 +187,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         sched: Schedule,
         iter: &I,
         d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
+    ) -> DistIterCollectHandle<B, A>
     where
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
@@ -212,18 +208,14 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    fn count<I>(&self, iter: &I) -> DistIterCountHandle
     where
         I: DistributedIterator + 'static,
     {
         self.count_with_schedule(Schedule::Static, iter)
     }
 
-    fn count_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
+    fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterCountHandle
     where
         I: DistributedIterator + 'static,
     {
@@ -239,7 +231,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         }
     }
 
-    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum<I>(&self, iter: &I) -> DistIterSumHandle<I::Item>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps + std::iter::Sum,
@@ -247,11 +239,7 @@ impl<T: Dist> DistIteratorLauncher for UnsafeArray<T> {
         self.sum_with_schedule(Schedule::Static, iter)
     }
 
-    fn sum_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
+    fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterSumHandle<I::Item>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps + std::iter::Sum,

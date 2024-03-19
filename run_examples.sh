@@ -72,7 +72,7 @@ results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}
 rm -r ${results_dir}
 
 rm -r rofiverbs_lamellae
-mkdir -p rofiverbs_lamellae
+# mkdir -p rofiverbs_lamellae
 mkdir -p ${results_dir}
 ln -s ${output_dir}/rofiverbs_lamellae rofiverbs_lamellae
 
@@ -94,6 +94,8 @@ for toolchain in stable; do #nightly; do
     cd ${mode}
 
     for dir in `ls $root/examples`; do
+    # for dir in kernels; do
+      # if [ $dir == "array_examples" ]; then
       mkdir -p $dir
       cd $dir
 
@@ -119,12 +121,15 @@ for toolchain in stable; do #nightly; do
         #   done
         fi
       cd ..
-      cur_tasks=`squeue -u frie869 | grep " R " | wc -l`
-      while [ $cur_tasks -gt 3 ]; do
-        cur_tasks=`squeue -u frie869 | grep " R " | wc -l`
+      sleep 2
+      cur_tasks=`squeue -u frie869 | wc -l`
+      running_tasks=`squeue -u frie869 | grep " R " | wc -l`
+      while [ $((cur_tasks+running_tasks)) -gt 6 ]; do
+        cur_tasks=`squeue -u frie869 | wc -l`
+        running_tasks=`squeue -u frie869 | grep " R " | wc -l`
         sleep 5
-      done
-      
+      done   
+      # fi   
     done
     cd ..
     wait

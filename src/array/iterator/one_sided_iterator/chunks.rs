@@ -1,12 +1,14 @@
 use crate::array::iterator::one_sided_iterator::{private::*, *};
 
+use crate::array::ArrayRdmaHandle;
+use crate::lamellar_request::LamellarRequest;
 // use crate::array::LamellarArrayRequest;
 // use crate::LamellarArray;
 use crate::memregion::OneSidedMemoryRegion;
 use pin_project::pin_project;
 
 // use async_trait::async_trait;
-// use futures::Future;
+// use futures_util::Future;
 #[pin_project]
 pub struct Chunks<I>
 where
@@ -20,10 +22,7 @@ where
 }
 
 enum ChunkState<I: Dist> {
-    Pending(
-        OneSidedMemoryRegion<I>,
-        Box<dyn LamellarArrayRequest<Output = ()>>,
-    ),
+    Pending(OneSidedMemoryRegion<I>, ArrayRdmaHandle),
     Finished,
 }
 
@@ -48,10 +47,7 @@ where
         array: <I as OneSidedIteratorInner>::Array,
         index: usize,
         size: usize,
-    ) -> (
-        OneSidedMemoryRegion<I::ElemType>,
-        Box<dyn LamellarArrayRequest<Output = ()>>,
-    ) {
+    ) -> (OneSidedMemoryRegion<I::ElemType>, ArrayRdmaHandle) {
         // println!(" get chunk of len: {:?}", size);
         let mem_region: OneSidedMemoryRegion<I::ElemType> =
             array.team_rt().alloc_one_sided_mem_region(size);
@@ -76,6 +72,7 @@ where
         let array = self.array();
         let size = std::cmp::min(self.chunk_size, array.len() - self.index);
         let (new_mem_region, new_req) = Self::get_buffer(array, self.index, size);
+        self.index += size;
         self.state = ChunkState::Pending(new_mem_region, new_req);
     }
     fn next(&mut self) -> Option<Self::Item> {
@@ -84,16 +81,18 @@ where
         std::mem::swap(&mut self.state, &mut cur_state);
         match cur_state {
             ChunkState::Pending(mem_region, req) => {
-                if self.index + 1 < array.len() {
+                // println!("next: index: {:?}", self.index);
+                if self.index < array.len() {
                     //prefetch
                     let size = std::cmp::min(self.chunk_size, array.len() - self.index);
-                    self.index += size;
+                    // println!("prefectching: index: {:?} {:?}", self.index, size);
                     let (new_mem_region, new_req) = Self::get_buffer(array, self.index, size);
+                    self.index += size;
                     self.state = ChunkState::Pending(new_mem_region, new_req);
                 } else {
                     self.state = ChunkState::Finished;
                 }
-                req.wait();
+                req.blocking_wait();
                 Some(mem_region)
             }
             ChunkState::Finished => None,
@@ -109,19 +108,18 @@ where
 
         match cur_state {
             ChunkState::Pending(mem_region, mut req) => {
-                if !req.ready() {
-                    req.set_waker(cx.waker().clone());
+                if !req.ready_or_set_waker(cx.waker()) {
                     *this.state = ChunkState::Pending(mem_region, req);
-
-                    // println!("not ready");
                     return Poll::Pending;
                 }
-                if *this.index + 1 < array.len() {
+                // println!("next: index: {:?}", this.index);
+                if *this.index < array.len() {
                     // println!("got chunk! {:?}", *this.index);
                     //prefetch
                     let size = std::cmp::min(*this.chunk_size, array.len() - *this.index);
-                    *this.index += size;
+                    // println!("prefectching: index: {:?} {:?}", this.index, size);
                     let (new_mem_region, new_req) = Self::get_buffer(array, *this.index, size);
+                    *this.index += size;
                     *this.state = ChunkState::Pending(new_mem_region, new_req);
                 } else {
                     // println!("finished chunks!");
@@ -164,7 +162,7 @@ where
     // fn buffered_next(
     //     &mut self,
     //     mem_region: OneSidedMemoryRegion<u8>,
-    // ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    // ) -> Option<ArrayRdmaHandle> {
     //     let array = self.array();
     //     if self.index < array.len() {
     //         let mem_reg_t = unsafe { mem_region.to_base::<I::ElemType>() };
@@ -191,8 +189,8 @@ where
 //     }
 // }
 
-// use futures::task::{Context, Poll};
-// use futures::Stream;
+// use futures_util::task::{Context, Poll};
+// use futures_util::Stream;
 // use std::pin::Pin;
 
 // impl<I> Stream for Chunks<I>

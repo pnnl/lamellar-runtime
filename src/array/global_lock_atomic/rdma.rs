@@ -3,16 +3,14 @@ use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::{
     ArrayRdmaAtHandle, ArrayRdmaHandle, Distribution, LamellarArrayGet, LamellarArrayInternalGet,
     LamellarArrayInternalPut, LamellarArrayPut, LamellarArrayRdmaInput, LamellarArrayRdmaOutput,
-    LamellarArrayRequest, LamellarEnv, LamellarRead, LamellarWrite, TeamTryInto,
+    LamellarEnv, LamellarRead, LamellarWrite, TeamTryInto,
 };
 use crate::memregion::{
     AsBase, Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RTMemoryRegionRDMA,
     RegisteredMemoryRegion, SubRegion,
 };
 
-use futures::Future;
-use std::collections::HashMap;
-use std::pin::Pin;
+use std::collections::{HashMap, VecDeque};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
     // fn iget<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
@@ -22,25 +20,27 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> ArrayRdmaHandle {
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.into(),
         });
-        Box::new(ArrayRdmaHandle { reqs: vec![req] })
+        ArrayRdmaHandle {
+            reqs: VecDeque::from([req.into()]),
+        }
     }
-    unsafe fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.clone().into(),
         });
-        Box::new(ArrayRdmaAtHandle {
-            reqs: vec![req],
+        ArrayRdmaAtHandle {
+            req: Some(req),
             buf: buf,
-        })
+        }
     }
 }
 
@@ -49,14 +49,16 @@ impl<T: Dist> LamellarArrayGet<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayRdmaHandle {
         match buf.team_try_into(&self.array.team_rt()) {
-            Ok(buf) => self.internal_get(index, buf).into_future(),
-            Err(_) => Box::pin(async move { () }),
+            Ok(buf) => self.internal_get(index, buf),
+            Err(_) => ArrayRdmaHandle {
+                reqs: VecDeque::new(),
+            },
         }
     }
-    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        unsafe { self.internal_at(index).into_future() }
+    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+        unsafe { self.internal_at(index) }
     }
 }
 
@@ -65,13 +67,15 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> ArrayRdmaHandle {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
             buf: buf.into(),
         });
-        Box::new(ArrayRdmaHandle { reqs: vec![req] })
+        ArrayRdmaHandle {
+            reqs: VecDeque::from([req.into()]),
+        }
     }
 }
 
@@ -80,10 +84,12 @@ impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayRdmaHandle {
         match buf.team_try_into(&self.array.team_rt()) {
-            Ok(buf) => self.internal_put(index, buf).into_future(),
-            Err(_) => Box::pin(async move { () }),
+            Ok(buf) => self.internal_put(index, buf),
+            Err(_) => ArrayRdmaHandle {
+                reqs: VecDeque::new(),
+            },
         }
     }
 }
@@ -115,7 +121,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                 start_index: self.index,
                 len: self.buf.len(),
             };
-            reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
+            reqs.push(self.array.exec_am_pe(pe, remote_am));
         }
         unsafe {
             match self.array.array.inner.distribution {
@@ -220,7 +226,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                         .into(),
                                     pe: self.array.my_pe(),
                                 };
-                                reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
+                                reqs.push(self.array.exec_am_pe(pe, remote_am));
                             } else {
                                 let remote_am = GlobalLockRemoteSmallPutAm {
                                     array: self.array.clone().into(), //inner of the indices we need to place data into
@@ -230,7 +236,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                         [cur_index..(cur_index + u8_buf_len)]
                                         .to_vec(),
                                 };
-                                reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
+                                reqs.push(self.array.exec_am_pe(pe, remote_am));
                             }
                             cur_index += u8_buf_len;
                         } else {
@@ -285,7 +291,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                             len: self.buf.len(),
                             data: vec,
                         };
-                        reqs.push(self.array.exec_am_pe(pe, remote_am).into_future());
+                        reqs.push(self.array.exec_am_pe(pe, remote_am));
                     }
                 }
             }
