@@ -45,6 +45,7 @@ glob = "0.3.0"
 thread_local = "1.1.4"
 tokio = { version = "1.35.1", features = ["full"] , optional = true}
 libc = { version = "0.2.137", optional = true }
+async-global-executor = "2.4.1"
 
 
 

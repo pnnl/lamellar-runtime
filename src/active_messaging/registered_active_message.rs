@@ -114,7 +114,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     let ame = self.clone();
                     let req_data_clone = req_data.clone();
                     let am_clone = am.clone();
-                    self.executor.submit_task(async move {
+                    self.executor.submit_io_task(async move {
                         //spawn a task so that we can the execute the local am immediately
                         // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
                         if am_size < crate::active_messaging::BATCH_AM_SIZE && !immediate {

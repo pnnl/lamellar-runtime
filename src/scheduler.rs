@@ -9,9 +9,19 @@ use enum_dispatch::enum_dispatch;
 use futures_util::Future;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::thread;
 
 pub(crate) mod work_stealing;
 use work_stealing::WorkStealing;
+
+pub(crate) mod work_stealing2;
+use work_stealing2::WorkStealing2;
+
+pub(crate) mod work_stealing3;
+use work_stealing3::WorkStealing3;
+
+pub(crate) mod async_std_executor;
+use async_std_executor::AsyncStdRt;
 
 #[cfg(feature = "tokio-executor")]
 pub(crate) mod tokio_executor;
@@ -34,6 +44,15 @@ pub(crate) enum SchedulerStatus {
 
 // pub(crate) mod numa_work_stealing2;
 // use numa_work_stealing2::{NumaWorkStealing2, NumaWorkStealing2Inner};
+
+// static AM_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
+// static AM_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
+
+// static TASK_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
+// static TASK_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
+
+// static IO_SAME_THREAD: AtomicUsize = AtomicUsize::new(0);
+// static IO_DIFF_THREAD: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(
     Copy,
@@ -59,6 +78,9 @@ pub(crate) struct ReqId {
 pub enum ExecutorType {
     /// The default work stealing executor
     LamellarWorkStealing,
+    LamellarWorkStealing2,
+    LamellarWorkStealing3,
+    AsyncStd,
     #[cfg(feature = "tokio-executor")]
     /// The tokio executor
     Tokio,
@@ -68,6 +90,11 @@ pub enum ExecutorType {
 #[enum_dispatch]
 pub(crate) trait LamellarExecutor {
     fn submit_task<F>(&self, future: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send;
+
+    fn submit_io_task<F>(&self, future: F)
     where
         F: Future + Send + 'static,
         F::Output: Send;
@@ -96,6 +123,9 @@ pub(crate) trait LamellarExecutor {
 #[derive(Debug)]
 pub(crate) enum Executor {
     WorkStealing(WorkStealing),
+    WorkStealing2(WorkStealing2),
+    WorkStealing3(WorkStealing3),
+    AsyncStd(AsyncStdRt),
     #[cfg(feature = "tokio-executor")]
     Tokio(TokioRt),
 }
@@ -139,12 +169,18 @@ impl Scheduler {
         let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
         let ame = self.active_message_engine.clone();
         let am_future = async move {
+            // let start_tid = thread::current().id();
             num_ams.fetch_add(1, Ordering::Relaxed);
             let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
             // println!("[{:?}] submit_am {:?}", std::thread::current().id(), am_id);
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
+            // if thread::current().id() != start_tid {
+            //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+            // } else {
+            //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+            // }
             // println!(
             //     "[{:?}] submit_am_done {:?}",
             //     std::thread::current().id(),
@@ -162,6 +198,7 @@ impl Scheduler {
         let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
         let ame = self.active_message_engine.clone();
         let am_future = async move {
+            // let start_tid = thread::current().id();
             num_ams.fetch_add(1, Ordering::Relaxed);
             let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
@@ -172,6 +209,11 @@ impl Scheduler {
             // );
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
+            // if thread::current().id() != start_tid {
+            //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+            // } else {
+            //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+            // }
             // println!(
             //     "[{:?}] submit_am_immediate done {:?}",
             //     std::thread::current().id(),
@@ -187,6 +229,7 @@ impl Scheduler {
         let max_ams = self.max_ams.clone();
         let ame = self.active_message_engine.clone();
         let am_future = async move {
+            // let start_tid = std::thread::current().id();
             num_ams.fetch_add(1, Ordering::Relaxed);
             let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
@@ -203,6 +246,11 @@ impl Scheduler {
                 panic!("should i be here?");
             }
             num_ams.fetch_sub(1, Ordering::Relaxed);
+            // if start_tid == std::thread::current().id() {
+            //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+            // } else {
+            //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+            // }
             // println!(
             //     "[{:?}] submit_remote_am done {:?}",
             //     std::thread::current().id(),
@@ -220,6 +268,7 @@ impl Scheduler {
         let num_tasks = self.num_tasks.clone();
         let max_tasks = self.max_tasks.clone();
         let future = async move {
+            // let start_tid = std::thread::current().id();
             num_tasks.fetch_add(1, Ordering::Relaxed);
             let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
             // println!(
@@ -234,6 +283,11 @@ impl Scheduler {
             //     std::thread::current().id(),
             //     task_id
             // );
+            // if start_tid == std::thread::current().id() {
+            //     TASK_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+            // } else {
+            //     TASK_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+            // }
         };
         self.executor.submit_task(future);
     }
@@ -245,6 +299,7 @@ impl Scheduler {
         let num_tasks = self.num_tasks.clone();
         let max_tasks = self.max_tasks.clone();
         let future = async move {
+            // let start_tid = std::thread::current().id();
             num_tasks.fetch_add(1, Ordering::Relaxed);
             let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
             // println!(
@@ -259,8 +314,45 @@ impl Scheduler {
             //     std::thread::current().id(),
             //     task_id
             // );
+            // if start_tid == std::thread::current().id() {
+            //     TASK_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+            // } else {
+            //     TASK_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+            // }
         };
         self.executor.submit_immediate_task(future);
+    }
+
+    pub(crate) fn submit_io_task<F>(&self, task: F)
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let num_tasks = self.num_tasks.clone();
+        let max_tasks = self.max_tasks.clone();
+        let future = async move {
+            // let start_tid = std::thread::current().id();
+            num_tasks.fetch_add(1, Ordering::Relaxed);
+            let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] execing new task {:?}",
+            //     std::thread::current().id(),
+            //     task_id
+            // );
+            task.await;
+            num_tasks.fetch_sub(1, Ordering::Relaxed);
+            // println!(
+            //     "[{:?}] done new task {:?} ",
+            //     std::thread::current().id(),
+            //     task_id
+            // );
+            // if start_tid == std::thread::current().id() {
+            //     IO_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+            // } else {
+            //     IO_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+            // }
+        };
+
+        self.executor.submit_io_task(future);
     }
 
     pub(crate) fn exec_task(&self) {
@@ -290,6 +382,14 @@ impl Scheduler {
     }
 
     pub(crate) fn active(&self) -> bool {
+        // if self.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8 {
+        //     println!(
+        //         "active: {:?} {:?}",
+        //         self.status.load(Ordering::SeqCst),
+        //         self.num_tasks.load(Ordering::SeqCst)
+        //     );
+        // }
+
         self.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
             || self.num_tasks.load(Ordering::SeqCst) > 3 // the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
     }
@@ -317,6 +417,21 @@ impl Scheduler {
             std::thread::yield_now()
         }
         self.executor.shutdown();
+        // println!(
+        //     "AM_SAME: {:?} AM_DIFF: {:?}",
+        //     AM_SAME_THREAD.load(Ordering::Relaxed),
+        //     AM_DIFF_THREAD.load(Ordering::Relaxed)
+        // );
+        // println!(
+        //     "TASK_SAME: {:?} TASK_DIFF: {:?}",
+        //     TASK_SAME_THREAD.load(Ordering::Relaxed),
+        //     TASK_DIFF_THREAD.load(Ordering::Relaxed)
+        // );
+        // println!(
+        //     "IO_SAME: {:?} IO_DIFF: {:?}",
+        //     IO_SAME_THREAD.load(Ordering::Relaxed),
+        //     IO_DIFF_THREAD.load(Ordering::Relaxed)
+        // );
     }
     pub(crate) fn force_shutdown(&self) {
         self.status
@@ -337,6 +452,14 @@ pub(crate) fn create_scheduler(
         ExecutorType::LamellarWorkStealing => {
             WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
         }
+        ExecutorType::LamellarWorkStealing2 => {
+            WorkStealing2::new(num_workers, status.clone(), panic.clone()).into()
+        }
+        ExecutorType::LamellarWorkStealing3 => {
+            WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
+        }
+        ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
+
         #[cfg(feature = "tokio-executor")]
         ExecutorType::Tokio => TokioRt::new(num_workers).into(),
     });

@@ -5,6 +5,7 @@ use crate::lamellae::{
 use crate::scheduler::Scheduler;
 
 use parking_lot::Mutex;
+use thread_local::ThreadLocal;
 
 use std::collections::HashMap;
 use std::num::Wrapping;
@@ -16,6 +17,10 @@ use std::sync::Arc;
 const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
                                   // const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
 const CMD_BUFS_PER_PE: usize = 2;
+
+// lazy_static! {
+//     static ref CNTS: ThreadLocal<AtomicUsize> = ThreadLocal::new();
+// }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -701,14 +706,7 @@ impl InnerCQ {
 
     //#[tracing::instrument(skip_all)]
     async fn send(&self, addr: usize, len: usize, dst: usize, hash: usize) {
-        // if len > 1000000000{
-        //     println!("wayyyyyy toooooo big!!!");
-        // }
         let mut timer = std::time::Instant::now();
-        // while self.active_cnt.load(Ordering::SeqCst) > 4 {
-        //     async_std::task::yield_now().await;
-        // }
-        // self.active_cnt.fetch_add(1, Ordering::SeqCst);
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
@@ -719,12 +717,9 @@ impl InnerCQ {
                 // let mut cmd_buffer = trace_span!("lock").in_scope(|| self.cmd_buffers[dst].lock());
                 let mut cmd_buffer = self.cmd_buffers[dst].lock();
                 if cmd_buffer.try_push(addr, len, hash) {
-                    // let data_slice = unsafe{ std::slice::from_raw_parts((addr + self.comm.base_addr()) as *const u8, len) };
                     self.sent_cnt.fetch_add(1, Ordering::SeqCst);
                     self.put_amt.fetch_add(len, Ordering::Relaxed);
                     let _cnt = self.pending_cmds.fetch_sub(1, Ordering::SeqCst);
-                    // println!("pushed {:?} {:?} {:?} {:?}", addr, len, hash, _cnt); //, data_slice);
-                    // println!("cmd_buffer {:?}", cmd_buffer);
                     break;
                 }
                 // let span1 = trace_span!("send loop 1.1");
@@ -1365,7 +1360,7 @@ impl CommandQueue {
             // scheduler.force_shutdown();
             panic!("received panic from other PE");
         }
-        // println!("leaving alloc_task task {:?}", scheduler.active());
+        // println!("leaving panic_task task {:?}", scheduler.active());
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1377,6 +1372,8 @@ impl CommandQueue {
             || !self.cq.empty()
             || scheduler.active()
         {
+            // CNTS.get_or(|| AtomicUsize::new(0))
+            //     .fetch_add(1, Ordering::Relaxed);
             for src in 0..num_pes {
                 if src != my_pe {
                     if let Some(cmd_buf_cmd) = self.cq.ready(src) {
@@ -1450,7 +1447,7 @@ impl CommandQueue {
                                             //     "[{:?}] recv_data submitting get command task",
                                             //     std::thread::current().id(),
                                             // );
-                                            scheduler1.submit_task(task);
+                                            scheduler1.submit_io_task(task);
                                             i += 1;
                                         } else {
                                             panic!(
@@ -1466,7 +1463,7 @@ impl CommandQueue {
                                 //     "[{:?}] recv_data submitting tx task",
                                 //     std::thread::current().id()
                                 // );
-                                scheduler.submit_task(task);
+                                scheduler.submit_io_task(task);
                             }
                         }
                     }
@@ -1497,6 +1494,11 @@ impl CommandQueue {
         // );
         self.active
             .store(CmdQStatus::Finished as u8, Ordering::SeqCst);
+        // println!("recv_data thread shutting down");
+        // for cnt in CNTS.iter() {
+        //     print!("{:?} ", cnt.load(Ordering::Relaxed));
+        // }
+        // println!("");
     }
 
     //#[tracing::instrument(skip_all)]

@@ -396,6 +396,12 @@ impl LamellarWorldBuilder {
                         println!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled,  defaulting to lamellar work stealing executor");
                         ExecutorType::LamellarWorkStealing
                     }
+                } else if executor == 2 {
+                    ExecutorType::LamellarWorkStealing2
+                } else if executor == 3 {
+                    ExecutorType::LamellarWorkStealing3
+                } else if executor == 4 {
+                    ExecutorType::AsyncStd
                 } else {
                     println!("[LAMELLAR WARNING]: invalid executor selected defaulting to lamellar work stealing executor");
                     ExecutorType::LamellarWorkStealing

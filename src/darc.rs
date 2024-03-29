@@ -46,6 +46,7 @@
 ///```
 use async_lock::RwLock;
 use core::marker::PhantomData;
+use futures_util::future::join_all;
 use serde::{Deserialize, Deserializer};
 use std::cmp::PartialEq;
 use std::fmt;
@@ -458,11 +459,17 @@ impl<T> DarcInner<T> {
 
             while outstanding_refs {
                 outstanding_refs = false;
+                // these hopefully all get set to non zero later otherwise we still need to wait
+                for id in &mut *barrier_slice {
+                    *id = 0;
+                }
                 let old_barrier_id = barrier_id; //we potentially will set barrier_id to 0 but want to maintiain the previously highest value
                 while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                     async_std::task::yield_now().await;
                 }
-                inner.send_finished();
+                join_all(inner.send_finished()).await;
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
 
                 let mut old_ref_cnts = ref_cnts_slice.to_vec();
                 let old_local_cnt = inner.total_local_cnt.load(Ordering::SeqCst);
@@ -563,6 +570,7 @@ impl<T> DarcInner<T> {
                         inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
                     );
                 }
+                //maybe we need to change the above to a get?
                 rdma.flush();
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
@@ -580,15 +588,17 @@ impl<T> DarcInner<T> {
                 //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(), inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
                 // }
                 barrier_id = old_barrier_id + 1;
-                if outstanding_refs {
-                    // println!(
-                    //     "[{:?}] still outstanding, exec a task!",
-                    //     std::thread::current().id()
-                    // );
-                    // team.scheduler.exec_task();
-                    async_std::task::yield_now().await;
-                }
+                // if outstanding_refs {
+                //     // println!(
+                //     //     "[{:?}] still outstanding, exec a task!",
+                //     //     std::thread::current().id()
+                //     // );
+                //     // team.scheduler.exec_task();
+                //     async_std::task::yield_now().await;
+                // }
                 prev_ref_cnts = old_ref_cnts;
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
             }
             // println!(
             //     "[{:?}] {rel_addr:x}  all outstanding refs are resolved",
@@ -613,7 +623,7 @@ impl<T> DarcInner<T> {
                 let mut timer = std::time::Instant::now();
                 while *pe != state as u8 {
                     if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
-                        inner.send_finished();
+                        join_all(inner.send_finished()).await;
                     }
                     if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                         let ref_cnts_slice = unsafe {
@@ -622,22 +632,23 @@ impl<T> DarcInner<T> {
                                 inner.num_pes,
                             )
                         };
-                        println!("[{:?}][WARNING] -- Potential deadlock detected.\n\
-                    The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                    The object is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-                    An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
-                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
-                    To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                    {}",
-                    std::thread::current().id(),
-                    unsafe {
-                        &std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes)
-                    },
-                    inner.local_cnt.load(Ordering::SeqCst),
-                    inner.dist_cnt.load(Ordering::SeqCst),
-                    *crate::DEADLOCK_TIMEOUT,
-                    std::backtrace::Backtrace::capture()
-                );
+                        println!("[{:?}][{:?}][WARNING] -- Potential deadlock detected.\n\
+                            The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                            The object is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
+                            An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
+                            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                            To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                            {}",
+                            inner.my_pe,
+                            std::thread::current().id(),
+                            unsafe {
+                                &std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes)
+                            },
+                            inner.local_cnt.load(Ordering::SeqCst),
+                            inner.dist_cnt.load(Ordering::SeqCst),
+                            *crate::DEADLOCK_TIMEOUT,
+                            std::backtrace::Backtrace::capture()
+                        );
                         timer = std::time::Instant::now();
                     }
                     async_std::task::yield_now().await;
@@ -1393,7 +1404,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 async_std::task::yield_now().await;
 
                 if wrapped.local_cnt.load(Ordering::SeqCst) == 0 {
-                    wrapped.send_finished();
+                    join_all(wrapped.send_finished()).await;
                 }
 
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
@@ -1434,7 +1445,8 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 || wrapped.local_cnt.load(Ordering::SeqCst) != 0
             {
                 if wrapped.local_cnt.load(Ordering::SeqCst) == 0 {
-                    wrapped.send_finished();
+                    // wrapped.send_finished()
+                    join_all(wrapped.send_finished()).await;
                 }
                 if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
                     let ref_cnts_slice = std::slice::from_raw_parts_mut(

@@ -1,10 +1,10 @@
 use crate::scheduler::{LamellarExecutor, SchedulerStatus};
+use crate::MAIN_THREAD;
 
 //use tracing::*;
 
 use async_task::{Builder, Runnable};
 use core_affinity::CoreId;
-use crossbeam::deque::Worker;
 use futures_util::Future;
 use rand::prelude::*;
 use std::panic;
@@ -17,13 +17,21 @@ use std::task::Poll;
 //, Weak};
 use std::thread;
 
+use crossbeam::deque::{Injector, Stealer, Worker};
+use thread_local::ThreadLocal;
+
 static TASK_ID: AtomicUsize = AtomicUsize::new(0);
+
+lazy_static! {
+    static ref WORK_Q: ThreadLocal<Worker<Runnable<usize>>> = ThreadLocal::new();
+}
+
 #[derive(Debug)]
 pub(crate) struct WorkStealingThread {
-    imm_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
-    work_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
-    work_stealers: Vec<crossbeam::deque::Stealer<Runnable<usize>>>,
-    work_q: Worker<Runnable<usize>>,
+    imm_inj: Arc<Injector<Runnable<usize>>>,
+    work_inj: Arc<Injector<Runnable<usize>>>,
+    work_stealers: Vec<Stealer<Runnable<usize>>>,
+    // work_q: Arc<HashMap<ThreadId, Worker<Runnable<usize>>>>,
     work_flag: Arc<AtomicU8>,
     status: Arc<AtomicU8>,
     panic: Arc<AtomicU8>,
@@ -33,6 +41,7 @@ impl WorkStealingThread {
     //#[tracing::instrument(skip_all)]
     fn run(
         worker: WorkStealingThread,
+        work_q: Worker<Runnable<usize>>,
         active_cnt: Arc<AtomicUsize>,
         // num_tasks: Arc<AtomicUsize>,
         id: CoreId,
@@ -43,6 +52,7 @@ impl WorkStealingThread {
                 // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
                 // let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
+                let work_q = WORK_Q.get_or(|| work_q);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::thread_rng();
                 let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
@@ -50,7 +60,7 @@ impl WorkStealingThread {
                 while worker.panic.load(Ordering::SeqCst) == 0
                     && (
                         worker.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-                            || !(worker.work_q.is_empty()
+                            || !(work_q.is_empty()
                                 && worker.work_inj.is_empty()
                                 && worker.imm_inj.is_empty())
                         // || num_tasks.load(Ordering::SeqCst) > 1
@@ -59,7 +69,7 @@ impl WorkStealingThread {
                     let omsg = if !worker.imm_inj.is_empty() {
                         worker.imm_inj.steal().success()
                     } else {
-                        worker.work_q.pop().or_else(|| {
+                        work_q.pop().or_else(|| {
                             if worker.work_flag.compare_exchange(
                                 0,
                                 1,
@@ -67,14 +77,16 @@ impl WorkStealingThread {
                                 Ordering::Relaxed,
                             ) == Ok(0)
                             {
-                                let ret = worker
-                                    .work_inj
-                                    .steal_batch_and_pop(&worker.work_q)
-                                    .success();
+                                let ret = worker.work_inj.steal_batch_and_pop(work_q).success();
                                 worker.work_flag.store(0, Ordering::SeqCst);
                                 ret
                             } else {
-                                worker.work_stealers[t.sample(&mut rng)].steal().success()
+                                let pe = t.sample(&mut rng);
+                                if worker.work_stealers[pe].len() > 100 {
+                                    worker.work_stealers[t.sample(&mut rng)].steal().success()
+                                } else {
+                                    None
+                                }
                             }
                         })
                     };
@@ -86,7 +98,7 @@ impl WorkStealingThread {
                             println!("runnable {:?}", runnable);
                             println!(
                                 "work_q size {:?} work inj size {:?}", // num_tasks {:?}",
-                                worker.work_q.len(),
+                                work_q.len(),
                                 worker.work_inj.len(),
                                 // num_tasks.load(Ordering::SeqCst)
                             );
@@ -96,11 +108,11 @@ impl WorkStealingThread {
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
                         && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
-                        && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
+                        && (work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
                             "work_q size {:?} work inj size {:?} ", // num_tasks {:?}",
-                            worker.work_q.len(),
+                            work_q.len(),
                             worker.work_inj.len(),
                             // num_tasks.load(Ordering::SeqCst)
                         );
@@ -116,19 +128,19 @@ impl WorkStealingThread {
 }
 
 #[derive(Debug)]
-pub(crate) struct WorkStealing {
+pub(crate) struct WorkStealing3 {
     max_num_threads: usize,
     threads: Vec<thread::JoinHandle<()>>,
-    imm_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
-    work_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
-    work_stealers: Vec<crossbeam::deque::Stealer<Runnable<usize>>>,
+    imm_inj: Arc<Injector<Runnable<usize>>>,
+    work_inj: Arc<Injector<Runnable<usize>>>,
+    work_stealers: Vec<Stealer<Runnable<usize>>>,
     work_flag: Arc<AtomicU8>,
     status: Arc<AtomicU8>,
     active_cnt: Arc<AtomicUsize>,
     panic: Arc<AtomicU8>,
 }
 
-impl LamellarExecutor for WorkStealing {
+impl LamellarExecutor for WorkStealing3 {
     fn submit_task<F>(&self, task: F)
     where
         F: Future + Send + 'static,
@@ -136,7 +148,13 @@ impl LamellarExecutor for WorkStealing {
     {
         // trace_span!("submit_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
-        let schedule = move |runnable| work_inj.push(runnable);
+        let schedule = move |runnable| {
+            // if thread::current().id() == *MAIN_THREAD {
+            work_inj.push(runnable);
+            // } else {
+            //     WORK_Q.get().unwrap().push(runnable);
+            // }
+        };
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
             .spawn(move |_task_id| async move { task.await }, schedule);
@@ -152,12 +170,18 @@ impl LamellarExecutor for WorkStealing {
         F::Output: Send,
     {
         // trace_span!("submit_task").in_scope(|| {
+
         let work_inj = self.work_inj.clone();
-        let schedule = move |runnable| work_inj.push(runnable);
+        let schedule = move |runnable| {
+            if thread::current().id() == *MAIN_THREAD {
+                work_inj.push(runnable);
+            } else {
+                WORK_Q.get().unwrap().push(runnable);
+            }
+        };
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
             .spawn(move |_task_id| async move { task.await }, schedule);
-
         runnable.schedule();
         task.detach();
         // });
@@ -214,7 +238,6 @@ impl LamellarExecutor for WorkStealing {
         {
             //num active threads
             self.exec_task();
-            std::thread::yield_now()
         }
     }
 
@@ -230,7 +253,6 @@ impl LamellarExecutor for WorkStealing {
             while self.active_cnt.load(Ordering::Relaxed) > 0 {
                 //num active threads
                 self.exec_task();
-                std::thread::yield_now()
             }
         }
         // println!(
@@ -257,11 +279,14 @@ impl LamellarExecutor for WorkStealing {
                 self.work_flag.store(0, Ordering::SeqCst);
                 ret
             } else {
-                self.work_stealers[t.sample(&mut rng)].steal().success()
+                // self.work_stealers[t.sample(&mut rng)].steal().success()
+                None
             }
         };
         if let Some(runnable) = ret {
             runnable.run();
+        } else {
+            std::thread::yield_now();
         }
     }
 
@@ -274,18 +299,18 @@ impl LamellarExecutor for WorkStealing {
     }
 }
 
-impl WorkStealing {
+impl WorkStealing3 {
     pub(crate) fn new(
         num_workers: usize,
         status: Arc<AtomicU8>,
         panic: Arc<AtomicU8>,
-    ) -> WorkStealing {
+    ) -> WorkStealing3 {
         // println!("new work stealing queue");
-        let mut ws = WorkStealing {
+        let mut ws = WorkStealing3 {
             max_num_threads: num_workers,
             threads: Vec::new(),
-            imm_inj: Arc::new(crossbeam::deque::Injector::new()),
-            work_inj: Arc::new(crossbeam::deque::Injector::new()),
+            imm_inj: Arc::new(Injector::new()),
+            work_inj: Arc::new(Injector::new()),
             work_stealers: Vec::new(),
             work_flag: Arc::new(AtomicU8::new(0)),
             status: status,
@@ -318,19 +343,20 @@ impl WorkStealing {
             }
         };
         // println!("core_ids: {:?}",core_ids);
+        println!("num threads: {} {}", self.max_num_threads, core_ids.len());
         for i in 0..self.max_num_threads {
             let work_worker = work_workers.pop().unwrap();
             let worker = WorkStealingThread {
                 imm_inj: self.imm_inj.clone(),
                 work_inj: self.work_inj.clone(),
                 work_stealers: self.work_stealers.clone(),
-                work_q: work_worker,
                 work_flag: self.work_flag.clone(),
                 status: self.status.clone(),
                 panic: self.panic.clone(),
             };
             self.threads.push(WorkStealingThread::run(
                 worker,
+                work_worker,
                 self.active_cnt.clone(),
                 // self.num_tasks.clone(),
                 core_ids[i % core_ids.len()],
@@ -342,7 +368,7 @@ impl WorkStealing {
     }
 }
 
-impl Drop for WorkStealing {
+impl Drop for WorkStealing3 {
     //when is this called with respect to world?
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {

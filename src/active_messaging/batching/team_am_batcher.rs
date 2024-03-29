@@ -205,7 +205,7 @@ impl Batcher for TeamAmBatcher {
             //     std::thread::current().id()
             // );
             let cur_stall_mark = self.stall_mark.clone();
-            self.executor.submit_task(async move {
+            self.executor.submit_io_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
@@ -267,7 +267,7 @@ impl Batcher for TeamAmBatcher {
             //     std::thread::current().id()
             // );
             let cur_stall_mark = self.stall_mark.clone();
-            self.executor.submit_task(async move {
+            self.executor.submit_io_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
@@ -336,7 +336,7 @@ impl Batcher for TeamAmBatcher {
             //     std::thread::current().id()
             // );
             let cur_stall_mark = self.stall_mark.clone();
-            self.executor.submit_task(async move {
+            self.executor.submit_io_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
@@ -387,7 +387,7 @@ impl Batcher for TeamAmBatcher {
             //     std::thread::current().id()
             // );
             let cur_stall_mark = self.stall_mark.clone();
-            self.executor.submit_task(async move {
+            self.executor.submit_io_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
