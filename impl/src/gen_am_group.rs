@@ -317,10 +317,11 @@ fn impl_am_group_user(
     quote! {
         impl #am_user_impl_generics #am_group_name_user #am_user_ty_generics #am_user_where_clause{
             pub fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> Self {
-                let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-                    Ok(n) => n.parse::<usize>().unwrap(),
-                    Err(_) => 10000,
-                };
+                let num_per_batch = #lamellar::config().batch_op_size;
+                // match std::env::var("LAMELLAR_OP_BATCH") {
+                //     Ok(n) => n.parse::<usize>().unwrap(),
+                //     Err(_) => 10000,
+                // };
                 #am_group_name_user {
                     team: team,
                     batch_cnt: 0,

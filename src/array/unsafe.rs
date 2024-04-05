@@ -9,6 +9,7 @@ use crate::active_messaging::*;
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::{Darc, DarcMode, WeakDarc};
+use crate::env_var::config;
 use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
@@ -452,7 +453,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             // self.inner.data.team.flush();
             // self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
             async_std::task::yield_now().await;
-            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 //|| first{
                 println!(
                     "in array await_all mype: {:?} cnt: {:?} {:?} {:?}",
@@ -946,7 +947,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
             // std::thread::yield_now();
             // self.inner.data.team.flush();
             self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 //|| first{
                 println!(
                     "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",

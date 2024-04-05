@@ -1,12 +1,12 @@
+use crate::env_var::config;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
 use crate::lamellar_arch::LamellarArchRT;
 use crate::memregion::MemoryRegion;
 use crate::scheduler::Scheduler;
+
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-
-const DISSEMINATION_FACTOR: usize = 2;
 
 pub(crate) struct Barrier {
     my_pe: usize, // global pe id
@@ -32,10 +32,8 @@ impl Barrier {
         panic: Arc<AtomicU8>,
     ) -> Barrier {
         let num_pes = arch.num_pes;
-        let mut n = std::env::var("LAMELLAR_BARRIER_DISSEMNATION_FACTOR")
-            .unwrap_or(DISSEMINATION_FACTOR.to_string())
-            .parse::<usize>()
-            .unwrap();
+        // let mut n = std::env::var("LAMELLAR_BARRIER_DISSEMNATION_FACTOR")
+        let mut n = config().barrier_dissemination_factor;
         let num_rounds = if n > 1 && num_pes > 2 {
             ((num_pes as f64).log2() / (n as f64).log2()).ceil() as usize
         } else {
@@ -127,7 +125,7 @@ impl Barrier {
         recv_pe: usize,
         send_buf_slice: &[usize],
     ) {
-        if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
             println!("[LAMELLAR WARNING][{:?}] Potential deadlock detected.\n\
             Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
             Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
@@ -138,7 +136,7 @@ impl Barrier {
             To view backtrace set RUST_LIB_BACKTRACE=1\n\
         {}",
         std::thread::current().id()
-        ,*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
+        ,config().deadlock_timeout,std::backtrace::Backtrace::capture());
 
             println!(
                 "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
@@ -274,8 +272,10 @@ impl Barrier {
                 self.scheduler.exec_task();
             });
         } else {
-            if let Ok(val) = std::env::var("LAMELLAR_BARRIER_WARNING") {
-                if val != "0" && val != "false" && val != "no" && val != "off" {
+            if let Some(val) = config().barrier_warning {
+                // std::env::var("LAMELLAR_BARRIER_WARNING") {
+                // if val != "0" && val != "false" && val != "no" && val != "off" {
+                if val {
                     println!("[LAMELLAR WARNING] You are calling barrier from within an async context, this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
                 }
             } else {

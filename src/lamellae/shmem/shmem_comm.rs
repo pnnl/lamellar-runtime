@@ -1,3 +1,4 @@
+use crate::config;
 use crate::lamellae::comm::*;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::{
@@ -311,10 +312,11 @@ impl ShmemComm {
             Ok(val) => val.parse::<usize>().unwrap(),
             Err(_e) => 0,
         };
-        if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
-            let size = size
-                .parse::<usize>()
-                .expect("invalid memory size, please supply size in bytes");
+        if let Some(size) = config().heap_size {
+            //std::env::var("LAMELLAR_MEM_SIZE") {
+            // let size = size
+            //     .parse::<usize>()
+            //     .expect("invalid memory size, please supply size in bytes");
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
 
@@ -351,6 +353,10 @@ impl ShmemComm {
         };
         shmem.alloc.write()[0].init(addr, mem_per_pe);
         shmem
+    }
+
+    pub(crate) fn heap_size() -> usize {
+        SHMEM_SIZE.load(Ordering::SeqCst)
     }
 }
 

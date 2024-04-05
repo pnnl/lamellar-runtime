@@ -1,3 +1,4 @@
+use crate::env_var::config;
 use crate::lamellae::comm::*;
 use crate::lamellae::{
     Des, Lamellae, LamellaeComm, LamellaeRDMA, SerializedData, SerializedDataOps,
@@ -5,7 +6,7 @@ use crate::lamellae::{
 use crate::scheduler::Scheduler;
 
 use parking_lot::Mutex;
-use thread_local::ThreadLocal;
+// use thread_local::ThreadLocal;
 
 use std::collections::HashMap;
 use std::num::Wrapping;
@@ -727,7 +728,7 @@ impl InnerCQ {
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
                 self.try_sending_buffer(dst, &mut cmd_buffer);
-                if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let send_buf = self.send_buffer.lock();
                     println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
                     println!("send_buf: {:?}", send_buf);
@@ -772,7 +773,7 @@ impl InnerCQ {
                         break;
                     }
                 }
-                if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                     println!("waiting to send cmd buffer {:?}", cmd_buffer);
                     let send_buf = self.send_buffer.lock();
                     println!("send_buf addr {:?}", send_buf.as_ptr());
@@ -838,7 +839,7 @@ impl InnerCQ {
                 while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
                     self.comm.flush();
                     std::thread::yield_now();
-                    if start.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    if start.elapsed().as_secs_f64() > config().deadlock_timeout {
                         println!("waiting to alloc: {:?} {:?}", alloc_buf, alloc_id);
                         start = std::time::Instant::now();
                     }
@@ -942,7 +943,7 @@ impl InnerCQ {
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
-                if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let send_buf = self.send_buffer.lock();
                     // println!("waiting to add cmd to cmd buffer {:?}",cmd_buffer);
                     println!("send_buf: {:?}", send_buf);
@@ -982,7 +983,7 @@ impl InnerCQ {
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
             async_std::task::yield_now().await;
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "stuck waiting for data from {:?}!!! {:?} {:?} {:?} {:?} -- calced hash {:?}",
                     src,
@@ -1010,7 +1011,7 @@ impl InnerCQ {
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
             async_std::task::yield_now().await;
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "stuck waiting for serialized data from {:?} !!! {:?} {:?} {:?} {:?}",
                     src,
@@ -1036,7 +1037,7 @@ impl InnerCQ {
             self.send_alloc(cmd.dsize);
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
             // println!("cq 851 data {:?}",ser_data.is_ok());
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT && ser_data.is_err() {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout && ser_data.is_err() {
                 println!(
                     "get cmd stuck waiting for alloc {:?} {:?}",
                     cmd.dsize,
@@ -1082,7 +1083,7 @@ impl InnerCQ {
                 .comm
                 .rt_alloc(cmd.dsize as usize, std::mem::align_of::<u8>());
             // println!("cq 874 data {:?}",data.is_ok());
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!("get cmd buf stuck waiting for alloc");
                 timer = std::time::Instant::now();
             }

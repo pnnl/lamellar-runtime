@@ -1,3 +1,4 @@
+use crate::env_var::config;
 use crate::scheduler::{LamellarExecutor, SchedulerStatus};
 
 //use tracing::*;
@@ -81,7 +82,7 @@ impl WorkStealingThread {
 
                     if let Some(runnable) = omsg {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         {
                             println!("runnable {:?}", runnable);
                             println!(
@@ -95,7 +96,7 @@ impl WorkStealingThread {
                         runnable.run();
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
@@ -282,7 +283,7 @@ impl WorkStealing {
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let mut ws = WorkStealing {
-            max_num_threads: num_workers,
+            max_num_threads: std::cmp::max(1,num_workers-1),// the main thread does work during blocking_ons and wait_alls
             threads: Vec::new(),
             imm_inj: Arc::new(crossbeam::deque::Injector::new()),
             work_inj: Arc::new(crossbeam::deque::Injector::new()),

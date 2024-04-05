@@ -1,3 +1,5 @@
+use crate::config;
+use crate::env_var::HeapMode;
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
@@ -261,6 +263,11 @@ impl LamellaeRDMA for Shmem {
         self.shmem_comm.num_pool_allocs()
     }
     fn alloc_pool(&self, min_size: usize) {
-        self.cq.send_alloc(min_size);
+        match config().heap_mode {
+            HeapMode::Static => {
+                panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes, set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",ShmemComm::heap_size())
+            }
+            HeapMode::Dynamic => self.cq.send_alloc(min_size),
+        }
     }
 }

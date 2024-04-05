@@ -3,6 +3,7 @@ use crate::active_messaging::batching::team_am_batcher::TeamAmBatcher;
 use crate::active_messaging::batching::BatcherType;
 use crate::active_messaging::registered_active_message::RegisteredActiveMessages;
 use crate::active_messaging::*;
+use crate::env_var::config;
 use crate::lamellae::{Des, Lamellae, SerializedData};
 
 use enum_dispatch::enum_dispatch;
@@ -406,7 +407,7 @@ impl Scheduler {
         //TODO maybe this should be > 2
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "shurtdown timeout, tasks remaining: {:?} panic: {:?}",
                     self.num_tasks.load(Ordering::Relaxed),
@@ -464,29 +465,43 @@ pub(crate) fn create_scheduler(
         ExecutorType::Tokio => TokioRt::new(num_workers).into(),
     });
 
-    let batcher = match std::env::var("LAMELLAR_BATCHER") {
-        Ok(n) => {
-            let n = n.parse::<usize>().unwrap();
-            if n == 1 {
-                BatcherType::Simple(SimpleBatcher::new(
-                    num_pes,
-                    am_stall_mark.clone(),
-                    executor.clone(),
-                ))
-            } else {
-                BatcherType::TeamAm(TeamAmBatcher::new(
-                    num_pes,
-                    am_stall_mark.clone(),
-                    executor.clone(),
-                ))
-            }
-        }
-        Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(
+    let batcher = match config().batcher.as_str() {
+        "simple" => BatcherType::Simple(SimpleBatcher::new(
             num_pes,
             am_stall_mark.clone(),
             executor.clone(),
         )),
+        "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
+            num_pes,
+            am_stall_mark.clone(),
+            executor.clone(),
+        )),
+        _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
     };
+
+    // let batcher = match std::env::var("LAMELLAR_BATCHER") {
+    //     Ok(n) => {
+    //         let n = n.parse::<usize>().unwrap();
+    //         if n == 1 {
+    //             BatcherType::Simple(SimpleBatcher::new(
+    //                 num_pes,
+    //                 am_stall_mark.clone(),
+    //                 executor.clone(),
+    //             ))
+    //         } else {
+    //             BatcherType::TeamAm(TeamAmBatcher::new(
+    //                 num_pes,
+    //                 am_stall_mark.clone(),
+    //                 executor.clone(),
+    //             ))
+    //         }
+    //     }
+    //     Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(
+    //         num_pes,
+    //         am_stall_mark.clone(),
+    //         executor.clone(),
+    //     )),
+    // };
     Scheduler::new(
         executor.clone(),
         RegisteredActiveMessages::new(batcher, executor),

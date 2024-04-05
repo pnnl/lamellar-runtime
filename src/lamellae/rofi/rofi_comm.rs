@@ -1,3 +1,4 @@
+use crate::config;
 use crate::lamellae::comm::*;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
@@ -29,7 +30,7 @@ static ROFI_MAGIC_4: u32 = 0b10001111100100110010011111001100;
 static ROFI_MAGIC_2: u16 = 0b1100100110010011;
 static ROFI_MAGIC_1: u8 = 0b10011001;
 
-static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
+pub(crate) static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 #[derive(Debug)]
 pub(crate) struct RofiComm {
@@ -51,10 +52,11 @@ pub(crate) struct RofiComm {
 impl RofiComm {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn new(provider: &str) -> RofiComm {
-        if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
-            let size = size
-                .parse::<usize>()
-                .expect("invalid memory size, please supply size in bytes");
+        if let Some(size) = config().heap_size {
+            // if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
+            // let size = size
+            //     .parse::<usize>()
+            //     .expect("invalid memory size, please supply size in bytes");
             ROFI_MEM.store(size, Ordering::SeqCst);
         }
         rofi_init(provider).expect("error in rofi init");
@@ -191,6 +193,9 @@ impl RofiComm {
             }
             Ok(_) => {}
         }
+    }
+    pub(crate) fn heap_size() -> usize {
+        ROFI_MEM.load(Ordering::SeqCst)
     }
 }
 

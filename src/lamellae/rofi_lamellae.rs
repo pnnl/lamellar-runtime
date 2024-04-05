@@ -1,3 +1,4 @@
+use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
@@ -273,6 +274,11 @@ impl LamellaeRDMA for Rofi {
     }
     fn alloc_pool(&self, min_size: usize) {
         // println!("trying to alloc pool {:?}",min_size);
-        self.cq.send_alloc(min_size);
+        match config().heap_mode {
+            HeapMode::Static => {
+                panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes,set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",RofiComm::heap_size())
+            }
+            HeapMode::Dynamic => self.cq.send_alloc(min_size),
+        }
     }
 }

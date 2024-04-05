@@ -61,6 +61,7 @@ use std::sync::Arc;
 
 use crate::active_messaging::{AMCounters, AmHandle, RemotePtr};
 use crate::barrier::Barrier;
+use crate::env_var::config;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
@@ -625,7 +626,7 @@ impl<T> DarcInner<T> {
                     if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                         join_all(inner.send_finished()).await;
                     }
-                    if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                         let ref_cnts_slice = unsafe {
                             std::slice::from_raw_parts_mut(
                                 inner.ref_cnt_addr as *mut usize,
@@ -646,7 +647,7 @@ impl<T> DarcInner<T> {
                             },
                             inner.local_cnt.load(Ordering::SeqCst),
                             inner.dist_cnt.load(Ordering::SeqCst),
-                            *crate::DEADLOCK_TIMEOUT,
+                            config().deadlock_timeout,
                             std::backtrace::Backtrace::capture()
                         );
                         timer = std::time::Instant::now();
@@ -673,7 +674,7 @@ impl<T> DarcInner<T> {
     //     while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
     //         // std::thread::yield_now();
     //         team.scheduler.exec_task(); //mmight as well do useful work while we wait
-    //         if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+    //         if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
     //             //|| first{
     //             // println!(
     //             //     "[{:?}] in darc wait_all mype: {:?} cnt: {:?} {:?}",
@@ -1407,7 +1408,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     join_all(wrapped.send_finished()).await;
                 }
 
-                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timeout.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let ref_cnts_slice = unsafe {
                         std::slice::from_raw_parts_mut(
                             wrapped.ref_cnt_addr as *mut usize,
@@ -1425,7 +1426,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         mode_refs,
                         wrapped.local_cnt.load(Ordering::SeqCst),
                         wrapped.dist_cnt.load(Ordering::SeqCst),
-                        *crate::DEADLOCK_TIMEOUT,
+                        config().deadlock_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
@@ -1448,7 +1449,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     // wrapped.send_finished()
                     join_all(wrapped.send_finished()).await;
                 }
-                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timeout.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let ref_cnts_slice = std::slice::from_raw_parts_mut(
                         wrapped.ref_cnt_addr as *mut usize,
                         wrapped.num_pes,
@@ -1464,7 +1465,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         mode_refs,
                         wrapped.local_cnt.load(Ordering::SeqCst),
                         wrapped.dist_cnt.load(Ordering::SeqCst),
-                        *crate::DEADLOCK_TIMEOUT,
+                        config().deadlock_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();

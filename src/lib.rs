@@ -282,6 +282,9 @@ mod utils;
 #[doc(hidden)]
 pub use utils::*;
 
+mod env_var;
+pub use env_var::config;
+
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 #[doc(hidden)]
@@ -316,13 +319,6 @@ pub use custom_derive;
 // pub extern crate newtype_derive;
 #[doc(hidden)]
 pub use newtype_derive;
-
-lazy_static! {
-    pub(crate) static ref DEADLOCK_TIMEOUT: f64 = std::env::var("LAMELLAR_DEADLOCK_TIMEOUT")
-        .unwrap_or("600".to_string())
-        .parse::<usize>()
-        .unwrap_or(600) as f64;
-}
 
 lazy_static! {
     pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> =

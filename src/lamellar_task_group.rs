@@ -1,5 +1,6 @@
 use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
 use crate::active_messaging::*;
+use crate::env_var::config;
 use crate::lamellae::Des;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
@@ -645,7 +646,7 @@ impl LamellarTaskGroup {
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
             self.team.scheduler.exec_task();
-            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "in task group wait_all mype: {:?} cnt: {:?} {:?}",
                     self.team.world_pe,
@@ -666,7 +667,7 @@ impl LamellarTaskGroup {
             // self.team.flush();
             // self.team.scheduler.exec_task();
             async_std::task::yield_now().await;
-            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "in task group wait_all mype: {:?} cnt: {:?} {:?}",
                     self.team.world_pe,

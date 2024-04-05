@@ -2,6 +2,7 @@ use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
+use crate::env_var::{config, IndexType};
 use futures_util::Future;
 use parking_lot::Mutex;
 use std::any::TypeId;
@@ -54,16 +55,21 @@ enum IndexSize {
 
 impl From<usize> for IndexSize {
     fn from(size: usize) -> Self {
-        if size <= u8::MAX as usize {
-            IndexSize::U8
-        } else if size <= u16::MAX as usize {
-            IndexSize::U16
-        } else if size <= u32::MAX as usize {
-            IndexSize::U32
-        } else if size <= u64::MAX as usize {
-            IndexSize::U64
-        } else {
-            IndexSize::Usize
+        match config().index_size {
+            IndexType::Dynamic => {
+                if size <= u8::MAX as usize {
+                    IndexSize::U8
+                } else if size <= u16::MAX as usize {
+                    IndexSize::U16
+                } else if size <= u32::MAX as usize {
+                    IndexSize::U32
+                } else if size <= u64::MAX as usize {
+                    IndexSize::U64
+                } else {
+                    IndexSize::Usize
+                }
+            }
+            IndexType::Static => IndexSize::Usize,
         }
     }
 }
@@ -160,6 +166,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .max()
             .unwrap();
         let index_size = IndexSize::from(max_local_size);
+        println!("index_size: {:?}", index_size);
         let data_copied = Arc::new(AtomicBool::new(false));
         let res: Pin<Box<dyn Future<Output = Vec<((), Vec<usize>)>> + Send>> =
             if v_len == 1 && i_len == 1 {
@@ -387,10 +394,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index_size: IndexSize,
         data_copied: Arc<AtomicBool>,
     ) -> Pin<Box<dyn Future<Output = Vec<(R, Vec<usize>)>> + Send>> {
-        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            Ok(n) => n.parse::<usize>().unwrap(),
-            Err(_) => 10000,
-        };
+        let num_per_batch = config().batch_op_size;
+        // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+        //     Ok(n) => n.parse::<usize>().unwrap(),
+        //     Err(_) => 10000,
+        // };
         let num_pes = self.inner.data.team.num_pes();
         let cnt = Arc::new(AtomicUsize::new(0));
         let futures = Arc::new(Mutex::new(Vec::new()));
@@ -517,10 +525,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         _index_size: IndexSize,
         data_copied: Arc<AtomicBool>,
     ) -> Pin<Box<dyn Future<Output = Vec<(R, Vec<usize>)>> + Send>> {
-        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            Err(_) => 10000,                      //+ 1 to account for main thread
-        };
+        let num_per_batch = config().batch_op_size;
+        // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+        //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+        //     Err(_) => 10000,                      //+ 1 to account for main thread
+        // };
         // println!("multi_val_one_index");
         // let num_pes = self.inner.data.team.num_pes();
         let cnt = Arc::new(AtomicUsize::new(0));
@@ -604,10 +613,11 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index_size: IndexSize,
         data_copied: Arc<AtomicBool>,
     ) -> Pin<Box<dyn Future<Output = Vec<(R, Vec<usize>)>> + Send>> {
-        let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-            Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
-            Err(_) => 10000,                      //+ 1 to account for main thread
-        };
+        let num_per_batch = config().batch_op_size;
+        // let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
+        //     Ok(n) => n.parse::<usize>().unwrap(), //+ 1 to account for main thread
+        //     Err(_) => 10000,                      //+ 1 to account for main thread
+        // };
         let bytes_per_batch = match index_size {
             IndexSize::U8 => num_per_batch * std::mem::size_of::<IdxVal<u8, T>>(),
             IndexSize::U16 => num_per_batch * std::mem::size_of::<IdxVal<u16, T>>(),

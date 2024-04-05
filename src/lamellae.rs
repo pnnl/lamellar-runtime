@@ -1,4 +1,5 @@
 use crate::active_messaging::Msg;
+use crate::config;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 use std::sync::Arc;
@@ -56,12 +57,7 @@ pub(crate) enum AllocationType {
 
 impl Default for Backend {
     fn default() -> Self {
-        default_backend()
-    }
-}
-fn default_backend() -> Backend {
-    match std::env::var("LAMELLAE_BACKEND") {
-        Ok(p) => match p.as_str() {
+        match config().backend.as_str() {
             "rofi" => {
                 #[cfg(feature = "enable-rofi")]
                 return Backend::Rofi;
@@ -74,15 +70,33 @@ fn default_backend() -> Backend {
             _ => {
                 return Backend::Local;
             }
-        },
-        Err(_) => {
-            #[cfg(feature = "enable-rofi")]
-            return Backend::Rofi;
-            #[cfg(not(feature = "enable-rofi"))]
-            return Backend::Local;
         }
-    };
+    }
 }
+// fn default_backend() -> Backend {
+//     match std::env::var("LAMELLAE_BACKEND") {
+//         Ok(p) => match p.as_str() {
+//             "rofi" => {
+//                 #[cfg(feature = "enable-rofi")]
+//                 return Backend::Rofi;
+//                 #[cfg(not(feature = "enable-rofi"))]
+//                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+//             }
+//             "shmem" => {
+//                 return Backend::Shmem;
+//             }
+//             _ => {
+//                 return Backend::Local;
+//             }
+//         },
+//         Err(_) => {
+//             #[cfg(feature = "enable-rofi")]
+//             return Backend::Rofi;
+//             #[cfg(not(feature = "enable-rofi"))]
+//             return Backend::Local;
+//         }
+//     };
+// }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub(crate) struct SerializeHeader {

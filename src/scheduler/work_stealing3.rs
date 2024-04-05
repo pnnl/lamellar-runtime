@@ -1,3 +1,4 @@
+use crate::env_var::config;
 use crate::scheduler::{LamellarExecutor, SchedulerStatus};
 use crate::MAIN_THREAD;
 
@@ -93,7 +94,7 @@ impl WorkStealingThread {
 
                     if let Some(runnable) = omsg {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         {
                             println!("runnable {:?}", runnable);
                             println!(
@@ -107,7 +108,7 @@ impl WorkStealingThread {
                         runnable.run();
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         && (work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
@@ -307,7 +308,7 @@ impl WorkStealing3 {
     ) -> WorkStealing3 {
         // println!("new work stealing queue");
         let mut ws = WorkStealing3 {
-            max_num_threads: num_workers,
+            max_num_threads: std::cmp::max(1,num_workers-1),
             threads: Vec::new(),
             imm_inj: Arc::new(Injector::new()),
             work_inj: Arc::new(Injector::new()),

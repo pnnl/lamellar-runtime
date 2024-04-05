@@ -79,7 +79,7 @@ impl AsyncStdRt {
                 .with_thread_name_fn(Box::new(|| "lamellar_worker".to_string())),
         );
         Self {
-            max_num_threads: num_workers + 1,
+            max_num_threads: num_workers,
         }
     }
 }

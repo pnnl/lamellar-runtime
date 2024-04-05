@@ -74,9 +74,9 @@ impl TokioRt {
     pub(crate) fn new(num_workers: usize) -> TokioRt {
         // println!("New TokioRT with {} workers", num_workers);
         TokioRt {
-            max_num_threads: num_workers + 1, //LAMELLAR_THREADS = num_workers + 1, so for tokio runtime, we actually want num_workers + 1 worker threads as block_on will not do anywork on the main thread (i think)...
+            max_num_threads: num_workers, //LAMELLAR_THREADS = num_workers + 1, so for tokio runtime, we actually want num_workers + 1 worker threads as block_on will not do anywork on the main thread (i think)...
             rt: tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(num_workers + 1)
+                .worker_threads(num_workers)
                 .enable_all()
                 .build()
                 .unwrap(),

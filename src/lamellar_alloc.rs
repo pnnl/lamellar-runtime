@@ -1,3 +1,5 @@
+use crate::env_var::config;
+
 use core::marker::PhantomData;
 use indexmap::IndexSet;
 // use log::trace;
@@ -274,11 +276,11 @@ impl LamellarAlloc for BTreeAlloc {
         let mut timer = std::time::Instant::now();
         while let None = val {
             val = self.try_malloc(size, align);
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!("[WARNING]  Potential deadlock detected when trying to allocate more memory.\n\
                 The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                 To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                {}",*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
+                {}",config().deadlock_timeout,std::backtrace::Backtrace::capture());
                 timer = std::time::Instant::now();
             }
         }

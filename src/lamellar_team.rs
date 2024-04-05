@@ -1,6 +1,7 @@
 use crate::active_messaging::handle::AmHandleInner;
 use crate::active_messaging::*;
 use crate::barrier::Barrier;
+use crate::env_var::config;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
 use crate::lamellar_env::LamellarEnv;
@@ -1150,7 +1151,7 @@ impl LamellarTeamRT {
                 while *hash_val == 0 {
                     self.flush();
                     std::thread::yield_now();
-                    if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    if s.elapsed().as_secs_f64() > config().deadlock_timeout {
                         let status = hash_buf
                             .as_slice()
                             .expect("data should exist on pe")
@@ -1163,7 +1164,7 @@ impl LamellarTeamRT {
                         The following indicates which PEs have not entered the call: {:?}\n\
                         The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                        {}",status,*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture()
+                        {}",status,config().deadlock_timeout,std::backtrace::Backtrace::capture()
                     );
                         // println!(
                         //     "[{:?}] ({:?})  hash: {:?}",
@@ -1246,14 +1247,14 @@ impl LamellarTeamRT {
             for pe in self.dropped.as_slice().expect("data should exist on pe") {
                 while *pe != 1 {
                     // std::thread::yield_now();
-                    if s.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                    if s.elapsed().as_secs_f64() > config().deadlock_timeout {
                         println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
                             The following indicates the dropped status on each PE: {:?}\n\
                             The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
                             To view backtrace set RUST_LIB_BACKTRACE=1\n\
                             {}",
                             self.dropped.as_slice(),
-                            *crate::DEADLOCK_TIMEOUT,
+                            config().deadlock_timeout,
                             std::backtrace::Backtrace::capture());
                         s = Instant::now();
                     }
@@ -1321,7 +1322,7 @@ impl LamellarTeamRT {
             // std::thread::yield_now();
             // self.flush();
             self.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "in team wait_all mype: {:?} cnt: {:?} {:?}",
                     self.world_pe,

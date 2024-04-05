@@ -1,4 +1,3 @@
-use crate::active_messaging::*;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_env::LamellarEnv;
@@ -7,6 +6,7 @@ use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
 };
 use crate::scheduler::{create_scheduler, ExecutorType};
+use crate::{active_messaging::*, config};
 // use log::trace;
 
 //use tracing::*;
@@ -381,61 +381,76 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
-        let executor = match std::env::var("LAMELLAR_EXECUTOR") {
-            Ok(val) => {
-                let executor = val.parse::<usize>().unwrap();
-                if executor == 0 {
-                    ExecutorType::LamellarWorkStealing
-                } else if executor == 1 {
-                    #[cfg(feature = "tokio-executor")]
-                    {
-                        ExecutorType::Tokio
-                    }
-                    #[cfg(not(feature = "tokio-executor"))]
-                    {
-                        println!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled,  defaulting to lamellar work stealing executor");
-                        ExecutorType::LamellarWorkStealing
-                    }
-                } else if executor == 2 {
-                    ExecutorType::LamellarWorkStealing2
-                } else if executor == 3 {
-                    ExecutorType::LamellarWorkStealing3
-                } else if executor == 4 {
-                    ExecutorType::AsyncStd
-                } else {
-                    println!("[LAMELLAR WARNING]: invalid executor selected defaulting to lamellar work stealing executor");
-                    ExecutorType::LamellarWorkStealing
-                }
-            }
-            Err(_) => {
-                #[cfg(feature = "tokio-executor")]
-                {
-                    ExecutorType::Tokio
-                }
+        let executor = match config().executor.as_str(){
+            "tokio" => {
                 #[cfg(not(feature = "tokio-executor"))]
                 {
-                    ExecutorType::LamellarWorkStealing
+                    panic!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled, either recompile lamellar with --features tokio-executor, or set LAMELLAR_EXECUTOR to one of 'lamellar' or 'async_std'");
                 }
+                ExecutorType::Tokio
             }
+            "async_std" => ExecutorType::AsyncStd,
+            "lamellar" => ExecutorType::LamellarWorkStealing,
+            "lamellar2" => ExecutorType::LamellarWorkStealing2,
+            "lamellar3" => ExecutorType::LamellarWorkStealing3,
+            _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'async_std', or (if tokio-executor feature is enabled, 'tokio'.")
         };
+        // let executor = match std::env::var("LAMELLAR_EXECUTOR") {
+        //     Ok(val) => {
+        //         let executor = val.parse::<usize>().unwrap();
+        //         if executor == 0 {
+        //             ExecutorType::LamellarWorkStealing
+        //         } else if executor == 1 {
+        //             #[cfg(feature = "tokio-executor")]
+        //             {
+        //                 ExecutorType::Tokio
+        //             }
+        //             #[cfg(not(feature = "tokio-executor"))]
+        //             {
+        //                 println!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled,  defaulting to lamellar work stealing executor");
+        //                 ExecutorType::LamellarWorkStealing
+        //             }
+        //         } else if executor == 2 {
+        //             ExecutorType::LamellarWorkStealing2
+        //         } else if executor == 3 {
+        //             ExecutorType::LamellarWorkStealing3
+        //         } else if executor == 4 {
+        //             ExecutorType::AsyncStd
+        //         } else {
+        //             println!("[LAMELLAR WARNING]: invalid executor selected defaulting to lamellar work stealing executor");
+        //             ExecutorType::LamellarWorkStealing
+        //         }
+        //     }
+        //     Err(_) => {
+        //         #[cfg(feature = "tokio-executor")]
+        //         {
+        //             ExecutorType::Tokio
+        //         }
+        //         #[cfg(not(feature = "tokio-executor"))]
+        //         {
+        //             ExecutorType::LamellarWorkStealing
+        //         }
+        //     }
+        // };
         println!("executor: {:?}", executor);
 
-        let num_threads = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => {
-                if let Ok(num_threads) = n.parse::<usize>() {
-                    if num_threads == 0 {
-                        panic!("LAMELLAR_THREADS must be greater than 0");
-                    } else if num_threads == 1 {
-                        num_threads
-                    } else {
-                        num_threads - 1
-                    }
-                } else {
-                    panic!("LAMELLAR_THREADS must be an integer greater than 0");
-                }
-            }
-            Err(_) => 4,
-        };
+        let num_threads = config().threads;
+        //     let num_threads = match std::env::var("LAMELLAR_THREADS") {
+        //     Ok(n) => {
+        //         if let Ok(num_threads) = n.parse::<usize>() {
+        //             if num_threads == 0 {
+        //                 panic!("LAMELLAR_THREADS must be greater than 0");
+        //             } else if num_threads == 1 {
+        //                 num_threads
+        //             } else {
+        //                 num_threads - 1
+        //             }
+        //         } else {
+        //             panic!("LAMELLAR_THREADS must be an integer greater than 0");
+        //         }
+        //     }
+        //     Err(_) => 4,
+        // };
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),

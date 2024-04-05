@@ -1,3 +1,4 @@
+use crate::env_var::config;
 use crate::scheduler::{LamellarExecutor, SchedulerStatus};
 use crate::MAIN_THREAD;
 
@@ -109,7 +110,7 @@ impl WorkStealingThread {
 
                     if let Some(runnable) = omsg {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         {
                             println!("runnable {:?}", runnable);
                             println!(
@@ -123,7 +124,7 @@ impl WorkStealingThread {
                         runnable.run();
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         && !worker.group_queue.is_empty()
                     {
                         println!(
@@ -170,7 +171,7 @@ impl IoThread {
                         .or_else(|| worker.io_inj.steal_batch_and_pop(&worker.io_q).success());
                     if let Some(runnable) = io_task {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         {
                             println!(
                                 "io_q size {:?} io inj size {:?} ", // num_tasks {:?}",
@@ -184,7 +185,7 @@ impl IoThread {
                     }
 
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT
+                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
                         && (worker.io_q.len() > 0 || worker.io_inj.len() > 0)
                     {
                         println!(
@@ -366,6 +367,7 @@ impl WorkStealing2 {
         panic: Arc<AtomicU8>,
     ) -> WorkStealing2 {
         // println!("new work stealing queue");
+        let num_workers =  std::cmp::max(1,num_workers-1);
         let mut num_threads_per_group = match std::env::var("LAMELLAR_WS2_THREADS") {
             Ok(s) => {
                 if let Ok(num) = s.parse::<usize>() {
@@ -376,8 +378,8 @@ impl WorkStealing2 {
             }
             _ => 4,
         };
-        if num_threads_per_group > num_workers {
-            num_threads_per_group = num_workers
+        if num_threads_per_group > num_workers  {
+            num_threads_per_group = num_workers 
         }
 
         let mut ws = WorkStealing2 {
