@@ -204,6 +204,7 @@ impl Barrier {
                                 //             .expect("Data should exist on PE")
                                 //     }
                                 // );
+                                println!("barrier put_slice 1");
                                 unsafe {
                                     self.barrier_buf[i - 1].put_slice(
                                         send_pe,
@@ -335,6 +336,7 @@ impl Barrier {
                                 //             .expect("Data should exist on PE")
                                 //     }
                                 // );
+                                println!("barrier put_slice 2");
                                 unsafe {
                                     self.barrier_buf[i - 1].put_slice(
                                         send_pe,

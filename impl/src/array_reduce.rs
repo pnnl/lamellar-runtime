@@ -85,12 +85,9 @@ fn create_reduction(
                         let timer = std::time::Instant::now();
                         #[allow(unused_unsafe)]
                         let data_slice = unsafe { #data_slice};
-                        // let first = data_slice.first().unwrap().clone();
-                        // let res = data_slice[1..].iter().fold(first, #op );
-                        let res = data_slice.iter()#iter_chain.reduce(#op).unwrap();
+                        let res = data_slice.iter()#iter_chain.reduce(#op).expect("length of slice should be greater than 0");
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
-                        // data_slice.first().unwrap().clone()
                     }
                     else{
                         // println!("[{:?}] recurse {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
@@ -103,8 +100,6 @@ fn create_reduction(
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
-                        // let data_slice = unsafe {self.data.local_data()};
-                        // data_slice.first().unwrap().clone()
                     }
                 }
             }

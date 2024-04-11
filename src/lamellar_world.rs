@@ -387,6 +387,7 @@ impl LamellarWorldBuilder {
                 {
                     panic!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled, either recompile lamellar with --features tokio-executor, or set LAMELLAR_EXECUTOR to one of 'lamellar' or 'async_std'");
                 }
+                #[cfg(feature = "tokio-executor")]
                 ExecutorType::Tokio
             }
             "async_std" => ExecutorType::AsyncStd,

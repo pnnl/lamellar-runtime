@@ -5,8 +5,8 @@ use std::ffi::CString;
 use std::os::raw::c_ulong;
 
 pub(crate) fn rofi_init(provider: &str) -> Result<(), &'static str> {
-    let c_str = CString::new(provider).unwrap();
-    let retval = unsafe { rofisys::rofi_init(c_str.as_ptr() as *mut _) as i32 };
+    let prov_str = CString::new(provider).unwrap();
+    let retval = unsafe { rofisys::rofi_init(prov_str.as_ptr() as *mut _, 0 as *mut _) as i32 };
     if retval == 0 {
         Ok(())
     } else {

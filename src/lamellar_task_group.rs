@@ -300,7 +300,9 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
             .expect("req sub id should exist");
         let mut res = Vec::new();
         for pe in 0..sub_id_map.len() {
-            res.push(self.process_result(sub_id_map.remove(&pe).unwrap()));
+            res.push(
+                self.process_result(sub_id_map.remove(&pe).expect("pe id should exist still")),
+            );
         }
         res
     }
@@ -336,7 +338,9 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
             .expect("req sub id should exist");
         let mut res = Vec::new();
         for pe in 0..sub_id_map.len() {
-            res.push(self.process_result(sub_id_map.remove(&pe).unwrap()));
+            res.push(
+                self.process_result(sub_id_map.remove(&pe).expect("pe id should exist still")),
+            );
         }
         res
     }
@@ -355,7 +359,9 @@ impl<T: AmDist> Future for TaskGroupMultiAmHandle<T> {
                 .expect("req sub id should exist");
             let mut res = Vec::new();
             for pe in 0..sub_id_map.len() {
-                res.push(this.process_result(sub_id_map.remove(&pe).unwrap()));
+                res.push(
+                    this.process_result(sub_id_map.remove(&pe).expect("pe id should exist still")),
+                );
             }
             Poll::Ready(res)
         } else {

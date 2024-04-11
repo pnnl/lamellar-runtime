@@ -447,16 +447,20 @@ impl<T> DarcInner<T> {
 
             // let rel_addr = inner.inner.as_ptr() as *const _ as usize - team.lamellae.base_addr();
 
-            // println!(
-            //     "[{:?}] entering initial block_on barrier()",
-            //     std::thread::current().id()
-            // );
+            while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
+                async_std::task::yield_now().await;
+            }
+
+            println!(
+                "[{:?}] entering initial block_on barrier()",
+                std::thread::current().id()
+            );
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
             barrier_fut.await;
-            // println!(
-            //     "[{:?}] leaving initial block_on barrier()",
-            //     std::thread::current().id()
-            // );
+            println!(
+                "[{:?}] leaving initial block_on barrier()",
+                std::thread::current().id()
+            );
 
             while outstanding_refs {
                 outstanding_refs = false;
@@ -496,6 +500,7 @@ impl<T> DarcInner<T> {
                         //     inner.my_pe * std::mem::size_of::<usize>(),
                         //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
                         // );
+                        println!("darc block_on_outstanding put 1");
                         rdma.put(
                             send_pe,
                             ref_cnt_u8,
@@ -565,6 +570,7 @@ impl<T> DarcInner<T> {
                             std::mem::size_of::<usize>(),
                         )
                     };
+                    println!("darc block_on_outstanding put 2");
                     rdma.put(
                         send_pe,
                         barrier_id_slice,
@@ -614,6 +620,7 @@ impl<T> DarcInner<T> {
             };
             let rdma = &team.lamellae;
             for pe in team.arch.team_iter() {
+                println!("darc block_on_outstanding put 3");
                 rdma.put(
                     pe,
                     &mode_refs[inner.my_pe..=inner.my_pe],

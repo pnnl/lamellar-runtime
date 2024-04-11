@@ -156,8 +156,8 @@ fn gen_am_group_return_stmt(
                     },
                     quote! {
                             match __local{
-                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap())),
-                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group.unwrap())),
+                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.expect("am group should exsit"))),
+                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group.expect("am group should exsit"))),
                         }
                     },
                 )
@@ -176,7 +176,7 @@ fn gen_am_group_return_stmt(
                         }
                     },
                     quote! {
-                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap()))
+                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.expect("am group should exsit")))
                     },
                 )
             }
