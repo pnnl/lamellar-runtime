@@ -1168,7 +1168,7 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> AtomicArray<T> {
-    pub fn reduce(&self, reduction: &str) -> AmHandle<T> {
+    pub fn reduce(&self, reduction: &str) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
@@ -1177,13 +1177,13 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
-    pub fn sum(&self) -> AmHandle<T> {
+    pub fn sum(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
-    pub fn prod(&self) -> AmHandle<T> {
+    pub fn prod(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
             AtomicArray::GenericAtomicArray(array) => array.prod(),
@@ -1191,13 +1191,13 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
-    pub fn max(&self) -> AmHandle<T> {
+    pub fn max(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
         }
     }
-    pub fn min(&self) -> AmHandle<T> {
+    pub fn min(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),
             AtomicArray::GenericAtomicArray(array) => array.min(),

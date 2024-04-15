@@ -1100,16 +1100,20 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
             .get(&(std::any::TypeId::of::<T>(), op))
             .expect("unexpected reduction type")(byte_array, self.inner.data.team.num_pes())
     }
-    pub(crate) fn reduce_data(&self, op: &str, byte_array: LamellarByteArray) -> AmHandle<T> {
+    pub(crate) fn reduce_data(
+        &self,
+        op: &str,
+        byte_array: LamellarByteArray,
+    ) -> AmHandle<Option<T>> {
         let func = self.get_reduction_op(op, byte_array);
         if let Ok(my_pe) = self.inner.data.team.team_pe_id() {
-            self.inner.data.team.exec_arc_am_pe::<T>(
+            self.inner.data.team.exec_arc_am_pe::<Option<T>>(
                 my_pe,
                 func,
                 Some(self.inner.data.array_counters.clone()),
             )
         } else {
-            self.inner.data.team.exec_arc_am_pe::<T>(
+            self.inner.data.team.exec_arc_am_pe::<Option<T>>(
                 0,
                 func,
                 Some(self.inner.data.array_counters.clone()),
@@ -1153,7 +1157,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
-    pub unsafe fn reduce(&self, op: &str) -> AmHandle<T> {
+    pub unsafe fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
         self.reduce_data(op, self.clone().into())
     }
 
@@ -1189,7 +1193,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let sum = array.block_on(unsafe{array.sum()}); //Safe in this instance as we have ensured no updates are currently happening
     /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
-    pub unsafe fn sum(&self) -> AmHandle<T> {
+    pub unsafe fn sum(&self) -> AmHandle<Option<T>> {
         self.reduce("sum")
     }
 
@@ -1226,7 +1230,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let prod =  array.block_on(array.prod());
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
-    pub unsafe fn prod(&self) -> AmHandle<T> {
+    pub unsafe fn prod(&self) -> AmHandle<Option<T>> {
         self.reduce("prod")
     }
 
@@ -1257,7 +1261,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let max = array.block_on(max_req);
     /// assert_eq!((array.len()-1)*2,max);
     ///```
-    pub unsafe fn max(&self) -> AmHandle<T> {
+    pub unsafe fn max(&self) -> AmHandle<Option<T>> {
         self.reduce("max")
     }
 
@@ -1288,7 +1292,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let min = array.block_on(min_req);
     /// assert_eq!(0,min);
     ///```
-    pub unsafe fn min(&self) -> AmHandle<T> {
+    pub unsafe fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
     }
 }

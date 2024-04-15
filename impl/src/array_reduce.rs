@@ -78,14 +78,14 @@ fn create_reduction(
 
             #[#am]
             impl LamellarAM for #reduction_name{
-                async fn exec(&self) -> #typeident{
+                async fn exec(&self) -> Option<#typeident>{
                     // println!("{}",stringify!(#array_type));
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
                         #[allow(unused_unsafe)]
                         let data_slice = unsafe { #data_slice};
-                        let res = data_slice.iter()#iter_chain.reduce(#op).expect("length of slice should be greater than 0");
+                        let res = data_slice.iter()#iter_chain.reduce(#op);//s.expect("length of slice should be greater than 0");
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
                     }
@@ -96,7 +96,16 @@ fn create_reduction(
                         let timer = std::time::Instant::now();
                         let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe});//;
                         let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe});//;
-                        let res = op(left.await,right.await);
+                        let left = left.await;
+                        let right = right.await;
+
+                        let res = match (left,right){
+                            (None,None) => None,
+                            (Some(v),None) => Some(v),
+                            (None,Some(v)) => Some(v),
+                            (Some(v1),Some(v2)) => Some(op(v1,v2))
+                        };
+
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res

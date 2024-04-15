@@ -92,7 +92,12 @@ where
         local_sums.async_barrier().await;
         // let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
         // buffered_iter.into_iter().map(|&e| e).sum()
-        unsafe { local_sums.sum().await }
+        unsafe {
+            local_sums
+                .sum()
+                .await
+                .expect("array size is greater than zero")
+        }
     }
 
     fn reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
@@ -102,7 +107,12 @@ where
         local_sums.tasking_barrier();
         // let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
         // buffered_iter.into_iter().map(|&e| e).sum()
-        unsafe { local_sums.sum().blocking_wait() }
+        unsafe {
+            local_sums
+                .sum()
+                .blocking_wait()
+                .expect("array size is greater than zero")
+        }
     }
 }
 

@@ -825,23 +825,23 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
-    pub fn reduce(&self, op: &str) -> AmHandle<T> {
+    pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
         self.array.reduce_data(op, self.clone().into())
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GenericAtomicArray<T> {
-    pub fn sum(&self) -> AmHandle<T> {
+    pub fn sum(&self) -> AmHandle<Option<T>> {
         self.reduce("sum")
     }
-    pub fn prod(&self) -> AmHandle<T> {
+    pub fn prod(&self) -> AmHandle<Option<T>> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GenericAtomicArray<T> {
-    pub fn max(&self) -> AmHandle<T> {
+    pub fn max(&self) -> AmHandle<Option<T>> {
         self.reduce("max")
     }
-    pub fn min(&self) -> AmHandle<T> {
+    pub fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
     }
 }

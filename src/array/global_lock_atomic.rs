@@ -1029,7 +1029,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
 #[doc(hidden)]
 #[pin_project]
 pub struct GlobalLockArrayReduceHandle<T: Dist + AmDist> {
-    req: AmHandle<T>,
+    req: AmHandle<Option<T>>,
     lock_guard: GlobalRwDarcReadGuard<()>,
 }
 
@@ -1046,7 +1046,7 @@ impl<T: Dist + AmDist> LamellarRequest for GlobalLockArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist> Future for GlobalLockArrayReduceHandle<T> {
-    type Output = T;
+    type Output = Option<T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.req.ready_or_set_waker(cx.waker()) {
