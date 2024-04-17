@@ -1,5 +1,7 @@
 use crate::array::*;
 
+use super::handle::{ArrayFetchBatchOpHandle, ArrayFetchOpHandle};
+
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for remotely reading elements
 ///
@@ -68,16 +70,17 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let val = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn load<'a>(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
-        let result = self.inner_array().initiate_batch_fetch_op_2(
-            dummy_val,
-            index,
-            ArrayOpCmd::Load,
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+        self.inner_array()
+            .initiate_batch_fetch_op_2(
+                dummy_val,
+                index,
+                ArrayOpCmd::Load,
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
@@ -109,10 +112,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// assert_eq!(vals.len(),indices.len());
     ///```
     //#[tracing::instrument(skip_all)]
-    fn batch_load<'a>(
-        &self,
-        index: impl OpInput<'a, usize>,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+    fn batch_load<'a>(&self, index: impl OpInput<'a, usize>) -> ArrayFetchBatchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array().initiate_batch_fetch_op_2(
             dummy_val,

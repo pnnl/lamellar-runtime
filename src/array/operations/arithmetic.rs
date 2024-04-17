@@ -1,5 +1,8 @@
 use crate::array::*;
 
+use super::handle::{
+    ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayFetchOpHandle, ArrayOpHandle,
+};
 /// Supertrait specifying elements of the array support remote arithmetic assign operations
 /// - Addition ```+=```
 /// - Subtraction ```-=```
@@ -118,7 +121,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn add(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -157,7 +160,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
         self.inner_array().initiate_batch_op(
             val,
@@ -192,14 +195,15 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_add(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let result = self.inner_array().initiate_batch_fetch_op_2(
-            val,
-            index,
-            ArrayOpCmd::FetchAdd,
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    fn fetch_add(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_fetch_op_2(
+                val,
+                index,
+                ArrayOpCmd::FetchAdd,
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [fetch_add][ArithmeticOps::fetch_add] function,
@@ -233,7 +237,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+    ) -> ArrayFetchBatchOpHandle<T> {
         // println!("here in batch_fetch_add");
         self.inner_array().initiate_batch_fetch_op_2(
             val,
@@ -267,7 +271,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -306,7 +310,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
         self.inner_array().initiate_batch_op(
             val,
@@ -341,14 +345,15 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_sub<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let result = self.inner_array().initiate_batch_fetch_op_2(
-            val,
-            index,
-            ArrayOpCmd::FetchSub,
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_fetch_op_2(
+                val,
+                index,
+                ArrayOpCmd::FetchSub,
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [fetch_sub][ArithmeticOps::fetch_sub] function,
@@ -382,7 +387,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+    ) -> ArrayFetchBatchOpHandle<T> {
         self.inner_array().initiate_batch_fetch_op_2(
             val,
             index,
@@ -415,7 +420,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -454,7 +459,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
         self.inner_array().initiate_batch_op(
             val,
@@ -489,14 +494,15 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_mul<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let result = self.inner_array().initiate_batch_fetch_op_2(
-            val,
-            index,
-            ArrayOpCmd::FetchMul,
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_fetch_op_2(
+                val,
+                index,
+                ArrayOpCmd::FetchMul,
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [fetch_mul][ArithmeticOps::fetch_mul] function,
@@ -530,7 +536,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+    ) -> ArrayFetchBatchOpHandle<T> {
         self.inner_array().initiate_batch_fetch_op_2(
             val,
             index,
@@ -563,7 +569,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -602,7 +608,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
         self.inner_array().initiate_batch_op(
             val,
@@ -637,14 +643,15 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_div<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let result = self.inner_array().initiate_batch_fetch_op_2(
-            val,
-            index,
-            ArrayOpCmd::FetchDiv,
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_fetch_op_2(
+                val,
+                index,
+                ArrayOpCmd::FetchDiv,
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [fetch_div][ArithmeticOps::fetch_div] function,
@@ -678,7 +685,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+    ) -> ArrayFetchBatchOpHandle<T> {
         self.inner_array().initiate_batch_fetch_op_2(
             val,
             index,
@@ -711,7 +718,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn rem<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -750,7 +757,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
         self.inner_array().initiate_batch_op(
             val,
@@ -785,14 +792,15 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_rem<'a>(&self, index: usize, val: T) -> Pin<Box<dyn Future<Output = T> + Send>> {
-        let result = self.inner_array().initiate_batch_fetch_op_2(
-            val,
-            index,
-            ArrayOpCmd::FetchRem,
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_fetch_op_2(
+                val,
+                index,
+                ArrayOpCmd::FetchRem,
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [fetch_rem][ArithmeticOps::fetch_rem] function,
@@ -826,7 +834,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<T>> + Send>> {
+    ) -> ArrayFetchBatchOpHandle<T> {
         self.inner_array().initiate_batch_fetch_op_2(
             val,
             index,

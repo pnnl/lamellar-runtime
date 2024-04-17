@@ -1,5 +1,7 @@
 use crate::array::*;
 
+use super::handle::{ArrayResultBatchOpHandle, ArrayResultOpHandle};
+
 /// Supertrait specifying elements of the array support remote Equality operations
 /// - ```==```
 /// - ```!=```
@@ -119,19 +121,15 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let result = array.block_on(req);
     ///```
     //#[tracing::instrument(skip_all)]
-    fn compare_exchange<'a>(
-        &self,
-        index: usize,
-        current: T,
-        new: T,
-    ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
-        let result = self.inner_array().initiate_batch_result_op_2(
-            new,
-            index,
-            ArrayOpCmd::CompareExchange(current),
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    fn compare_exchange<'a>(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_result_op_2(
+                new,
+                index,
+                ArrayOpCmd::CompareExchange(current),
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
@@ -168,7 +166,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
         index: impl OpInput<'a, usize>,
         current: T,
         new: impl OpInput<'a, T>,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
+    ) -> ArrayResultBatchOpHandle<T> {
         self.inner_array().initiate_batch_result_op_2(
             new,
             index,
@@ -294,14 +292,15 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         current: T,
         new: T,
         eps: T,
-    ) -> Pin<Box<dyn Future<Output = Result<T, T>> + Send>> {
-        let result = self.inner_array().initiate_batch_result_op_2(
-            new,
-            index,
-            ArrayOpCmd::CompareExchangeEps(current, eps),
-            self.as_lamellar_byte_array(),
-        );
-        Box::pin(async move { result.await[0] })
+    ) -> ArrayResultOpHandle<T> {
+        self.inner_array()
+            .initiate_batch_result_op_2(
+                new,
+                index,
+                ArrayOpCmd::CompareExchangeEps(current, eps),
+                self.as_lamellar_byte_array(),
+            )
+            .into()
     }
 
     /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
@@ -340,7 +339,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         current: T,
         new: impl OpInput<'a, T>,
         eps: T,
-    ) -> Pin<Box<dyn Future<Output = Vec<Result<T, T>>> + Send>> {
+    ) -> ArrayResultBatchOpHandle<T> {
         self.inner_array().initiate_batch_result_op_2(
             new,
             index,
