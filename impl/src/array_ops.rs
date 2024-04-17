@@ -854,6 +854,7 @@ fn create_buf_ops(
             struct #multi_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
+                #[serde(with = "serde_bytes")]
                 idx_vals: Vec<u8>,
                 index_size: u8,
             }
@@ -918,6 +919,7 @@ fn create_buf_ops(
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
                 val: #typeident,
+                #[serde(with = "serde_bytes")]
                 indices: Vec<u8>,
                 index_size: u8,
             }
@@ -986,6 +988,7 @@ fn create_buf_ops(
             struct #multi_val_single_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
+                #[serde(with = "serde_bytes")]
                 vals: Vec<u8>,
                 index: usize,
             }
@@ -1026,6 +1029,7 @@ fn create_buf_ops(
                 struct #multi_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
+                    #[serde(with = "serde_bytes")]
                     idx_vals: Vec<u8>,
                     index_size: u8,
                 }
@@ -1092,6 +1096,7 @@ fn create_buf_ops(
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
                     val: #typeident,
+                    #[serde(with = "serde_bytes")]
                     indices: Vec<u8>,
                     index_size: u8,
                 }
@@ -1161,6 +1166,7 @@ fn create_buf_ops(
                 struct #multi_val_single_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
+                    #[serde(with = "serde_bytes")]
                     vals: Vec<u8>,
                     index: usize,
                 }
@@ -1204,6 +1210,7 @@ fn create_buf_ops(
         struct #multi_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
+            #[serde(with = "serde_bytes")]
             idx_vals: Vec<u8>,
             index_size: u8,
         }
@@ -1273,6 +1280,7 @@ fn create_buf_ops(
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
             val: #typeident,
+            #[serde(with = "serde_bytes")]
             indices: Vec<u8>,
             index_size: u8,
         }
@@ -1347,6 +1355,7 @@ fn create_buf_ops(
         struct #multi_val_single_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
+            #[serde(with = "serde_bytes")]
             vals: Vec<u8>,
             index: usize,
         }
