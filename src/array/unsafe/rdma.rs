@@ -1158,6 +1158,7 @@ struct UnsafeSmallPutAm {
     array: UnsafeByteArray, //byte representation of the array
     start_index: usize,     //index with respect to inner (of type T)
     len: usize,             //len of buf (with respect to original type T)
+    #[serde(with = "serde_bytes")]
     data: Vec<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
                    // pe: usize,
 }
