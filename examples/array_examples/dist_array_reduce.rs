@@ -158,4 +158,9 @@ fn main() {
     // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
     // block_array.for_each(|x| println!("x: {:?}", x));
     // cyclic_array.for_each_mut(|x| *x += *x);
+
+    let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block);
+    let min = unsafe { one_elem_array.min() };
+    let min = one_elem_array.block_on(min);
+    println!("one elem array min: {min:?}");
 }
