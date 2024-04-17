@@ -113,7 +113,7 @@ pub struct GlobalLockCollectiveMutLocalData<T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
     start_index: usize,
     end_index: usize,
-    lock_guard: GlobalRwDarcCollectiveWriteGuard<()>,
+    _lock_guard: GlobalRwDarcCollectiveWriteGuard<()>,
 }
 
 // impl<T: Dist> Drop for GlobalLockCollectiveMutLocalData<T>{
@@ -542,7 +542,7 @@ impl<T: Dist> GlobalLockArray<T> {
                 array: self_clone.clone(),
                 start_index: 0,
                 end_index: self_clone.array.num_elems_local(),
-                lock_guard: lock,
+                _lock_guard: lock,
             };
             // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
             data
@@ -577,7 +577,7 @@ impl<T: Dist> GlobalLockArray<T> {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
-            lock_guard: lock,
+            _lock_guard: lock,
         };
         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
         data

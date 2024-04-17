@@ -500,7 +500,7 @@ impl<T> DarcInner<T> {
                         //     inner.my_pe * std::mem::size_of::<usize>(),
                         //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
                         // );
-                        println!("darc block_on_outstanding put 1");
+                        // println!("darc block_on_outstanding put 1");
                         rdma.put(
                             send_pe,
                             ref_cnt_u8,
@@ -570,7 +570,7 @@ impl<T> DarcInner<T> {
                             std::mem::size_of::<usize>(),
                         )
                     };
-                    println!("darc block_on_outstanding put 2");
+                    // println!("darc block_on_outstanding put 2");
                     rdma.put(
                         send_pe,
                         barrier_id_slice,
@@ -620,7 +620,7 @@ impl<T> DarcInner<T> {
             };
             let rdma = &team.lamellae;
             for pe in team.arch.team_iter() {
-                println!("darc block_on_outstanding put 3");
+                // println!("darc block_on_outstanding put 3");
                 rdma.put(
                     pe,
                     &mode_refs[inner.my_pe..=inner.my_pe],
