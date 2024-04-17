@@ -405,7 +405,7 @@ macro_rules! check_input {
 macro_rules! input_test{
     ($array:ident,  $len:expr, $dist:ident) =>{
        {
-            std::env::set_var("LAMELLAR_OP_BATCH","10");
+            std::env::set_var("LAMELLAR_BATCH_OP_SIZE","10");
             let world = lamellar::LamellarWorldBuilder::new().build();
             let num_pes = world.num_pes();
             let my_pe = world.my_pe();
