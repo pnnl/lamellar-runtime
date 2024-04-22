@@ -33,19 +33,32 @@ impl<T: Dist> UnsafeArray<T> {
             ),
         };
         // .expect("index out of bounds"); //(((index + buf.len()) as f64) / self.elem_per_pe).round() as usize;
-        // println!("block_op {:?} {:?}",start_pe,end_pe);
+        // println!(
+        //     "block_op index: {:?} global_index: {:?} spe: {:?} epe: {:?}",
+        //     index, global_index, start_pe, end_pe
+        // );
         let mut dist_index = global_index;
         // let mut subarray_index = index;
         let mut buf_index = 0;
         let mut reqs = VecDeque::new();
         for pe in start_pe..=end_pe {
-            let num_elems_on_pe = (self.inner.orig_elem_per_pe * (pe + 1) as f64).round() as usize
-                - (self.inner.orig_elem_per_pe * pe as f64).round() as usize;
-            let pe_start_index = (self.inner.orig_elem_per_pe * pe as f64).round() as usize;
-            let offset = dist_index - pe_start_index;
-            let len = std::cmp::min(num_elems_on_pe - offset, buf.len() - buf_index);
+            let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
+            if pe < self.inner.orig_remaining_elems {
+                full_num_elems_on_pe += 1;
+            }
+            let pe_full_start_index = self.inner.global_start_index_for_pe(pe);
+            // let mut pe_full_start_index = self.inner.orig_elem_per_pe * pe;
+            // if pe < self.inner.orig_remaining_elems {
+            //     pe_full_start_index += pe;
+            // }
+
+            // let full_num_elems_on_pe = (self.inner.orig_elem_per_pe * (pe + 1) as f64).round() as usize
+            //     - (self.inner.orig_elem_per_pe * pe as f64).round() as usize;
+            // let pe_start_index = (self.inner.orig_elem_per_pe * pe as f64).round() as usize;
+            let offset = dist_index - pe_full_start_index;
+            let len = std::cmp::min(full_num_elems_on_pe - offset, buf.len() - buf_index);
             if len > 0 {
-                // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_start_index, num_elems_on_pe, len);
+                // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_full_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_full_start_index, full_num_elems_on_pe, len);
                 match op {
                     ArrayRdmaCmd::Put => unsafe {
                         self.inner.data.mem_region.blocking_put(
@@ -74,9 +87,7 @@ impl<T: Dist> UnsafeArray<T> {
                         // unsafe{
                         //     println!("{:?} {:?},",buf.clone().to_base::<u8>().as_slice(), buf.sub_region(buf_index..(buf_index + len)).to_base::<u8>().as_slice());
                         // }
-                        if buf.len() * std::mem::size_of::<T>()
-                            > crate::active_messaging::BATCH_AM_SIZE
-                        {
+                        if buf.len() * std::mem::size_of::<T>() > config().batch_am_size {
                             let am = UnsafePutAm {
                                 array: self.clone().into(),
                                 start_index: index,
@@ -106,7 +117,7 @@ impl<T: Dist> UnsafeArray<T> {
                         }
                     }
                     ArrayRdmaCmd::GetAm => {
-                        // if buf.len()*std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE{
+                        // if buf.len()*std::mem::size_of::<T>() > config().batch_am_size{
                         let am = UnsafeBlockGetAm {
                             array: self.clone().into(),
                             offset: offset,
@@ -200,8 +211,7 @@ impl<T: Dist> UnsafeArray<T> {
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
                     // println!("si: {:?} ei {:?}",offset,offset+k);
 
-                    if buf.len() * std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE
-                    {
+                    if buf.len() * std::mem::size_of::<T>() > config().batch_am_size {
                         let am = UnsafePutAm {
                             array: self.clone().into(),
                             start_index: index,
@@ -273,7 +283,7 @@ impl<T: Dist> UnsafeArray<T> {
                 }
             }
             ArrayRdmaCmd::GetAm => {
-                // if buf.len()*std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE{
+                // if buf.len()*std::mem::size_of::<T>() > config().batch_am_size{
                 let rem = buf.len() % num_pes;
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
                     let temp_memreg = self
@@ -706,8 +716,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         buf: U,
     ) -> ArrayRdmaHandle {
         let buf = buf.into();
-        let reqs = if buf.len() * std::mem::size_of::<T>() > crate::active_messaging::BATCH_AM_SIZE
-        {
+        let reqs = if buf.len() * std::mem::size_of::<T>() > config().batch_am_size {
             match self.inner.distribution {
                 Distribution::Block => self.block_op(ArrayRdmaCmd::GetAm, index, buf),
                 Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::GetAm, index, buf),
@@ -825,7 +834,10 @@ impl UnsafeArrayInner {
             ),
         };
 
-        // println!("i {:?} len {:?} spe {:?} epe {:?}  ",index,len,start_pe,end_pe);
+        // println!(
+        //     "i {:?} len {:?} spe {:?} epe {:?}  ",
+        //     index, len, start_pe, end_pe
+        // );
         match self.distribution {
             Distribution::Block => {
                 let num_elems_local = self.num_elems_local();
@@ -846,7 +858,10 @@ impl UnsafeArrayInner {
                 } else {
                     num_elems_local
                 };
-                // println!("ssi {:?} si {:?} ei {:?} nel {:?} es {:?}",subarray_start_index,start_index,end_index,num_elems_local,self.elem_size);
+                // println!(
+                //     "ssi {:?} si {:?} ei {:?} nel {:?} es {:?}",
+                //     subarray_start_index, start_index, end_index, num_elems_local, self.elem_size
+                // );
                 Some((
                     &mut self.local_as_mut_slice()
                         [start_index * self.elem_size..end_index * self.elem_size],
