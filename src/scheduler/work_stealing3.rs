@@ -308,7 +308,7 @@ impl WorkStealing3 {
     ) -> WorkStealing3 {
         // println!("new work stealing queue");
         let mut ws = WorkStealing3 {
-            max_num_threads: std::cmp::max(1,num_workers-1),
+            max_num_threads: std::cmp::max(1, num_workers - 1),
             threads: Vec::new(),
             imm_inj: Arc::new(Injector::new()),
             work_inj: Arc::new(Injector::new()),

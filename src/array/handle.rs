@@ -22,7 +22,6 @@ impl LamellarRequest for ArrayRdmaHandle {
         for req in self.reqs.drain(0..) {
             req.blocking_wait();
         }
-        ()
     }
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         let mut ready = true;
@@ -61,7 +60,7 @@ impl<T: Dist> LamellarRequest for ArrayRdmaAtHandle<T> {
     fn blocking_wait(self) -> Self::Output {
         match self.req {
             Some(req) => req.blocking_wait(),
-            None => {}, //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
+            None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
         }
         unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
     }
@@ -86,9 +85,8 @@ impl<T: Dist> Future for ArrayRdmaAtHandle<T> {
                 if !req.ready_or_set_waker(cx.waker()) {
                     return Poll::Pending;
                 }
-                
             }
-            None => {},//this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
+            None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
         }
         Poll::Ready(unsafe { this.buf.as_slice().expect("Data should exist on PE")[0] })
     }

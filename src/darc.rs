@@ -451,16 +451,16 @@ impl<T> DarcInner<T> {
                 async_std::task::yield_now().await;
             }
 
-            println!(
-                "[{:?}] entering initial block_on barrier()",
-                std::thread::current().id()
-            );
+            // println!(
+            //     "[{:?}] entering initial block_on barrier()",
+            //     std::thread::current().id()
+            // );
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
             barrier_fut.await;
-            println!(
-                "[{:?}] leaving initial block_on barrier()",
-                std::thread::current().id()
-            );
+            // println!(
+            //     "[{:?}] leaving initial block_on barrier()",
+            //     std::thread::current().id()
+            // );
 
             while outstanding_refs {
                 outstanding_refs = false;

@@ -89,6 +89,7 @@ fn main() {
         println!("------------------------------------------------------------");
     }
     world.barrier();
+    println!("about to free mem region");
     drop(local_mem_region);
     println!("freed mem region");
     println!("[{:?}] Before {:?}", my_pe, unsafe {

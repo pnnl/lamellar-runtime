@@ -62,8 +62,6 @@ pub(crate) enum InternalResult {
 // #[enum_dispatch]
 pub(crate) trait LamellarRequest: Future {
     fn blocking_wait(self) -> Self::Output;
-    // fn ready(&self) -> bool;
-    // fn set_waker(&mut self, waker: &Waker);
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool;
     fn val(&self) -> Self::Output;
 }

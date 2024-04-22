@@ -324,18 +324,36 @@ lazy_static! {
     pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> =
         bincode::DefaultOptions::new().allow_trailing_bytes();
 }
+// use std::sync::atomic::AtomicUsize;
+// use std::sync::atomic::Ordering::SeqCst;
+// use std::sync::Arc;
+// lazy_static! {
+//     pub(crate) static ref SERIALIZE_TIMER: thread_local::ThreadLocal<Arc<AtomicUsize>> =
+//         thread_local::ThreadLocal::new();
+//     pub(crate) static ref DESERIALIZE_TIMER: thread_local::ThreadLocal<Arc<AtomicUsize>> =
+//         thread_local::ThreadLocal::new();
+//     pub(crate) static ref SERIALIZE_SIZE_TIMER: thread_local::ThreadLocal<Arc<AtomicUsize>> =
+//         thread_local::ThreadLocal::new();
+// }
 
 #[doc(hidden)]
 pub fn serialize<T: ?Sized>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
-    if var {
+    // let start = std::time::Instant::now();
+    let res = if var {
         // Ok(BINCODE.serialize(obj)?)
         Ok(bincode::serialize(obj)?)
     } else {
         Ok(bincode::serialize(obj)?)
-    }
+    };
+    // unsafe {
+    //     SERIALIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
+    res
 }
 
 #[doc(hidden)]
@@ -343,24 +361,37 @@ pub fn serialized_size<T: ?Sized>(obj: &T, var: bool) -> usize
 where
     T: serde::Serialize,
 {
-    if var {
+    // let start = std::time::Instant::now();
+    let res = if var {
         // BINCODE.serialized_size(obj).unwrap() as usize
         bincode::serialized_size(obj).unwrap() as usize
     } else {
         bincode::serialized_size(obj).unwrap() as usize
-    }
+    };
+    // unsafe {
+    //     SERIALIZE_SIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
+    res
 }
 #[doc(hidden)]
 pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
 {
+    // let start = std::time::Instant::now();
     if var {
         // BINCODE.serialize_into(buf, obj)?;
         bincode::serialize_into(buf, obj)?;
     } else {
         bincode::serialize_into(buf, obj)?;
     }
+    // unsafe {
+    //     SERIALIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
     Ok(())
 }
 
@@ -369,12 +400,19 @@ pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error
 where
     T: serde::Deserialize<'a>,
 {
-    if var {
+    // let start = std::time::Instant::now();
+    let res = if var {
         // Ok(BINCODE.deserialize(bytes)?)
         Ok(bincode::deserialize(bytes)?)
     } else {
         Ok(bincode::deserialize(bytes)?)
-    }
+    };
+    // unsafe {
+    //     DESERIALIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
+    res
 }
 #[doc(hidden)]
 pub use async_std;

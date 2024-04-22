@@ -116,11 +116,11 @@ fn main() {
         }
 
         world.barrier();
-        println!(
-            "cleanup: {:?}s {:?}us",
-            s.elapsed().as_secs_f64(),
-            s.elapsed().as_secs_f64() * 1_000_000 as f64
-        );
+        // println!(
+        //     "cleanup: {:?}s {:?}us",
+        //     s.elapsed().as_secs_f64(),
+        //     s.elapsed().as_secs_f64() * 1_000_000 as f64
+        // );
     }
     if my_pe == 0 {
         println!(
