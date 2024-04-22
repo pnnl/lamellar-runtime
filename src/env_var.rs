@@ -71,6 +71,18 @@ fn default_array_dynamic_index() -> IndexType {
     IndexType::Dynamic
 }
 
+fn default_cmd_buf_len() -> usize {
+    50000
+}
+
+fn default_cmd_buf_cnt() -> usize {
+    2
+}
+
+fn default_batch_am_size() -> usize {
+    100000
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Config {
     #[serde(default = "default_deadlock_timeout")]
@@ -97,12 +109,21 @@ pub struct Config {
     pub alloc: Alloc,
     #[serde(default = "default_array_dynamic_index")]
     pub index_size: IndexType,
+    #[serde(default = "default_cmd_buf_len")]
+    pub cmd_buf_len: usize,
+    #[serde(default = "default_cmd_buf_cnt")]
+    pub cmd_buf_cnt: usize,
+    #[serde(default = "default_batch_am_size")]
+    pub batch_am_size: usize,
 }
 
 pub fn config() -> &'static Config {
     static CONFIG: OnceLock<Config> = OnceLock::new();
     CONFIG.get_or_init(|| match envy::prefixed("LAMELLAR_").from_env::<Config>() {
-        Ok(config) => config,
+        Ok(config) => {
+            println!("[LAMELLAR CONFIG]{config:?}");
+            config
+        }
         Err(error) => panic!("{}", error),
     })
 }

@@ -661,7 +661,7 @@ pub(crate) mod batching;
 pub(crate) mod handle;
 pub use handle::*;
 
-pub(crate) const BATCH_AM_SIZE: usize = 100_000;
+// pub(crate) const BATCH_AM_SIZE: usize = 100_000;
 
 /// This macro is used to setup the attributed type so that it can be used within remote active messages.
 ///

@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 //use tracing::*;
 
-const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
+// const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
                                   // const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
 const CMD_BUFS_PER_PE: usize = 2;
 
@@ -236,14 +236,14 @@ impl CmdMsgBuffer {
                     Box::from_raw(std::ptr::slice_from_raw_parts_mut(
                         // (*addr + base_addr) as *mut CmdMsg,
                         *addr as *mut CmdMsg,
-                        CMD_BUF_LEN,
+                        config().cmd_buf_len,
                     ))
                 },
                 addr: *addr,
                 // base_addr: base_addr,
                 index: 0,
                 allocated_cnt: 0,
-                max_size: CMD_BUF_LEN,
+                max_size: config().cmd_buf_len,
             });
         }
         CmdMsgBuffer {
@@ -1256,10 +1256,10 @@ impl CommandQueue {
         let mut cmd_buffers_addrs = vec![];
         for _pe in 0..num_pes {
             let mut addrs = vec![];
-            for _i in 0..CMD_BUFS_PER_PE {
+            for _i in 0..config().cmd_buf_cnt {
                 let addr = comm
                     .rt_alloc(
-                        CMD_BUF_LEN * std::mem::size_of::<CmdMsg>() + 1,
+                        config().cmd_buf_len * std::mem::size_of::<CmdMsg>() + 1,
                         std::mem::align_of::<CmdMsg>(),
                     )
                     .unwrap(); //+ comm.base_addr();
@@ -1516,7 +1516,7 @@ impl CommandQueue {
 
     //#[tracing::instrument(skip_all)]
     pub fn mem_per_pe() -> usize {
-        (CMD_BUF_LEN * CMD_BUFS_PER_PE + 4) * std::mem::size_of::<CmdMsg>()
+        (config().cmd_buf_len * config().cmd_buf_cnt  + 4) * std::mem::size_of::<CmdMsg>()
     }
 }
 
