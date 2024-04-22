@@ -10,7 +10,6 @@ use enum_dispatch::enum_dispatch;
 use futures_util::Future;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread;
 
 pub(crate) mod work_stealing;
 use work_stealing::WorkStealing;
@@ -225,6 +224,39 @@ impl Scheduler {
         self.executor.submit_immediate_task(am_future);
     }
 
+    #[allow(dead_code)]
+    pub(crate) async fn exec_am(&self, am: Am) {
+        let num_ams = self.num_ams.clone();
+        let max_ams = self.max_ams.clone();
+        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let ame = self.active_message_engine.clone();
+        // let am_future = async move {
+        // let start_tid = thread::current().id();
+        num_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
+        // println!(
+        //     "[{:?}] submit_am_immediate {:?}",
+        //     std::thread::current().id(),
+        //     am_id
+        // );
+        ame.process_msg(am, am_stall_mark, false).await;
+        num_ams.fetch_sub(1, Ordering::Relaxed);
+        // if thread::current().id() != start_tid {
+        //     AM_DIFF_THREAD.fetch_add(1, Ordering::Relaxed);
+        // } else {
+        //     AM_SAME_THREAD.fetch_add(1, Ordering::Relaxed);
+        // }
+        // println!(
+        //     "[{:?}] submit_am_immediate done {:?}",
+        //     std::thread::current().id(),
+        //     am_id
+        // );
+        // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
+        // };
+        // self.executor.submit_immediate_task(am_future);
+    }
+
     pub(crate) fn submit_remote_am(&self, data: SerializedData, lamellae: Arc<Lamellae>) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
@@ -306,7 +338,7 @@ impl Scheduler {
             // println!(
             //     "[{:?}] execing new task immediate {:?}",
             //     std::thread::current().id(),
-            //     task_id
+            //     _task_id
             // );
             task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);

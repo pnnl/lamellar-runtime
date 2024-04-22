@@ -176,7 +176,8 @@ impl LamellarExecutor for WorkStealing {
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
             .spawn(move |_task_id| async move { task.await }, schedule);
 
-        runnable.run(); //try to run immediately
+        runnable.schedule();
+        // runnable.run(); //try to run immediately
         task.detach();
         // });
     }
@@ -283,7 +284,7 @@ impl WorkStealing {
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let mut ws = WorkStealing {
-            max_num_threads: std::cmp::max(1,num_workers-1),// the main thread does work during blocking_ons and wait_alls
+            max_num_threads: std::cmp::max(1, num_workers - 1), // the main thread does work during blocking_ons and wait_alls
             threads: Vec::new(),
             imm_inj: Arc::new(crossbeam::deque::Injector::new()),
             work_inj: Arc::new(crossbeam::deque::Injector::new()),

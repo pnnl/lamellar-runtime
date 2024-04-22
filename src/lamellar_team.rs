@@ -1816,70 +1816,72 @@ impl LamellarTeamRT {
         .into()
     }
 
-    //#[tracing::instrument(skip_all)]
-    // pub(crate) fn exec_arc_am_pe_immediate<F>(
-    //     self: &Pin<Arc<LamellarTeamRT>>,
-    //     pe: usize,
-    //     am: LamellarArcAm,
-    //     task_group_cnts: Option<Arc<AMCounters>>,
-    // ) -> Box<dyn LamellarRequest<Output = F>>
-    // where
-    //     F: AmDist,
-    // {
-    //     // println!("team exec arc am pe");
-    //     let tg_outstanding_reqs = match task_group_cnts {
-    //         Some(task_group_cnts) => {
-    //             task_group_cnts.add_send_req(1);
-    //             Some(task_group_cnts.outstanding_reqs.clone())
-    //         }
-    //         None => None,
-    //     };
-    //     assert!(pe < self.arch.num_pes());
-    //     let req = Arc::new(LamellarRequestHandleInner {
-    //         ready: AtomicBool::new(false),
-    //         data: Cell::new(None),
-    //         team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
-    //         world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
-    //         tg_outstanding_reqs: tg_outstanding_reqs.clone(),
-    //         user_handle: AtomicU8::new(1),
-    //         scheduler: self.scheduler.clone(),
-    //     });
-    //     let req_result = Arc::new(LamellarRequestResult { req: req.clone() });
-    //     let req_ptr = Arc::into_raw(req_result);
-    //     let id = ReqId {
-    //         id: req_ptr as usize,
-    //         sub_id: 0,
-    //     };
-    //     self.world_counters.add_send_req(1);
-    //     self.team_counters.add_send_req(1);
-    //     // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+    pub(crate) async fn exec_arc_am_pe_immediately<F>(
+        self: &Pin<Arc<LamellarTeamRT>>,
+        pe: usize,
+        am: LamellarArcAm,
+        task_group_cnts: Option<Arc<AMCounters>>,
+    ) -> AmHandle<F>
+    where
+        F: AmDist,
+    {
+        // println!("team exec arc am pe");
+        let tg_outstanding_reqs = match task_group_cnts {
+            Some(task_group_cnts) => {
+                task_group_cnts.add_send_req(1);
+                Some(task_group_cnts.outstanding_reqs.clone())
+            }
+            None => None,
+        };
+        assert!(pe < self.arch.num_pes());
+        let req = Arc::new(AmHandleInner {
+            ready: AtomicBool::new(false),
+            data: Cell::new(None),
+            waker: Mutex::new(None),
+            team_outstanding_reqs: self.team_counters.outstanding_reqs.clone(),
+            world_outstanding_reqs: self.world_counters.outstanding_reqs.clone(),
+            tg_outstanding_reqs: tg_outstanding_reqs.clone(),
+            user_handle: AtomicU8::new(1),
+            scheduler: self.scheduler.clone(),
+        });
+        let req_result = Arc::new(LamellarRequestResult::Am(req.clone()));
+        let req_ptr = Arc::into_raw(req_result);
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
+        self.world_counters.add_send_req(1);
+        self.team_counters.add_send_req(1);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
 
-    //     let world = if let Some(world) = &self.world {
-    //         world.clone()
-    //     } else {
-    //         self.clone()
-    //     };
-    //     let req_data = ReqMetaData {
-    //         src: self.world_pe,
-    //         dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
-    //         id: id,
-    //         lamellae: self.lamellae.clone(),
-    //         world: world,
-    //         team: self.clone(),
-    //         team_addr: self.remote_ptr_addr,
-    //     };
+        let world = if let Some(world) = &self.world {
+            world.clone()
+        } else {
+            self.clone()
+        };
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            team_addr: self.remote_ptr_addr,
+        };
 
-    //     // println!(
-    //     //     "[{:?}] team arc exec am pe immediate",
-    //     //     std::thread::current().id()
-    //     // );
-    //     self.scheduler.submit_am_immediate(Am::Remote(req_data, am));
+        // println!("[{:?}] team arc exec am pe", std::thread::current().id());
+        self.scheduler.exec_am(Am::Remote(req_data, am)).await;
 
-    //     Box::new(LamellarRequestHandle {
-    //         inner: req,
-    //         _phantom: PhantomData,
-    //     })
-    // }
+        // Box::new(LamellarRequestHandle {
+        //     inner: req,
+        //     _phantom: PhantomData,
+        // })
+        AmHandle {
+            inner: req,
+            _phantom: PhantomData,
+        }
+        .into()
+    }
 
     //#[tracing::instrument(skip_all)]
     pub fn exec_am_local<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> LocalAmHandle<F::Output>
@@ -2024,6 +2026,17 @@ impl Drop for LamellarTeamRT {
         // println!("removing {:?} ", self.team_hash);
         self.lamellae.free(self.remote_ptr_addr);
         // println!("LamellarTeamRT dropped {:?}", self.team_hash);
+        // unsafe {
+        //     for duration in crate::SERIALIZE_TIMER.iter() {
+        //         println!("Serialize: {:?}", duration.load(Ordering::SeqCst));
+        //     }
+        //     for duration in crate::SERIALIZE_SIZE_TIMER.iter() {
+        //         println!("Serialize Time: {:?}", duration.load(Ordering::SeqCst));
+        //     }
+        //     for duration in crate::DESERIALIZE_TIMER.iter() {
+        //         println!("Deserialize: {:?}", duration.load(Ordering::SeqCst));
+        //     }
+        // }
     }
 }
 
