@@ -446,6 +446,9 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
         let num = if len < 1000 {
             1
         } else {
@@ -500,6 +503,9 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
 
         let num = if len < 1000 {
             1
@@ -573,6 +579,9 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
+        if len == 0 {
+            return (vec![], len);
+        }
         let num = if len < 1000 {
             1
         } else {
@@ -692,6 +701,9 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<'_, T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             let num = if len < 1000 {
@@ -732,6 +744,10 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<'_, T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         let len = self.len();
         let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
+
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             let num = if len < 1000 {
@@ -807,6 +823,9 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
         let local_data = self.clone();
         let len = local_data.len();
         let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             let num = if len < 1000 {
@@ -854,6 +873,9 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
         let local_data = self.clone();
         let len = local_data.len();
         let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
         let my_pe = self.array.my_pe();
         if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
             let num = if len < 1000 {
