@@ -271,8 +271,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 )
             } else {
                 //no vals no indices
-                panic!("should not be here");
-                // Box::pin(async { Vec::new() })
+                //panic!("should not be here");
+                 Box::pin(async { Vec::new() })
             };
         Box::pin(async move {
             let mut results = Vec::with_capacity(std::cmp::max(i_len, v_len));
