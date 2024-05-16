@@ -691,6 +691,18 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
             false
         }
     }
+
+    pub(crate) unsafe fn to_base<B: Dist>(self) -> OneSidedMemoryRegion<B> {
+        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
+        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
+        OneSidedMemoryRegion {
+            mr: self.mr.clone(),
+            pe: self.pe,
+            sub_region_offset: u8_offset / std::mem::size_of::<B>(),
+            sub_region_size: u8_size / std::mem::size_of::<B>(),
+            phantom: PhantomData,
+        }
+    }
 }
 
 // This could be useful for if we want to transfer the actual data instead of the pointer
