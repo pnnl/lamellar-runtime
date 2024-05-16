@@ -1290,10 +1290,11 @@ fn create_buf_ops(
                 // println!("in single val multi idx exec");
                 #slice
                 let val = self.val;
-                let mut res = Vec::new();
+                let mut res;
                 match self.index_size{
                     1 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u8>());
                         // println!("indices: {:?}", indices);
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
@@ -1301,24 +1302,28 @@ fn create_buf_ops(
                     }
                     2 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u16, self.indices.len()/std::mem::size_of::<u16>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u16>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     4 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u32, self.indices.len()/std::mem::size_of::<u32>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u32>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     8 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u64, self.indices.len()/std::mem::size_of::<u64>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u64>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     _ => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const usize, self.indices.len()/std::mem::size_of::<usize>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<usize>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
