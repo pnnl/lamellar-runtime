@@ -88,7 +88,7 @@ pub struct Config {
     #[serde(default = "default_deadlock_timeout")]
     pub deadlock_timeout: f64,
     #[serde(default = "default_op_batch")]
-    pub batch_op_size: usize,
+    pub batch_op_size: usize, // am group batch size
     #[serde(default = "default_dissemination_factor")]
     pub barrier_dissemination_factor: usize,
     // #[serde(default=true)]
@@ -101,7 +101,7 @@ pub struct Config {
     pub batcher: String,
     #[serde(default = "default_threads")]
     pub threads: usize,
-    pub batch_op_threads: Option<usize>,
+    pub batch_op_threads: Option<usize>,//number of threads used to process array batch ops sending
     pub heap_size: Option<usize>,
     #[serde(default = "default_heap_mode")]
     pub heap_mode: HeapMode,
@@ -114,14 +114,14 @@ pub struct Config {
     #[serde(default = "default_cmd_buf_cnt")]
     pub cmd_buf_cnt: usize,
     #[serde(default = "default_batch_am_size")]
-    pub batch_am_size: usize,
+    pub batch_am_size: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated
 }
 
 pub fn config() -> &'static Config {
     static CONFIG: OnceLock<Config> = OnceLock::new();
     CONFIG.get_or_init(|| match envy::prefixed("LAMELLAR_").from_env::<Config>() {
         Ok(config) => {
-            println!("[LAMELLAR CONFIG]{config:?}");
+            // println!("[LAMELLAR CONFIG]{config:?}");
             config
         }
         Err(error) => panic!("{}", error),

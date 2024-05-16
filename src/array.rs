@@ -106,6 +106,8 @@ use std::sync::Arc;
 /// Alternatively, if you plan to derive all the above traits you can simply supply `All` as the single argument to [ArrayOps]
 pub use lamellar_impl::ArrayOps;
 
+use crate::memregion::RemoteMemoryRegion;
+
 #[doc(hidden)]
 pub mod prelude;
 

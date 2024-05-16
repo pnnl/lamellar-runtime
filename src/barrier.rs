@@ -31,7 +31,7 @@ impl Barrier {
         scheduler: Arc<Scheduler>,
         panic: Arc<AtomicU8>,
     ) -> Barrier {
-        let num_pes = arch.num_pes;
+        let num_pes = arch.num_pes();
         // let mut n = std::env::var("LAMELLAR_BARRIER_DISSEMNATION_FACTOR")
         let mut n = config().barrier_dissemination_factor;
         let num_rounds = if n > 1 && num_pes > 2 {
@@ -42,7 +42,7 @@ impl Barrier {
         };
         let (buffs, send_buf) = if let Ok(_my_index) = arch.team_pe(my_pe) {
             if num_pes > 1 {
-                let alloc = if global_pes == arch.num_pes {
+                let alloc = if global_pes == arch.num_pes() {
                     AllocationType::Global
                 } else {
                     let mut pes = arch.team_iter().collect::<Vec<usize>>();
@@ -263,6 +263,8 @@ impl Barrier {
                 }
             }
         }
+        // println!("leaving barrier");
+        // self.print_bar();
         // self.lamellae.flush();
     }
 

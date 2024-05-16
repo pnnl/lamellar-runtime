@@ -511,29 +511,6 @@ pub(crate) fn create_scheduler(
         _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
     };
 
-    // let batcher = match std::env::var("LAMELLAR_BATCHER") {
-    //     Ok(n) => {
-    //         let n = n.parse::<usize>().unwrap();
-    //         if n == 1 {
-    //             BatcherType::Simple(SimpleBatcher::new(
-    //                 num_pes,
-    //                 am_stall_mark.clone(),
-    //                 executor.clone(),
-    //             ))
-    //         } else {
-    //             BatcherType::TeamAm(TeamAmBatcher::new(
-    //                 num_pes,
-    //                 am_stall_mark.clone(),
-    //                 executor.clone(),
-    //             ))
-    //         }
-    //     }
-    //     Err(_) => BatcherType::TeamAm(TeamAmBatcher::new(
-    //         num_pes,
-    //         am_stall_mark.clone(),
-    //         executor.clone(),
-    //     )),
-    // };
     Scheduler::new(
         executor.clone(),
         RegisteredActiveMessages::new(batcher, executor),
