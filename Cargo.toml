@@ -436,6 +436,10 @@ path="examples/misc/simple_ptp.rs"
 name="lamellar_env"
 path="examples/misc/lamellar_env.rs"
 
+[[example]]
+name="ping_pong"
+path="examples/misc/ping_pong.rs"
+
 
 ##------------ Darc examples ------------------##
 [[example]]
