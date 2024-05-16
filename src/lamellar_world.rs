@@ -209,6 +209,10 @@ impl LamellarWorld {
     pub fn num_threads_per_pe(&self) -> usize {
         self.team.num_threads_per_pe()
     }
+
+    pub fn flush(&self) {
+        self.team_rt.flush();
+    }
 }
 
 impl LamellarEnv for LamellarWorld {
@@ -433,7 +437,7 @@ impl LamellarWorldBuilder {
         //         }
         //     }
         // };
-        println!("executor: {:?}", executor);
+        // println!("executor: {:?}", executor);
 
         let num_threads = config().threads;
         //     let num_threads = match std::env::var("LAMELLAR_THREADS") {

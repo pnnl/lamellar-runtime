@@ -667,7 +667,7 @@ impl LamellarTaskGroup {
         }
     }
 
-    pub(crate) async fn await_all(&self) {
+    pub async fn await_all(&self) {
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
@@ -1525,6 +1525,9 @@ pub struct TypedAmGroupResultIter<'a, T> {
 impl<'a, T> Iterator for TypedAmGroupResultIter<'a, T> {
     type Item = AmGroupResult<'a, T>;
     fn next(&mut self) -> Option<Self::Item> {
+        if self.index % 10000 == 0 {
+            println!("TypedAmGroupResultIter index: {}", self.index);
+        }
         if self.index < self.results.len() {
             let index = self.index;
             self.index += 1;
