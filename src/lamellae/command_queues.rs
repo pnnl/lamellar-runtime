@@ -16,7 +16,7 @@ use std::sync::Arc;
 //use tracing::*;
 
 // const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
-                                  // const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
+// const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
 const CMD_BUFS_PER_PE: usize = 2;
 
 // lazy_static! {
@@ -62,24 +62,35 @@ enum Cmd {
 //#[tracing::instrument(skip_all)]
 fn calc_hash(addr: usize, len: usize) -> usize {
     //we split into a u64 slice and a u8 slice as u64 seems to compute faster.
-    let num_u64s = len / std::mem::size_of::<u64>();
-    let u64_slice = unsafe { std::slice::from_raw_parts(addr as *const u64, num_u64s) };
-    let num_u8s = len % std::mem::size_of::<u64>();
+    let num_usizes = len / std::mem::size_of::<usize>();
+    //let u64_slice = unsafe { std::slice::from_raw_parts(addr as *const u64, num_u64s) };
+    let num_u8s = len % std::mem::size_of::<usize>();
     let u8_slice = unsafe {
         std::slice::from_raw_parts(
-            (addr + num_u64s * std::mem::size_of::<u64>()) as *const u8,
+            (addr + num_usizes * std::mem::size_of::<usize>()) as *const u8,
             num_u8s,
         )
     };
-    (u64_slice
-        .iter()
-        .map(|x| Wrapping(*x as usize))
+    ((0..num_usizes)
+        .map(|x| unsafe { Wrapping((addr as *const usize).offset(x as isize).read_unaligned()) })
         .sum::<Wrapping<usize>>()
         + u8_slice
             .iter()
             .map(|x| Wrapping(*x as usize))
             .sum::<Wrapping<usize>>())
     .0
+
+    // let u8_slice = unsafe {
+    //     std::slice::from_raw_parts(
+    //         (addr) as *const u8,
+    //         num_u8s,
+    //     )
+    // };
+    // u8_slice
+    //     .iter()
+    //     .map(|x| Wrapping(*x as usize))
+    //     .sum::<Wrapping<usize>>()
+    //     .0
 }
 
 impl CmdMsg {
@@ -1065,10 +1076,13 @@ impl InnerCQ {
         }
         let ser_data = ser_data.unwrap();
         // if print{
-        //     ser_data.print();
+        // ser_data.print();
         // }
         self.get_serialized_data(src, cmd, &ser_data).await;
-        // println!("received data {:?}",ser_data.header_and_data_as_bytes()[0..10]);
+        // println!(
+        //     "received data {:?}",
+        //     &ser_data.header_and_data_as_bytes()[0..10]
+        // );
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         // println!("received: {:?} {:?} cmd: {:?} {:?}",cmd.dsize,ser_data.len(),cmd,&ser_data.header_and_data_as_bytes()[0..20]);
         // SerializedData::RofiData(ser_data)
@@ -1079,7 +1093,7 @@ impl InnerCQ {
     async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
         let mut data = self
             .comm
-            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<u8>());
+            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
         let mut timer = std::time::Instant::now();
         while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
@@ -1087,7 +1101,7 @@ impl InnerCQ {
             self.send_alloc(cmd.dsize);
             data = self
                 .comm
-                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<u8>());
+                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
             // println!("cq 874 data {:?}",data.is_ok());
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!("get cmd buf stuck waiting for alloc");
@@ -1328,7 +1342,8 @@ impl CommandQueue {
                 //     &data.header_and_data_as_bytes()[0..20]
                 // );
                 data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}",data.header_and_data_as_bytes());
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;
             }
             SerializedData::ShmemData(ref data) => {
@@ -1516,7 +1531,7 @@ impl CommandQueue {
 
     //#[tracing::instrument(skip_all)]
     pub fn mem_per_pe() -> usize {
-        (config().cmd_buf_len * config().cmd_buf_cnt  + 4) * std::mem::size_of::<CmdMsg>()
+        (config().cmd_buf_len * config().cmd_buf_cnt + 4) * std::mem::size_of::<CmdMsg>()
     }
 }
 

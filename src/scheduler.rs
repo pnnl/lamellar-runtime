@@ -168,6 +168,7 @@ impl Scheduler {
         let max_ams = self.max_ams.clone();
         let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
         let ame = self.active_message_engine.clone();
+        // println!("am ptr {:p} ", &am);
         let am_future = async move {
             // let start_tid = thread::current().id();
             num_ams.fetch_add(1, Ordering::Relaxed);

@@ -912,6 +912,15 @@ impl<T> Darc<T> {
     }
 }
 
+fn calc_padding(addr: usize, align: usize) -> usize {
+    let rem = addr % align;
+    if rem == 0 {
+        0
+    } else {
+        align - rem
+    }
+}
+
 impl<T> Darc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `Darc<T>` on the PEs specified by team.
@@ -967,12 +976,34 @@ impl<T> Darc<T> {
             AllocationType::Sub(team_rt.get_pes())
         };
 
-        let size = std::mem::size_of::<DarcInner<T>>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<usize>();
+        //The DarcInner data structure
+        let mut size = std::mem::size_of::<DarcInner<T>>();
+
+        // Ref Cnt Array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        // total ref cnt array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let total_ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        // mode array
+        let padding = calc_padding(size, std::mem::align_of::<DarcMode>());
+        let mode_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<DarcMode>();
+
+        //mode ref cnt array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let mode_ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        //mode_barrier array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let mode_barrier_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
         // println!("creating new darc");
 
         team_rt.async_barrier().await;
@@ -1008,25 +1039,30 @@ impl<T> Darc<T> {
             weak_local_cnt: AtomicUsize::new(0),
             dist_cnt: AtomicUsize::new(0),
             total_dist_cnt: AtomicUsize::new(0),
-            ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
-            total_ref_cnt_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
-            mode_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
-            mode_ref_cnt_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
-            mode_barrier_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
+            // total_ref_cnt_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // mode_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // mode_ref_cnt_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
+            // mode_barrier_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            ref_cnt_addr: addr + ref_cnt_offset,
+            total_ref_cnt_addr: addr + total_ref_cnt_offset,
+            mode_addr: addr + mode_offset,
+            mode_ref_cnt_addr: addr + mode_ref_cnt_offset,
+            mode_barrier_addr: addr + mode_barrier_offset,
             barrier: barrier_ptr,
             // mode_barrier_rounds: num_rounds,
             am_counters: am_counters_ptr,
@@ -1082,12 +1118,33 @@ impl<T> Darc<T> {
             AllocationType::Sub(team_rt.get_pes())
         };
 
-        let size = std::mem::size_of::<DarcInner<T>>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<usize>();
+        //The DarcInner data structure
+        let mut size = std::mem::size_of::<DarcInner<T>>();
+
+        // Ref Cnt Array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        // total ref cnt array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let total_ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        // mode array
+        let padding = calc_padding(size, std::mem::align_of::<DarcMode>());
+        let mode_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<DarcMode>();
+
+        //mode ref cnt array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let mode_ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        //mode_barrier array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let mode_barrier_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
         // println!("creating new darc");
 
         team_rt.tasking_barrier();
@@ -1123,25 +1180,30 @@ impl<T> Darc<T> {
             weak_local_cnt: AtomicUsize::new(0),
             dist_cnt: AtomicUsize::new(0),
             total_dist_cnt: AtomicUsize::new(0),
-            ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
-            total_ref_cnt_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
-            mode_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
-            mode_ref_cnt_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
-            mode_barrier_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
+            // total_ref_cnt_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // mode_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // mode_ref_cnt_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
+            // mode_barrier_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            ref_cnt_addr: addr + ref_cnt_offset,
+            total_ref_cnt_addr: addr + total_ref_cnt_offset,
+            mode_addr: addr + mode_offset,
+            mode_ref_cnt_addr: addr + mode_ref_cnt_offset,
+            mode_barrier_addr: addr + mode_barrier_offset,
             barrier: barrier_ptr,
             // mode_barrier_rounds: num_rounds,
             am_counters: am_counters_ptr,

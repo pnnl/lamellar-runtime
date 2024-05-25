@@ -355,11 +355,8 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        let mr = MemoryRegion::try_new(
-            size * std::mem::size_of::<T>(),
-            lamellae,
-            AllocationType::Local,
-        )?;
+        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, lamellae, AllocationType::Local)?;
+        let mr = unsafe { mr_t.to_base::<u8>() };
         let pe = mr.pe;
 
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
