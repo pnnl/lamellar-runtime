@@ -362,8 +362,15 @@ impl LamellarAlloc for BTreeAlloc {
             //     a + padding,
             //     self.free_space.load(Ordering::SeqCst)
             // );
-
-            Some(a + padding)
+            let new_addr = a + padding;
+            // let rem = new_addr % align;
+            // let rem_16 = new_addr % 16;
+            // println!(
+            //     "alloc addr {:x?} {:x?} {new_addr} {a} {padding} {rem} {align} {rem_16}",
+            //     a + padding,
+            //     new_addr,
+            // );
+            Some(new_addr)
         } else {
             None
         };
@@ -390,7 +397,7 @@ impl LamellarAlloc for BTreeAlloc {
     fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
-
+        // println!("trying to free: {:x?} {:?}", addr, addr);
         if let Some((size, padding)) = allocated_addrs.remove(&addr) {
             // println!("allocated_addrs: {:?}", allocated_addrs);
             let full_size = size + padding;

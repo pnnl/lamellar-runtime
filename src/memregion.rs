@@ -730,8 +730,9 @@ impl<T: Dist> MemoryRegion<T> {
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         // println!(
-        //     "creating new lamellar memory region {:?}",
-        //     size * std::mem::size_of::<T>()
+        //     "creating new lamellar memory region size: {:?} align: {:?}",
+        //     size * std::mem::size_of::<T>(),
+        //     std::mem::align_of::<T>()
         // );
         let mut mode = Mode::Shared;
         let addr = if size > 0 {
@@ -791,23 +792,25 @@ impl<T: Dist> MemoryRegion<T> {
 
     #[allow(dead_code)]
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn to_base<B: Dist>(self) -> MemoryRegion<B> {
+    pub(crate) unsafe fn to_base<B: Dist>(mut self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
             self.num_bytes % std::mem::size_of::<B>(),
             0,
             "Error converting memregion to new base, does not align"
         );
-        MemoryRegion {
-            addr: self.addr, //TODO: out of memory...
-            pe: self.pe,
-            size: self.num_bytes / std::mem::size_of::<B>(),
-            num_bytes: self.num_bytes,
-            backend: self.backend,
-            rdma: self.rdma.clone(),
-            mode: self.mode,
-            phantom: PhantomData,
-        }
+        // MemoryRegion {
+        //     addr: self.addr, //TODO: out of memory...
+        //     pe: self.pe,
+        //     size: self.num_bytes / std::mem::size_of::<B>(),
+        //     num_bytes: self.num_bytes,
+        //     backend: self.backend,
+        //     rdma: self.rdma.clone(),
+        //     mode: self.mode,
+        //     phantom: PhantomData,
+        // }
+        self.size = self.num_bytes / std::mem::size_of::<B>();
+        std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
 
     // }
