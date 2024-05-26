@@ -66,8 +66,6 @@ root=$PWD
 #  cd ..
 # done
 
-cargo build --release --features enable-rofi --features tokio-executor --examples -j 20
-
 local_results_dir=async_backends
 results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}
 ### test using rofi verbs lamellae

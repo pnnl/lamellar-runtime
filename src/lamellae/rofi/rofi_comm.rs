@@ -94,10 +94,13 @@ impl RofiComm {
 
     //#[tracing::instrument(skip_all)]
     unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
-        let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
-        let r_ptr = dst_addr.as_ptr() as *mut T as *mut R;
-        for i in 0..num_r {
-            r_ptr.offset(i as isize).write_unaligned(val);
+        // println!("{:?} {:?} {:?} {:?} {:?}",std::mem::size_of::<T>(),std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>()),(dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>())%std::mem::size_of::<R>());
+        let bytes = std::slice::from_raw_parts_mut(
+            dst_addr.as_ptr() as *mut T as *mut R,
+            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
+        );
+        for elem in bytes.iter_mut() {
+            *elem = val;
         }
     }
     //#[tracing::instrument(skip_all)]
@@ -117,26 +120,24 @@ impl RofiComm {
         }
     }
     //#[tracing::instrument(skip_all)]
-    unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
+    unsafe fn check_buffer_elems<R: std::cmp::PartialEq, T>(
         &self,
         dst_addr: &mut [T],
         val: R,
     ) -> TxResult<()> {
-        let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
-        let r_ptr = dst_addr.as_ptr() as *mut T as *mut R;
-
+        let bytes = std::slice::from_raw_parts_mut(
+            dst_addr.as_ptr() as *mut T as *mut R,
+            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
+        );
         let mut timer = std::time::Instant::now();
-        for i in 0..num_r - 2 {
-            while r_ptr.offset(i as isize).read_unaligned() == val
-                && r_ptr.offset(i as isize + 1).read_unaligned() == val
-            {
+        for i in 0..(bytes.len() as isize - 2) {
+            while bytes[i as usize] == val && bytes[i as usize + 1] == val {
                 if timer.elapsed().as_secs_f64() > 1.0 {
                     // println!(
-                    //     "{:?}/{:?}: {:?} {:?} {:?}",
+                    //     "{:?}: {:?} {:?} {:?}",
                     //     i,
-                    //     num_r,
-                    //     r_ptr.offset(i as isize).read_unaligned(),
-                    //     r_ptr.offset(i as isize + 1).read_unaligned(),
+                    //     bytes[i as usize],
+                    //     bytes[i as usize + 1],
                     //     val
                     // );
                     return Err(TxError::GetError);
@@ -144,10 +145,9 @@ impl RofiComm {
                 //hopefully magic number doesnt appear twice in a row
                 std::thread::yield_now();
             }
-            timer = std::time::Instant::now();
         }
         timer = std::time::Instant::now();
-        while r_ptr.offset(num_r as isize - 1).read_unaligned() == val {
+        while bytes[bytes.len() - 1] == val {
             if timer.elapsed().as_secs_f64() > 1.0 {
                 // println!("{:?}", bytes[bytes.len() - 1]);
                 return Err(TxError::GetError);
@@ -263,7 +263,6 @@ impl CommOps for RofiComm {
     }
     //#[tracing::instrument(skip_all)]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
-        // println!("rt_alloc size {size} align {align}");
         // let size = size + size%8;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -361,16 +360,12 @@ impl CommOps for RofiComm {
             // }
         } else {
             unsafe {
-                // println!(
-                //     "[{:?}]-({:?}) memcopy {:?} into {:x} src align {:?} dst align {:?}",
-                //     pe,
-                //     src_addr.as_ptr(),
-                //     src_addr.len(),
-                //     dst_addr,
-                //     src_addr.as_ptr().align_offset(std::mem::align_of::<T>()),
-                //     (dst_addr as *mut T).align_offset(std::mem::align_of::<T>()),
-                // );
-                std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
+                // println!("[{:?}]-({:?}) memcopy {:?} into {:x}",pe,src_addr.as_ptr(),src_addr.len(),dst_addr);
+                std::ptr::copy_nonoverlapping(
+                    src_addr.as_ptr(),
+                    dst_addr as *mut T,
+                    src_addr.len(),
+                );
             }
         }
         // req
@@ -399,7 +394,11 @@ impl CommOps for RofiComm {
         } else {
             unsafe {
                 // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
-                std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
+                std::ptr::copy_nonoverlapping(
+                    src_addr.as_ptr(),
+                    dst_addr as *mut T,
+                    src_addr.len(),
+                );
             }
         }
         // req
@@ -432,7 +431,7 @@ impl CommOps for RofiComm {
         }
         // drop(lock);
         unsafe {
-            std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
+            std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
         }
         self.put_amt.fetch_add(
             src_addr.len() * (self.num_pes - 1) * std::mem::size_of::<T>(),
@@ -488,7 +487,11 @@ impl CommOps for RofiComm {
         } else {
             // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
             unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                std::ptr::copy_nonoverlapping(
+                    src_addr as *const T,
+                    dst_addr.as_mut_ptr(),
+                    dst_addr.len(),
+                );
             }
         }
         // req
@@ -564,7 +567,11 @@ impl CommOps for RofiComm {
             }
         } else {
             unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                std::ptr::copy_nonoverlapping(
+                    src_addr as *const T,
+                    dst_addr.as_mut_ptr(),
+                    dst_addr.len(),
+                );
             }
         }
     }
@@ -610,7 +617,11 @@ impl CommOps for RofiComm {
             // };
         } else {
             unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                std::ptr::copy_nonoverlapping(
+                    src_addr as *const T,
+                    dst_addr.as_mut_ptr(),
+                    dst_addr.len(),
+                );
             }
         }
         // req

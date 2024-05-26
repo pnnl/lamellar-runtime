@@ -228,16 +228,14 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
         #[cfg(feature = "enable-rofi")]
         Backend::Rofi => {
             let provider = match std::env::var("LAMELLAR_ROFI_PROVIDER") {
-                Ok(p) => p,
-                Err(_) => "verbs".to_owned(),
-                // Ok(p) => match p.as_str() {
-                //     "verbs" => "verbs",
-                //     "tcp" => "tcp",
-                //     _ => "verbs",
-                // },
-                // Err(_) => "verbs",
+                Ok(p) => match p.as_str() {
+                    "verbs" => "verbs",
+                    "shm" => "shm",
+                    _ => "verbs",
+                },
+                Err(_) => "verbs",
             };
-            LamellaeBuilder::RofiBuilder(RofiBuilder::new(&provider))
+            LamellaeBuilder::RofiBuilder(RofiBuilder::new(provider))
         }
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),

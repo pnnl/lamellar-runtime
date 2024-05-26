@@ -34,7 +34,7 @@ for pe in $(seq 0 $ENDPE); do
     echo "more threads ${E_CORE} than cores ${NPROC} "
     exit
   fi
-  LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  $bin  "${@:2}" &>> ${pe}_out.txt & 
+  LAMELLAE_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  $bin  "${@:2}" &>> ${pe}_out & 
   S_CORE=$(($E_CORE ))
   E_CORE=$(($S_CORE + $THREADS))
 done

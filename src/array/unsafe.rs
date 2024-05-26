@@ -157,33 +157,17 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         if remaining_elems > 0 {
             per_pe_size += 1
         }
-        // println!("new unsafe array {:?} {:?}", elem_per_pe, per_pe_size);
-        let rmr_t: MemoryRegion<T> =
-            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global);
-        // let rmr = MemoryRegion::new(
-        //     per_pe_size * std::mem::size_of::<T>(),
-        //     team.lamellae.clone(),
-        //     AllocationType::Global,
-        // );
-        // println!("new array {:?}",rmr_t.as_ptr());
-        
+        // println!("new unsafe array {:?} {:?} {:?}", elem_per_pe, num_elems_local, per_pe_size);
+        let rmr = MemoryRegion::new(
+            per_pe_size * std::mem::size_of::<T>(),
+            team.lamellae.clone(),
+            AllocationType::Global,
+        );
         unsafe {
-            // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
-            //     *elem = std::mem::zeroed();
-            // }
-            if std::mem::needs_drop::<T>() {
-                // If `T` needs to be dropped then we have to do this one item at a time, in
-                // case one of the intermediate drops does a panic.
-                // slice.iter_mut().for_each(write_zeroes);
-                panic!("need drop not yet supported");
-              } else {
-                // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(rmr_t.as_mut_slice().expect("data should exist on pe"));
-                unsafe { std::ptr::write_bytes(rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8, 0u8, len) }
-              }
+            for elem in rmr.as_mut_slice().expect("data should exist on pe") {
+                *elem = 0;
+            }
         }
-        let rmr = unsafe { rmr_t.to_base::<u8>() };
-        // println!("new array u8 {:?}",rmr.as_ptr());
 
         let data = Darc::try_new_with_drop(
             team.clone(),
@@ -251,30 +235,16 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         if remaining_elems > 0 {
             per_pe_size += 1
         }
-        let rmr_t: MemoryRegion<T> =
-            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global);
-        // let rmr = MemoryRegion::new(
-        //     per_pe_size * std::mem::size_of::<T>(),
-        //     team.lamellae.clone(),
-        //     AllocationType::Global,
-        // );
-        
+        let rmr = MemoryRegion::new(
+            per_pe_size * std::mem::size_of::<T>(),
+            team.lamellae.clone(),
+            AllocationType::Global,
+        );
         unsafe {
-             // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
-            //     *elem = std::mem::zeroed();
-            // }
-            if std::mem::needs_drop::<T>() {
-                // If `T` needs to be dropped then we have to do this one item at a time, in
-                // case one of the intermediate drops does a panic.
-                // slice.iter_mut().for_each(write_zeroes);
-                panic!("need drop not yet supported");
-              } else {
-                // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(rmr_t.as_mut_slice().expect("data should exist on pe"));
-                unsafe { std::ptr::write_bytes(rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8, 0u8, len) }
-              }
+            for elem in rmr.as_mut_slice().expect("data should exist on pe") {
+                *elem = 0;
+            }
         }
-        let rmr = unsafe { rmr_t.to_base::<u8>() };
 
         let data = Darc::try_new_with_drop(
             team.clone(),
@@ -457,7 +427,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         let u8_ptr = unsafe { self.inner.local_as_mut_ptr() };
         // self.inner.data.mem_region.as_casted_mut_ptr::<T>().unwrap();
-        // println!("ptr: {:?} {:?}", u8_ptr, u8_ptr as *const T);
         u8_ptr as *mut T
     }
 
@@ -1842,7 +1811,6 @@ impl UnsafeArrayInner {
             self.data.mem_region.as_casted_mut_ptr::<u8>().expect(
                 "memory doesnt exist on this pe (this should not happen for arrays currently)",
             );
-        // println!("u8 ptr: {:?}", ptr);
         // let len = self.size;
         let my_pe = self.data.my_pe;
         let num_pes = self.data.num_pes;

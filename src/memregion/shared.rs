@@ -99,11 +99,17 @@ impl<T: Dist> SharedMemoryRegion<T> {
         alloc: AllocationType,
     ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
-        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
-        let mr = unsafe { mr_t.to_base::<u8>() };
         Ok(SharedMemoryRegion {
-            mr: Darc::try_new(team.clone(), mr, crate::darc::DarcMode::Darc)
-                .expect("memregions can only be created on a member of the team"),
+            mr: Darc::try_new(
+                team.clone(),
+                MemoryRegion::try_new(
+                    size * std::mem::size_of::<T>(),
+                    team.lamellae.clone(),
+                    alloc,
+                )?,
+                crate::darc::DarcMode::Darc,
+            )
+            .expect("memregions can only be created on a member of the team"),
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,
