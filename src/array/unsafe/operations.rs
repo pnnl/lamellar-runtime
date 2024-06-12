@@ -409,6 +409,9 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         } else {
             VecDeque::new()
         };
+        if res.len() == 0 {
+            return ArrayFetchBatchOpHandle::new(byte_array, res, 0);
+        }
         ArrayFetchBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
     }
 
