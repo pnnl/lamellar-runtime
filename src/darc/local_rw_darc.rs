@@ -489,7 +489,7 @@ impl<T: fmt::Display + Sync + Send> fmt::Display for LocalRwDarc<T> {
     }
 }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub fn localrw_serialize<S, T>(localrw: &LocalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 // where
 //     S: Serializer,
@@ -497,7 +497,7 @@ impl<T: fmt::Display + Sync + Send> fmt::Display for LocalRwDarc<T> {
 //     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 // }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub fn localrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<LocalRwDarc<T>, D::Error>
 // where
 //     D: Deserializer<'de>,
@@ -512,8 +512,11 @@ impl<T: fmt::Display + Sync + Send> fmt::Display for LocalRwDarc<T> {
 //     Ok(rwdarc)
 // }
 
-#[doc(hidden)]
-pub fn localrw_serialize2<S, T>(localrw: &Darc<Arc<RwLock<T>>>, s: S) -> Result<S::Ok, S::Error>
+//#[doc(hidden)]
+pub(crate) fn localrw_serialize2<S, T>(
+    localrw: &Darc<Arc<RwLock<T>>>,
+    s: S,
+) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -523,8 +526,11 @@ where
     ndarc.serialize(s)
 }
 
-#[doc(hidden)]
-pub fn localrw_from_ndarc2<'de, D, T>(deserializer: D) -> Result<Darc<Arc<RwLock<T>>>, D::Error>
+//#[doc(hidden)]
+// #[allow(unreachable_pub)]
+pub(crate) fn localrw_from_ndarc2<'de, D, T>(
+    deserializer: D,
+) -> Result<Darc<Arc<RwLock<T>>>, D::Error>
 where
     D: Deserializer<'de>,
 {

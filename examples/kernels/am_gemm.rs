@@ -10,7 +10,7 @@
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
 ///----------------------------------------------------------------------------------
-use futures_util::{Future,future};
+use futures_util::future;
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
 use lazy_static::lazy_static;

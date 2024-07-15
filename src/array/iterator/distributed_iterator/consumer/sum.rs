@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
-pub struct Sum<I> {
+pub(crate) struct Sum<I> {
     pub(crate) iter: I,
 }
 
@@ -66,7 +66,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct DistIterSumHandle<T> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
@@ -158,7 +158,7 @@ where
         }
     }
 }
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T> LamellarRequest for DistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,

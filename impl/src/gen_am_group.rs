@@ -305,7 +305,7 @@ fn impl_am_group_user(
     };
 
     // quote! {
-    //     #[doc(hidden)]
+    //     //#[doc(hidden)]
     //     pub struct #am_group_name_user #impl_generics #where_clause{
     //         team: std::sync::Arc<#lamellar::LamellarTeam>,
     //         batch_cnt: usize,
@@ -317,7 +317,7 @@ fn impl_am_group_user(
     quote! {
         impl #am_user_impl_generics #am_group_name_user #am_user_ty_generics #am_user_where_clause{
             pub fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> Self {
-                let num_per_batch = #lamellar::config().batch_op_size;
+                let num_per_batch = #lamellar::config().am_group_batch_size;
                 // match std::env::var("LAMELLAR_OP_BATCH") {
                 //     Ok(n) => n.parse::<usize>().unwrap(),
                 //     Err(_) => 10000,
@@ -398,7 +398,7 @@ fn generate_am_group_user_struct(
     let (_impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
 
     quote! {
-        #[doc(hidden)]
+        //#[doc(hidden)]
         #vis struct #am_group_name_user #am_user_impl_generics #am_user_where_clause{
             team: std::sync::Arc<lamellar::LamellarTeam>,
             batch_cnt: usize,

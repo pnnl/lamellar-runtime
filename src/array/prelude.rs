@@ -5,7 +5,7 @@ pub use crate::array::local_lock_atomic::LocalLockArray;
 pub use crate::array::native_atomic::NativeAtomicArray;
 pub use crate::array::r#unsafe::UnsafeArray;
 pub use crate::array::read_only::ReadOnlyArray;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use crate::array::{
     register_reduction,
     ArrayOps,
@@ -36,11 +36,11 @@ pub use crate::array::operations::{
 };
 // pub use crate::array::operations::*;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use crate::active_messaging::ActiveMessaging;
 pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;

@@ -10,7 +10,7 @@ use crate::array::*;
 use crate::darc::global_rw_darc::GlobalRwDarcReadGuard;
 use crate::memregion::Dist;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Clone)]
 pub struct GlobalLockDistIter<T: Dist> {
     data: GlobalLockArray<T>,
@@ -44,7 +44,7 @@ impl<T: Dist> std::fmt::Debug for GlobalLockDistIter<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Clone)]
 pub struct GlobalLockLocalIter<T: Dist> {
     data: GlobalLockArray<T>,

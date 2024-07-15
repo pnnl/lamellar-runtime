@@ -743,7 +743,7 @@ impl<T> GlobalRwDarc<T> {
     /// # One-sided Operation
     /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
     /// Once aqui
-    /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_read]
+    /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::read]
     ///
     /// # Examples
     ///```
@@ -797,7 +797,7 @@ impl<T> GlobalRwDarc<T> {
     /// Once aquired the lock will only be held by the calling PE (until it is dropped)
     ///
     /// # Note
-    /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_write]
+    /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::write]
     ///
     /// # Examples
     ///```
@@ -1055,7 +1055,7 @@ impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
     }
 }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub fn globalrw_serialize<S, T>(localrw: &GlobalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 // where
 //     S: Serializer,
@@ -1063,7 +1063,7 @@ impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
 //     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 // }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub fn globalrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<GlobalRwDarc<T>, D::Error>
 // where
 //     D: Deserializer<'de>,

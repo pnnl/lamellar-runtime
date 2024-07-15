@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
-pub struct Collect<I, A> {
+pub(crate) struct Collect<I, A> {
     pub(crate) iter: Monotonic<I>,
     pub(crate) distribution: Distribution,
     pub(crate) _phantom: PhantomData<A>,
@@ -78,7 +78,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct CollectAsync<I, A, B> {
+pub(crate) struct CollectAsync<I, A, B> {
     pub(crate) iter: Monotonic<I>,
     pub(crate) distribution: Distribution,
     pub(crate) _phantom: PhantomData<(A, B)>,
@@ -154,7 +154,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct DistIterCollectHandle<
     T: Dist + ArrayOps,

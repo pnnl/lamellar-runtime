@@ -266,8 +266,8 @@ impl LamellarExecutor for WorkStealing3 {
 
     //#[tracing::instrument(skip_all)]
     fn exec_task(&self) {
-        let mut rng = rand::thread_rng();
-        let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
+        let mut _rng = rand::thread_rng();
+        let _t = rand::distributions::Uniform::from(0..self.work_stealers.len());
         let ret = if !self.imm_inj.is_empty() {
             self.imm_inj.steal().success()
         } else {
@@ -291,9 +291,9 @@ impl LamellarExecutor for WorkStealing3 {
         }
     }
 
-    fn set_max_workers(&mut self, num_workers: usize) {
-        self.max_num_threads = num_workers;
-    }
+    // fn set_max_workers(&mut self, num_workers: usize) {
+    //     self.max_num_threads = num_workers;
+    // }
 
     fn num_workers(&self) -> usize {
         self.max_num_threads

@@ -12,7 +12,7 @@ use crate::memregion::Dist;
 //     RawRwLock,
 // };
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Clone)]
 pub struct NativeAtomicDistIter<T: Dist> {
     data: NativeAtomicArray<T>,
@@ -42,7 +42,7 @@ impl<T: Dist> std::fmt::Debug for NativeAtomicDistIter<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Clone)]
 pub struct NativeAtomicLocalIter<T: Dist> {
     data: NativeAtomicArray<T>,

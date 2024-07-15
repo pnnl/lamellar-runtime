@@ -82,7 +82,6 @@ fn main() {
         }
         let cur_t = timer.elapsed().as_secs_f64();
         world.barrier();
-        s = Instant::now();
         // let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();

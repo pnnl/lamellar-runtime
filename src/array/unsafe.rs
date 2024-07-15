@@ -1,6 +1,7 @@
 mod iteration;
 
-mod local_chunks;
+pub(crate) mod local_chunks;
+// pub use local_chunks::{};
 pub(crate) mod operations;
 mod rdma;
 
@@ -166,7 +167,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         //     AllocationType::Global,
         // );
         // println!("new array {:?}",rmr_t.as_ptr());
-        
+
         unsafe {
             // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
             //     *elem = std::mem::zeroed();
@@ -176,11 +177,17 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 // case one of the intermediate drops does a panic.
                 // slice.iter_mut().for_each(write_zeroes);
                 panic!("need drop not yet supported");
-              } else {
+            } else {
                 // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(rmr_t.as_mut_slice().expect("data should exist on pe"));
-                unsafe { std::ptr::write_bytes(rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8, 0u8, len) }
-              }
+                let len = std::mem::size_of_val::<[T]>(
+                    rmr_t.as_mut_slice().expect("data should exist on pe"),
+                );
+                std::ptr::write_bytes(
+                    rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
+                    0u8,
+                    len,
+                )
+            }
         }
         let rmr = unsafe { rmr_t.to_base::<u8>() };
         // println!("new array u8 {:?}",rmr.as_ptr());
@@ -258,9 +265,9 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         //     team.lamellae.clone(),
         //     AllocationType::Global,
         // );
-        
+
         unsafe {
-             // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
+            // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
             //     *elem = std::mem::zeroed();
             // }
             if std::mem::needs_drop::<T>() {
@@ -268,11 +275,17 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 // case one of the intermediate drops does a panic.
                 // slice.iter_mut().for_each(write_zeroes);
                 panic!("need drop not yet supported");
-              } else {
+            } else {
                 // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(rmr_t.as_mut_slice().expect("data should exist on pe"));
-                unsafe { std::ptr::write_bytes(rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8, 0u8, len) }
-              }
+                let len = std::mem::size_of_val::<[T]>(
+                    rmr_t.as_mut_slice().expect("data should exist on pe"),
+                );
+                std::ptr::write_bytes(
+                    rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
+                    0u8,
+                    len,
+                )
+            }
         }
         let rmr = unsafe { rmr_t.to_base::<u8>() };
 
@@ -685,7 +698,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.data.team.tasking_barrier();
     }
 
-    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+    pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
         self.inner.data.team.async_barrier()
     }
 }
@@ -1353,7 +1366,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
 }
 
 impl UnsafeArrayInnerWeak {
-    pub fn upgrade(&self) -> Option<UnsafeArrayInner> {
+    pub(crate) fn upgrade(&self) -> Option<UnsafeArrayInner> {
         if let Some(data) = self.data.upgrade() {
             Some(UnsafeArrayInner {
                 data: data,
@@ -1455,7 +1468,7 @@ impl UnsafeArrayInner {
 
     //index relative to subarray, return offset relative to subarray
     // //#[tracing::instrument(skip_all)]
-    pub fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
+    pub(crate) fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         let mut global_index = self.offset + index;
 
         match self.distribution {
@@ -1486,7 +1499,7 @@ impl UnsafeArrayInner {
     }
 
     //index relative to subarray, return offset relative to subarray
-    pub fn pe_sub_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
+    pub(crate) fn pe_sub_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         let offset = self.pe_full_offset_for_dist_index(pe, index)?;
         match self.distribution {
             Distribution::Block => {
@@ -1510,7 +1523,7 @@ impl UnsafeArrayInner {
     //index is local with respect to subarray
     //returns local offset relative to full array
     // //#[tracing::instrument(skip_all)]
-    pub fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
+    pub(crate) fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
         let global_index = self.global_index_from_local(index)?;
         match self.distribution {
             Distribution::Block => {
@@ -1650,7 +1663,7 @@ impl UnsafeArrayInner {
     pub(crate) fn global_start_index_for_pe(&self, pe: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
-                let mut global_start = self.orig_elem_per_pe * pe;
+                let global_start = self.orig_elem_per_pe * pe;
                 global_start + std::cmp::min(pe, self.orig_remaining_elems)
             }
             Distribution::Cyclic => pe,
@@ -1706,6 +1719,7 @@ impl UnsafeArrayInner {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn global_end_index_for_pe(&self, pe: usize) -> usize {
         self.global_start_index_for_pe(pe) + self.num_elems_pe(pe)
     }

@@ -39,12 +39,12 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
-    #[doc(hidden)]
     #[cfg(feature = "enable-rofi")]
+    /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
-    #[doc(hidden)]
+    /// The Local backend -- intended for single process environments
     Local,
-    #[doc(hidden)]
+    /// The Shmem backend -- intended for multi process environments single node environments
     Shmem,
 }
 
@@ -151,11 +151,11 @@ pub(crate) trait LamellaeInit {
 // #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
-    fn serialize<T: serde::Serialize + ?Sized>(
-        &self,
-        header: Option<SerializeHeader>,
-        obj: &T,
-    ) -> Result<SerializedData, anyhow::Error>;
+    // fn serialize<T: serde::Serialize + ?Sized>(
+    //     &self,
+    //     header: Option<SerializeHeader>,
+    //     obj: &T,
+    // ) -> Result<SerializedData, anyhow::Error>;
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
@@ -182,7 +182,7 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     fn backend(&self) -> Backend;
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
-    fn print_stats(&self);
+    // fn print_stats(&self);
     fn shutdown(&self);
     fn force_shutdown(&self);
     fn force_deinit(&self);
@@ -191,7 +191,6 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
 #[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeAM: Send {
-    async fn send_to_pe_async(&self, pe: usize, data: SerializedData); //should never send to self... this is short circuited before request is serialized in the active message layer
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -209,15 +208,15 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
-    fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
+    // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
-    fn occupied(&self) -> usize;
-    fn num_pool_allocs(&self) -> usize;
+    // fn occupied(&self) -> usize;
+    // fn num_pool_allocs(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);
 }
 

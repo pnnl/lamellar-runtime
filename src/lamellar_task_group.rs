@@ -36,7 +36,7 @@ pub(crate) struct TaskGroupAmHandleInner {
     pub(crate) scheduler: Arc<Scheduler>,
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupAmHandle<T: AmDist> {
@@ -191,7 +191,7 @@ pub(crate) struct TaskGroupMultiAmHandleInner {
     pub(crate) scheduler: Arc<Scheduler>,
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupMultiAmHandle<T: AmDist> {
@@ -370,7 +370,7 @@ impl<T: AmDist> Future for TaskGroupMultiAmHandle<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupLocalAmHandle<T> {
@@ -540,6 +540,10 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.wait_all();
     }
 
+    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+        self.await_all()
+    }
+
     //#[tracing::instrument(skip_all)]
     fn barrier(&self) {
         self.team.barrier();
@@ -667,7 +671,7 @@ impl LamellarTaskGroup {
         }
     }
 
-    pub async fn await_all(&self) {
+    async fn await_all(&self) {
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
@@ -1563,7 +1567,7 @@ impl<T: AmDist> BaseAmGroupReq<T> {
 
 /// This enum is used to hold the results of a TypedAmGroup request
 #[derive(Clone)]
-pub enum BaseAmGroupResult<T> {
+pub(crate) enum BaseAmGroupResult<T> {
     // T here should be the inner most return type
     /// AmGroup executed on a single PE, and does not return any value
     SinglePeUnit(T),

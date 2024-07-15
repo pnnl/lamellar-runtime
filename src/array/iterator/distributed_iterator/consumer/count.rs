@@ -21,7 +21,7 @@ use std::sync::{
 use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
-pub struct Count<I> {
+pub(crate) struct Count<I> {
     pub(crate) iter: I,
 }
 
@@ -71,7 +71,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct DistIterCountHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<usize>>,
@@ -155,7 +155,7 @@ impl Future for DistIterCountHandle {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[async_trait]
 impl LamellarRequest for DistIterCountHandle {
     fn blocking_wait(mut self) -> Self::Output {

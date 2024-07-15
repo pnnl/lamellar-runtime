@@ -11,6 +11,7 @@ use std::sync::Arc;
 pub(crate) trait LamellarAlloc {
     fn new(id: String) -> Self;
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
+    #[allow(dead_code)]
     fn malloc(&self, size: usize, align: usize) -> usize;
     fn try_malloc(&self, size: usize, align: usize) -> Option<usize>;
     fn fake_malloc(&self, size: usize, align: usize) -> bool;

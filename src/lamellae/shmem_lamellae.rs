@@ -5,8 +5,8 @@ use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
 
 use crate::lamellae::{
-    AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
-    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
+    AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
+    Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -136,7 +136,7 @@ impl LamellaeComm for Shmem {
         // (self.shmem_comm.put_amt.load(Ordering::SeqCst) + self.shmem_comm.get_amt.load(Ordering::SeqCst)) as
         self.cq.tx_amount() as f64 / 1_000_000.0
     }
-    fn print_stats(&self) {}
+    // fn print_stats(&self) {}
     fn shutdown(&self) {
         // println!("Shmem Lamellae shuting down");
         let _ = self.active.compare_exchange(
@@ -166,10 +166,6 @@ impl LamellaeComm for Shmem {
 
 #[async_trait]
 impl LamellaeAM for Shmem {
-    async fn send_to_pe_async(&self, pe: usize, data: SerializedData) {
-        self.cq.send_data(data, pe).await;
-    } //should never send to self... this is short circuited before request is serialized in the active message layer
-
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -190,18 +186,18 @@ impl LamellaeAM for Shmem {
 }
 
 impl Ser for Shmem {
-    fn serialize<T: serde::Serialize + ?Sized>(
-        &self,
-        header: Option<SerializeHeader>,
-        obj: &T,
-    ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = *SERIALIZE_HEADER_LEN;
-        let data_size = crate::serialized_size(obj, true) as usize;
-        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
-        crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
-        Ok(SerializedData::ShmemData(ser_data))
-    }
+    // fn serialize<T: serde::Serialize + ?Sized>(
+    //     &self,
+    //     header: Option<SerializeHeader>,
+    //     obj: &T,
+    // ) -> Result<SerializedData, anyhow::Error> {
+    //     let header_size = *SERIALIZE_HEADER_LEN;
+    //     let data_size = crate::serialized_size(obj, true) as usize;
+    //     let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size)?;
+    //     crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+    //     crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
+    //     Ok(SerializedData::ShmemData(ser_data))
+    // }
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
@@ -235,9 +231,9 @@ impl LamellaeRDMA for Shmem {
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.shmem_comm.rt_alloc(size, align)
     }
-    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
-        self.shmem_comm.rt_check_alloc(size, align)
-    }
+    // fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+    //     self.shmem_comm.rt_check_alloc(size, align)
+    // }
     fn rt_free(&self, addr: usize) {
         self.shmem_comm.rt_free(addr)
     }
@@ -256,12 +252,12 @@ impl LamellaeRDMA for Shmem {
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
         self.shmem_comm.remote_addr(remote_pe, local_addr)
     }
-    fn occupied(&self) -> usize {
-        self.shmem_comm.occupied()
-    }
-    fn num_pool_allocs(&self) -> usize {
-        self.shmem_comm.num_pool_allocs()
-    }
+    // fn occupied(&self) -> usize {
+    //     self.shmem_comm.occupied()
+    // }
+    // fn num_pool_allocs(&self) -> usize {
+    //     self.shmem_comm.num_pool_allocs()
+    // }
     fn alloc_pool(&self, min_size: usize) {
         match config().heap_mode {
             HeapMode::Static => {

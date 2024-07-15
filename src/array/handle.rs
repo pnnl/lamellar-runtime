@@ -13,6 +13,7 @@ use crate::{
     Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,
 };
 
+/// a task handle for an array rdma (put/get) operation
 pub struct ArrayRdmaHandle {
     pub(crate) reqs: VecDeque<AmHandle<()>>,
 }
@@ -50,6 +51,7 @@ impl Future for ArrayRdmaHandle {
     }
 }
 
+/// a task handle for an array rdma 'at' operation
 #[pin_project]
 pub struct ArrayRdmaAtHandle<T: Dist> {
     pub(crate) req: Option<LocalAmHandle<()>>,

@@ -58,7 +58,7 @@ pub(crate) enum InternalResult {
 //     }
 // }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 // #[enum_dispatch]
 pub(crate) trait LamellarRequest: Future {
     fn blocking_wait(self) -> Self::Output;
@@ -66,7 +66,7 @@ pub(crate) trait LamellarRequest: Future {
     fn val(&self) -> Self::Output;
 }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // #[async_trait]
 // pub trait LamellarMultiRequest: Sync + Send {
 //     type Output;
@@ -250,7 +250,7 @@ impl LamellarRequestResult {
 // // we use the ready bool to protect access to the data field
 // unsafe impl Sync for LamellarRequestHandleInner {}
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // #[derive(Debug)]
 // pub struct LamellarRequestHandle<T: AmDist> {
 //     pub(crate) inner: Arc<LamellarRequestHandleInner>,
@@ -381,7 +381,7 @@ impl LamellarRequestResult {
 //     pub(crate) user_handle: AtomicBool, //we can use this flag to optimize what happens when the request returns
 // }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // #[derive(Debug)]
 // pub struct LamellarMultiRequestHandle<T: AmDist> {
 //     pub(crate) inner: Arc<LamellarMultiRequestHandleInner>,
@@ -529,7 +529,7 @@ impl LamellarRequestResult {
 // // we use the ready bool to protect access to the data field
 // unsafe impl Sync for LamellarLocalRequestHandleInner {}
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // #[derive(Debug)]
 // pub struct LamellarLocalRequestHandle<T> {
 //     pub(crate) inner: Arc<LamellarLocalRequestHandleInner>,

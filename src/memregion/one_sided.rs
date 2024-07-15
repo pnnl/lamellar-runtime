@@ -26,7 +26,7 @@ lazy_static! {
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct NetMemRegionHandle {
     mr_addr: usize,

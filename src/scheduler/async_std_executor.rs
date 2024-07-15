@@ -60,9 +60,9 @@ impl LamellarExecutor for AsyncStdRt {
         // I dont think tokio has a way to do this
     }
 
-    fn set_max_workers(&mut self, num_workers: usize) {
-        self.max_num_threads = num_workers;
-    }
+    // fn set_max_workers(&mut self, num_workers: usize) {
+    //     self.max_num_threads = num_workers;
+    // }
 
     fn num_workers(&self) -> usize {
         self.max_num_threads

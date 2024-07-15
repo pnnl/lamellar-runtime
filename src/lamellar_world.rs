@@ -72,6 +72,9 @@ impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         self.team.wait_all();
     }
+    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+        self.team.await_all()
+    }
     //#[tracing::instrument(skip_all)]
     fn barrier(&self) {
         self.team.barrier();
@@ -187,8 +190,15 @@ impl LamellarWorld {
         }
     }
 
-    #[doc(hidden)]
-    //#[tracing::instrument(skip_all)]
+    #[doc(alias("One-sided", "onesided"))] //#[tracing::instrument(skip_all)]
+    /// Returns the underlying [LamellarTeam] for this world
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let team = world.team();
+    ///```
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
@@ -210,9 +220,9 @@ impl LamellarWorld {
         self.team.num_threads_per_pe()
     }
 
-    pub fn flush(&self) {
-        self.team_rt.flush();
-    }
+    // pub fn flush(&self) {
+    //     self.team_rt.flush();
+    // }
 }
 
 impl LamellarEnv for LamellarWorld {

@@ -12,7 +12,9 @@ use crate::config;
 // use crate::LamellarTeamRT;
 
 pub(crate) mod handle;
-pub use handle::{ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayResultBatchOpHandle};
+pub use handle::{
+    ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
+};
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAtomicOps};
 pub(crate) mod arithmetic;
@@ -36,9 +38,6 @@ pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps};
 // use std::sync::atomic::{AtomicBool, Ordering};
 // use std::sync::Arc;
 use std::u8;
-
-#[doc(hidden)]
-pub static OPS_BUFFER_SIZE: usize = 10_000_000;
 
 /// A marker trait for types that can be used as an array
 /// Users should not implement this directly, rather they should use the [trait@ArrayOps] derive macro
@@ -454,7 +453,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
         let len = self.len();
         let mut iters = vec![];
         if len == 0 {
-            return (iters,len)
+            return (iters, len);
         }
         let num = if len < 1000 {
             1
@@ -600,7 +599,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
         // println!("vec as op input");
         let len = self.len();
         if len == 0 {
-            return (vec![], len)
+            return (vec![], len);
         }
         let num = if len < 1000 {
             1

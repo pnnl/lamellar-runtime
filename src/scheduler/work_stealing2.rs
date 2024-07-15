@@ -144,72 +144,72 @@ impl WorkStealingThread {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct IoThread {
-    io_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
-    io_q: Worker<Runnable<usize>>,
-    status: Arc<AtomicU8>,
-    panic: Arc<AtomicU8>,
-}
+// #[derive(Debug)]
+// pub(crate) struct IoThread {
+//     io_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
+//     io_q: Worker<Runnable<usize>>,
+//     status: Arc<AtomicU8>,
+//     panic: Arc<AtomicU8>,
+// }
 
-impl IoThread {
-    //#[tracing::instrument(skip_all)]
-    fn run(worker: IoThread, active_cnt: Arc<AtomicUsize>, id: CoreId) -> thread::JoinHandle<()> {
-        let builder = thread::Builder::new().name("io_thread".into());
-        builder
-            .spawn(move || {
-                core_affinity::set_for_current(id);
-                active_cnt.fetch_add(1, Ordering::SeqCst);
-                let mut timer = std::time::Instant::now();
-                while worker.panic.load(Ordering::SeqCst) == 0
-                    && (worker.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
-                        || !(worker.io_q.is_empty() && worker.io_inj.is_empty()))
-                {
-                    let io_task = worker
-                        .io_q
-                        .pop()
-                        .or_else(|| worker.io_inj.steal_batch_and_pop(&worker.io_q).success());
-                    if let Some(runnable) = io_task {
-                        if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
-                        {
-                            println!(
-                                "io_q size {:?} io inj size {:?} ", // num_tasks {:?}",
-                                worker.io_q.len(),
-                                worker.io_inj.len(),
-                                // num_tasks.load(Ordering::SeqCst)
-                            );
-                            timer = std::time::Instant::now();
-                        }
-                        runnable.run();
-                    }
+// impl IoThread {
+//     //#[tracing::instrument(skip_all)]
+//     fn run(worker: IoThread, active_cnt: Arc<AtomicUsize>, id: CoreId) -> thread::JoinHandle<()> {
+//         let builder = thread::Builder::new().name("io_thread".into());
+//         builder
+//             .spawn(move || {
+//                 core_affinity::set_for_current(id);
+//                 active_cnt.fetch_add(1, Ordering::SeqCst);
+//                 let mut timer = std::time::Instant::now();
+//                 while worker.panic.load(Ordering::SeqCst) == 0
+//                     && (worker.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
+//                         || !(worker.io_q.is_empty() && worker.io_inj.is_empty()))
+//                 {
+//                     let io_task = worker
+//                         .io_q
+//                         .pop()
+//                         .or_else(|| worker.io_inj.steal_batch_and_pop(&worker.io_q).success());
+//                     if let Some(runnable) = io_task {
+//                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
+//                             && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+//                         {
+//                             println!(
+//                                 "io_q size {:?} io inj size {:?} ", // num_tasks {:?}",
+//                                 worker.io_q.len(),
+//                                 worker.io_inj.len(),
+//                                 // num_tasks.load(Ordering::SeqCst)
+//                             );
+//                             timer = std::time::Instant::now();
+//                         }
+//                         runnable.run();
+//                     }
 
-                    if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
-                        && (worker.io_q.len() > 0 || worker.io_inj.len() > 0)
-                    {
-                        println!(
-                            "io_q size {:?} io inj size {:?} ", // num_tasks {:?}",
-                            worker.io_q.len(),
-                            worker.io_inj.len(),
-                            // num_tasks.load(Ordering::SeqCst)
-                        );
-                        timer = std::time::Instant::now();
-                    }
-                    std::thread::yield_now();
-                }
-                active_cnt.fetch_sub(1, Ordering::SeqCst);
-            })
-            .unwrap()
-    }
-}
+//                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
+//                         && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+//                         && (worker.io_q.len() > 0 || worker.io_inj.len() > 0)
+//                     {
+//                         println!(
+//                             "io_q size {:?} io inj size {:?} ", // num_tasks {:?}",
+//                             worker.io_q.len(),
+//                             worker.io_inj.len(),
+//                             // num_tasks.load(Ordering::SeqCst)
+//                         );
+//                         timer = std::time::Instant::now();
+//                     }
+//                     std::thread::yield_now();
+//                 }
+//                 active_cnt.fetch_sub(1, Ordering::SeqCst);
+//             })
+//             .unwrap()
+//     }
+// }
 
 #[derive(Debug)]
 pub(crate) struct WorkStealing2 {
     max_num_threads: usize,
     threads: Vec<thread::JoinHandle<()>>,
     imm_inj: Arc<Injector<Runnable<usize>>>,
-    io_inj: Arc<Injector<Runnable<usize>>>,
+    // io_inj: Arc<Injector<Runnable<usize>>>,
     work_injs: Vec<Arc<Injector<Runnable<usize>>>>,
     work_stealers: Vec<Stealer<Runnable<usize>>>,
     work_flag: Arc<AtomicU8>,
@@ -351,9 +351,9 @@ impl LamellarExecutor for WorkStealing2 {
         }
     }
 
-    fn set_max_workers(&mut self, num_workers: usize) {
-        self.max_num_threads = num_workers;
-    }
+    // fn set_max_workers(&mut self, num_workers: usize) {
+    //     self.max_num_threads = num_workers;
+    // }
 
     fn num_workers(&self) -> usize {
         self.max_num_threads
@@ -367,7 +367,7 @@ impl WorkStealing2 {
         panic: Arc<AtomicU8>,
     ) -> WorkStealing2 {
         // println!("new work stealing queue");
-        let num_workers =  std::cmp::max(1,num_workers-1);
+        let num_workers = std::cmp::max(1, num_workers - 1);
         let mut num_threads_per_group = match std::env::var("LAMELLAR_WS2_THREADS") {
             Ok(s) => {
                 if let Ok(num) = s.parse::<usize>() {
@@ -378,15 +378,15 @@ impl WorkStealing2 {
             }
             _ => 4,
         };
-        if num_threads_per_group > num_workers  {
-            num_threads_per_group = num_workers 
+        if num_threads_per_group > num_workers {
+            num_threads_per_group = num_workers
         }
 
         let mut ws = WorkStealing2 {
             max_num_threads: num_workers,
             threads: Vec::new(),
             imm_inj: Arc::new(Injector::new()),
-            io_inj: Arc::new(Injector::new()),
+            // io_inj: Arc::new(Injector::new()),
             work_injs: Vec::new(),
             work_stealers: Vec::new(),
             work_flag: Arc::new(AtomicU8::new(0)),
@@ -446,7 +446,7 @@ impl WorkStealing2 {
             .enumerate()
         {
             // println!("init group {} {:?}", group_id, group_stealers.len());
-            let work_flag = Arc::new(AtomicU8::new(0));
+            let work_flag = self.work_flag.clone();
             for _ in 0..group_stealers.len() {
                 let group_queue = TaskQueue {
                     tasks: work_workers.pop().unwrap(),

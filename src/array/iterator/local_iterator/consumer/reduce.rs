@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
-pub struct Reduce<I, F> {
+pub(crate) struct Reduce<I, F> {
     pub(crate) iter: I,
     pub(crate) op: F,
 }
@@ -70,7 +70,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct LocalIterReduceHandle<T, F> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Option<T>>>,
@@ -112,7 +112,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T, F> LamellarRequest for LocalIterReduceHandle<T, F>
 where
     T: SyncSend + Copy + 'static,

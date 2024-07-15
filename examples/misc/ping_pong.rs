@@ -37,7 +37,7 @@ struct RecvAm {
 impl LamellarAm for RecvAm {
     async fn exec(self) {
         unsafe {
-            let mut cnt = 0;
+            let cnt = 0;
 
             let start = self.remote_pe * self.buffer_size;
             let end = start + self.buffer_size;
@@ -371,7 +371,7 @@ fn main() {
     let mut res_am_buffers = Vec::new();
     let mut send_am_buffers = Vec::new();
 
-    for i in 0..num_pes {
+    for _i in 0..num_pes {
         let mut pe_buffer = VecDeque::new();
         let idx_buffers = IdxAmBuffer {
             idx_send_buffer: index_send_buffers.clone(),
@@ -403,7 +403,7 @@ fn main() {
     }
     let mut reqs = vec![];
     // if my_pe == 0 {
-    for thread in 0..1 {
+    for _thread in 0..1 {
         //world.num_threads_per_pe() {
         reqs.push(world.exec_am_local(MyAm {
             indices: indices.clone(),

@@ -14,7 +14,8 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
 #rofisys = { version ="0.3", optional = true }
-rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
+#rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
+rofisys = { path = "../rofi-sys-junction", optional = true}
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -64,7 +65,9 @@ tracing-subscriber = "0.3"
 [workspace]
 members = ["impl"]
 
-
+# Set the settings for build scripts and proc-macros.
+[profile.dev.build-override]
+opt-level = 3
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
@@ -439,6 +442,10 @@ path="examples/misc/lamellar_env.rs"
 [[example]]
 name="ping_pong"
 path="examples/misc/ping_pong.rs"
+
+[[example]]
+name="dist_hashmap"
+path="examples/misc/dist_hashmap.rs"
 
 
 ##------------ Darc examples ------------------##

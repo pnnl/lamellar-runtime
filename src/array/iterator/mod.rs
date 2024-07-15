@@ -9,7 +9,7 @@ pub mod consumer;
 
 use crate::memregion::Dist;
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // #[async_trait]
 // pub trait IterRequest {
 //     type Output;
@@ -53,15 +53,15 @@ pub enum Schedule {
 ///
 /// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayIterators<T: Dist> {
-    /// The [DistributedIterator][crate::array::DistributedIterator] type
+    /// The [DistributedIterator] type
     type DistIter: DistributedIterator;
-    /// The [LocalIterator][crate::array::LocalIterator] type
+    /// The [LocalIterator] type
     type LocalIter: LocalIterator;
-    /// The [OneSidedIterator][crate::array::OneSidedIterator] type
+    /// The [OneSidedIterator] type
     type OnesidedIter: OneSidedIterator;
 
     #[doc(alias = "Collective")]
-    /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this array
+    /// Create an immutable [DistributedIterator] for this array
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
@@ -81,7 +81,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     fn dist_iter(&self) -> Self::DistIter;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this array
+    /// Create an immutable [LocalIterator] for this array
     ///
     /// # One-sided Operation
     /// The iteration is launched and local to only the calling PE.
@@ -101,7 +101,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     fn local_iter(&self) -> Self::LocalIter;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
+    /// Create an immutable [OneSidedIterator] for this array
     ///
     /// # One-sided Operation
     /// The iteration is launched and local to only the calling PE.
@@ -123,7 +123,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     fn onesided_iter(&self) -> Self::OnesidedIter;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this array
+    /// Create an immutable [OneSidedIterator]  for this array
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
     /// The buffering is transparent to the user.
@@ -154,13 +154,13 @@ pub trait LamellarArrayIterators<T: Dist> {
 ///
 /// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayMutIterators<T: Dist> {
-    /// The [DistributedIterator][crate::array::DistributedIterator] type
+    /// The [DistributedIterator] type
     type DistIter: DistributedIterator;
-    /// The [LocalIterator][crate::array::LocalIterator] type
+    /// The [LocalIterator]type
     type LocalIter: LocalIterator;
 
     #[doc(alias = "Collective")]
-    /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this array
+    /// Create a mutable [DistributedIterator] for this array
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
@@ -180,7 +180,7 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     fn dist_iter_mut(&self) -> Self::DistIter;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this array
+    /// Create a mutable [LocalIterator] for this array
     ///
     /// # One-sided Operation
     /// The iteration is launched and local to only the calling PE.

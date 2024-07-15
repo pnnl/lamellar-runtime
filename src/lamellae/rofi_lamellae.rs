@@ -3,8 +3,8 @@ use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_comm::{RofiComm, RofiData};
 use crate::lamellae::{
-    AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
-    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
+    AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
+    Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
@@ -139,7 +139,7 @@ impl LamellaeComm for Rofi {
         self.rofi_comm.MB_sent()
         //+ self.cq.tx_amount() as f64 / 1_000_000.0
     }
-    fn print_stats(&self) {}
+    // fn print_stats(&self) {}
     fn shutdown(&self) {
         // println!("Rofi Lamellae shuting down");
         let _ = self.active.compare_exchange(
@@ -172,10 +172,6 @@ impl LamellaeComm for Rofi {
 
 #[async_trait]
 impl LamellaeAM for Rofi {
-    async fn send_to_pe_async(&self, pe: usize, data: SerializedData) {
-        self.cq.send_data(data, pe).await;
-    } //should never send to self... this is short circuited before request is serialized in the active message layer
-
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -196,19 +192,19 @@ impl LamellaeAM for Rofi {
 }
 
 impl Ser for Rofi {
-    fn serialize<T: serde::Serialize + ?Sized>(
-        &self,
-        header: Option<SerializeHeader>,
-        obj: &T,
-    ) -> Result<SerializedData, anyhow::Error> {
-        let header_size = *SERIALIZE_HEADER_LEN;
-        // let data_size = bincode::serialized_size(obj)? as usize;
-        let data_size = crate::serialized_size(obj, true) as usize;
-        let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
-        crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
-        Ok(SerializedData::RofiData(ser_data))
-    }
+    // fn serialize<T: serde::Serialize + ?Sized>(
+    //     &self,
+    //     header: Option<SerializeHeader>,
+    //     obj: &T,
+    // ) -> Result<SerializedData, anyhow::Error> {
+    //     let header_size = *SERIALIZE_HEADER_LEN;
+    //     // let data_size = bincode::serialized_size(obj)? as usize;
+    //     let data_size = crate::serialized_size(obj, true) as usize;
+    //     let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + data_size)?;
+    //     crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+    //     crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
+    //     Ok(SerializedData::RofiData(ser_data))
+    // }
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
@@ -245,9 +241,9 @@ impl LamellaeRDMA for Rofi {
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size, align)
     }
-    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
-        self.rofi_comm.rt_check_alloc(size, align)
-    }
+    // fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+    //     self.rofi_comm.rt_check_alloc(size, align)
+    // }
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)
     }
@@ -266,12 +262,12 @@ impl LamellaeRDMA for Rofi {
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
         self.rofi_comm.remote_addr(remote_pe, local_addr)
     }
-    fn occupied(&self) -> usize {
-        self.rofi_comm.occupied()
-    }
-    fn num_pool_allocs(&self) -> usize {
-        self.rofi_comm.num_pool_allocs()
-    }
+    // fn occupied(&self) -> usize {
+    //     self.rofi_comm.occupied()
+    // }
+    // fn num_pool_allocs(&self) -> usize {
+    //     self.rofi_comm.num_pool_allocs()
+    // }
     fn alloc_pool(&self, min_size: usize) {
         // println!("trying to alloc pool {:?}",min_size);
         match config().heap_mode {

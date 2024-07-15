@@ -4,7 +4,8 @@ use crate::array::r#unsafe::*;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 
-
+/// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [UnsafeArray]
+/// This struct is created by calling [UnsafeArray::local_chunks]
 #[derive(Clone)]
 pub struct UnsafeLocalChunks<T: Dist> {
     chunk_size: usize,
@@ -24,6 +25,8 @@ impl<T: Dist> IterClone for UnsafeLocalChunks<T> {
     }
 }
 
+/// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [UnsafeArray]
+/// This struct is created by calling [UnsafeArray::local_chunks_mut]
 #[derive(Clone)]
 pub struct UnsafeLocalChunksMut<T: Dist> {
     chunk_size: usize,
@@ -43,10 +46,8 @@ impl<T: Dist> IterClone for UnsafeLocalChunksMut<T> {
     }
 }
 
-
-
 impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunks<T> {
-    type Item =  &'static [T];
+    type Item = &'static [T];
     type Array = UnsafeArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
@@ -79,10 +80,12 @@ impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunks<T> {
             //     "start_i {} end_i {} self.index {} self.end_index {}",
             //     start_i, end_i, self.index, self.end_index
             // );
-            Some(unsafe{std::slice::from_raw_parts_mut(
-                self.array.local_as_mut_ptr().offset(start_i as isize),
-                end_i - start_i,
-            )})
+            Some(unsafe {
+                std::slice::from_raw_parts_mut(
+                    self.array.local_as_mut_ptr().offset(start_i as isize),
+                    end_i - start_i,
+                )
+            })
         } else {
             None
         }
@@ -106,10 +109,8 @@ impl<T: Dist + 'static> IndexedLocalIterator for UnsafeLocalChunks<T> {
     }
 }
 
-
-
 impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunksMut<T> {
-    type Item =  &'static mut [T];
+    type Item = &'static mut [T];
     type Array = UnsafeArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
@@ -142,10 +143,12 @@ impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunksMut<T> {
             //     "start_i {} end_i {} self.index {} self.end_index {}",
             //     start_i, end_i, self.index, self.end_index
             // );
-            Some(unsafe{std::slice::from_raw_parts_mut(
-                self.array.local_as_mut_ptr().offset(start_i as isize),
-                end_i - start_i,
-            )})
+            Some(unsafe {
+                std::slice::from_raw_parts_mut(
+                    self.array.local_as_mut_ptr().offset(start_i as isize),
+                    end_i - start_i,
+                )
+            })
         } else {
             None
         }
@@ -170,21 +173,55 @@ impl<T: Dist + 'static> IndexedLocalIterator for UnsafeLocalChunksMut<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
+    /// immutably iterate over fixed sized chunks(slices) of the local data of this array.
+    /// the returned iterator is a lamellar [LocalIterator]
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    ///
+    /// array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    /// });
+    /// array.wait_all();
+    ///
+    /// ```
     pub fn local_chunks(&self, chunk_size: usize) -> UnsafeLocalChunks<T> {
         UnsafeLocalChunks {
             chunk_size,
             index: 0,
             end_index: 0,
-            array: self.clone()
+            array: self.clone(),
         }
     }
 
+    /// mutably iterate over fixed sized chunks(slices) of the local data of this array.
+    /// the returned iterator is a lamellar [LocalIterator]
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    ///
+    /// array.local_chunks_mut(5).await.enumerate().for_each(move|(i,chunk)| {
+    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    /// });
+    /// array.wait_all();
+    ///
+    /// ```
     pub fn local_chunks_mut(&self, chunk_size: usize) -> UnsafeLocalChunksMut<T> {
         UnsafeLocalChunksMut {
             chunk_size,
             index: 0,
             end_index: 0,
-            array: self.clone()
+            array: self.clone(),
         }
     }
 }

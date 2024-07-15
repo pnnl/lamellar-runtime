@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
-pub struct ForEach<I, F>
+pub(crate) struct ForEach<I, F>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
@@ -73,7 +73,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct ForEachAsync<I, F, Fut>
+pub(crate) struct ForEachAsync<I, F, Fut>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
@@ -154,7 +154,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub struct DistIterForEachHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
 }
@@ -172,7 +172,7 @@ impl Future for DistIterForEachHandle {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl LamellarRequest for DistIterForEachHandle {
     fn blocking_wait(mut self) -> Self::Output {
         for req in self.reqs.drain(..) {

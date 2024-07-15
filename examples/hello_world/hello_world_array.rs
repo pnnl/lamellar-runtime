@@ -4,8 +4,6 @@
 /// --------------------------------------------------------------------
 use lamellar::array::prelude::*;
 
-use lamellar::RemoteMemoryRegion;
-
 fn main() {
     let timer = std::time::Instant::now();
     let world = lamellar::LamellarWorldBuilder::new().build();
@@ -27,7 +25,7 @@ fn main() {
     println!("array_time: {:?}", array_time);
 
     let timer = std::time::Instant::now();
-    let one_sided = world.alloc_one_sided_mem_region::<usize>(local_length);
+    // let _one_sided = world.alloc_one_sided_mem_region::<usize>(local_length);
     let one_sided_time = timer.elapsed();
     println!("one_sided_time: {:?}", one_sided_time);
 

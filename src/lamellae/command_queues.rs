@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 // const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
 // const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
-const CMD_BUFS_PER_PE: usize = 2;
+// const CMD_BUFS_PER_PE: usize = 2;
 
 // lazy_static! {
 //     static ref CNTS: ThreadLocal<AtomicUsize> = ThreadLocal::new();
@@ -841,7 +841,7 @@ impl InnerCQ {
                 cmd.calc_hash();
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
-                        println!("putting alloc cmd to pe {:?}", pe);
+                        // println!("putting alloc cmd to pe {:?}", pe);
                         self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                     }
                 }
@@ -869,7 +869,7 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    println!("putting clear cmd to pe {:?}", pe);
+                    // println!("putting clear cmd to pe {:?}", pe);
                     self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
             }
@@ -1200,7 +1200,7 @@ pub(crate) struct CommandQueue {
 
 impl CommandQueue {
     //#[tracing::instrument(skip_all)]
-    pub fn new(
+    pub(crate) fn new(
         comm: Arc<Comm>,
         my_pe: usize,
         num_pes: usize,
@@ -1315,17 +1315,17 @@ impl CommandQueue {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn send_alloc(&self, min_size: usize) {
+    pub(crate) fn send_alloc(&self, min_size: usize) {
         self.cq.send_alloc(min_size)
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn send_panic(&self) {
+    pub(crate) fn send_panic(&self) {
         self.cq.send_panic()
     }
 
     //#[tracing::instrument(skip_all)]
-    pub async fn send_data(&self, data: SerializedData, dst: usize) {
+    pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
         match data {
             #[cfg(feature = "enable-rofi")]
             SerializedData::RofiData(ref data) => {
@@ -1361,7 +1361,7 @@ impl CommandQueue {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub async fn alloc_task(&self, scheduler: Arc<Scheduler>) {
+    pub(crate) async fn alloc_task(&self, scheduler: Arc<Scheduler>) {
         while scheduler.active() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             self.cq.check_alloc();
             async_std::task::yield_now().await;
@@ -1370,7 +1370,7 @@ impl CommandQueue {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub async fn panic_task(&self, scheduler: Arc<Scheduler>) {
+    pub(crate) async fn panic_task(&self, scheduler: Arc<Scheduler>) {
         let mut panic = false;
         while scheduler.active() && !panic {
             panic = self.cq.check_panic();
@@ -1386,7 +1386,7 @@ impl CommandQueue {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>) {
+    pub(crate) async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>) {
         let num_pes = lamellae.num_pes();
         let my_pe = lamellae.my_pe();
         // let mut timer= std::time::Instant::now();
@@ -1524,13 +1524,13 @@ impl CommandQueue {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn tx_amount(&self) -> usize {
+    pub(crate) fn tx_amount(&self) -> usize {
         // println!("cq put: {:?} get {:?}",self.cq.put_amt.load(Ordering::SeqCst) ,self.cq.get_amt.load(Ordering::SeqCst));
         self.cq.put_amt.load(Ordering::SeqCst) + self.cq.get_amt.load(Ordering::SeqCst)
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn mem_per_pe() -> usize {
+    pub(crate) fn mem_per_pe() -> usize {
         (config().cmd_buf_len * config().cmd_buf_cnt + 4) * std::mem::size_of::<CmdMsg>()
     }
 }

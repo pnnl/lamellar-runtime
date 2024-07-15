@@ -52,7 +52,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub struct DistIterForEachHandle {
 //     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = ()>>>,
 // }
@@ -63,7 +63,7 @@ use std::sync::Arc;
 //     }
 // }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // #[async_trait]
 // impl IterRequest for DistIterForEachHandle {
 //     type Output = ();
@@ -79,7 +79,7 @@ use std::sync::Arc;
 //     }
 // }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub struct DistIterCollectHandle<T: Dist + ArrayOps, A: From<UnsafeArray<T>> + SyncSend> {
 //     pub(crate) reqs: Vec<Box<dyn LamellarRequest<Output = Vec<T>>>>,
 //     pub(crate) distribution: Distribution,
@@ -251,16 +251,16 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps + std::iter::Sum;
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
-    // #[doc(hidden)]
+    // //#[doc(hidden)]
     // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)>;
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
 

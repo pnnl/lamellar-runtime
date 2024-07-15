@@ -78,8 +78,11 @@ pub(crate) struct ReqId {
 pub enum ExecutorType {
     /// The default work stealing executor
     LamellarWorkStealing,
+    /// Experimental numa-aware(ish) work stealing executor
     LamellarWorkStealing2,
+    /// Experimental numa-aware(ish) work stealing executor
     LamellarWorkStealing3,
+    /// executor provided by the AsyncStd crate
     AsyncStd,
     #[cfg(feature = "tokio-executor")]
     /// The tokio executor
@@ -113,7 +116,7 @@ pub(crate) trait LamellarExecutor {
 
     fn block_on<F: Future>(&self, future: F) -> F::Output;
 
-    fn set_max_workers(&mut self, num_workers: usize);
+    // fn set_max_workers(&mut self, num_workers: usize);
     fn num_workers(&self) -> usize;
     fn shutdown(&self);
     fn force_shutdown(&self);

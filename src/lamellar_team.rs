@@ -355,6 +355,7 @@ impl LamellarTeam {
 
     #[doc(alias = "Collective")]
     /// team wide synchronization method which blocks calling thread until all PEs in the team have entered
+    /// Generally this is intended to be called from the main thread, if a barrier is needed within an active message or async context please see [async_barrier](Self::async_barrier)
     ///
     /// # Collective Operation
     /// Requrires all PEs present within the team to enter the barrier otherwise deadlock will occur.
@@ -381,12 +382,29 @@ impl LamellarTeam {
         self.team.barrier()
     }
 
+    #[doc(alias = "Collective")]
+    /// EXPERIMENTAL: team wide synchronization method which blocks the calling task until all PEs in team have entered.
+    /// This function allows for calling barrier in an async context without blocking the worker thread.
+    /// Care should be taken when using this function to avoid deadlocks,as it is easy to mismatch barrier calls accross threads and PEs.
+    ///
+    /// # Collective Operation
+    /// Requrires all PEs present within the team to enter the barrier otherwise deadlock will occur.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// //do some work
+    /// world.barrier(); //block until all PEs have entered the barrier
+    ///```
     pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.async_barrier()
     }
 
+    //used by proc macro
     #[doc(hidden)]
     pub fn exec_am_group_pe<F, O>(&self, pe: usize, am: F) -> AmHandle<O>
     where
@@ -396,6 +414,7 @@ impl LamellarTeam {
         self.team.am_group_exec_am_pe_tg(pe, am, None)
     }
 
+    //used by proc macro
     #[doc(hidden)]
     pub fn exec_am_group_all<F, O>(&self, am: F) -> MultiAmHandle<O>
     where
@@ -483,6 +502,12 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.wait_all();
+    }
+
+    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        self.team.await_all()
     }
 
     //#[tracing::instrument(skip_all)]
@@ -602,6 +627,8 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     }
 }
 
+// Intenal Runtime handle to a lamellar team
+// users generally don't need to use this
 #[doc(hidden)]
 pub struct ArcLamellarTeam {
     pub team: Arc<LamellarTeam>,
@@ -671,6 +698,9 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
     }
 }
 
+// Internal Runtime handle to a lamellar team
+// used by proc macros
+// users should never need to use this
 #[doc(hidden)]
 pub struct LamellarTeamRT {
     #[allow(dead_code)]
@@ -1333,6 +1363,27 @@ impl LamellarTeamRT {
             }
         }
     }
+    pub(crate) async fn await_all(&self) {
+        let mut temp_now = Instant::now();
+        while self.panic.load(Ordering::SeqCst) == 0
+            && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                || (self.parent.is_none()
+                    && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
+        {
+            // std::thread::yield_now();
+            // self.flush();
+            async_std::task::yield_now().await;
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                println!(
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    self.world_pe,
+                    self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                    self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+            }
+        }
+    }
 
     pub(crate) fn block_on<F>(&self, f: F) -> F::Output
     where
@@ -1816,6 +1867,7 @@ impl LamellarTeamRT {
         .into()
     }
 
+    #[allow(dead_code)]
     pub(crate) async fn exec_arc_am_pe_immediately<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,

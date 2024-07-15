@@ -64,7 +64,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct LocalIterSumHandle<T> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
@@ -105,7 +105,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T> LamellarRequest for LocalIterSumHandle<T>
 where
     T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,

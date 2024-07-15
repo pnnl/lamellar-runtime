@@ -13,11 +13,13 @@ use std::{
 
 use pin_project::pin_project;
 
+/// a task handle for a batched array operation that doesnt return any values
 pub struct ArrayBatchOpHandle {
     pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<()>, Vec<usize>)>,
 }
 
+/// a task handle for a single array operation that doesnt return any values
 pub type ArrayOpHandle = ArrayBatchOpHandle;
 
 impl LamellarRequest for ArrayBatchOpHandle {
@@ -53,13 +55,14 @@ impl Future for ArrayBatchOpHandle {
     }
 }
 
+/// a task handle for a single array operation that returns a value
 pub struct ArrayFetchOpHandle<R: AmDist> {
     pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: AmHandle<Vec<R>>,
 }
 
 impl<R: AmDist> LamellarRequest for ArrayFetchOpHandle<R> {
-    fn blocking_wait(mut self) -> Self::Output {
+    fn blocking_wait(self) -> Self::Output {
         self.req
             .blocking_wait()
             .pop()
@@ -83,6 +86,7 @@ impl<R: AmDist> Future for ArrayFetchOpHandle<R> {
     }
 }
 
+/// a task handle for a batched array operation that return values
 #[pin_project]
 pub struct ArrayFetchBatchOpHandle<R: AmDist> {
     pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
@@ -168,6 +172,7 @@ impl<R: AmDist> Future for ArrayFetchBatchOpHandle<R> {
     }
 }
 
+/// a task handle for a single array operation that returns a result
 pub struct ArrayResultOpHandle<R: AmDist> {
     pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: AmHandle<Vec<Result<R, R>>>,
@@ -198,6 +203,7 @@ impl<R: AmDist> Future for ArrayResultOpHandle<R> {
     }
 }
 
+/// a task handle for a batched array operation that returns results
 #[pin_project]
 pub struct ArrayResultBatchOpHandle<R: AmDist> {
     pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop

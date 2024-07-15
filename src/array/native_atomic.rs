@@ -15,36 +15,10 @@ use std::ops::{
     AddAssign, BitAndAssign, BitOrAssign, BitXorAssign, DivAssign, MulAssign, RemAssign, ShlAssign,
     ShrAssign, SubAssign,
 };
-// use std::ops::{Deref, DerefMut};
-
-#[doc(hidden)]
-pub trait NativeAtomic {}
-
-#[doc(hidden)]
-pub trait AsNativeAtomic {
-    type Atomic;
-    fn as_native_atomic(&self) -> &Self::Atomic;
-}
 
 macro_rules! impl_atomic_ops{
     { $A:ty, $B:ty , $C:ident} => {
-        impl NativeAtomic for $A{}
-        impl AsNativeAtomic for $A {
-            // there is an equivalent call in nightly rust
-            // Self::Atomic::from_mut()... we will switch to that once stablized;
-            type Atomic = $B;
-            fn as_native_atomic(&self) -> &Self::Atomic{
-                use std::mem::align_of;
-                let [] = [(); align_of::<$B>() - align_of::<$A>()];
-                // SAFETY:
-                //  - the mutable reference guarantees unique ownership.
-                //  - the alignment of `$int_type` and `Self` is the
-                //    same, as promised by $cfg_align and verified above.
-                unsafe { &*(self as *const $A as *mut $A as *mut Self::Atomic) }
-            }
-        }
-        #[doc(hidden)]
-        pub struct $C<'a>(pub &'a $B);
+        pub(crate) struct $C<'a>(pub(crate) &'a $B);
         impl AddAssign<$A> for $C<'_>{
             fn add_assign(&mut self, val: $A) {
                self.0.fetch_add(val,Ordering::SeqCst);
@@ -637,7 +611,7 @@ macro_rules! impl_compare_exchange_eps {
     };
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub struct NativeAtomicElement<T> {
     array: NativeAtomicArray<T>,
     local_index: usize,
@@ -990,9 +964,9 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.array.into()
     }
 
-    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
-        self.array.async_barrier()
-    }
+    // pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+    //     self.array.async_barrier()
+    // }
 }
 
 impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {
@@ -1012,7 +986,7 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for NativeAtomicA
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("native from unsafe");
@@ -1025,7 +999,7 @@ impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[async_trait]
 impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NativeAtomicArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
@@ -1041,7 +1015,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         NativeAtomicByteArray {
@@ -1051,7 +1025,7 @@ impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         LamellarByteArray::NativeAtomicArray(NativeAtomicByteArray {
@@ -1061,7 +1035,7 @@ impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<LamellarByteArray> for NativeAtomicArray<T> {
     fn from(array: LamellarByteArray) -> Self {
         if let LamellarByteArray::NativeAtomicArray(array) = array {
@@ -1072,7 +1046,7 @@ impl<T: Dist> From<LamellarByteArray> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
         AtomicByteArray::NativeAtomicByteArray(NativeAtomicByteArray {
@@ -1082,7 +1056,7 @@ impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
@@ -1092,7 +1066,7 @@ impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
@@ -1103,7 +1077,7 @@ impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     }
 }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
@@ -1113,7 +1087,7 @@ impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     fn inner_array(&self) -> &UnsafeArray<T> {
         &self.array
@@ -1138,7 +1112,7 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
@@ -1197,13 +1171,13 @@ impl<T: Dist> LamellarEnv for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> LamellarWrite for NativeAtomicArray<T> {}
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> LamellarRead for NativeAtomicArray<T> {}
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist> SubArray<T> for NativeAtomicArray<T> {
     type Array = NativeAtomicArray<T>;
     fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Array {
@@ -1217,14 +1191,15 @@ impl<T: Dist> SubArray<T> for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist + std::fmt::Debug> NativeAtomicArray<T> {
+    #[doc(hidden)]
     pub fn print(&self) {
         self.array.print();
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
     fn print(&self) {
         self.array.print()
@@ -1232,29 +1207,34 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for NativeAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> NativeAtomicArray<T> {
+    #[doc(hidden)]
     pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
         self.array.reduce_data(op, self.clone().into())
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> NativeAtomicArray<T> {
+    #[doc(hidden)]
     pub fn sum(&self) -> AmHandle<Option<T>> {
         self.reduce("sum")
     }
+    #[doc(hidden)]
     pub fn prod(&self) -> AmHandle<Option<T>> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> NativeAtomicArray<T> {
+    #[doc(hidden)]
     pub fn max(&self) -> AmHandle<Option<T>> {
         self.reduce("max")
     }
+    #[doc(hidden)]
     pub fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
     }
 }
 
 //for use within RDMA active messages to atomically read/write values
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum NativeAtomicType {
     I8,
@@ -1269,7 +1249,7 @@ pub enum NativeAtomicType {
     Usize,
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl NativeAtomicType {
     fn from<T: 'static>() -> NativeAtomicType {
         let t = TypeId::of::<T>();

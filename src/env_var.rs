@@ -6,7 +6,7 @@ fn default_deadlock_timeout() -> f64 {
     600.0
 }
 
-fn default_op_batch() -> usize {
+fn default_am_group_batch_size() -> usize {
     10000
 }
 
@@ -47,7 +47,7 @@ pub enum HeapMode {
 }
 
 fn default_heap_mode() -> HeapMode {
-    HeapMode::Static
+    HeapMode::Dynamic
 }
 
 #[derive(Deserialize, Debug, PartialEq)]
@@ -85,23 +85,38 @@ fn default_batch_am_size() -> usize {
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
+    /// A general timeout in seconds for various operations which may indicate a deadlock, default: 600.0 seconds
     #[serde(default = "default_deadlock_timeout")]
     pub deadlock_timeout: f64,
-    #[serde(default = "default_op_batch")]
-    pub batch_op_size: usize, // am group batch size
+
+    /// The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
+    #[serde(default = "default_am_group_batch_size")]
+    pub am_group_batch_size: usize, // am group batch size
+
+    /// The dissemination factor for the n-way barrier, default: 2
     #[serde(default = "default_dissemination_factor")]
     pub barrier_dissemination_factor: usize,
-    // #[serde(default=true)]
+
+    /// flag used to print warnings when users call barriers on worker threads. Default: true
     pub barrier_warning: Option<bool>,
+
+    /// The lamellae backend to use
+    /// rofi -- multi pe distributed execution, default if rofi feature is turned on
+    /// local -- single pe execution, default if rofi feature is turned off
+    /// shmem -- multi pe single node execution
     #[serde(default = "default_backend")]
     pub backend: String, //rofi,shmem,local
+
+    /// The executor (thread scheduler) to use, default: 'lamellar' unless the tokio feature is turned on
     #[serde(default = "default_executor")]
     pub executor: String, //lamellar,tokio,async_std
+
+    /// The batcher to use, default: 'simple'
     #[serde(default = "default_batcher")]
     pub batcher: String,
     #[serde(default = "default_threads")]
     pub threads: usize,
-    pub batch_op_threads: Option<usize>,//number of threads used to process array batch ops sending
+    pub batch_op_threads: Option<usize>, //number of threads used to process array batch ops sending
     pub heap_size: Option<usize>,
     #[serde(default = "default_heap_mode")]
     pub heap_mode: HeapMode,
@@ -117,13 +132,11 @@ pub struct Config {
     pub batch_am_size: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated
 }
 
+/// Get the current Environment Variable configuration
 pub fn config() -> &'static Config {
     static CONFIG: OnceLock<Config> = OnceLock::new();
     CONFIG.get_or_init(|| match envy::prefixed("LAMELLAR_").from_env::<Config>() {
-        Ok(config) => {
-            // println!("[LAMELLAR CONFIG]{config:?}");
-            config
-        }
+        Ok(config) => config,
         Err(error) => panic!("{}", error),
     })
 }

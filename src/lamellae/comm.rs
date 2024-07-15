@@ -28,7 +28,7 @@ pub(crate) enum CmdQStatus {
 // const PANIC: u8 = 3;
 
 #[derive(Debug, Clone, Copy)]
-pub enum AllocError {
+pub(crate) enum AllocError {
     OutOfMemoryError(usize),
     IdError(usize),
 }
@@ -52,7 +52,7 @@ pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
 #[cfg(feature = "enable-rofi")]
 #[derive(Debug, Clone, Copy)]
-pub enum TxError {
+pub(crate) enum TxError {
     GetError,
 }
 #[cfg(feature = "enable-rofi")]
@@ -118,7 +118,7 @@ pub(crate) trait CommOps {
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
     fn force_shutdown(&self);

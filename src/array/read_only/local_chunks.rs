@@ -4,6 +4,8 @@ use crate::array::read_only::*;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 
+/// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [ReadOnlyArray]
+/// This struct is created by calling [ReadOnlyArray::local_chunks]
 #[derive(Clone)]
 pub struct ReadOnlyLocalChunks<T: Dist> {
     chunk_size: usize,
@@ -87,6 +89,23 @@ impl<T: Dist + 'static> IndexedLocalIterator for ReadOnlyLocalChunks<T> {
 }
 
 impl<T: Dist> ReadOnlyArray<T> {
+    /// immutably iterate over fixed sized chunks(slices) of the local data of this array.
+    /// the returned iterator is a lamellar [LocalIterator]
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,40,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    ///
+    /// array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    /// });
+    /// array.wait_all();
+    ///
+    /// ```
     pub fn local_chunks(&self, chunk_size: usize) -> ReadOnlyLocalChunks<T> {
         ReadOnlyLocalChunks {
             chunk_size,

@@ -1,4 +1,5 @@
 #![warn(missing_docs)]
+#![warn(unreachable_pub)]
 
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
 //!
@@ -224,7 +225,7 @@
 //!         - `rofi`
 //! - `LAMELLAR_MEM_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 1GB
 //!     - `export LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))` 20GB memory pool
-//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues. Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime will print a message at the end of execution with how many additional pools were allocated.
+//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion],etc), aggregation buffers, and message queues. Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime will print a message at the end of execution with how many additional pools were allocated.
 //!         - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_MEM_SIZE` to a larger value
 //!     - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_MEM_SIZE * number of processes`
 //!
@@ -233,37 +234,37 @@
 extern crate lazy_static;
 #[macro_use]
 extern crate memoffset;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub extern crate serde;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use serde::*;
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 pub extern crate serde_with;
 // pub use serde_with::*;
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub extern crate tracing;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use parking_lot;
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub use tracing::*;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use async_trait;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use futures_util;
 
 pub mod active_messaging;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use active_messaging::prelude::*;
 pub mod array;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use array::prelude::*;
 mod barrier;
 pub mod darc;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use darc::prelude::*;
 mod lamellae;
 mod lamellar_alloc;
@@ -275,11 +276,11 @@ mod lamellar_task_group;
 mod lamellar_team;
 mod lamellar_world;
 pub mod memregion;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use memregion::prelude::*;
 mod scheduler;
 mod utils;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use utils::*;
 
 mod env_var;
@@ -287,37 +288,37 @@ pub use env_var::config;
 
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use crate::lamellar_task_group::{
     AmGroup, AmGroupResult, BaseAmGroupReq, LamellarTaskGroup, TypedAmGroupBatchReq,
     TypedAmGroupBatchResult, TypedAmGroupResult,
 };
 pub use crate::lamellar_team::LamellarTeam;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use crate::lamellar_team::{ArcLamellarTeam, LamellarTeamRT};
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::ExecutorType;
 
 extern crate lamellar_impl;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use lamellar_impl::Dist;
 // use lamellar_impl;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use inventory;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use bincode;
 use bincode::Options;
 
 // #[macro_use]
 // pub extern crate custom_derive;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use custom_derive;
 
 // #[macro_use]
 // pub extern crate newtype_derive;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use newtype_derive;
 
 lazy_static! {
@@ -336,7 +337,7 @@ lazy_static! {
 //         thread_local::ThreadLocal::new();
 // }
 
-#[doc(hidden)]
+/// Wrapper function for serializing data
 pub fn serialize<T: ?Sized>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
@@ -356,7 +357,7 @@ where
     res
 }
 
-#[doc(hidden)]
+/// Wrapper function for getting the size of serialized data
 pub fn serialized_size<T: ?Sized>(obj: &T, var: bool) -> usize
 where
     T: serde::Serialize,
@@ -375,7 +376,8 @@ where
     // }
     res
 }
-#[doc(hidden)]
+
+/// Wrapper function for serializing an object into a buffer
 pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
@@ -395,7 +397,7 @@ where
     Ok(())
 }
 
-#[doc(hidden)]
+/// Wrapper function for deserializing data
 pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,
@@ -414,5 +416,5 @@ where
     // }
     res
 }
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use async_std;

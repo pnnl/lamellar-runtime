@@ -43,7 +43,7 @@
 //! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
 //! - We also provided access directly to the underlying local data of an array using functions (and container types) that preserve the safety guarantees of a given array type
 //!     -`local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
-//!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput](crate::array::OpInput) for details.
+//!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput] for details.
 //! ```
 //! use lamellar::array::prelude::*;
 //!
@@ -88,31 +88,32 @@ use std::sync::Arc;
 /// This macro automatically derives various LamellarArray "Op" traits for user defined types
 ///
 /// The following "Op" traits are automatically implemented:
-/// - [AccessOps][crate::array::operations::AccessOps]
-/// - [ReadOnlyOps][crate::array::operations::ReadOnlyOps]
+/// - [AccessOps]
+/// - [ReadOnlyOps]
 ///
 /// Additionally, it is possible to pass any of the following as a list to [ArrayOps] to derive the associated traits
-/// - `Arithmetic` -- [ArithmeticOps][crate::array::operations::ArithmeticOps]
+/// - `Arithmetic` -- [ArithmeticOps]
 ///     - requires [AddAssign][std::ops::AddAssign], [SubAssign][std::ops::SubAssign], [MulAssign][std::ops::MulAssign], [DivAssign][std::ops::DivAssign], [RemAssign][std::ops::RemAssign] to be implemented on your data type
-/// - `Bitwise` -- [BitWiseOps][crate::array::operations::BitWiseOps]
+/// - `Bitwise` -- [BitWiseOps]
 ///     - requires [BitAndAssign][std::ops::BitAndAssign], [BitOrAssign][std::ops::BitOrAssign], [BitXorAssign][std::ops::BitXorAssign] to be implemented on your data type
-/// - `CompEx` -- [CompareExchangeOps][crate::array::operations::CompareExchangeOps]
-///     - requires [PartialEq][std::cmp::PartialEq], [PartialOrd][std::cmp::PartialOrd] to be implemented on your data type
-/// - `CompExEps` -- [CompareExchangeEpsilonOps][crate::array::operations::CompareExchangeEpsilonOps]
-///     - requires [PartialEq][std::cmp::PartialEq], [PartialOrd][std::cmp::PartialOrd] to be implemented on your data type
-/// - `Shift` -- [ShiftOps][crate::array::operations::ShiftOps]
+/// - `CompEx` -- [CompareExchangeOps]
+///     - requires [PartialEq], [PartialOrd] to be implemented on your data type
+/// - `CompExEps` -- [CompareExchangeEpsilonOps]
+///     - requires [PartialEq], [PartialOrd] to be implemented on your data type
+/// - `Shift` -- [ShiftOps]
 ///     - requires [ShlAssign][std::ops::ShlAssign], [ShrAssign][std::ops::ShrAssign] to be implemented on you data type
 ///
 /// Alternatively, if you plan to derive all the above traits you can simply supply `All` as the single argument to [ArrayOps]
 pub use lamellar_impl::ArrayOps;
 
-use crate::memregion::RemoteMemoryRegion;
+// //#[doc(hidden)]
 
-#[doc(hidden)]
+/// The prelude contains all the traits and macros that are required to use the array types
 pub mod prelude;
 
 pub(crate) mod r#unsafe;
 pub use r#unsafe::{
+    local_chunks::{UnsafeLocalChunks, UnsafeLocalChunksMut},
     operations::{
         multi_val_multi_idx_ops, multi_val_single_idx_ops, single_val_multi_idx_ops,
         BatchReturnType,
@@ -120,23 +121,10 @@ pub use r#unsafe::{
     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
 pub(crate) mod read_only;
-pub use read_only::{
-    ReadOnlyArray,
-    /*ReadOnlyArrayOpBuf, ReadOnlyArrayMultiMultiOps, ReadOnlyArrayMultiSingleOps,*/
-    ReadOnlyByteArray, ReadOnlyByteArrayWeak,
-};
-
-// pub(crate) mod local_only;
-// pub use local_only::LocalOnlyArray;
+pub use read_only::{ReadOnlyArray, ReadOnlyByteArray, ReadOnlyByteArrayWeak, ReadOnlyLocalChunks};
 
 pub(crate) mod atomic;
-pub use atomic::{
-    // operations::{AtomicArrayOp, AtomicArrayOpBuf},
-    AtomicArray,
-    AtomicByteArray, //AtomicOps
-    AtomicByteArrayWeak,
-    AtomicLocalData,
-};
+pub use atomic::{AtomicArray, AtomicByteArray, AtomicByteArrayWeak, AtomicLocalData};
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
@@ -150,22 +138,23 @@ pub use native_atomic::{
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak, LocalLockLocalData,
-    LocalLockMutLocalData,
+    LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak, LocalLockLocalChunks,
+    LocalLockLocalChunksMut, LocalLockLocalData, LocalLockMutLocalData, LocalLockReadGuard,
+    LocalLockWriteGuard,
 };
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
     GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak, GlobalLockLocalData,
-    GlobalLockMutLocalData,
+    GlobalLockMutLocalData, GlobalLockReadGuard, GlobalLockWriteGuard,
 };
 
 pub mod iterator;
-// #[doc(hidden)]
+// //#[doc(hidden)]
 pub use iterator::distributed_iterator::DistributedIterator;
-// #[doc(hidden)]
+// //#[doc(hidden)]
 pub use iterator::local_iterator::LocalIterator;
-// #[doc(hidden)]
+// //#[doc(hidden)]
 pub use iterator::one_sided_iterator::OneSidedIterator;
 
 pub(crate) mod operations;
@@ -291,10 +280,10 @@ pub enum LamellarArrayRdmaOutput<T: Dist> {
 
 impl<T: Dist> LamellarWrite for LamellarArrayRdmaOutput<T> {}
 
-#[doc(hidden)]
+/// Trait for types that can be used as output to various LamellarArray RDMA operations.
 pub trait LamellarWrite {}
 
-#[doc(hidden)]
+/// Trait for types that can be used as input to various LamellarArray RDMA operations.
 pub trait LamellarRead {}
 
 // impl<T: Dist> LamellarRead for T {}
@@ -305,7 +294,7 @@ impl<T: Dist> LamellarRead for &Vec<T> {}
 impl<T: Dist> LamellarRead for &[T] {}
 
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
-    /// Constructs a single element [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] and copies `val` into it
+    /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
@@ -316,7 +305,7 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
-    /// Constructs a single element [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] and copies `val` into it
+    /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
@@ -327,7 +316,7 @@ impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
-    /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
+    /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
@@ -341,7 +330,7 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
-    /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
+    /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
@@ -355,7 +344,7 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     }
 }
 impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
-    /// Constructs a [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
+    /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
@@ -535,7 +524,7 @@ pub trait TeamFrom<T: ?Sized> {
 // #[async_trait]
 /// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 /// and to be used within an async context
-pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> {
+pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> + Sized {
     /// Converts to this type from the input type
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> impl Future<Output = Self> + Send;
 }
@@ -600,15 +589,15 @@ where
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarReadArray<T: Dist + 'static> {
-    #[doc(hidden)]
+    ///
     UnsafeArray(UnsafeArray<T>),
-    #[doc(hidden)]
+    ///
     ReadOnlyArray(ReadOnlyArray<T>),
-    #[doc(hidden)]
+    ///
     AtomicArray(AtomicArray<T>),
-    #[doc(hidden)]
+    ///
     LocalLockArray(LocalLockArray<T>),
-    #[doc(hidden)]
+    ///
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -617,19 +606,19 @@ pub enum LamellarReadArray<T: Dist + 'static> {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarByteArray {
     //we intentially do not include "byte" in the variant name to ease construciton in the proc macros
-    #[doc(hidden)]
+    //#[doc(hidden)]
     UnsafeArray(UnsafeByteArray),
-    #[doc(hidden)]
+    //#[doc(hidden)]
     ReadOnlyArray(ReadOnlyByteArray),
-    #[doc(hidden)]
+    //#[doc(hidden)]
     AtomicArray(AtomicByteArray),
-    #[doc(hidden)]
+    //#[doc(hidden)]
     NativeAtomicArray(NativeAtomicByteArray),
-    #[doc(hidden)]
+    //#[doc(hidden)]
     GenericAtomicArray(GenericAtomicByteArray),
-    #[doc(hidden)]
+    //#[doc(hidden)]
     LocalLockArray(LocalLockByteArray),
-    #[doc(hidden)]
+    //#[doc(hidden)]
     GlobalLockArray(GlobalLockByteArray),
 }
 
@@ -679,13 +668,13 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarWriteArray<T: Dist> {
-    #[doc(hidden)]
+    ///
     UnsafeArray(UnsafeArray<T>),
-    #[doc(hidden)]
+    ///
     AtomicArray(AtomicArray<T>),
-    #[doc(hidden)]
+    ///
     LocalLockArray(LocalLockArray<T>),
-    #[doc(hidden)]
+    ///
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -832,7 +821,7 @@ pub(crate) mod private {
     use enum_dispatch::enum_dispatch;
     use std::pin::Pin;
     use std::sync::Arc;
-    #[doc(hidden)]
+    //#[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarArrayPrivate<T: Dist>: Clone {
         // // fn my_pe(&self) -> usize;
@@ -845,7 +834,7 @@ pub(crate) mod private {
         fn as_lamellar_byte_array(&self) -> LamellarByteArray;
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub(crate) trait ArrayExecAm<T: Dist> {
         fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
@@ -863,19 +852,19 @@ pub(crate) mod private {
             self.team()
                 .exec_am_pe_tg(pe, am, Some(self.team_counters()))
         }
-        fn exec_arc_am_pe<F>(&self, pe: usize, am: LamellarArcAm) -> AmHandle<F>
-        where
-            F: AmDist,
-        {
-            self.team()
-                .exec_arc_am_pe(pe, am, Some(self.team_counters()))
-        }
-        fn exec_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
-        where
-            F: RemoteActiveMessage + LamellarAM + AmDist,
-        {
-            self.team().exec_am_all_tg(am, Some(self.team_counters()))
-        }
+        // fn exec_arc_am_pe<F>(&self, pe: usize, am: LamellarArcAm) -> AmHandle<F>
+        // where
+        //     F: AmDist,
+        // {
+        //     self.team()
+        //         .exec_arc_am_pe(pe, am, Some(self.team_counters()))
+        // }
+        // fn exec_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
+        // where
+        //     F: RemoteActiveMessage + LamellarAM + AmDist,
+        // {
+        //     self.team().exec_am_all_tg(am, Some(self.team_counters()))
+        // }
     }
 }
 
@@ -1502,7 +1491,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// This trait exposes a few common reductions implemented by the runtime
 /// as well as the ability the launch user defined reductions that have been registered with the runtime at compile time
 ///
-/// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+/// Please see the documentation for the [register_reduction] procedural macro for
 /// more details and examples on how to create your own reductions.
 ///
 /// Currently these are one sided reductions, meaning the calling PE will initiate the reduction, and launch the appropriate Active Messages
@@ -1625,11 +1614,12 @@ pub trait LamellarArrayReduce<T>: LamellarArrayInternalGet<T>
 where
     T: Dist + AmDist + 'static,
 {
+    /// The Handle type returned by the reduce operation
     type Handle;
     #[doc(alias("One-sided", "onesided"))]
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
     ///
-    /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+    /// Please see the documentation for the [register_reduction] procedural macro for
     /// more details and examples on how to create your own reductions.
     ///
     /// # One-sided Operation

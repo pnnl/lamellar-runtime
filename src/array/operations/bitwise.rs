@@ -13,7 +13,7 @@ pub trait ElementBitWiseOps:
 {
 }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // impl<T> ElementBitWiseOps for T where
 //     T: std::ops::BitAndAssign + std::ops::BitOrAssign + std::ops::BitXorAssign + Dist //+ AmDist
 // {

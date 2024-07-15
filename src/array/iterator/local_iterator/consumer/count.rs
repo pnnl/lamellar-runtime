@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 #[derive(Clone, Debug)]
-pub struct Count<I> {
+pub(crate) struct Count<I> {
     pub(crate) iter: I,
 }
 
@@ -62,7 +62,7 @@ where
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct LocalIterCountHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<usize>>,
@@ -92,7 +92,7 @@ impl Future for LocalIterCountHandle {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 impl LamellarRequest for LocalIterCountHandle {
     fn blocking_wait(mut self) -> Self::Output {
         self.reqs

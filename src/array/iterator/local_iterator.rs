@@ -134,13 +134,13 @@ pub trait LocalIteratorLauncher {
         I: LocalIterator + 'static,
         I::Item: SyncSend + std::iter::Sum;
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
 }
 
@@ -699,6 +699,13 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     ///
     /// Returns an iterator that itself returns [Iterator]s over the chunked slices of the array.
     /// If the number of elements is not evenly divisible by `size`, the last chunk may be shorter than `size`
+    ///
+    /// # Note
+    /// If calling this on a LocalLockArray it may be possible to call [blocking_read_local_chunks](crate::array::LocalLockArray::blocking_read_local_chunks), [read_local_chunks](crate::array::LocalLockArray::read_local_chunks)
+    /// [blocking_write_local_chunks](crate::array::LocalLockArray::blocking_write_local_chunks), or [write_local_chunks](crate::array::LocalLockArray::blocking_write_local_chunks) for better performance
+    ///
+    /// If calling this on an UnsafeArray it may be possible to call [local_chunks](crate::array::UnsafeArray::local_chunks) or [local_chunks_mut](crate::array::UnsafeArray::local_chunks_mut)
+    ///
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;

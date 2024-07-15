@@ -68,13 +68,13 @@ impl Local {
 
 // #[async_trait]
 impl Ser for Local {
-    fn serialize<T: serde::Serialize + ?Sized>(
-        &self,
-        _header: Option<SerializeHeader>,
-        _obj: &T,
-    ) -> Result<SerializedData, anyhow::Error> {
-        panic!("should not be serializing in local");
-    }
+    // fn serialize<T: serde::Serialize + ?Sized>(
+    //     &self,
+    //     _header: Option<SerializeHeader>,
+    //     _obj: &T,
+    // ) -> Result<SerializedData, anyhow::Error> {
+    //     panic!("should not be serializing in local");
+    // }
     fn serialize_header(
         &self,
         _header: Option<SerializeHeader>,
@@ -108,7 +108,7 @@ impl LamellaeComm for Local {
     fn MB_sent(&self) -> f64 {
         0.0f64
     }
-    fn print_stats(&self) {}
+    // fn print_stats(&self) {}
     fn shutdown(&self) {}
     fn force_shutdown(&self) {}
     fn force_deinit(&self) {}
@@ -116,7 +116,6 @@ impl LamellaeComm for Local {
 
 #[async_trait]
 impl LamellaeAM for Local {
-    async fn send_to_pe_async(&self, _pe: usize, _data: SerializedData) {}
     async fn send_to_pes_async(
         &self,
         _pe: Option<usize>,
@@ -178,9 +177,9 @@ impl LamellaeRDMA for Local {
         );
         Ok(data_addr)
     }
-    fn rt_check_alloc(&self, _size: usize, _align: usize) -> bool {
-        true
-    }
+    // fn rt_check_alloc(&self, _size: usize, _align: usize) -> bool {
+    //     true
+    // }
 
     fn rt_free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();
@@ -226,12 +225,12 @@ impl LamellaeRDMA for Local {
         local_addr
     }
     //todo make this return a real value
-    fn occupied(&self) -> usize {
-        0
-    }
-    fn num_pool_allocs(&self) -> usize {
-        1
-    }
+    // fn occupied(&self) -> usize {
+    //     0
+    // }
+    // fn num_pool_allocs(&self) -> usize {
+    //     1
+    // }
     fn alloc_pool(&self, _min_size: usize) {}
 }
 

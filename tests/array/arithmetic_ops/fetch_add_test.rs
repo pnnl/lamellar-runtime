@@ -4,7 +4,7 @@ use lamellar::memregion::prelude::*;
 use rand::distributions::Distribution;
 use rand::distributions::Uniform;
 
-use std::ops::Deref;
+// use std::ops::Deref;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {

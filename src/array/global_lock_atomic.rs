@@ -251,6 +251,7 @@ impl<'a, T: Dist> IntoIterator for &'a GlobalLockLocalData<T> {
     }
 }
 
+/// Captures a read lock on the array, allowing immutable access to the underlying data
 #[derive(Clone)]
 pub struct GlobalLockReadGuard<T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
@@ -258,6 +259,7 @@ pub struct GlobalLockReadGuard<T: Dist> {
 }
 
 impl<T: Dist> GlobalLockReadGuard<T> {
+    /// Access the underlying local data through the read lock
     pub fn local_data(&self) -> GlobalLockLocalData<T> {
         GlobalLockLocalData {
             array: self.array.clone(),
@@ -269,6 +271,7 @@ impl<T: Dist> GlobalLockReadGuard<T> {
     }
 }
 
+/// Captures a write lock on the array, allowing mutable access to the underlying data
 pub struct GlobalLockWriteGuard<T: Dist> {
     pub(crate) array: GlobalLockArray<T>,
     lock_guard: GlobalRwDarcWriteGuard<()>,
@@ -284,6 +287,7 @@ impl<T: Dist> From<GlobalLockMutLocalData<T>> for GlobalLockWriteGuard<T> {
 }
 
 impl<T: Dist> GlobalLockWriteGuard<T> {
+    /// Access the underlying local data through the write lock
     pub fn local_data(self) -> GlobalLockMutLocalData<T> {
         GlobalLockMutLocalData {
             array: self.array.clone(),
@@ -345,6 +349,27 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a global read lock guard on the calling PE
+    ///
+    /// this function will block the thread until the lock is acquired
+    /// Calling within an asynchronous block may lead to deadlock, use [read_lock](self::GlobalLockArray::read_lock) instead.
+    ///
+    /// # One-sided Operation
+    /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
+    ///
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let read_lock = array.blocking_read_lock();
+    /// //do interesting work
+    ///
+    ///```
     pub fn blocking_read_lock(&self) -> GlobalLockReadGuard<T> {
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
@@ -355,6 +380,26 @@ impl<T: Dist> GlobalLockArray<T> {
         })
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a global read lock guard on the calling PE
+    ///
+    /// this function will block the calling task until the lock is acquired (but not the calling thread)
+    ///
+    /// # One-sided Operation
+    /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// world.block_on(async move {
+    ///     let read_lock = array.read_lock().await;
+    ///     //do interesting work
+    /// });
+    ///```
     pub async fn read_lock(&self) -> GlobalLockReadGuard<T> {
         GlobalLockReadGuard {
             array: self.clone(),
@@ -362,6 +407,27 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a global write lock guard on the calling PE
+    ///
+    /// this function will block the thread until the lock is acquired
+    /// Calling within an asynchronous block may lead to deadlock, use [write_lock](self::GlobalLockArray::write_lock) instead.
+    ///
+    /// # One-sided Operation
+    /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
+    ///
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// let write_lock = array.blocking_write_lock();
+    /// //do interesting work
+    ///
+    ///```
     pub fn blocking_write_lock(&self) -> GlobalLockWriteGuard<T> {
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
@@ -372,6 +438,26 @@ impl<T: Dist> GlobalLockArray<T> {
         })
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a global write lock guard on the calling PE
+    ///
+    /// this function will block the calling task until the lock is acquired (but not the calling thread)
+    ///
+    /// # One-sided Operation
+    /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    ///
+    /// world.block_on(async move {
+    ///     let write_lock = array.write_lock().await;
+    ///     //do interesting work
+    /// });
+    ///```
     pub async fn write_lock(&self) -> GlobalLockWriteGuard<T> {
         GlobalLockWriteGuard {
             array: self.clone(),
@@ -728,9 +814,9 @@ impl<T: Dist> GlobalLockArray<T> {
         self.array.into()
     }
 
-    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
-        self.array.async_barrier()
-    }
+    // pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+    //     self.array.async_barrier()
+    // }
 }
 
 impl<T: Dist + 'static> GlobalLockArray<T> {
@@ -1026,7 +1112,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[pin_project]
 pub struct GlobalLockArrayReduceHandle<T: Dist + AmDist> {
     req: AmHandle<Option<T>>,
@@ -1057,6 +1143,31 @@ impl<T: Dist + AmDist> Future for GlobalLockArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// let read_guard = array.blocking_read_lock();
+    /// let prod = array.block_on(read_guard.reduce("prod"));
+    ///```
     pub fn reduce(self, op: &str) -> GlobalLockArrayReduceHandle<T> {
         GlobalLockArrayReduceHandle {
             req: self.array.array.reduce_data(op, self.array.clone().into()),
@@ -1065,17 +1176,111 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// let read_guard = array.blocking_read_lock();
+    /// let sum = array.block_on(read_guard.sum());
+    /// ```
     pub fn sum(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("sum")
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// let read_guard = array.blocking_read_lock();
+    /// let prod = array.block_on(read_guard.prod());
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
+    ///```
     pub fn prod(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuard<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// let read_guard = array.blocking_read_lock();
+    /// let max = array.block_on(read_guard.max());
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
     pub fn max(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("max")
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// the global read lock ensures atomicity of the entire array, i.e. individual elements can not being modified before the call completes
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// let read_guard = array.blocking_read_lock();
+    /// let min = array.block_on(read_guard.min());
+    /// assert_eq!(0,min);
+    ///```
     pub fn min(self) -> GlobalLockArrayReduceHandle<T> {
         self.reduce("min")
     }

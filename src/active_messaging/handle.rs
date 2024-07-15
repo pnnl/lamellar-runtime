@@ -64,6 +64,7 @@ impl LamellarRequestAddResult for AmHandleInner {
     }
 }
 
+/// A handle to an active messaging request that executes on a singe PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct AmHandle<T> {
@@ -171,6 +172,7 @@ impl<T: AmDist> Future for AmHandle<T> {
     }
 }
 
+/// A handle to an active messaging request that executes on the local (originating) PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct LocalAmHandle<T> {
@@ -282,7 +284,7 @@ pub(crate) struct MultiAmHandleInner {
     pub(crate) user_handle: AtomicU8, //we can use this flag to optimize what happens when the request returns
 }
 
-#[doc(hidden)]
+/// A handle to an active messaging request that executes on multiple PEs, returned from a call to [exec_am_all][crate::ActiveMessaging::exec_am_all]
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct MultiAmHandle<T> {

@@ -17,7 +17,8 @@ use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-#[doc(hidden)]
+//#[doc(hidden)]
+/// Prelude for using the [LamellarMemoryRegion] module
 pub mod prelude;
 
 pub(crate) mod shared;
@@ -63,12 +64,15 @@ pub trait Dist:
 // {
 // }
 
-#[doc(hidden)]
+//#[doc(hidden)]
+/// Enum used to expose common methods for all registered memory regions
 #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>, LamellarEnv)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
+    ///
     Shared(SharedMemoryRegion<T>),
+    ///
     Local(OneSidedMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
 }
@@ -115,6 +119,8 @@ impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
 
 impl<T: Dist> LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
+    /// If the memory region contains local data, return it as a mutable slice
+    /// else return an error
     pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
@@ -124,6 +130,8 @@ impl<T: Dist> LamellarMemoryRegion<T> {
     }
 
     //#[tracing::instrument(skip_all)]
+    /// if the memory region contains local data, return it as a slice
+    /// else return an error
     pub unsafe fn as_slice(&self) -> MemResult<&[T]> {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(),
@@ -280,6 +288,8 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// assert_eq!(mem_region.len(),1000);
     ///```
     fn len(&self) -> usize;
+
+    //TODO: move this function to a private trait or private method
     #[doc(hidden)]
     fn addr(&self) -> MemResult<usize>;
 
@@ -404,9 +414,12 @@ pub(crate) trait MemRegionId {
 // because we want MemRegion to impl RegisteredMemoryRegion (so that it can be used in Shared + Local)
 // but MemRegion should not return LamellarMemoryRegions directly (as both SubRegion and AsBase require)
 // we will implement seperate functions for MemoryRegion itself.
-#[doc(hidden)]
+//#[doc(hidden)]
+
+/// Trait for creating subregions of a memory region
 #[enum_dispatch]
 pub trait SubRegion<T: Dist> {
+    #[doc(hidden)]
     type Region: RegisteredMemoryRegion<T> + MemoryRegionRDMA<T>;
     #[doc(alias("One-sided", "onesided"))]
     /// Create a sub region of this RegisteredMemoryRegion using the provided range

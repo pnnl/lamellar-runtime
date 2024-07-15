@@ -14,7 +14,7 @@ use crate::memregion::Dist;
 // };
 use async_lock::{RwLockReadGuardArc, RwLockWriteGuardArc};
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Clone)]
 pub struct LocalLockDistIter<'a, T: Dist> {
     data: LocalLockArray<T>,
@@ -48,7 +48,7 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIter<'a, T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Clone)]
 pub struct LocalLockLocalIter<'a, T: Dist> {
     data: LocalLockArray<T>,

@@ -1,5 +1,5 @@
-//! Distributed Atomic Reference Counter-- a distributed extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
-//! The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
+//! Distributed Atomic Reference Counter-- a distributed extension of an [`Arc`] called a [Darc][crate::darc].
+//! The atomic reference counter, [`Arc`], is a backbone of safe
 //! concurrent programming in Rust, and, in particular, *shared ownership*.
 //!
 //! The `Darc` provides a similar abstraction within a *distributed* environment.
@@ -67,7 +67,7 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
-#[doc(hidden)]
+/// prelude for the darc module
 pub mod prelude;
 
 pub(crate) mod local_rw_darc;
@@ -144,7 +144,7 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 
 /// Distributed atomic reference counter
 ///
-/// The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
+/// The atomic reference counter, [`Arc`], is a backbone of safe
 /// concurrent programming in Rust, and, in particular, *shared ownership*.
 ///
 /// The `Darc` provides a similar abstraction within a *distributed* environment.
@@ -236,7 +236,53 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
+/// `WeakDarc`` is a version of Darc that holds a non-owning reference to the managed object.
+/// (similar to [`Weak`](std::sync::Weak)).
+/// The managed object can be accessed by calling [`upgrade`](WeakDarc::upgrade), wich returns and ``Option<Darc<T>>``
+///
+/// A `WeakDarc` does not count toward ownership, thus it will not prevent the value stored in the allocation from being dropped,
+/// and it makes no guarantees itself about the value still being present, and thus can return `None` from `upgrade()`.
+/// Note that a `WeakDarc` does prevent the allocation itself from being deallocated.
+///
+/// The typical way to obtian a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
+///
+/// # Examples
+///```
+/// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
+/// use std::sync::atomic::{AtomicUsize, Ordering};
+/// use std::sync::Arc;
+///
+/// #[lamellar::AmData(Clone)]
+/// struct DarcAm {
+///     counter: Darc<AtomicUsize>, //each pe has a local atomicusize
+/// }
+///
+/// #[lamellar::am]
+/// impl LamellarAm for DarcAm {
+///     async fn exec(self) {
+///         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
+///     }
+///  }
+///
+/// fn main(){
+///     let world = LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     let num_pes = world.num_pes();
+///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
+///     let weak = darc_counter.downgrade();
+///     match weak.upgrade(){
+///         Some(counter) => {
+///             counter.fetch_add(my_pe, Ordering::SeqCst);
+///         }
+///         None => {
+///             println!("counter is gone");
+///         }   
+///     }
+/// }
+///```
+///
 #[derive(Debug)]
 pub struct WeakDarc<T: 'static> {
     inner: *mut DarcInner<T>,
@@ -246,6 +292,8 @@ unsafe impl<T: Send> Send for WeakDarc<T> {}
 unsafe impl<T: Sync> Sync for WeakDarc<T> {}
 
 impl<T> WeakDarc<T> {
+    /// attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped
+    /// returns `None` if the value has been dropped
     pub fn upgrade(&self) -> Option<Darc<T>> {
         let inner = unsafe { &*self.inner };
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -810,7 +858,8 @@ impl<T: 'static> fmt::Debug for DarcInner<T> {
 }
 
 impl<T> Darc<T> {
-    #[doc(hidden)]
+    //#[doc(hidden)]
+    /// downgrade a darc to a weak darc
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
         // println!("downgrading darc ");
         // the_darc.print();

@@ -1,4 +1,4 @@
-#[doc(hidden)]
+//#[doc(hidden)]
 // pub use crate::active_messaging::{
 //     registered_active_message::RegisteredAm, DarcSerde, LamellarActiveMessage, LamellarResultSerde,
 //     LamellarReturn, LamellarSerde, RemoteActiveMessage, Serde,
@@ -14,7 +14,7 @@ pub use crate::async_trait;
 pub use crate::inventory;
 pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;

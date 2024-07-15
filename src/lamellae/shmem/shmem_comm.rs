@@ -577,9 +577,9 @@ impl CommOps for ShmemComm {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
         self.get(pe, src_addr, dst_addr);
     }
-    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        self.get(pe, src_addr + self.base_addr(), dst_addr);
-    }
+    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    //     self.get(pe, src_addr + self.base_addr(), dst_addr);
+    // }
     fn force_shutdown(&self) {}
 }
 
@@ -610,7 +610,7 @@ pub(crate) struct ShmemData {
 }
 
 impl ShmemData {
-    pub fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData, anyhow::Error> {
+    pub(crate) fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr = shmem_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;

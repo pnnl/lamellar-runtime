@@ -8,7 +8,7 @@ use crate::AmHandle;
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 type MultiValMultiIdxFn = fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8) -> LamellarArcAm;
@@ -84,6 +84,7 @@ impl IndexSize {
             IndexSize::Usize => 8,
         }
     }
+    #[allow(dead_code)]
     fn as_bytes(&self, val: &usize) -> &[u8] {
         match self {
             IndexSize::U8 => unsafe {
@@ -586,7 +587,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // We need this loop so that we ensure all the internal AMs have launched so calls like wait_all work properly
         while cnt.load(Ordering::SeqCst) < num_reqs {
             self.inner.data.team.scheduler.exec_task();
-        };
+        }
         let res = std::mem::take(&mut *futures.lock());
         res
     }

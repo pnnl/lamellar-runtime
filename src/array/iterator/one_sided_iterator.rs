@@ -243,7 +243,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     //     Buffered::new(self, buf_size)
     // }
 
-    /// Convert self one-sided iterator into a standard Rust Iterator, enabling one to use any of the functions available on `Iterator`s
+    /// Convert a one-sided iterator into a standard Rust [Iterator], enabling one to use any of the functions available on `Iterator`s
     ///
     /// # Examples
     ///```
@@ -279,6 +279,28 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
         OneSidedIteratorIter { iter: self }
     }
 
+    /// Convert a one-sided iterator into a standard Rust [Stream] for iteration in async contexts, enabling one to use any of the functions available on `Stream`s
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
+    /// array.wait_all();
+    /// world.block_on (async move {
+    ///     if my_pe == 0 {
+    ///         let sum = array.onesided_iter().into_stream().take(4).map(|elem| *elem as f64).sum::<f64>().await;
+    ///         println!("Sum: {sum}")
+    ///     }
+    /// });
+    /// ```
+    ///  Output on a 4 PE execution
+    ///```text
+    /// Sum: 2.0
+    ///```
     fn into_stream(mut self) -> OneSidedStream<Self>
     where
         Self: Sized + Send,
@@ -289,9 +311,9 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     }
 }
 
-/// An immutable standard Rust Iterator backed by a [OneSidedIterator](crate::array::iterator::one_sided_iterator).
+/// An immutable standard Rust [Iterator] backed by a [OneSidedIterator](crate::array::iterator::one_sided_iterator).
 ///
-/// This object iterates over data serially on a single PE ; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data in on all PEs associate with the array.
+/// This object iterates over data serially on a single PE ; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data on all PEs associate with the array.
 ///
 /// This struct is created by calling [into_iter][OneSidedIterator::into_iter] a OneSidedIterator
 ///
@@ -321,6 +343,26 @@ where
     }
 }
 
+/// An immutable standard Rust [Stream] backed by a [OneSidedIterator](crate::array::iterator::one_sided_iterator) for iteration in async contexts.
+///
+/// This object iterates over data serially on a single PE ; compare with [distributed iterators](crate::array::iterator::distributed_iterator), which iterate over data on all PEs associate with the array.
+///
+/// This struct is created by calling [into_stream][OneSidedIterator::into_iter] a OneSidedIterator
+///
+/// # Examples
+///```
+/// use lamellar::array::prelude::*;
+/// use futures::stream::StreamExt;
+///
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// world.block_on(async move {
+///     let stream = array.onesided_iter().into_stream();
+///     while let Some(e) = stream.next().await {
+///         println!("{e}");
+///     }
+/// });
+///```
 #[pin_project]
 pub struct OneSidedStream<I> {
     #[pin]

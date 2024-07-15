@@ -36,7 +36,6 @@ use std::ops::{
     ShrAssign, SubAssign,
 };
 
-// #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.
 ///
 /// This type is returned when iterating over an AtomicArray as well as when accessing local elements through an [AtomicLocalData] handle.
@@ -559,7 +558,7 @@ pub enum AtomicByteArray {
 }
 
 impl AtomicByteArray {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn downgrade(array: &AtomicByteArray) -> AtomicByteArrayWeak {
         match array {
             AtomicByteArray::NativeAtomicByteArray(array) => {
@@ -601,7 +600,7 @@ pub enum AtomicByteArrayWeak {
 }
 
 impl AtomicByteArrayWeak {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn upgrade(&self) -> Option<AtomicByteArray> {
         match self {
             AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
@@ -1168,6 +1167,44 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
+    ///  # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
     pub fn reduce(&self, reduction: &str) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
@@ -1177,12 +1214,84 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE
+    ///
+    ///  # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let sum = array.block_on(array.sum());
+    /// assert_eq!(array.len()*num_pes,sum);
+    /// ```
     pub fn sum(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i+1);
+    /// });
+    /// array.wait_all();
+    /// array.barrier();
+    /// let prod =  array.block_on(array.prod());
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
+    ///```
     pub fn prod(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
@@ -1191,12 +1300,74 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let max = array.block_on(array.max());
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
     pub fn max(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
         }
     }
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let min = array.block_on(array.min());
+    /// assert_eq!(0,min);
+    ///```
     pub fn min(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),

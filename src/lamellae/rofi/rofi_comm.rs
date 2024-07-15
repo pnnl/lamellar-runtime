@@ -571,52 +571,52 @@ impl CommOps for RofiComm {
 
     //src address is relative to rofi base addr
     //#[tracing::instrument(skip_all)]
-    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        //-> RofiReq {
-        // let mut req = RofiReq{
-        //     txids: Vec::new(),
-        //     _drop_set: self.drop_set.clone(),
-        //     _any_dropped: self.any_dropped.clone(),
-        // };
-        if pe != self.my_pe {
-            // unsafe {
-            // let _lock = self.comm_mutex.write();
-            // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
+    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    //     //-> RofiReq {
+    //     // let mut req = RofiReq{
+    //     //     txids: Vec::new(),
+    //     //     _drop_set: self.drop_set.clone(),
+    //     //     _any_dropped: self.any_dropped.clone(),
+    //     // };
+    //     if pe != self.my_pe {
+    //         // unsafe {
+    //         // let _lock = self.comm_mutex.write();
+    //         // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
 
-            match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe) {
-                //.expect("error in rofi get")
-                Err(_ret) => {
-                    println!(
-                        "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
-                        self.my_pe,
-                        pe,
-                        src_addr,
-                        src_addr+*self.rofi_base_address.read() ,
-                        dst_addr.as_ptr(),
-                        *self.rofi_base_address.read(),
-                        dst_addr.len()
-                    );
-                    panic!();
-                }
-                Ok(_ret) => {
-                    self.get_cnt.fetch_add(1, Ordering::SeqCst);
-                    self.get_amt
-                        .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-                    // if ret != 0{
-                    //     req.txids.push(ret);
-                    // }
-                }
-            }
-            // };
-        } else {
-            unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
-            }
-        }
-        // req
-        // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
-        // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
-    }
+    //         match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe) {
+    //             //.expect("error in rofi get")
+    //             Err(_ret) => {
+    //                 println!(
+    //                     "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
+    //                     self.my_pe,
+    //                     pe,
+    //                     src_addr,
+    //                     src_addr+*self.rofi_base_address.read() ,
+    //                     dst_addr.as_ptr(),
+    //                     *self.rofi_base_address.read(),
+    //                     dst_addr.len()
+    //                 );
+    //                 panic!();
+    //             }
+    //             Ok(_ret) => {
+    //                 self.get_cnt.fetch_add(1, Ordering::SeqCst);
+    //                 self.get_amt
+    //                     .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+    //                 // if ret != 0{
+    //                 //     req.txids.push(ret);
+    //                 // }
+    //             }
+    //         }
+    //         // };
+    //     } else {
+    //         unsafe {
+    //             std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+    //         }
+    //     }
+    //     // req
+    //     // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+    //     // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
+    // }
 
     fn force_shutdown(&self) {
         let _res = rofi_finit();
@@ -671,7 +671,7 @@ pub(crate) struct RofiData {
 
 impl RofiData {
     //#[tracing::instrument(skip_all)]
-    pub fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData, anyhow::Error> {
+    pub(crate) fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr = rofi_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;

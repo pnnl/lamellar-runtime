@@ -648,12 +648,13 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-#[doc(hidden)]
+// //#[doc(hidden)]
+/// The prelude for the active messaging module
 pub mod prelude;
 
 pub(crate) mod registered_active_message;
 use registered_active_message::RegisteredActiveMessages;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use registered_active_message::RegisteredAm;
 
 pub(crate) mod batching;
@@ -696,7 +697,7 @@ pub use lamellar_impl::AmData;
 ///
 pub use lamellar_impl::AmLocalData;
 
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use lamellar_impl::AmGroupData;
 
 /// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro
@@ -900,8 +901,8 @@ pub(crate) enum Cmd {
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, Default)]
 pub(crate) struct Msg {
-    pub src: u16,
-    pub cmd: Cmd,
+    pub(crate) src: u16,
+    pub(crate) cmd: Cmd,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -943,8 +944,13 @@ impl AMCounters {
 
 /// The interface for launching, executing, and managing Lamellar Active Messages .
 pub trait ActiveMessaging {
+    /// The handle type for single PE active messages
     type SinglePeAmHandle<R: AmDist>;
+
+    /// The handle type for multi PE active messages
     type MultiAmHandle<R: AmDist>;
+
+    /// The handle type for local active messages
     type LocalAmHandle<L>;
     #[doc(alias("One-sided", "onesided"))]
     /// launch and execute an active message on every PE (including originating PE).
@@ -1116,8 +1122,46 @@ pub trait ActiveMessaging {
     ///```
     fn wait_all(&self);
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// blocks calling task until all remote tasks (e.g. active mesages, array operations)
+    /// initiated by the calling PE have completed.
+    /// Intended to be used within an async context.
+    ///
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
+    /// to finish that were initiated by the calling PE itself
+    ///
+    /// # Examples
+    ///```
+    /// # use lamellar::active_messaging::prelude::*;
+    /// #
+    /// # #[lamellar::AmData(Debug,Clone)]
+    /// # struct Am{
+    /// # // can contain anything that impls Sync, Send  
+    /// #     val: usize,
+    /// # }
+    ///
+    /// # #[lamellar::am]
+    /// # impl LamellarAM for Am{
+    /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
+    /// #         //do some remote computation
+    /// #          println!("hello from PE{}",self.val);
+    /// #         lamellar::current_pe //return the executing pe
+    /// #     }
+    /// # }
+    /// #
+    /// # let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let world_clone = world.clone();
+    /// world.block_on(async move {
+    ///     world_clone.exec_am_all(Am{val: world_clone.my_pe()});
+    ///     world_clone.await_all().await; //block until the previous am has finished
+    /// });
+    ///```
+    fn await_all(&self) -> impl Future<Output = ()> + Send;
+
     #[doc(alias = "Collective")]
-    /// Global synchronization method which blocks calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
+    /// Global synchronization method which blocks the calling thread until all PEs in the barrier group (e.g. World, Team, Array) have entered
+    /// Generally this is intended to be called from the main thread, if a barrier is needed within an active message or async context please see [async_barrier](Self::async_barrier)
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the ActiveMessaging object to enter the barrier, otherwise deadlock will occur
@@ -1132,6 +1176,25 @@ pub trait ActiveMessaging {
     ///```
     fn barrier(&self);
 
+    #[doc(alias = "Collective")]
+    /// EXPERIMENTAL: Global synchronization method which blocks the calling task until all PEs in the barrier group (e.g. World, Team, Array) have entered.
+    /// This function allows for calling barrier in an async context without blocking the worker thread.
+    /// Care should be taken when using this function to avoid deadlocks,as it is easy to mismatch barrier calls accross threads and PEs.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the ActiveMessaging object to enter the barrier, otherwise deadlock will occur
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let world_clone = world.clone();
+    /// world.block_on(async move {
+    ///     //do some work
+    ///     world_clone.async_barrier().await; //block until all PEs have entered the barrier
+    /// });
+    ///```
     fn async_barrier(&self) -> impl Future<Output = ()> + Send;
 
     #[doc(alias("One-sided", "onesided"))]

@@ -273,7 +273,7 @@ pub struct GenericAtomicByteArray {
 }
 
 impl GenericAtomicByteArray {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
         let index = self
             .array
@@ -283,7 +283,7 @@ impl GenericAtomicByteArray {
         self.locks[index].lock()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn downgrade(array: &GenericAtomicByteArray) -> GenericAtomicByteArrayWeak {
         GenericAtomicByteArrayWeak {
             locks: array.locks.clone(),
@@ -300,7 +300,7 @@ pub struct GenericAtomicByteArrayWeak {
 }
 
 impl GenericAtomicByteArrayWeak {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn upgrade(&self) -> Option<GenericAtomicByteArray> {
         Some(GenericAtomicByteArray {
             locks: self.locks.clone(),
@@ -437,7 +437,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 }
-
+#[doc(hidden)]
 impl<T: Dist> GenericAtomicArray<T> {
     // pub fn wait_all(&self) {
     //     self.array.wait_all();
@@ -457,7 +457,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.num_elems_local()
     // }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GenericAtomicArray {
             locks: self.locks.clone(),
@@ -469,12 +469,12 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.num_pes()
     // }
 
-    // #[doc(hidden)]
+    // //#[doc(hidden)]
     // pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
     //     self.array.pe_for_dist_index(index)
     // }
 
-    // #[doc(hidden)]
+    // //#[doc(hidden)]
     // pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
     //     self.array.pe_offset_for_dist_index(pe, index)
     // }
@@ -487,7 +487,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.len()
     // }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
@@ -496,7 +496,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn mut_local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
@@ -505,11 +505,11 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub unsafe fn __local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
     }
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub unsafe fn __local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
@@ -521,31 +521,31 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     }
     // }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn into_unsafe(self) -> UnsafeArray<T> {
         // println!("generic into_unsafe");
         self.array.into()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn into_read_only(self) -> ReadOnlyArray<T> {
         // println!("generic into_read_only");
         self.array.into()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn into_local_lock(self) -> LocalLockArray<T> {
         // println!("generic into_local_lock");
         self.array.into()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn into_global_lock(self) -> GlobalLockArray<T> {
         // println!("generic into_local_lock");
         self.array.into()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
         // if let Some(ref locks) = *self.locks {
         //     let start_index = (index * std::mem::size_of::<T>()) / self.orig_t_size;
@@ -567,9 +567,9 @@ impl<T: Dist> GenericAtomicArray<T> {
         self.locks[index].lock()
     }
 
-    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
-        self.array.async_barrier()
-    }
+    // pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+    //     self.array.async_barrier()
+    // }
 }
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
@@ -825,22 +825,27 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
     pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
         self.array.reduce_data(op, self.clone().into())
     }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
     pub fn sum(&self) -> AmHandle<Option<T>> {
         self.reduce("sum")
     }
+    #[doc(hidden)]
     pub fn prod(&self) -> AmHandle<Option<T>> {
         self.reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
     pub fn max(&self) -> AmHandle<Option<T>> {
         self.reduce("max")
     }
+    #[doc(hidden)]
     pub fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
     }
