@@ -51,7 +51,7 @@ pub(crate) struct RofiComm {
 
 impl RofiComm {
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn new(provider: &str) -> RofiComm {
+    pub(crate) fn new(provider: &str, domain: &str) -> RofiComm {
         if let Some(size) = config().heap_size {
             // if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
             // let size = size
@@ -59,7 +59,7 @@ impl RofiComm {
             //     .expect("invalid memory size, please supply size in bytes");
             ROFI_MEM.store(size, Ordering::SeqCst);
         }
-        rofi_init(provider).expect("error in rofi init");
+        rofi_init(provider, domain).expect("error in rofi init");
         // trace!("rofi initialized");
         rofi_barrier();
         let num_pes = rofi_get_size();

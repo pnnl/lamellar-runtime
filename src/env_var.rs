@@ -83,6 +83,14 @@ fn default_batch_am_size() -> usize {
     100000
 }
 
+fn default_rofi_provider() -> String {
+    "verbs".to_owned()
+}
+
+fn default_rofi_domain() -> String {
+    "".to_owned()
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// A general timeout in seconds for various operations which may indicate a deadlock, default: 600.0 seconds
@@ -130,6 +138,10 @@ pub struct Config {
     pub cmd_buf_cnt: usize,
     #[serde(default = "default_batch_am_size")]
     pub batch_am_size: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated
+    #[serde(default = "default_rofi_provider")]
+    pub rofi_provider: String,
+    #[serde(default = "default_rofi_domain")]
+    pub rofi_domain: String,
 }
 
 /// Get the current Environment Variable configuration

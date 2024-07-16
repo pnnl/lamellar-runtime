@@ -22,8 +22,8 @@ pub(crate) struct RofiBuilder {
 }
 
 impl RofiBuilder {
-    pub(crate) fn new(provider: &str) -> RofiBuilder {
-        let rofi_comm: Arc<Comm> = Arc::new(RofiComm::new(provider).into());
+    pub(crate) fn new(provider: &str, domain: &str) -> RofiBuilder {
+        let rofi_comm: Arc<Comm> = Arc::new(RofiComm::new(provider, domain).into());
         RofiBuilder {
             my_pe: rofi_comm.my_pe(),
             num_pes: rofi_comm.num_pes(),
