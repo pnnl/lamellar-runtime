@@ -114,7 +114,11 @@ impl CmdMsg {
     }
     //#[tracing::instrument(skip_all)]
     fn hash(&self) -> usize {
-        let mut res = self.daddr + self.dsize + self.cmd as usize + self.msg_hash;
+        let mut res = self
+            .daddr
+            .wrapping_add(self.dsize)
+            .wrapping_add(self.cmd as usize)
+            .wrapping_add(self.msg_hash);
         if res == 0 {
             res = 1
         }
