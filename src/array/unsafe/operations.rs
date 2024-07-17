@@ -487,7 +487,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index_size: IndexSize,
     ) -> VecDeque<(AmHandle<R>, Vec<usize>)> {
         let num_per_batch =
-            (config().batch_am_size as f32 / index_size.len() as f32).ceil() as usize;
+            (config().am_size_threshold as f32 / index_size.len() as f32).ceil() as usize;
 
         let num_pes = self.inner.data.team.num_pes();
         // let my_pe = self.inner.data.team.my_pe();
@@ -604,7 +604,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         _index_size: IndexSize,
     ) -> VecDeque<(AmHandle<R>, Vec<usize>)> {
         let num_per_batch =
-            (config().batch_am_size as f32 / std::mem::size_of::<T>() as f32).ceil() as usize;
+            (config().am_size_threshold as f32 / std::mem::size_of::<T>() as f32).ceil() as usize;
 
         // println!("multi_val_one_index");
         let cnt = Arc::new(AtomicUsize::new(0));
@@ -687,7 +687,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             IndexSize::U64 => std::mem::size_of::<IdxVal<u64, T>>(),
             IndexSize::Usize => std::mem::size_of::<IdxVal<usize, T>>(),
         };
-        let num_per_batch = (config().batch_am_size as f32 / idx_val_bytes as f32).ceil() as usize;
+        let num_per_batch = (config().am_size_threshold as f32 / idx_val_bytes as f32).ceil() as usize;
         let bytes_per_batch = num_per_batch * idx_val_bytes;
 
         let num_pes = self.inner.data.team.num_pes();

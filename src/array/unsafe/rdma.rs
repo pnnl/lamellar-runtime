@@ -87,7 +87,7 @@ impl<T: Dist> UnsafeArray<T> {
                         // unsafe{
                         //     println!("{:?} {:?},",buf.clone().to_base::<u8>().as_slice(), buf.sub_region(buf_index..(buf_index + len)).to_base::<u8>().as_slice());
                         // }
-                        if buf.len() * std::mem::size_of::<T>() > config().batch_am_size {
+                        if buf.len() * std::mem::size_of::<T>() > config().am_size_threshold {
                             let am = UnsafePutAm {
                                 array: self.clone().into(),
                                 start_index: index,
@@ -117,7 +117,7 @@ impl<T: Dist> UnsafeArray<T> {
                         }
                     }
                     ArrayRdmaCmd::GetAm => {
-                        // if buf.len()*std::mem::size_of::<T>() > config().batch_am_size{
+                        // if buf.len()*std::mem::size_of::<T>() > config().am_size_threshold{
                         let am = UnsafeBlockGetAm {
                             array: self.clone().into(),
                             offset: offset,
@@ -211,7 +211,7 @@ impl<T: Dist> UnsafeArray<T> {
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
                     // println!("si: {:?} ei {:?}",offset,offset+k);
 
-                    if buf.len() * std::mem::size_of::<T>() > config().batch_am_size {
+                    if buf.len() * std::mem::size_of::<T>() > config().am_size_threshold {
                         let am = UnsafePutAm {
                             array: self.clone().into(),
                             start_index: index,
@@ -283,7 +283,7 @@ impl<T: Dist> UnsafeArray<T> {
                 }
             }
             ArrayRdmaCmd::GetAm => {
-                // if buf.len()*std::mem::size_of::<T>() > config().batch_am_size{
+                // if buf.len()*std::mem::size_of::<T>() > config().am_size_threshold{
                 let rem = buf.len() % num_pes;
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
                     let temp_memreg = self
@@ -716,7 +716,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         buf: U,
     ) -> ArrayRdmaHandle {
         let buf = buf.into();
-        let reqs = if buf.len() * std::mem::size_of::<T>() > config().batch_am_size {
+        let reqs = if buf.len() * std::mem::size_of::<T>() > config().am_size_threshold {
             match self.inner.distribution {
                 Distribution::Block => self.block_op(ArrayRdmaCmd::GetAm, index, buf),
                 Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::GetAm, index, buf),

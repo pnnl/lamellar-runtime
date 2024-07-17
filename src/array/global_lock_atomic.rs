@@ -4,6 +4,7 @@ mod rdma;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
+use crate::config;
 use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
@@ -371,6 +372,17 @@ impl<T: Dist> GlobalLockArray<T> {
     ///
     ///```
     pub fn blocking_read_lock(&self) -> GlobalLockReadGuard<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
             GlobalLockReadGuard {
@@ -429,6 +441,17 @@ impl<T: Dist> GlobalLockArray<T> {
     ///
     ///```
     pub fn blocking_write_lock(&self) -> GlobalLockWriteGuard<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
             GlobalLockWriteGuard {
@@ -487,6 +510,17 @@ impl<T: Dist> GlobalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn blocking_read_local_data(&self) -> GlobalLockLocalData<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
             GlobalLockLocalData {
@@ -553,6 +587,17 @@ impl<T: Dist> GlobalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn blocking_write_local_data(&self) -> GlobalLockMutLocalData<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
             let lock = self_clone.lock.write().await;
@@ -621,6 +666,17 @@ impl<T: Dist> GlobalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn blocking_collective_write_local_data(&self) -> GlobalLockCollectiveMutLocalData<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_collective_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `collective_write_local_data().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_collective_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `collective_write_local_data().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: GlobalLockArray<T> = self.clone();
         self.block_on(async move {
             let lock = self_clone.lock.collective_write().await;

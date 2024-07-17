@@ -1,6 +1,47 @@
-use std::sync::OnceLock;
+//! Lamellar uses a number of environment variables to configure its behavior
+//! the following variables are supported along with a breif description and default value
+//!
+//! - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
+//!     - possible values
+//!         - `local` -- default (if `enable-local` feature is not active)
+//!         - `shmem`
+//!         - `rofi`  -- only available with the `enable-rofi` feature in which case it is the default backend
+//! - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
+//!     - possible values
+//!         - `lamellar` -- default, work stealing backend
+//!         - `async_std` -- alternative backend from async_std
+//!         - `tokio` -- only available with the `tokio-executor` feature in which case it is the default executor
+//! - `LAMELLAR_BATCHER` - selects how small active messages are batched for remote operations
+//!     - possible values
+//!         - `simple` -- default, active messages are only batched based on the PE they are sent to
+//!         - `team_am` -- active messages are batched heirarchically based on the remote PE, team sending the message, and AM id
+//! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
+//! - `LAMELLAR_HEAP_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 4GB
+//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc],
+//!       [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues.
+//!     - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_HEAP_SIZE * number of processes`
+//! - `LAMELLAR_HEAP_MODE` - Specify whether the heap will be allocated statically or dynamically
+//!     - possible values
+//!         - `static`
+//!         - `dynamic` -- default, Additional memory pools are dynamically allocated across the system as needed.
+//!           This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime
+//!           will print a message at the end of execution with how many additional pools were allocated.
+//!              - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_HEAP_SIZE` to a larger value
+//! - `LAMELLAR_DEADLOCK_TIMEOUT` - the timeout in seconds before a deadlock warning is printed. Defaults to 600
+//! - `LAMELLAR_AM_GROUP_BATCH_SIZE` - The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
+//! - `LAMELLAR_BLOCKING_CALL_WARNING` - flag used to print warnings when users call barriers on worker threads. Default: true
+//! - `LAMELLAR_BARRIER_DISSEMINATION_FACTOR` - (Experimental) The dissemination factor for the n-way barrier, default: 2
+//! - `LAMELLAR_BATCH_OP_THREADS` - the number of threads used to initiate batched operations, defaults to 1/4 LAMELLAR_THREADS
+//! - `LAMELLAR_ARRAY_INDEX_SIZE` - specify static or dynamic array index size
+//!     - possible values
+//!         - `static` -- constant usize indices
+//!         - `dynamic` -- default, only uses as large an int as necessary to index the array, bounded by themax number of elements on any PE.
+//! - `LAMELLAR_AM_SIZE_THRESHOLD` - the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated, default: 100000
+//! - `LAMELLAR_ROFI_PROVIDER` - the provider for the rofi backend (only used with the rofi backend), default: "verbs"
+//! - `LAMELLAR_ROFI_DOMAIN` - the domain for the rofi backend (only used with the rofi backend), default: ""
 
 use serde::Deserialize;
+use std::sync::OnceLock;
 
 fn default_deadlock_timeout() -> f64 {
     600.0
@@ -39,6 +80,7 @@ fn default_threads() -> usize {
     }
 }
 
+#[doc(hidden)]
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum HeapMode {
@@ -50,6 +92,7 @@ fn default_heap_mode() -> HeapMode {
     HeapMode::Dynamic
 }
 
+#[doc(hidden)]
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Alloc {
@@ -61,6 +104,7 @@ fn default_alloc() -> Alloc {
     Alloc::Heap
 }
 
+#[doc(hidden)]
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum IndexType {
@@ -79,7 +123,7 @@ fn default_cmd_buf_cnt() -> usize {
     2
 }
 
-fn default_batch_am_size() -> usize {
+fn default_am_size_threshold() -> usize {
     100000
 }
 
@@ -91,6 +135,7 @@ fn default_rofi_domain() -> String {
     "".to_owned()
 }
 
+#[doc(hidden)]
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// A general timeout in seconds for various operations which may indicate a deadlock, default: 600.0 seconds
@@ -106,7 +151,7 @@ pub struct Config {
     pub barrier_dissemination_factor: usize,
 
     /// flag used to print warnings when users call barriers on worker threads. Default: true
-    pub barrier_warning: Option<bool>,
+    pub blocking_call_warning: Option<bool>,
 
     /// The lamellae backend to use
     /// rofi -- multi pe distributed execution, default if rofi feature is turned on
@@ -132,18 +177,23 @@ pub struct Config {
     pub alloc: Alloc,
     #[serde(default = "default_array_dynamic_index")]
     pub index_size: IndexType,
+
+    //used internally by the command queues
     #[serde(default = "default_cmd_buf_len")]
     pub cmd_buf_len: usize,
+    //used internally by the command queues
     #[serde(default = "default_cmd_buf_cnt")]
     pub cmd_buf_cnt: usize,
-    #[serde(default = "default_batch_am_size")]
-    pub batch_am_size: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated
+
+    #[serde(default = "default_am_size_threshold")]
+    pub am_size_threshold: usize, //the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated
     #[serde(default = "default_rofi_provider")]
     pub rofi_provider: String,
     #[serde(default = "default_rofi_domain")]
     pub rofi_domain: String,
 }
 
+#[doc(hidden)]
 /// Get the current Environment Variable configuration
 pub fn config() -> &'static Config {
     static CONFIG: OnceLock<Config> = OnceLock::new();

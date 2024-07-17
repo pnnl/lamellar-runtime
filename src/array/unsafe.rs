@@ -808,6 +808,17 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
 
 impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `Array::team_from` from within an async context which may lead to deadlock, this is unintended and likely a Runtime bug.
+                Please open a github issue at https://github.com/pnnl/lamellar-runtime/issues including a backtrace if possible.
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         let (local_vals, distribution) = input;
         // println!("local_vals len: {:?}", local_vals.len());
         team.tasking_barrier();

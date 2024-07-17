@@ -6,6 +6,7 @@ mod rdma;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
+use crate::config;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::DarcMode;
 use crate::lamellar_request::LamellarRequest;
@@ -345,6 +346,17 @@ impl<T: Dist> LocalLockArray<T> {
     /// //do interesting work
     ///
     pub fn blocking_read_lock(&self) -> LocalLockReadGuard<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: LocalLockArray<T> = self.clone();
         self.block_on(async move {
             LocalLockReadGuard {
@@ -402,6 +414,17 @@ impl<T: Dist> LocalLockArray<T> {
     /// //do interesting work
     ///
     pub fn blocking_write_lock(&self) -> LocalLockWriteGuard<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: LocalLockArray<T> = self.clone();
         self.block_on(async move {
             LocalLockWriteGuard {
@@ -457,7 +480,17 @@ impl<T: Dist> LocalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn blocking_read_local_data(&self) -> LocalLockLocalData<T> {
-        // println!("getting read lock in read_local_local");
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: LocalLockArray<T> = self.clone();
         self.block_on(async move {
             LocalLockLocalData {
@@ -470,7 +503,6 @@ impl<T: Dist> LocalLockArray<T> {
         })
     }
 
-    /// TODO: UPDATE
     /// Return the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
     ///
     /// Calling this function will result in a local read lock being captured on the array
@@ -520,7 +552,17 @@ impl<T: Dist> LocalLockArray<T> {
     /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn blocking_write_local_data(&self) -> LocalLockMutLocalData<T> {
-        // println!("getting write lock in write_local_data");
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling `LocalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+        }
         let self_clone: LocalLockArray<T> = self.clone();
         self.block_on(async move {
             let lock = self_clone.lock.write().await;

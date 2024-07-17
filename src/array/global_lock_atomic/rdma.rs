@@ -216,7 +216,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                             self.buf.len(),
                         ) {
                             let u8_buf_len = len * std::mem::size_of::<T>();
-                            if u8_buf_len > config().batch_am_size {
+                            if u8_buf_len > config().am_size_threshold {
                                 // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
                                 let remote_am = GlobalLockRemotePutAm {
                                     array: self.array.clone().into(), //inner of the indices we need to place data into

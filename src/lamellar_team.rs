@@ -1343,6 +1343,19 @@ impl LamellarTeamRT {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn wait_all(&self) {
+        let mut exec_task = true;
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            if let Some(val) = config().blocking_call_warning {
+                if val {
+                    println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                }
+            } else {
+                println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+            }
+            exec_task = false;
+        }
         let mut temp_now = Instant::now();
         while self.panic.load(Ordering::SeqCst) == 0
             && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
@@ -1351,7 +1364,9 @@ impl LamellarTeamRT {
         {
             // std::thread::yield_now();
             // self.flush();
-            self.scheduler.exec_task(); //mmight as well do useful work while we wait
+            if exec_task {
+                self.scheduler.exec_task()
+            }; //mmight as well do useful work while we wait }
             if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
                     "in team wait_all mype: {:?} cnt: {:?} {:?}",

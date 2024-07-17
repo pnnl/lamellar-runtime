@@ -117,7 +117,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                     self.executor.submit_io_task(async move {
                         //spawn a task so that we can the execute the local am immediately
                         // println!(" {} {} {}, {}, {}",req_data.team.lamellae.backend() != Backend::Local,req_data.team.num_pes() > 1, req_data.team.team_pe_id().is_err(),(req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()),req_data.team.lamellae.backend() != Backend::Local && (req_data.team.num_pes() > 1 || req_data.team.team_pe_id().is_err()) );
-                        if am_size < config().batch_am_size && !immediate {
+                        if am_size < config().am_size_threshold && !immediate {
                             ame.batcher
                                 .add_remote_am_to_batch(
                                     req_data_clone.clone(),
@@ -155,7 +155,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 } else {
                     let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                     let am_size = am.serialized_size();
-                    if am_size < config().batch_am_size && !immediate {
+                    if am_size < config().am_size_threshold && !immediate {
                         self.batcher
                             .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                             .await;
@@ -179,7 +179,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 // println!("Am::Return");
                 let am_id = *(AMS_IDS.get(&am.get_id()).unwrap());
                 let am_size = am.serialized_size();
-                if am_size < config().batch_am_size && !immediate {
+                if am_size < config().am_size_threshold && !immediate {
                     self.batcher
                         .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                         .await;
@@ -197,7 +197,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
             Am::Data(req_data, data) => {
                 // println!("Am::Data");
                 let data_size = data.serialized_size();
-                if data_size < config().batch_am_size && !immediate {
+                if data_size < config().am_size_threshold && !immediate {
                     self.batcher
                         .add_data_am_to_batch(req_data, data, data_size, stall_mark)
                         .await;
@@ -207,7 +207,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 }
             }
             Am::Unit(req_data) => {
-                if *UNIT_HEADER_LEN < config().batch_am_size && !immediate {
+                if *UNIT_HEADER_LEN < config().am_size_threshold && !immediate {
                     self.batcher
                         .add_unit_am_to_batch(req_data, stall_mark)
                         .await;

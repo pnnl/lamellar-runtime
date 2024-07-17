@@ -61,6 +61,11 @@
 //!
 //! Additional information on using each of the lamellae backends can be found below in the `Running Lamellar Applications` section
 //!
+//! Environment Variables
+//! ---------------------
+//! Lamellar has a number of environment variables that can be used to configure the runtime.
+//! please see the [Environment Variables][crate::env_var] module documentation for more details
+//!
 //! Examples
 //! --------
 //! Our repository also provides numerous examples highlighting various features of the runtime: <https://github.com/pnnl/lamellar-runtime/tree/master/examples>
@@ -214,21 +219,6 @@
 //!     - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>```
 //!         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
 //!
-//! # Environment Variables
-//! Lamellar exposes a number of environment variables that can used to control application execution at runtime
-//! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE
-//!     -  `export LAMELLAR_THREADS=10`
-//! - `LAMELLAE_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
-//!     - possible values
-//!         - `local`
-//!         - `shmem`
-//!         - `rofi`
-//! - `LAMELLAR_MEM_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 1GB
-//!     - `export LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))` 20GB memory pool
-//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion],etc), aggregation buffers, and message queues. Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime will print a message at the end of execution with how many additional pools were allocated.
-//!         - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_MEM_SIZE` to a larger value
-//!     - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_MEM_SIZE * number of processes`
-//!
 
 #[macro_use]
 extern crate lazy_static;
@@ -283,7 +273,7 @@ mod utils;
 //#[doc(hidden)]
 pub use utils::*;
 
-mod env_var;
+pub mod env_var;
 pub use env_var::config;
 
 pub use crate::lamellae::Backend;

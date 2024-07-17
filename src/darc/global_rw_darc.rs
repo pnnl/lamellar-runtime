@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::active_messaging::RemotePtr;
+use crate::config;
 use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
@@ -758,6 +759,16 @@ impl<T> GlobalRwDarc<T> {
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn blocking_read(&self) -> GlobalRwDarcReadGuard<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarc::blocking_read` from within an async context which may lead to deadlock, it is recommended that you use `read().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         // println!("read");
 
         let inner = self.inner();
@@ -812,7 +823,16 @@ impl<T> GlobalRwDarc<T> {
     /// *guard += my_pe;
     ///```
     pub fn blocking_write(&self) -> GlobalRwDarcWriteGuard<T> {
-        // println!("write");
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarc::blocking_write` from within an async context which may lead to deadlock, it is recommended that you use `write().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.lamellae.remote_addr(
@@ -880,7 +900,16 @@ impl<T> GlobalRwDarc<T> {
     /// world.barrier(); //at this point all updates will have been performed
     ///```
     pub fn blocking_collective_write(&self) -> GlobalRwDarcCollectiveWriteGuard<T> {
-        // println!("async write");
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarc::blocking_collective_write` from within an async context which may lead to deadlock, it is recommended that you use `collective_write().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         let inner = self.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.lamellae.remote_addr(
@@ -970,9 +999,62 @@ impl<T> GlobalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five_as_darc = world.block_on(async move {five.into_darc()});
+    /// ```
+    pub async fn into_darc(self) -> Darc<T> {
+        let inner = self.inner();
+        // println!("into_darc");
+        // self.print();
+        DarcInner::block_on_outstanding(
+            WrappedInner {
+                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                    .expect("invalid darc pointer"),
+            },
+            DarcMode::Darc,
+            0,
+        )
+        .await;
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+        let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
+        let d = Darc {
+            inner: self.darc.inner as *mut DarcInner<T>,
+            src_pe: self.darc.src_pe,
+            // phantom: PhantomData,
+        };
+        d.inner_mut().update_item(Box::into_raw(Box::new(item)));
+        d
+    }
+    #[doc(alias = "Collective")]
+    /// Converts this GlobalRwDarc into a regular [Darc]
+    ///
+    /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
+    ///
+    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_darc = five.into_darc();
     /// ```
-    pub fn into_darc(self) -> Darc<T> {
+    pub fn blocking_into_darc(self) -> Darc<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarc::blocking_into_darc` from within an async context which may lead to deadlock, it is recommended that you use `into_darc().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         let inner = self.inner();
         // println!("into_darc");
         // self.print();
@@ -1013,9 +1095,64 @@ impl<T> GlobalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five_as_localdarc = world.block_on(async move {five.into_localrw()});
+    /// ```
+    pub async fn into_localrw(self) -> LocalRwDarc<T> {
+        let inner = self.inner();
+        // println!("into_localrw");
+        // self.print();
+        DarcInner::block_on_outstanding(
+            WrappedInner {
+                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                    .expect("invalid darc pointer"),
+            },
+            DarcMode::LocalRw,
+            0,
+        )
+        .await;
+        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
+        let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
+        let d = Darc {
+            inner: self.darc.inner as *mut DarcInner<Arc<RwLock<T>>>,
+            src_pe: self.darc.src_pe,
+            // phantom: PhantomData,
+        };
+        d.inner_mut()
+            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
+        LocalRwDarc { darc: d }
+    }
+
+    #[doc(alias = "Collective")]
+    /// Converts this GlobalRwDarc into a [LocalRwDarc]
+    ///
+    /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
+    ///
+    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_localdarc = five.into_localrw();
     /// ```
-    pub fn into_localrw(self) -> LocalRwDarc<T> {
+    pub fn blocking_into_localrw(self) -> LocalRwDarc<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarc::blocking_into_localrw` from within an async context which may lead to deadlock, it is recommended that you use `into_localrw().await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         let inner = self.inner();
         // println!("into_localrw");
         // self.print();

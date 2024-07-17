@@ -275,14 +275,14 @@ impl Barrier {
                 self.scheduler.exec_task();
             });
         } else {
-            if let Some(val) = config().barrier_warning {
-                // std::env::var("LAMELLAR_BARRIER_WARNING") {
+            if let Some(val) = config().blocking_call_warning {
+                // std::env::var("LAMELLAR_BLOCKING_CALL_WARNING") {
                 // if val != "0" && val != "false" && val != "no" && val != "off" {
                 if val {
-                    println!("[LAMELLAR WARNING] You are calling barrier from within an async context, this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
+                    println!("[LAMELLAR WARNING] You are calling barrier from within an async context, this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning");
                 }
             } else {
-                println!("[LAMELLAR WARNING] You are calling barrier from within an async context), this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BARRIER_WARNING=0 to disable this warning");
+                println!("[LAMELLAR WARNING] You are calling barrier from within an async context), this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning");
             }
             self.tasking_barrier()
         }
