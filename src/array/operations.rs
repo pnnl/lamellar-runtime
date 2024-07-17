@@ -462,13 +462,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
                 Some(n) => n,
                 None => std::cmp::max(1, config().threads / 4),
             }
-            // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-            //     Ok(n) => n.parse::<usize>().unwrap(),
-            //     Err(_) => match std::env::var("LAMELLAR_THREADS") {
-            //         Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-            //         Err(_) => 4,
-            //     },
-            // }
         };
         let num_per_batch = len / num;
         for i in 0..num {
@@ -526,15 +519,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
                 Some(n) => n,
                 None => std::cmp::max(1, config().threads / 4),
             }
-            // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-            //     Ok(n) => n.parse::<usize>().unwrap(),
-            //     Err(_) => {
-            //         match std::env::var("LAMELLAR_THREADS") {
-            //             Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-            //             Err(_) => 4, //+ 1 to account for main thread
-            //         }
-            //     }
-            // }
         };
         let num_per_batch = len / num;
         for i in 0..num {
@@ -566,33 +550,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
     }
 }
 
-// impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
-//     //#[tracing::instrument(skip_all)]
-//     fn as_op_input(mut self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-//         let len = self.len();
-//         let mut iters = vec![];
-//         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-//             Ok(n) => n.parse::<usize>().unwrap(),
-//             Err(_) => 10000,
-//         };
-//         let num = (len as f32 / num_per_batch as f32).ceil() as usize;
-//         println!("num: {}", num);
-//         for i in (1..num).rev() {
-//             let temp = self.split_off(i * num_per_batch);
-//             // println!("temp: {:?} {:?} {:?}", temp,i ,i * num_per_batch);
-//             iters.push(OpInputEnum::Vec(temp));
-//         }
-//         let rem = len % num_per_batch;
-//         // println!("rem: {} {:?}", rem,self);
-//         // if rem > 0 || num == 1 {
-//         if self.len() > 0 {
-//             iters.push(OpInputEnum::Vec(self));
-//         }
-//         iters.reverse(); //the indice slices get pushed in from the back, but we want to return in order
-//         (iters, len)
-//     }
-// }
-
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     //#[tracing::instrument(skip_all)]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
@@ -608,15 +565,6 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
                 Some(n) => n,
                 None => std::cmp::max(1, config().threads / 4),
             }
-            // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-            //     Ok(n) => n.parse::<usize>().unwrap(),
-            //     Err(_) => {
-            //         match std::env::var("LAMELLAR_THREADS") {
-            //             Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-            //             Err(_) => 4, //+ 1 to account for main thread
-            //         }
-            //     }
-            // }
         };
         let num_per_batch = len / num;
         let iters = self
@@ -628,13 +576,6 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
         (iters, len)
     }
 }
-
-// impl<'a, T: Dist, I: Iterator<Item=T>> OpInput<'a, T> for I {
-//     //#[tracing::instrument(skip_all)]
-//     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-//         self.collect::<Vec<T>>().as_op_input()
-//     }
-// }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
 //     //#[tracing::instrument(skip_all)]
@@ -737,15 +678,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
                     Some(n) => n,
                     None => std::cmp::max(1, config().threads / 4),
                 }
-                // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-                //     Ok(n) => n.parse::<usize>().unwrap(),
-                //     Err(_) => {
-                //         match std::env::var("LAMELLAR_THREADS") {
-                //             Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
-                //             Err(_) => 4, //+ 1 to account for main thread
-                //         }
-                //     }
-                // }
             };
             let num_per_batch = len / num;
             // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
@@ -786,15 +718,6 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
                     Some(n) => n,
                     None => std::cmp::max(1, config().threads / 4),
                 }
-                // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-                //     Ok(n) => n.parse::<usize>().unwrap(),
-                //     Err(_) => {
-                //         match std::env::var("LAMELLAR_THREADS") {
-                //             Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4), //+ 1 to account for main thread
-                //             Err(_) => 4, //+ 1 to account for main thread
-                //         }
-                //     }
-                // }
             };
             let num_per_batch = len / num;
             // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
@@ -869,15 +792,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
                     Some(n) => n,
                     None => std::cmp::max(1, config().threads / 4),
                 }
-                // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-                //     Ok(n) => n.parse::<usize>().unwrap(),
-                //     Err(_) => {
-                //         match std::env::var("LAMELLAR_THREADS") {
-                //             Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-                //             Err(_) => 4, //+ 1 to account for main thread
-                //         }
-                //     }
-                // }
             };
             let num_per_batch = len / num;
             for i in 0..num {
@@ -923,15 +837,6 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
                     Some(n) => n,
                     None => std::cmp::max(1, config().threads / 4),
                 }
-                // match std::env::var("LAMELLAR_BATCH_OP_THREADS") {
-                //     Ok(n) => n.parse::<usize>().unwrap(),
-                //     Err(_) => {
-                //         match std::env::var("LAMELLAR_THREADS") {
-                //             Ok(n) => std::cmp::max(1, (n.parse::<usize>().unwrap()) / 4),
-                //             Err(_) => 4, //+ 1 to account for main thread
-                //         }
-                //     }
-                // }
             };
             let num_per_batch = len / num;
             // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
