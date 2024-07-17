@@ -9,12 +9,14 @@ use pin_project::pin_project;
 
 use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
+    array::LamellarByteArray,
     lamellar_request::LamellarRequest,
     Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,
 };
 
 /// a task handle for an array rdma (put/get) operation
 pub struct ArrayRdmaHandle {
+    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<AmHandle<()>>,
 }
 
@@ -54,6 +56,7 @@ impl Future for ArrayRdmaHandle {
 /// a task handle for an array rdma 'at' operation
 #[pin_project]
 pub struct ArrayRdmaAtHandle<T: Dist> {
+    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: Option<LocalAmHandle<()>>,
     pub(crate) buf: OneSidedMemoryRegion<T>,
 }

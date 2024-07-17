@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::array::private::ArrayExecAm;
+use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::r#unsafe::*;
 use crate::array::*;
 use crate::memregion::{
@@ -631,6 +631,7 @@ impl<T: Dist> UnsafeArray<T> {
         match buf.team_try_into(&self.team_rt()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
+                _array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
             },
         }
@@ -640,6 +641,7 @@ impl<T: Dist> UnsafeArray<T> {
         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         self.blocking_get(index, &buf);
         ArrayRdmaAtHandle {
+            _array: self.as_lamellar_byte_array(),
             req: None,
             buf: buf,
         }
@@ -731,7 +733,10 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
             reqs.push_back(req.into());
             reqs
         };
-        ArrayRdmaHandle { reqs: reqs }
+        ArrayRdmaHandle {
+            _array: self.as_lamellar_byte_array(),
+            reqs: reqs,
+        }
     }
 
     unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
@@ -749,7 +754,10 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
             Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf.into()),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf.into()),
         };
-        ArrayRdmaHandle { reqs: reqs }
+        ArrayRdmaHandle {
+            _array: self.as_lamellar_byte_array(),
+            reqs: reqs,
+        }
     }
 }
 
@@ -762,6 +770,7 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         match buf.team_try_into(&self.team_rt()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
+                _array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
             },
         }

@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::array::generic_atomic::*;
-use crate::array::private::ArrayExecAm;
+use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
@@ -18,6 +18,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
             buf: buf.into(),
         });
         ArrayRdmaHandle {
+            _array: self.as_lamellar_byte_array(),
             reqs: VecDeque::from([req.into()]),
         }
     }
@@ -29,6 +30,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
             buf: buf.clone().into(),
         });
         ArrayRdmaAtHandle {
+            _array: self.as_lamellar_byte_array(),
             req: Some(req),
             buf: buf,
         }
@@ -44,6 +46,7 @@ impl<T: Dist> LamellarArrayGet<T> for GenericAtomicArray<T> {
         match buf.team_try_into(&self.array.team_rt()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
+                _array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
             },
         }
@@ -65,6 +68,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GenericAtomicArray<T> {
             buf: buf.into(),
         });
         ArrayRdmaHandle {
+            _array: self.as_lamellar_byte_array(),
             reqs: VecDeque::from([req.into()]),
         }
     }
@@ -79,6 +83,7 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
         match buf.team_try_into(&self.array.team_rt()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
+                _array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
             },
         }
