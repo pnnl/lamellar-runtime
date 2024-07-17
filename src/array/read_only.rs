@@ -4,6 +4,7 @@ pub use local_chunks::ReadOnlyLocalChunks;
 mod rdma;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
+use crate::config;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -520,6 +521,47 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
         self.array.reduce_data(op, self.clone().into())
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.blocking_reduce("sum"); // equivalent to calling array.sum()
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
+    pub fn blocking_reduce(&self, op: &str) -> Option<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `ReadOnlyArray::blocking_reduce` from within an async context which may lead to deadlock, it is recommended that you use `reduce(...).await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
+        self.block_on(self.array.reduce_data(op, self.clone().into()))
+    }
 }
 impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     #[doc(alias("One-sided", "onesided"))]
@@ -552,6 +594,35 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// let req = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    /// });
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let sum = array.blocking_sum();
+    /// assert_eq!(array.len()*num_pes,sum);
+    /// ```
+    pub fn blocking_sum(&self) -> Option<T> {
+        self.blocking_reduce("sum")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("prod")`.
@@ -576,6 +647,33 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     ///```
     pub fn prod(&self) -> AmHandle<Option<T>> {
         self.reduce("prod")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i+1);
+    /// });
+    /// array.wait_all();
+    /// array.barrier();
+    /// let prod =  array.blocking_prod();
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
+    ///```
+    pub fn blocking_prod(&self) -> Option<T> {
+        self.blocking_reduce("prod")
     }
 }
 impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
@@ -604,6 +702,30 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let max = array.blocking_max();
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
+    pub fn blocking_max(&self) -> Option<T> {
+        self.blocking_reduce("max")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Find the min element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("min")`.
@@ -625,6 +747,30 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     ///```
     pub fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let min = array.blocking_min();
+    /// assert_eq!(0,min);
+    ///```
+    pub fn blocking_min(&self) -> Option<T> {
+        self.blocking_reduce("min")
     }
 }
 

@@ -1241,6 +1241,53 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE  
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
+    ///     let req = array.local_iter().for_each(move |_| {
+    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     });
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let sum = array.blocking_reduce("sum"); // equivalent to calling array.sum()
+    /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
+    ///```
+    pub unsafe fn blocking_reduce(&self, op: &str) -> Option<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `UnsafeArray::blocking_reduce` from within an async context which may lead to deadlock, it is recommended that you use `reduce(...).await;` instead! 
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
+        self.block_on(self.reduce_data(op, self.clone().into()))
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("sum")`.
@@ -1277,6 +1324,76 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE  
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
+    ///     let req = array.local_iter().for_each(move |_| {
+    ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     });
+    /// }
+    /// array.wait_all();
+    /// array.barrier();
+    /// let sum = unsafe{array.blocking_sum()};
+    ///```
+    pub unsafe fn blocking_sum(&self) -> Option<T> {
+        self.blocking_reduce("sum")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE  
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// unsafe {
+    ///     let req = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///         *elem = i+1;
+    ///     });
+    /// }
+    /// array.print();
+    /// array.wait_all();
+    /// array.print();
+    /// let prod = unsafe{ array.block_on(array.prod())};
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
+    ///```
+    pub unsafe fn prod(&self) -> AmHandle<Option<T>> {
+        self.reduce("prod")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
     ///
     /// This equivalent to `reduce("prod")`.
@@ -1306,11 +1423,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// array.print();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
     /// array.print();
-    /// let prod =  array.block_on(array.prod());
+    /// let prod =  unsafe{array.blocking_prod()};
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
-    pub unsafe fn prod(&self) -> AmHandle<Option<T>> {
-        self.reduce("prod")
+    pub unsafe fn blocking_prod(&self) -> Option<T> {
+        self.blocking_reduce("prod")
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1345,6 +1462,36 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE  
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
+    /// array.wait_all();
+    /// array.barrier();
+    /// let max = unsafe{array.blocking_max()};
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
+    pub unsafe fn blocking_max(&self) -> Option<T> {
+        self.blocking_reduce("max")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Find the min element in the entire destributed array, returning to the calling PE
     ///
     /// This equivalent to `reduce("min")`.
@@ -1373,6 +1520,36 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///```
     pub unsafe fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # Safety
+    /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's or local threads may access this PE's local data.
+    /// Any updates to local data are not guaranteed to be Atomic.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE  
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array_clone = array.clone();
+    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
+    /// array.wait_all();
+    /// array.barrier();
+    /// let min = unsafe{array.blocking_min()};
+    /// assert_eq!(0,min);
+    ///```
+    pub unsafe fn blocking_min(&self) -> Option<T> {
+        self.blocking_reduce("min")
     }
 }
 
