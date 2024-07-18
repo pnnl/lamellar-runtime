@@ -2,7 +2,7 @@ pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
-use crate::array::private::LamellarArrayPrivate;
+// use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::darc::Darc;

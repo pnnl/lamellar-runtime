@@ -1,20 +1,27 @@
 use crate::array::global_lock_atomic::*;
+
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::{
-    private::*, LamellarArrayIterators, LamellarArrayMutIterators, Schedule,
+    private::{IterClone, Sealed},
+    LamellarArrayIterators, LamellarArrayMutIterators, Schedule,
 };
 use crate::array::private::LamellarArrayPrivate;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
-use crate::darc::global_rw_darc::GlobalRwDarcReadGuard;
 use crate::memregion::Dist;
+
+impl<T> InnerArray for GlobalLockArray<T> {
+    fn as_inner(&self) -> &UnsafeArrayInner {
+        &self.array.inner
+    }
+}
 
 //#[doc(hidden)]
 #[derive(Clone)]
 pub struct GlobalLockDistIter<T: Dist> {
-    data: GlobalLockArray<T>,
-    lock: GlobalRwDarcReadGuard<()>,
+    array_guard: GlobalLockReadGuard<T>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'static T>,
@@ -23,8 +30,7 @@ pub struct GlobalLockDistIter<T: Dist> {
 impl<T: Dist> IterClone for GlobalLockDistIter<T> {
     fn iter_clone(&self, _: Sealed) -> Self {
         GlobalLockDistIter {
-            data: self.data.clone(),
-            lock: self.lock.clone(),
+            array_guard: self.array_guard.clone(),
             cur_i: self.cur_i,
             end_i: self.end_i,
             _marker: PhantomData,
@@ -37,7 +43,7 @@ impl<T: Dist> std::fmt::Debug for GlobalLockDistIter<T> {
         write!(
             f,
             "GlobalLockDistIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
-            self.data.len(),
+            self.array_guard.array.len(),
             self.cur_i,
             self.end_i
         )
@@ -47,8 +53,7 @@ impl<T: Dist> std::fmt::Debug for GlobalLockDistIter<T> {
 //#[doc(hidden)]
 #[derive(Clone)]
 pub struct GlobalLockLocalIter<T: Dist> {
-    data: GlobalLockArray<T>,
-    lock: GlobalRwDarcReadGuard<()>,
+    array_guard: GlobalLockReadGuard<T>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'static T>,
@@ -57,8 +62,7 @@ pub struct GlobalLockLocalIter<T: Dist> {
 impl<T: Dist> IterClone for GlobalLockLocalIter<T> {
     fn iter_clone(&self, _: Sealed) -> Self {
         GlobalLockLocalIter {
-            data: self.data.clone(),
-            lock: self.lock.clone(),
+            array_guard: self.array_guard.clone(),
             cur_i: self.cur_i,
             end_i: self.end_i,
             _marker: PhantomData,
@@ -71,7 +75,7 @@ impl<T: Dist> std::fmt::Debug for GlobalLockLocalIter<T> {
         write!(
             f,
             "GlobalLockLocalIter{{ data.len: {:?}, cur_i: {:?}, end_i: {:?} }}",
-            self.data.len(),
+            self.array_guard.array.len(),
             self.cur_i,
             self.end_i
         )
@@ -82,24 +86,24 @@ impl<T: Dist + 'static> DistributedIterator for GlobalLockDistIter<T> {
     type Item = &'static T;
     type Array = GlobalLockArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
-        let max_i = self.data.num_elems_local();
+        let max_i = self.array_guard.array.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         GlobalLockDistIter {
-            data: self.data.clone(),
-            lock: self.lock.clone(),
+            array_guard: self.array_guard.clone(),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
             _marker: PhantomData,
         }
     }
     fn array(&self) -> Self::Array {
-        self.data.clone()
+        self.array_guard.array.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             unsafe {
-                self.data
+                self.array_guard
+                    .array
                     .array
                     .local_as_ptr()
                     .offset((self.cur_i - 1) as isize)
@@ -118,7 +122,7 @@ impl<T: Dist + 'static> DistributedIterator for GlobalLockDistIter<T> {
 }
 impl<T: Dist + 'static> IndexedDistributedIterator for GlobalLockDistIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
+        let g_index = self.array_guard.array.subarray_index_from_local(index, 1);
         g_index
     }
 }
@@ -127,24 +131,24 @@ impl<T: Dist + 'static> LocalIterator for GlobalLockLocalIter<T> {
     type Item = &'static T;
     type Array = GlobalLockArray<T>;
     fn init(&self, start_i: usize, cnt: usize) -> Self {
-        let max_i = self.data.num_elems_local();
+        let max_i = self.array_guard.array.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         GlobalLockLocalIter {
-            data: self.data.clone(),
-            lock: self.lock.clone(),
+            array_guard: self.array_guard.clone(),
             cur_i: std::cmp::min(start_i, max_i),
             end_i: std::cmp::min(start_i + cnt, max_i),
             _marker: PhantomData,
         }
     }
     fn array(&self) -> Self::Array {
-        self.data.clone()
+        self.array_guard.array.clone()
     }
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             self.cur_i += 1;
             unsafe {
-                self.data
+                self.array_guard
+                    .array
                     .array
                     .local_as_ptr()
                     .offset((self.cur_i - 1) as isize)
@@ -165,7 +169,7 @@ impl<T: Dist + 'static> LocalIterator for GlobalLockLocalIter<T> {
 
 impl<T: Dist + 'static> IndexedLocalIterator for GlobalLockLocalIter<T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        if index < self.data.len() {
+        if index < self.array_guard.array.len() {
             Some(index) //everyone at this point as calculated the actual index (cause we are local only) so just return it
         } else {
             None
@@ -338,19 +342,15 @@ impl<T: Dist + 'static> IndexedLocalIterator for GlobalLockLocalIterMut<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
+impl<T: Dist> LamellarArrayIterators<T> for GlobalLockReadGuard<T> {
     // type Array = GlobalLockArray<T>;
     type DistIter = GlobalLockDistIter<T>;
     type LocalIter = GlobalLockLocalIter<T>;
-    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    type OnesidedIter = OneSidedIter<'static, T, GlobalLockArray<T>>;
 
     fn dist_iter(&self) -> Self::DistIter {
-        let lock: GlobalRwDarc<()> = self.lock.clone();
-        let lock = self.array.block_on(async move { lock.read().await });
-        self.barrier();
         GlobalLockDistIter {
-            data: self.clone(),
-            lock: lock,
+            array_guard: self.clone(),
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,
@@ -358,11 +358,8 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     }
 
     fn local_iter(&self) -> Self::LocalIter {
-        let lock: GlobalRwDarc<()> = self.lock.clone();
-        let lock = self.array.block_on(async move { lock.read().await });
         GlobalLockLocalIter {
-            data: self.clone(),
-            lock: lock,
+            array_guard: self.clone(),
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,
@@ -370,14 +367,14 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone().into(), self.array.team_rt().clone(), 1)
+        OneSidedIter::new(self.array.clone().into(), self.array.team_rt().clone(), 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
         OneSidedIter::new(
-            self.clone().into(),
+            self.array.clone().into(),
             self.array.team_rt().clone(),
-            std::cmp::min(buf_size, self.len()),
+            std::cmp::min(buf_size, self.array.len()),
         )
     }
 }
@@ -416,164 +413,165 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GlobalLockArray<T> {
     }
 }
 
-impl<T: Dist> DistIteratorLauncher for GlobalLockArray<T> {
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-        self.array.global_index_from_local(index, chunk_size)
-    }
+impl<T: Dist> DistIteratorLauncher for GlobalLockArray<T> {}
+//     // type Inner = Self;
+//     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.array.global_index_from_local(index, chunk_size)
+//     }
 
-    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
-        self.array.subarray_index_from_local(index, chunk_size)
-    }
+//     fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+//         self.array.subarray_index_from_local(index, chunk_size)
+//     }
 
-    // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)> {
-    //     self.array.subarray_pe_and_offset_for_global_index(index, chunk_size)
-    // }
+//     // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)> {
+//     //     self.array.subarray_pe_and_offset_for_global_index(index, chunk_size)
+//     // }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::for_each(&self.array, iter, op)
-    }
-    fn for_each_with_schedule<I, F>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        op: F,
-    ) -> DistIterForEachHandle
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::for_each_with_schedule(&self.array, sched, iter, op)
-    }
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        DistIteratorLauncher::for_each_async(&self.array, iter, op)
-    }
-    fn for_each_async_with_schedule<I, F, Fut>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        op: F,
-    ) -> DistIterForEachHandle
-    where
-        I: DistributedIterator + 'static,
-        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        DistIteratorLauncher::for_each_async_with_schedule(&self.array, sched, iter, op)
-    }
+//     fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::for_each(&self.array, iter, op)
+//     }
+//     fn for_each_with_schedule<I, F>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> DistIterForEachHandle
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::for_each_with_schedule(&self.array, sched, iter, op)
+//     }
+//     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
+//     {
+//         DistIteratorLauncher::for_each_async(&self.array, iter, op)
+//     }
+//     fn for_each_async_with_schedule<I, F, Fut>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> DistIterForEachHandle
+//     where
+//         I: DistributedIterator + 'static,
+//         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
+//         Fut: Future<Output = ()> + Send + 'static,
+//     {
+//         DistIteratorLauncher::for_each_async_with_schedule(&self.array, sched, iter, op)
+//     }
 
-    fn reduce<I, F>(&self, iter: &I, op: F) -> DistIterReduceHandle<I::Item, F>
-    where
-        I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::reduce(&self.array, iter, op)
-    }
+//     fn reduce<I, F>(&self, iter: &I, op: F) -> DistIterReduceHandle<I::Item, F>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist + ArrayOps,
+//         F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::reduce(&self.array, iter, op)
+//     }
 
-    fn reduce_with_schedule<I, F>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        op: F,
-    ) -> DistIterReduceHandle<I::Item, F>
-    where
-        I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::reduce_with_schedule(&self.array, sched, iter, op)
-    }
+//     fn reduce_with_schedule<I, F>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         op: F,
+//     ) -> DistIterReduceHandle<I::Item, F>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist + ArrayOps,
+//         F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::reduce_with_schedule(&self.array, sched, iter, op)
+//     }
 
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<I::Item, A>
-    where
-        I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::collect(&self.array, iter, d)
-    }
+//     fn collect<I, A>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<I::Item, A>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist + ArrayOps,
+//         A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::collect(&self.array, iter, d)
+//     }
 
-    fn collect_with_schedule<I, A>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        d: Distribution,
-    ) -> DistIterCollectHandle<I::Item, A>
-    where
-        I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::collect_with_schedule(&self.array, sched, iter, d)
-    }
-    fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<B, A>
-    where
-        I: DistributedIterator,
-        I::Item: Future<Output = B> + Send + 'static,
-        B: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::collect_async(&self.array, iter, d)
-    }
+//     fn collect_with_schedule<I, A>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         d: Distribution,
+//     ) -> DistIterCollectHandle<I::Item, A>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist + ArrayOps,
+//         A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::collect_with_schedule(&self.array, sched, iter, d)
+//     }
+//     fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<B, A>
+//     where
+//         I: DistributedIterator,
+//         I::Item: Future<Output = B> + Send + 'static,
+//         B: Dist + ArrayOps,
+//         A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::collect_async(&self.array, iter, d)
+//     }
 
-    fn collect_async_with_schedule<I, A, B>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        d: Distribution,
-    ) -> DistIterCollectHandle<B, A>
-    where
-        I: DistributedIterator,
-        I::Item: Future<Output = B> + Send + 'static,
-        B: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        DistIteratorLauncher::collect_async_with_schedule(&self.array, sched, iter, d)
-    }
+//     fn collect_async_with_schedule<I, A, B>(
+//         &self,
+//         sched: Schedule,
+//         iter: &I,
+//         d: Distribution,
+//     ) -> DistIterCollectHandle<B, A>
+//     where
+//         I: DistributedIterator,
+//         I::Item: Future<Output = B> + Send + 'static,
+//         B: Dist + ArrayOps,
+//         A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+//     {
+//         DistIteratorLauncher::collect_async_with_schedule(&self.array, sched, iter, d)
+//     }
 
-    fn count<I>(&self, iter: &I) -> DistIterCountHandle
-    where
-        I: DistributedIterator + 'static,
-    {
-        DistIteratorLauncher::count(&self.array, iter)
-    }
+//     fn count<I>(&self, iter: &I) -> DistIterCountHandle
+//     where
+//         I: DistributedIterator + 'static,
+//     {
+//         DistIteratorLauncher::count(&self.array, iter)
+//     }
 
-    fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterCountHandle
-    where
-        I: DistributedIterator + 'static,
-    {
-        DistIteratorLauncher::count_with_schedule(&self.array, sched, iter)
-    }
+//     fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterCountHandle
+//     where
+//         I: DistributedIterator + 'static,
+//     {
+//         DistIteratorLauncher::count_with_schedule(&self.array, sched, iter)
+//     }
 
-    fn sum<I>(&self, iter: &I) -> DistIterSumHandle<I::Item>
-    where
-        I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps + std::iter::Sum,
-    {
-        DistIteratorLauncher::sum(&self.array, iter)
-    }
+//     fn sum<I>(&self, iter: &I) -> DistIterSumHandle<I::Item>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist + ArrayOps + std::iter::Sum,
+//     {
+//         DistIteratorLauncher::sum(&self.array, iter)
+//     }
 
-    fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterSumHandle<I::Item>
-    where
-        I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps + std::iter::Sum,
-    {
-        DistIteratorLauncher::sum_with_schedule(&self.array, sched, iter)
-    }
+//     fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterSumHandle<I::Item>
+//     where
+//         I: DistributedIterator + 'static,
+//         I::Item: Dist + ArrayOps + std::iter::Sum,
+//     {
+//         DistIteratorLauncher::sum_with_schedule(&self.array, sched, iter)
+//     }
 
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
-    }
-}
+//     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+//         self.array.team_rt().clone()
+//     }
+// }
 
 impl<T: Dist> LocalIteratorLauncher for GlobalLockArray<T> {
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {

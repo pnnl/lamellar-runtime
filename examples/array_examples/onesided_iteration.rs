@@ -104,7 +104,7 @@ fn main() {
     println!("--------------------------------------------------------");
 
     // let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    // for elem in block_array.onesided_iter().into_iter().step_by(4) {...}
+    // for elem in block_onesided_iter!($array,array).into_iter().step_by(4) {...}
     // for elem in block_array.buffered_onesided_iter(10) {...}
 
     // //rust step_by pseudo code

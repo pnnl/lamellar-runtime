@@ -7,6 +7,7 @@ mod rdma;
 
 use crate::active_messaging::*;
 // use crate::array::r#unsafe::operations::BUFOPS;
+use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
 use crate::darc::{Darc, DarcMode, WeakDarc};
@@ -89,17 +90,23 @@ impl UnsafeByteArrayWeak {
     }
 }
 
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub(crate) struct UnsafeArrayInner {
-    pub(crate) data: Darc<UnsafeArrayData>,
-    pub(crate) distribution: Distribution,
-    orig_elem_per_pe: usize,
-    orig_remaining_elems: usize,
-    elem_size: usize, //for bytes array will be size of T, for T array will be 1
-    offset: usize,    //relative to size of T
-    pub(crate) size: usize, //relative to size of T
-    sub: bool,
+pub(crate) mod private {
+    use super::UnsafeArrayData;
+    use crate::array::Distribution;
+    use crate::darc::Darc;
+    #[lamellar_impl::AmDataRT(Clone, Debug)]
+    pub struct UnsafeArrayInner {
+        pub(crate) data: Darc<UnsafeArrayData>,
+        pub(crate) distribution: Distribution,
+        pub(crate) orig_elem_per_pe: usize,
+        pub(crate) orig_remaining_elems: usize,
+        pub(crate) elem_size: usize, //for bytes array will be size of T, for T array will be 1
+        pub(crate) offset: usize,    //relative to size of T
+        pub(crate) size: usize,      //relative to size of T
+        pub(crate) sub: bool,
+    }
 }
+use private::UnsafeArrayInner;
 
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
 pub(crate) struct UnsafeArrayInnerWeak {
@@ -944,7 +951,7 @@ impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
+impl<T: Dist> ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.team_rt().clone()
     }
@@ -952,7 +959,7 @@ impl<T: Dist> private::ArrayExecAm<T> for UnsafeArray<T> {
         self.inner.data.array_counters.clone()
     }
 }
-impl<T: Dist> private::LamellarArrayPrivate<T> for UnsafeArray<T> {
+impl<T: Dist> LamellarArrayPrivate<T> for UnsafeArray<T> {
     fn inner_array(&self) -> &UnsafeArray<T> {
         self
     }

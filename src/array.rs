@@ -809,6 +809,12 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
 //     }
 // }
 
+// private sealed trait
+#[doc(hidden)]
+pub trait InnerArray: Sized {
+    fn as_inner(&self) -> &r#unsafe::private::UnsafeArrayInner;
+}
+
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{

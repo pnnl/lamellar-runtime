@@ -38,7 +38,7 @@ pub(crate) use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
 use crate::array::{
-    operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, GenericAtomicArray,
+    operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, GenericAtomicArray, InnerArray,
     LamellarArray, NativeAtomicArray,
 };
 use crate::memregion::Dist;
@@ -147,11 +147,17 @@ use std::sync::Arc;
 
 #[doc(hidden)]
 #[enum_dispatch]
-pub trait DistIteratorLauncher {
+pub trait DistIteratorLauncher: InnerArray {
+    // type Inner: InnerArray;
     fn for_each<I, F>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static;
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
+        Self: InnerArray,
+    {
+        // DistIteratorLauncher::for_each_with_schedule(self, Schedule::Static, iter, op)
+        self.as_inner().for_each(iter, op)
+    }
 
     fn for_each_with_schedule<I, F>(
         &self,
@@ -161,13 +167,19 @@ pub trait DistIteratorLauncher {
     ) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static;
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
+    {
+        self.as_inner().for_each_with_schedule(sched, iter, op)
+    }
 
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> DistIterForEachHandle
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.as_inner().for_each_async(iter, op)
+    }
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -178,13 +190,20 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.as_inner()
+            .for_each_async_with_schedule(sched, iter, op)
+    }
 
     fn reduce<I, F>(&self, iter: &I, op: F) -> DistIterReduceHandle<I::Item, F>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.as_inner().reduce(iter, op)
+    }
 
     fn reduce_with_schedule<I, F>(
         &self,
@@ -195,13 +214,19 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.as_inner().reduce_with_schedule(sched, iter, op)
+    }
 
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<I::Item, A>
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.as_inner().collect(iter, d)
+    }
 
     fn collect_with_schedule<I, A>(
         &self,
@@ -212,14 +237,20 @@ pub trait DistIteratorLauncher {
     where
         I: DistributedIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.as_inner().collect_with_schedule(sched, iter, d)
+    }
 
     fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> DistIterCollectHandle<B, A>
     where
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.as_inner().collect_async(iter, d)
+    }
 
     fn collect_async_with_schedule<I, A, B>(
         &self,
@@ -231,37 +262,74 @@ pub trait DistIteratorLauncher {
         I: DistributedIterator,
         I::Item: Future<Output = B> + Send + 'static,
         B: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.as_inner().collect_async_with_schedule(sched, iter, d)
+    }
 
     fn count<I>(&self, iter: &I) -> DistIterCountHandle
     where
-        I: DistributedIterator + 'static;
+        I: DistributedIterator + 'static,
+    {
+        self.as_inner().count(iter)
+    }
 
     fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterCountHandle
     where
-        I: DistributedIterator + 'static;
+        I: DistributedIterator + 'static,
+    {
+        self.as_inner().count_with_schedule(sched, iter)
+    }
 
     fn sum<I>(&self, iter: &I) -> DistIterSumHandle<I::Item>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps + std::iter::Sum;
+        I::Item: Dist + ArrayOps + std::iter::Sum,
+    {
+        self.as_inner().sum(iter)
+    }
 
     fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> DistIterSumHandle<I::Item>
     where
         I: DistributedIterator + 'static,
-        I::Item: Dist + ArrayOps + std::iter::Sum;
+        I::Item: Dist + ArrayOps + std::iter::Sum,
+    {
+        self.as_inner().sum_with_schedule(sched, iter)
+    }
 
     //#[doc(hidden)]
-    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        if chunk_size == 1 {
+            self.as_inner().global_index_from_local(index)
+        } else {
+            Some(
+                self.as_inner()
+                    .global_index_from_local(index * chunk_size)?
+                    / chunk_size,
+            )
+        }
+    }
 
     //#[doc(hidden)]
-    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        if chunk_size == 1 {
+            self.as_inner().subarray_index_from_local(index)
+        } else {
+            Some(
+                self.as_inner()
+                    .subarray_index_from_local(index * chunk_size)?
+                    / chunk_size,
+            )
+        }
+    }
 
     // //#[doc(hidden)]
     // fn subarray_pe_and_offset_for_global_index(&self, index: usize, chunk_size: usize) -> Option<(usize,usize)>;
 
     //#[doc(hidden)]
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.as_inner().team()
+    }
 }
 
 /// An interface for dealing with distributed iterators (intended as a parallel and distributed version of the standard iterator trait)

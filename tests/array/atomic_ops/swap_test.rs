@@ -47,6 +47,8 @@ macro_rules! check_val {
     };
 }
 
+
+
 macro_rules! swap{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {

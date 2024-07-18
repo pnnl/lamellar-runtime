@@ -255,7 +255,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
     /// array.wait_all();
     /// if my_pe == 0 {
-    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| *elem as f64).sum::<f64>();
+    ///     let sum = onesided_iter!($array,array).into_iter().take(4).map(|elem| *elem as f64).sum::<f64>();
     ///     println!("Sum: {sum}")
     /// }
     /// ```
@@ -324,7 +324,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
-/// let std_iter = array.onesided_iter().into_iter();
+/// let std_iter = onesided_iter!($array,array).into_iter();
 /// for e in std_iter {
 ///     println!("{e}");
 /// }

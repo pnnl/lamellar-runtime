@@ -47,6 +47,15 @@ macro_rules! check_val {
     };
 }
 
+// macro_rules! onesided_iter{
+//     (GlobalLockArray,$array:ident) => {
+//         $array.blocking_read_lock().onesided_iter()
+//     };
+//     ($arraytype:ident,$array:ident) => {
+//        $array.onesided_iter()
+//     };
+// }
+
 macro_rules! load_store_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {

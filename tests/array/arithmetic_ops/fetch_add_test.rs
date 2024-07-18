@@ -82,6 +82,26 @@ macro_rules! max_updates {
     };
 }
 
+macro_rules! onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array.blocking_read_lock().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.onesided_iter()
+    };
+}
+
+macro_rules! buffered_onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array
+            .blocking_read_lock()
+            .buffered_onesided_iter($array.len())
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.buffered_onesided_iter($array.len())
+    };
+}
+
 macro_rules! fetch_add_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -120,7 +140,7 @@ macro_rules! fetch_add_test{
             // array.wait_all();
             array.barrier();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{ array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe{ onesided_iter!($array,array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -144,7 +164,7 @@ macro_rules! fetch_add_test{
             }
             array.barrier();
             #[allow(unused_unsafe)]
-            let sum = unsafe{array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
+            let sum = unsafe{onesided_iter!($array,array).into_iter().fold(0,|acc,x| acc+ *x as usize)};
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
@@ -181,7 +201,7 @@ macro_rules! fetch_add_test{
             }
             array.barrier();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{ sub_array.onesided_iter().into_iter().enumerate()} {
+            for (i,elem) in unsafe{ onesided_iter!($array,sub_array).into_iter().enumerate()} {
                 let val = *elem;
                 check_val!($array,val,max_val,success);
                 if !success{
@@ -204,7 +224,7 @@ macro_rules! fetch_add_test{
             }
             array.barrier();
             #[allow(unused_unsafe)]
-            let sum = unsafe {sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
+            let sum = unsafe {onesided_iter!($array,sub_array).into_iter().fold(0,|acc,x| acc+ *x as usize)};
             let tot_updates = num_updates * num_pes;
             check_val!($array,sum,tot_updates,success);
             if !success{
@@ -244,7 +264,7 @@ macro_rules! fetch_add_test{
                 }
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
+                for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,max_val,success);
                     if !success{
@@ -267,7 +287,7 @@ macro_rules! fetch_add_test{
                 }
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
-                let sum = unsafe{sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
+                let sum = unsafe{onesided_iter!($array,sub_array).into_iter().fold(0,|acc,x| acc+ *x as usize)};
                 let tot_updates = num_updates * num_pes;
                 check_val!($array,sum,tot_updates,success);
                 if !success{
@@ -358,7 +378,7 @@ macro_rules! check_results {
         }
         // println!("here");
         #[allow(unused_unsafe)]
-        for (i, elem) in unsafe { $array.buffered_onesided_iter($array.len()).into_iter().enumerate() }{
+        for (i, elem) in unsafe { buffered_onesided_iter!($array_ty,$array).into_iter().enumerate() }{
             let val = *elem;
             let real_val = if $real_val == 0  {
                 i + $num_pes

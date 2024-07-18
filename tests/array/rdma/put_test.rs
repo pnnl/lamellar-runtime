@@ -32,6 +32,15 @@ macro_rules! initialize_array {
     };
 }
 
+macro_rules! onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array.blocking_read_lock().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.onesided_iter()
+    };
+}
+
 macro_rules! put_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -62,7 +71,7 @@ macro_rules! put_test{
                 array.wait_all();
                 array.barrier();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe { array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size) }{
+                for (i,elem) in unsafe { onesided_iter!($array,array).into_iter().enumerate().take( num_txs * tx_size) }{
                     if ((i as $t - *elem) as f32).abs() > 0.0001 {
                         eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                         success = false;
@@ -96,7 +105,7 @@ macro_rules! put_test{
                 array.wait_all();
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size)}{
+                for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate().take( num_txs * tx_size)}{
                     if ((i as $t - *elem) as f32).abs() > 0.0001 {
                         eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                         success = false;
@@ -133,7 +142,7 @@ macro_rules! put_test{
                     array.wait_all();
                     sub_array.barrier();
                     #[allow(unused_unsafe)]
-                    for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate().take( num_txs * tx_size)}{
+                    for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate().take( num_txs * tx_size)}{
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
                             eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;

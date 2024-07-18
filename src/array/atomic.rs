@@ -3,6 +3,7 @@ pub(crate) mod operations;
 pub(crate) mod rdma;
 
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
+
 use crate::array::native_atomic::NativeAtomicElement;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
@@ -510,6 +511,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
 #[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,LocalIteratorLauncher)]
+// #[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist> {
@@ -518,6 +520,12 @@ pub enum AtomicArray<T: Dist> {
     /// an array containing generic types, each protected by a mutex
     GenericAtomicArray(GenericAtomicArray<T>),
 }
+
+// impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {
+//     // type Inner = Self;
+// }
+
+// impl<T: Dist> LocalIteratorLauncher for AtomicArray<T> {}
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for AtomicArray<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {

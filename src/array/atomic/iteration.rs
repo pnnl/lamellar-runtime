@@ -1,10 +1,24 @@
 use crate::array::atomic::*;
+
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{private::*, LamellarArrayIterators, LamellarArrayMutIterators};
+use crate::array::iterator::{
+    private::{IterClone, Sealed},
+    LamellarArrayIterators, LamellarArrayMutIterators,
+};
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
+
+impl<T: Dist> InnerArray for AtomicArray<T> {
+    fn as_inner(&self) -> &UnsafeArrayInner {
+        match &self {
+            AtomicArray::NativeAtomicArray(a) => a.as_inner(),
+            AtomicArray::GenericAtomicArray(a) => a.as_inner(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AtomicDistIter<T: Dist> {

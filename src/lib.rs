@@ -139,7 +139,7 @@
 //!     block_array.wait_all();
 //!     block_array.barrier();
 //!     if my_pe == 0{
-//!         for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+//!         for (i,elem) in block_onesided_iter!($array,array).into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
 //!             println!("i: {} = {})",i,elem);
 //!         }
 //!     }

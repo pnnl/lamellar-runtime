@@ -54,11 +54,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             op,
         };
         match sched {
-            Schedule::Static => self.sched_static(for_each),
-            Schedule::Dynamic => self.sched_dynamic(for_each),
-            Schedule::Chunk(size) => self.sched_chunk(for_each, size),
-            Schedule::Guided => self.sched_guided(for_each),
-            Schedule::WorkStealing => self.sched_work_stealing(for_each),
+            Schedule::Static => self.inner.sched_static(for_each),
+            Schedule::Dynamic => self.inner.sched_dynamic(for_each),
+            Schedule::Chunk(size) => self.inner.sched_chunk(for_each, size),
+            Schedule::Guided => self.inner.sched_guided(for_each),
+            Schedule::WorkStealing => self.inner.sched_work_stealing(for_each),
         }
     }
 
@@ -87,11 +87,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             op: op.clone(),
         };
         match sched {
-            Schedule::Static => self.sched_static(for_each),
-            Schedule::Dynamic => self.sched_dynamic(for_each),
-            Schedule::Chunk(size) => self.sched_chunk(for_each, size),
-            Schedule::Guided => self.sched_guided(for_each),
-            Schedule::WorkStealing => self.sched_work_stealing(for_each),
+            Schedule::Static => self.inner.sched_static(for_each),
+            Schedule::Dynamic => self.inner.sched_dynamic(for_each),
+            Schedule::Chunk(size) => self.inner.sched_chunk(for_each, size),
+            Schedule::Guided => self.inner.sched_guided(for_each),
+            Schedule::WorkStealing => self.inner.sched_work_stealing(for_each),
         }
     }
 
@@ -120,11 +120,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             op,
         };
         match sched {
-            Schedule::Static => self.sched_static(reduce),
-            Schedule::Dynamic => self.sched_dynamic(reduce),
-            Schedule::Chunk(size) => self.sched_chunk(reduce, size),
-            Schedule::Guided => self.sched_guided(reduce),
-            Schedule::WorkStealing => self.sched_work_stealing(reduce),
+            Schedule::Static => self.inner.sched_static(reduce),
+            Schedule::Dynamic => self.inner.sched_dynamic(reduce),
+            Schedule::Chunk(size) => self.inner.sched_chunk(reduce, size),
+            Schedule::Guided => self.inner.sched_guided(reduce),
+            Schedule::WorkStealing => self.inner.sched_work_stealing(reduce),
         }
     }
 
@@ -154,11 +154,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             _phantom: PhantomData,
         };
         match sched {
-            Schedule::Static => self.sched_static(collect),
-            Schedule::Dynamic => self.sched_dynamic(collect),
-            Schedule::Chunk(size) => self.sched_chunk(collect, size),
-            Schedule::Guided => self.sched_guided(collect),
-            Schedule::WorkStealing => self.sched_work_stealing(collect),
+            Schedule::Static => self.inner.sched_static(collect),
+            Schedule::Dynamic => self.inner.sched_dynamic(collect),
+            Schedule::Chunk(size) => self.inner.sched_chunk(collect, size),
+            Schedule::Guided => self.inner.sched_guided(collect),
+            Schedule::WorkStealing => self.inner.sched_work_stealing(collect),
         }
     }
 
@@ -177,11 +177,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             iter: iter.iter_clone(Sealed),
         };
         match sched {
-            Schedule::Static => self.sched_static(count),
-            Schedule::Dynamic => self.sched_dynamic(count),
-            Schedule::Chunk(size) => self.sched_chunk(count, size),
-            Schedule::Guided => self.sched_guided(count),
-            Schedule::WorkStealing => self.sched_work_stealing(count),
+            Schedule::Static => self.inner.sched_static(count),
+            Schedule::Dynamic => self.inner.sched_dynamic(count),
+            Schedule::Chunk(size) => self.inner.sched_chunk(count, size),
+            Schedule::Guided => self.inner.sched_guided(count),
+            Schedule::WorkStealing => self.inner.sched_work_stealing(count),
         }
     }
 
@@ -202,11 +202,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             iter: iter.iter_clone(Sealed),
         };
         match sched {
-            Schedule::Static => self.sched_static(sum),
-            Schedule::Dynamic => self.sched_dynamic(sum),
-            Schedule::Chunk(size) => self.sched_chunk(sum, size),
-            Schedule::Guided => self.sched_guided(sum),
-            Schedule::WorkStealing => self.sched_work_stealing(sum),
+            Schedule::Static => self.inner.sched_static(sum),
+            Schedule::Dynamic => self.inner.sched_dynamic(sum),
+            Schedule::Chunk(size) => self.inner.sched_chunk(sum, size),
+            Schedule::Guided => self.inner.sched_guided(sum),
+            Schedule::WorkStealing => self.inner.sched_work_stealing(sum),
         }
     }
 

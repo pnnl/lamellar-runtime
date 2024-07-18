@@ -115,7 +115,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
     /// if my_pe == 0 {
-    ///     for elem in array.onesided_iter().into_iter() { //"into_iter()" converts into a standard Rust Iterator
+    ///     for elem in onesided_iter!($array,array).into_iter() { //"into_iter()" converts into a standard Rust Iterator
     ///         println!("PE{my_pe} elem {elem}");
     ///     }
     /// }

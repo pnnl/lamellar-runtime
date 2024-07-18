@@ -49,6 +49,15 @@ macro_rules! check_val {
     };
 }
 
+macro_rules! onesided_iter{
+    (GlobalLockArray,$array:ident) => {
+        $array.blocking_read_lock().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+       $array.onesided_iter()
+    };
+}
+
 macro_rules! or_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -74,7 +83,7 @@ macro_rules! or_test{
             array.barrier();
             // array.print();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe{onesided_iter!($array,array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
@@ -101,7 +110,7 @@ macro_rules! or_test{
             sub_array.barrier();
             // sub_array.print();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
@@ -129,7 +138,7 @@ macro_rules! or_test{
                 sub_array.barrier();
                 // sub_array.print();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate()}{
+                for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,final_val,success);
                     if !success{

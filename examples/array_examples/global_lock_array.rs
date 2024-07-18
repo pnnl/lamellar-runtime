@@ -47,7 +47,7 @@ fn main() {
     array.print();
     println!("PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 
-    let task = array.dist_iter().enumerate().for_each(move |(i, elem)| {
+    let task = array.blocking_read_lock().dist_iter().enumerate().for_each(move |(i, elem)| {
         println!(
             "{my_pe}, {:?}: {i} {:?}",
             std::thread::current().id(),

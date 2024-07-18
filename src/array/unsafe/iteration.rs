@@ -140,7 +140,7 @@ impl<T: Dist> UnsafeArray<T> {
     ///
     /// unsafe {
     ///     if my_pe == 0 {
-    ///         for elem in array.onesided_iter().into_iter() { //"into_iter()" converts into a standard Rust Iterator
+    ///         for elem in onesided_iter!($array,array).into_iter() { //"into_iter()" converts into a standard Rust Iterator
     ///             println!("PE{my_pe} elem {elem}");
     ///         }
     ///     }
