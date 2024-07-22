@@ -3,7 +3,9 @@ use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::{DistributedIterator, Monotonic};
 use crate::array::iterator::private::*;
 use crate::array::operations::ArrayOps;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamInto};
+use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
@@ -43,7 +45,7 @@ where
     type AmOutput = Vec<(usize, I::Item)>;
     type Output = A;
     type Item = (usize, I::Item);
-    type Handle = DistIterCollectHandle<I::Item, A>;
+    type Handle = InnerDistIterCollectHandle<I::Item, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Collect {
             iter: self.iter.init(start, cnt),
@@ -65,11 +67,11 @@ where
         team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        DistIterCollectHandle {
+        InnerDistIterCollectHandle {
             reqs,
             distribution: self.distribution,
             team,
-            state: State::ReqsPending(Vec::new()),
+            state: InnerState::ReqsPending(Vec::new()),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -104,7 +106,7 @@ where
     type AmOutput = Vec<(usize, B)>;
     type Output = A;
     type Item = (usize, I::Item);
-    type Handle = DistIterCollectHandle<B, A>;
+    type Handle = InnerDistIterCollectHandle<B, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         CollectAsync {
             iter: self.iter.init(start, cnt),
@@ -126,11 +128,11 @@ where
         team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        DistIterCollectHandle {
+        InnerDistIterCollectHandle {
             reqs,
             distribution: self.distribution,
             team,
-            state: State::ReqsPending(Vec::new()),
+            state: InnerState::ReqsPending(Vec::new()),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -155,24 +157,36 @@ where
 }
 
 //#[doc(hidden)]
+// #[pin_project]
+// pub struct InnerDistIterCollectHandle<
+//     T: Dist + ArrayOps,
+//     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend,
+// > {
+//     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,
+//     pub(crate) distribution: Distribution,
+//     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+//     state: InnerState<T, A>,
+// }
+// enum InnerState<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend> {
+//     ReqsPending(Vec<(usize, T)>),
+//     Collecting(Pin<Box<dyn Future<Output = A>>>),
+// }
+
 #[pin_project]
-pub struct DistIterCollectHandle<
-    T: Dist + ArrayOps,
-    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend,
-> {
+pub(crate) struct InnerDistIterCollectHandle<T, A> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    state: State<T, A>,
+    state: InnerState<T, A>,
 }
 
-enum State<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend> {
+enum InnerState<T, A> {
     ReqsPending(Vec<(usize, T)>),
-    Collecting(Pin<Box<dyn Future<Output = A>>>),
+    Collecting(Pin<Box<dyn Future<Output = A> + Send>>),
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static>
-    DistIterCollectHandle<T, A>
+    InnerDistIterCollectHandle<T, A>
 {
     async fn async_create_array(
         local_vals: Vec<T>,
@@ -192,13 +206,13 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static> Future
-    for DistIterCollectHandle<T, A>
+    for InnerDistIterCollectHandle<T, A>
 {
     type Output = A;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            State::ReqsPending(ref mut vals) => {
+            InnerState::ReqsPending(ref mut vals) => {
                 while let Some(mut req) = this.reqs.pop_front() {
                     if req.ready_or_set_waker(cx.waker()) {
                         vals.extend(req.val());
@@ -221,12 +235,12 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
                         return Poll::Ready(a);
                     }
                     Poll::Pending => {
-                        *this.state = State::Collecting(collect);
+                        *this.state = InnerState::Collecting(collect);
                         return Poll::Pending;
                     }
                 }
             }
-            State::Collecting(collect) => {
+            InnerState::Collecting(collect) => {
                 let a = ready!(Future::poll(collect.as_mut(), cx));
                 Poll::Ready(a)
             }
@@ -235,7 +249,7 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static>
-    LamellarRequest for DistIterCollectHandle<T, A>
+    LamellarRequest for InnerDistIterCollectHandle<T, A>
 {
     fn blocking_wait(mut self) -> Self::Output {
         // let mut num_local_vals = 0;
@@ -267,6 +281,103 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
         temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
         let local_vals = temp_vals.into_iter().map(|v| v.1).collect();
         self.create_array(local_vals)
+    }
+}
+
+#[pin_project]
+pub struct DistIterCollectHandle<T, A> {
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State<T, A>,
+}
+
+impl<T, A> DistIterCollectHandle<T, A>
+where
+    T: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
+{
+    pub(crate) fn new(
+        barrier_handle: BarrierHandle,
+        inner: Pin<Box<dyn Future<Output = InnerDistIterCollectHandle<T, A>> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        Self {
+            team: array.data.team.clone(),
+            state: State::Barrier(barrier_handle, inner),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State<T, A> {
+    Barrier(
+        #[pin] BarrierHandle,
+        Pin<Box<dyn Future<Output = InnerDistIterCollectHandle<T, A>> + Send>>,
+    ),
+    Reqs(#[pin] InnerDistIterCollectHandle<T, A>),
+}
+impl<T, A> Future for DistIterCollectHandle<T, A>
+where
+    T: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
+{
+    type Output = A;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Barrier(barrier, inner) => {
+                ready!(barrier.poll(cx));
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(val) => Poll::Ready(val),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                let val = ready!(inner.poll(cx));
+                Poll::Ready(val)
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl<T, A> LamellarRequest for DistIterCollectHandle<T, A>
+where
+    T: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
+{
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Barrier(barrier, reqs) => {
+                barrier.blocking_wait();
+                self.team.block_on(reqs).blocking_wait()
+            }
+            State::Reqs(inner) => inner.blocking_wait(),
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Barrier(barrier, _) => {
+                if !barrier.ready_or_set_waker(waker) {
+                    return false;
+                }
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Barrier(_barrier, _reqs) => {
+                unreachable!("should never be in barrier state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
+        }
     }
 }
 

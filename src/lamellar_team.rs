@@ -720,7 +720,7 @@ pub struct LamellarTeamRT {
     pub(crate) world_counters: Arc<AMCounters>, // can probably remove this?
     pub(crate) id: usize,
     sub_team_id_cnt: AtomicUsize,
-    barrier: Barrier,
+    pub(crate) barrier: Barrier,
     dropped: MemoryRegion<usize>,
     pub(crate) remote_ptr_addr: usize,
     pub(crate) team_hash: u64,

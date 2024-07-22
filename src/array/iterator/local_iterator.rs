@@ -35,7 +35,9 @@ use zip::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, LamellarArray};
+use crate::array::{
+    operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, InnerArray, LamellarArray,
+};
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
@@ -49,11 +51,14 @@ use std::sync::Arc;
 
 #[doc(hidden)]
 #[enum_dispatch]
-pub trait LocalIteratorLauncher {
+pub trait LocalIteratorLauncher: InnerArray {
     fn for_each<I, F>(&self, iter: &I, op: F) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static;
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
+    {
+        self.as_inner().for_each(iter, op)
+    }
 
     fn for_each_with_schedule<I, F>(
         &self,
@@ -63,13 +68,19 @@ pub trait LocalIteratorLauncher {
     ) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static;
+        F: Fn(I::Item) + SyncSend + Clone + 'static,
+    {
+        self.as_inner().for_each_with_schedule(sched, iter, op)
+    }
 
     fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> LocalIterForEachHandle
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.as_inner().for_each_async(iter, op)
+    }
 
     fn for_each_async_with_schedule<I, F, Fut>(
         &self,
@@ -80,13 +91,20 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static;
+        Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.as_inner()
+            .for_each_async_with_schedule(sched, iter, op)
+    }
 
     fn reduce<I, F>(&self, iter: &I, op: F) -> LocalIterReduceHandle<I::Item, F>
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.as_inner().reduce(iter, op)
+    }
 
     fn reduce_with_schedule<I, F>(
         &self,
@@ -97,13 +115,19 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         I::Item: SyncSend,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static;
+        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
+    {
+        self.as_inner().reduce_with_schedule(sched, iter, op)
+    }
 
     fn collect<I, A>(&self, iter: &I, d: Distribution) -> LocalIterCollectHandle<I::Item, A>
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.as_inner().collect(iter, d)
+    }
 
     fn collect_with_schedule<I, A>(
         &self,
@@ -114,34 +138,71 @@ pub trait LocalIteratorLauncher {
     where
         I: LocalIterator + 'static,
         I::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static;
+        A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
+    {
+        self.as_inner().collect_with_schedule(sched, iter, d)
+    }
 
     fn count<I>(&self, iter: &I) -> LocalIterCountHandle
     where
-        I: LocalIterator + 'static;
+        I: LocalIterator + 'static,
+    {
+        self.as_inner().count(iter)
+    }
 
     fn count_with_schedule<I>(&self, sched: Schedule, iter: &I) -> LocalIterCountHandle
     where
-        I: LocalIterator + 'static;
+        I: LocalIterator + 'static,
+    {
+        self.as_inner().count_with_schedule(sched, iter)
+    }
 
     fn sum<I>(&self, iter: &I) -> LocalIterSumHandle<I::Item>
     where
         I: LocalIterator + 'static,
-        I::Item: SyncSend + std::iter::Sum;
+        I::Item: SyncSend + std::iter::Sum,
+    {
+        self.as_inner().sum(iter)
+    }
 
     fn sum_with_schedule<I>(&self, sched: Schedule, iter: &I) -> LocalIterSumHandle<I::Item>
     where
         I: LocalIterator + 'static,
-        I::Item: SyncSend + std::iter::Sum;
+        I::Item: SyncSend + std::iter::Sum,
+    {
+        self.as_inner().sum_with_schedule(sched, iter)
+    }
 
     //#[doc(hidden)]
-    fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        if chunk_size == 1 {
+            self.as_inner().global_index_from_local(index)
+        } else {
+            Some(
+                self.as_inner()
+                    .global_index_from_local(index * chunk_size)?
+                    / chunk_size,
+            )
+        }
+    }
 
     //#[doc(hidden)]
-    fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize>;
+    fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
+        if chunk_size == 1 {
+            self.as_inner().subarray_index_from_local(index)
+        } else {
+            Some(
+                self.as_inner()
+                    .subarray_index_from_local(index * chunk_size)?
+                    / chunk_size,
+            )
+        }
+    }
 
     //#[doc(hidden)]
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
+    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.as_inner().team()
+    }
 }
 
 /// An interface for dealing with parallel local iterators (intended as the Lamellar version of the Rayon ParellelIterator trait)

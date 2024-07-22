@@ -7,25 +7,27 @@ use rand::seq::SliceRandom;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         #[allow(unused_unsafe)]
-        let _ = unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
-        $array.wait_all();
-        $array.barrier();
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .blocking_for_each(move |x| *x = $init_val)
+        };
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
-        $array.barrier();
+        $array
+            .dist_iter()
+            .blocking_for_each(move |x| x.store($init_val));
         // println!("----------------------------------------------");
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
-        $array.barrier();
+        $array
+            .dist_iter_mut()
+            .blocking_for_each(move |x| *x = $init_val);
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
-        $array.barrier();
+        $array
+            .dist_iter_mut()
+            .blocking_for_each(move |x| *x = $init_val);
     };
 }
 
@@ -56,12 +58,12 @@ macro_rules! check_val {
     };
 }
 
-macro_rules! onesided_iter{
+macro_rules! onesided_iter {
     (GlobalLockArray,$array:ident) => {
         $array.blocking_read_lock().onesided_iter()
     };
     ($arraytype:ident,$array:ident) => {
-       $array.onesided_iter()
+        $array.onesided_iter()
     };
 }
 
@@ -292,7 +294,7 @@ macro_rules! check_results {
         $array.wait_all();
         $array.barrier();
         #[allow(unused_unsafe)]
-        for (i, elem) in unsafe {onesided_iter!($array_ty,$array).into_iter().enumerate() } {
+        for (i, elem) in unsafe { onesided_iter!($array_ty, $array).into_iter().enumerate() } {
             let val = *elem;
             check_val!($array_ty, val, $num_pes, success);
             if !success {

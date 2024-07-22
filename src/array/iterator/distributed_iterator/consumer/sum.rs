@@ -2,7 +2,9 @@ use crate::active_messaging::LamellarArcLocalAm;
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{ArrayOps, Distribution, UnsafeArray};
+use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
@@ -35,7 +37,7 @@ where
     type AmOutput = I::Item;
     type Output = I::Item;
     type Item = I::Item;
-    type Handle = DistIterSumHandle<I::Item>;
+    type Handle = InnerDistIterSumHandle<I::Item>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Sum {
             iter: self.iter.init(start, cnt),
@@ -55,10 +57,10 @@ where
         team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        DistIterSumHandle {
+        InnerDistIterSumHandle {
             reqs,
             team,
-            state: State::ReqsPending(None),
+            state: InnerState::ReqsPending(None),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -68,18 +70,18 @@ where
 
 //#[doc(hidden)]
 #[pin_project]
-pub struct DistIterSumHandle<T> {
+pub(crate) struct InnerDistIterSumHandle<T> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    state: State<T>,
+    state: InnerState<T>,
 }
 
-enum State<T> {
+enum InnerState<T> {
     ReqsPending(Option<T>),
-    Summing(Pin<Box<dyn Future<Output = T>>>),
+    Summing(Pin<Box<dyn Future<Output = T> + Send>>),
 }
 
-impl<T> DistIterSumHandle<T>
+impl<T> InnerDistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
@@ -116,7 +118,7 @@ where
     }
 }
 
-impl<T> Future for DistIterSumHandle<T>
+impl<T> Future for InnerDistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
@@ -124,7 +126,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            State::ReqsPending(local_sum) => {
+            InnerState::ReqsPending(local_sum) => {
                 while let Some(mut req) = this.reqs.pop_front() {
                     if !req.ready_or_set_waker(cx.waker()) {
                         this.reqs.push_front(req);
@@ -146,12 +148,12 @@ where
                 match Future::poll(sum.as_mut(), cx) {
                     Poll::Ready(local_sum) => Poll::Ready(local_sum),
                     Poll::Pending => {
-                        *this.state = State::Summing(sum);
+                        *this.state = InnerState::Summing(sum);
                         Poll::Pending
                     }
                 }
             }
-            State::Summing(sum) => {
+            InnerState::Summing(sum) => {
                 let local_sum = ready!(Future::poll(sum.as_mut(), cx));
                 Poll::Ready(local_sum)
             }
@@ -159,7 +161,7 @@ where
     }
 }
 //#[doc(hidden)]
-impl<T> LamellarRequest for DistIterSumHandle<T>
+impl<T> LamellarRequest for InnerDistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
@@ -188,6 +190,100 @@ where
         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
         let local_sum = self.reqs.iter().map(|req| req.val()).into_iter().sum();
         self.reduce_remote_vals(local_sum, local_sums)
+    }
+}
+
+#[pin_project]
+pub struct DistIterSumHandle<T> {
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State<T>,
+}
+
+impl<T> DistIterSumHandle<T>
+where
+    T: Dist + ArrayOps + std::iter::Sum,
+{
+    pub(crate) fn new(
+        barrier_handle: BarrierHandle,
+        inner: Pin<Box<dyn Future<Output = InnerDistIterSumHandle<T>> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        Self {
+            team: array.data.team.clone(),
+            state: State::Barrier(barrier_handle, inner),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State<T> {
+    Barrier(
+        #[pin] BarrierHandle,
+        Pin<Box<dyn Future<Output = InnerDistIterSumHandle<T>> + Send>>,
+    ),
+    Reqs(#[pin] InnerDistIterSumHandle<T>),
+}
+impl<T> Future for DistIterSumHandle<T>
+where
+    T: Dist + ArrayOps + std::iter::Sum,
+{
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Barrier(barrier, inner) => {
+                ready!(barrier.poll(cx));
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(val) => Poll::Ready(val),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                let val = ready!(inner.poll(cx));
+                Poll::Ready(val)
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl<T> LamellarRequest for DistIterSumHandle<T>
+where
+    T: Dist + ArrayOps + std::iter::Sum,
+{
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Barrier(barrier, reqs) => {
+                barrier.blocking_wait();
+                self.team.block_on(reqs).blocking_wait()
+            }
+            State::Reqs(inner) => inner.blocking_wait(),
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Barrier(barrier, _) => {
+                if !barrier.ready_or_set_waker(waker) {
+                    return false;
+                }
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Barrier(_barrier, _reqs) => {
+                unreachable!("should never be in barrier state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
+        }
     }
 }
 

@@ -2,11 +2,14 @@ use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
+use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
-use futures_util::Future;
+use futures_util::{ready, Future};
+use pin_project::pin_project;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -43,7 +46,7 @@ where
     type AmOutput = ();
     type Output = ();
     type Item = I::Item;
-    type Handle = DistIterForEachHandle;
+    type Handle = InnerDistIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         ForEach {
             iter: self.iter.init(start, cnt),
@@ -65,7 +68,7 @@ where
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        DistIterForEachHandle { reqs }
+        InnerDistIterForEachHandle { reqs }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -107,7 +110,7 @@ where
     type AmOutput = ();
     type Output = ();
     type Item = I::Item;
-    type Handle = DistIterForEachHandle;
+    type Handle = InnerDistIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         ForEachAsync {
             iter: self.iter.init(start, cnt),
@@ -130,14 +133,11 @@ where
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        DistIterForEachHandle { reqs }
+        InnerDistIterForEachHandle { reqs }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
     }
-    // fn clone(&self) -> Self{
-
-    // }
 }
 
 impl<I, F, Fut> Clone for ForEachAsync<I, F, Fut>
@@ -154,12 +154,11 @@ where
     }
 }
 
-//#[doc(hidden)]
-pub struct DistIterForEachHandle {
+pub(crate) struct InnerDistIterForEachHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
 }
 
-impl Future for DistIterForEachHandle {
+impl Future for InnerDistIterForEachHandle {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         while let Some(mut req) = self.reqs.pop_front() {
@@ -173,7 +172,7 @@ impl Future for DistIterForEachHandle {
 }
 
 //#[doc(hidden)]
-impl LamellarRequest for DistIterForEachHandle {
+impl LamellarRequest for InnerDistIterForEachHandle {
     fn blocking_wait(mut self) -> Self::Output {
         for req in self.reqs.drain(..) {
             req.blocking_wait();
@@ -191,6 +190,95 @@ impl LamellarRequest for DistIterForEachHandle {
     fn val(&self) -> Self::Output {
         for req in self.reqs.iter() {
             req.val();
+        }
+    }
+}
+
+//#[doc(hidden)]
+#[pin_project]
+pub struct DistIterForEachHandle {
+    // pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State,
+}
+
+impl DistIterForEachHandle {
+    pub(crate) fn new(
+        barrier: BarrierHandle,
+        reqs: Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        DistIterForEachHandle {
+            team: array.data.team.clone(),
+            state: State::Barrier(barrier, reqs),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State {
+    Barrier(
+        #[pin] BarrierHandle,
+        Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
+    ),
+    Reqs(#[pin] InnerDistIterForEachHandle),
+}
+impl Future for DistIterForEachHandle {
+    type Output = ();
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Barrier(barrier, inner) => {
+                ready!(barrier.poll(cx));
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(()) => Poll::Ready(()),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                ready!(inner.poll(cx));
+                Poll::Ready(())
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl LamellarRequest for DistIterForEachHandle {
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Barrier(barrier, reqs) => {
+                barrier.blocking_wait();
+                self.team.block_on(reqs).blocking_wait();
+            }
+            State::Reqs(inner) => {
+                inner.blocking_wait();
+            }
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Barrier(barrier, _) => {
+                if !barrier.ready_or_set_waker(waker) {
+                    return false;
+                }
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Barrier(_barrier, _reqs) => {
+                unreachable!("should never be in barrier state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
         }
     }
 }
@@ -277,320 +365,3 @@ where
         }
     }
 }
-
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct ForEachStatic<I, F>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item),
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) start_i: usize,
-//     pub(crate) end_i: usize,
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F> LamellarAm for ForEachStatic<I, F>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) + SyncSend + 'static,
-// {
-//     async fn exec(&self) {
-//         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-//         // println!("for each static thread {:?} {} {} {}",std::thread::current().id(),self.start_i, self.end_i, self.end_i - self.start_i);
-//         // let mut cnt = 0;
-//         while let Some(elem) = iter.next() {
-//             (&self.op)(elem);
-//             // cnt += 1;
-//         }
-//         // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct ForEachDynamic<I, F>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item),
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) cur_i: Arc<AtomicUsize>,
-//     pub(crate) max_i: usize,
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F> LamellarAm for ForEachDynamic<I, F>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) + SyncSend + 'static,
-// {
-//     async fn exec(&self) {
-//         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
-//         let mut cur_i = self.cur_i.fetch_add(1, Ordering::Relaxed);
-
-//         while cur_i < self.max_i {
-//             // println!("in for each {:?} {:?} {:?}", range_i, start_i, end_i);
-//             let mut iter = self.data.init(cur_i, 1);
-//             while let Some(item) = iter.next() {
-//                 (self.op)(item);
-//             }
-//             cur_i = self.cur_i.fetch_add(1, Ordering::Relaxed);
-//         }
-//         // println!("done in for each");
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct ForEachChunk<I, F>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item),
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) ranges: Vec<(usize, usize)>,
-//     pub(crate) range_i: Arc<AtomicUsize>,
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F> LamellarAm for ForEachChunk<I, F>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) + SyncSend + 'static,
-// {
-//     async fn exec(&self) {
-//         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
-//         let mut range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
-//         while range_i < self.ranges.len() {
-//             let (start_i, end_i) = self.ranges[range_i];
-//             // println!("in for each {:?} {:?} {:?}", range_i, start_i, end_i);
-//             let mut iter = self.data.init(start_i, end_i - start_i);
-//             while let Some(item) = iter.next() {
-//                 (self.op)(item);
-//             }
-//             range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
-//         }
-//         // println!("done in for each");
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct ForEachWorkStealing<I, F>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item),
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) range: IterWorkStealer,
-//     // pub(crate) ranges: Vec<(usize, usize)>,
-//     // pub(crate) range_i: Arc<AtomicUsize>,
-//     pub(crate) siblings: Vec<IterWorkStealer>,
-// }
-// #[lamellar_impl::rt_am_local]
-// impl<I, F> LamellarAm for ForEachWorkStealing<I, F>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) + SyncSend + 'static,
-// {
-//     async fn exec(&self) {
-//         let (start, end) = *self.range.range.lock();
-//         // println!("{:?} ForEachWorkStealing {:?} {:?}",std::thread::current().id(), start, end);
-//         let mut iter = self.data.init(start, end - start);
-//         while self.range.next().is_some() {
-//             if let Some(elem) = iter.next() {
-//                 (&self.op)(elem);
-//             } else {
-//                 self.range.set_done();
-//             }
-//         }
-//         // println!("{:?} ForEachWorkStealing done with my range",std::thread::current().id());
-//         let mut rng = thread_rng();
-//         let mut workers = (0..self.siblings.len()).collect::<Vec<usize>>();
-//         workers.shuffle(&mut rng);
-//         while let Some(worker) = workers.pop() {
-//             // println!("{:?} ForEachWorkStealing stealing from sibling",std::thread::current().id());
-//             if let Some((start, end)) = self.siblings[worker].steal() {
-//                 let mut iter = self.data.init(start, end - start);
-//                 self.range.set_range(start, end);
-//                 while self.range.next().is_some() {
-//                     if let Some(elem) = iter.next() {
-//                         (&self.op)(elem);
-//                     } else {
-//                         self.range.set_done();
-//                     }
-//                 }
-//                 workers = (0..self.siblings.len()).collect::<Vec<usize>>();
-//                 workers.shuffle(&mut rng);
-//             }
-//         }
-//         // println!("{:?} ForEachWorkStealing done",std::thread::current().id());
-//     }
-// }
-
-//-------------------------async for each-------------------------------
-
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct ForEachAsyncStatic<I, F, Fut>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone,
-//     Fut: Future<Output = ()> + Send,
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) start_i: usize,
-//     pub(crate) end_i: usize,
-// }
-
-// impl<I, F, Fut> std::fmt::Debug for ForEachAsyncStatic<I, F, Fut>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone,
-//     Fut: Future<Output = ()> + Send,
-// {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "ForEachAsync {{   start_i: {:?}, end_i: {:?} }}",
-//             self.start_i, self.end_i
-//         )
-//     }
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F, Fut> LamellarAm for ForEachAsyncStatic<I, F, Fut>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-//     Fut: Future<Output = ()> + Send + 'static,
-// {
-//     async fn exec(&self) {
-//         let mut iter = self.data.init(self.start_i, self.end_i - self.start_i);
-//         while let Some(elem) = iter.next() {
-//             (&self.op)(elem).await;
-//         }
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct ForEachAsyncDynamic<I, F, Fut>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone,
-//     Fut: Future<Output = ()> + Send,
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) cur_i: Arc<AtomicUsize>,
-//     pub(crate) max_i: usize,
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F, Fut> LamellarAm for ForEachAsyncDynamic<I, F, Fut>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-//     Fut: Future<Output = ()> + Send + 'static,
-// {
-//     async fn exec(&self) {
-//         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
-//         let mut cur_i = self.cur_i.fetch_add(1, Ordering::Relaxed);
-
-//         while cur_i < self.max_i {
-//             // println!("in for each {:?} {:?} {:?}", range_i, start_i, end_i);
-//             let mut iter = self.data.init(cur_i, 1);
-//             while let Some(item) = iter.next() {
-//                 (self.op)(item).await;
-//             }
-//             cur_i = self.cur_i.fetch_add(1, Ordering::Relaxed);
-//         }
-//         // println!("done in for each");
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct ForEachAsyncChunk<I, F, Fut>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone,
-//     Fut: Future<Output = ()> + Send,
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) ranges: Vec<(usize, usize)>,
-//     pub(crate) range_i: Arc<AtomicUsize>,
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F, Fut> LamellarAm for ForEachAsyncChunk<I, F, Fut>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-//     Fut: Future<Output = ()> + Send + 'static,
-// {
-//     async fn exec(&self) {
-//         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
-//         let mut range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
-//         while range_i < self.ranges.len() {
-//             let (start_i, end_i) = self.ranges[range_i];
-//             // println!("in for each {:?} {:?} {:?}", range_i, start_i, end_i);
-//             let mut iter = self.data.init(start_i, end_i - start_i);
-//             while let Some(item) = iter.next() {
-//                 (self.op)(item).await;
-//             }
-//             range_i = self.range_i.fetch_add(1, Ordering::Relaxed);
-//         }
-//         // println!("done in for each");
-//     }
-// }
-
-// #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-// pub(crate) struct ForEachAsyncWorkStealing<I, F, Fut>
-// where
-//     I: DistributedIterator,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone,
-//     Fut: Future<Output = ()> + Send,
-// {
-//     pub(crate) op: F,
-//     pub(crate) data: I,
-//     pub(crate) range: IterWorkStealer,
-//     pub(crate) siblings: Vec<IterWorkStealer>,
-// }
-// #[lamellar_impl::rt_am_local]
-// impl<I, F, Fut> LamellarAm for ForEachAsyncWorkStealing<I, F, Fut>
-// where
-//     I: DistributedIterator + 'static,
-//     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-//     Fut: Future<Output = ()> + Send + 'static,
-// {
-//     async fn exec(&self) {
-//         // println!("in for each {:?} {:?}", self.start_i, self.end_i);
-//         let (start, end) = *self.range.range.lock();
-//         let mut iter = self.data.init(start, end - start);
-//         while self.range.next().is_some() {
-//             if let Some(elem) = iter.next() {
-//                 (&self.op)(elem);
-//             }
-//         }
-//         // let mut rng = thread_rng().gen();
-//         let mut workers = (0..self.siblings.len()).collect::<Vec<usize>>();
-//         workers.shuffle(&mut thread_rng());
-//         while let Some(worker) = workers.pop() {
-//             if let Some((start, end)) = self.siblings[worker].steal() {
-//                 let mut iter = self.data.init(start, end - start);
-//                 self.range.set_range(start, end);
-//                 while self.range.next().is_some() {
-//                     if let Some(elem) = iter.next() {
-//                         (&self.op)(elem).await;
-//                     }
-//                 }
-//                 workers = (0..self.siblings.len()).collect::<Vec<usize>>();
-//                 workers.shuffle(&mut thread_rng());
-//             }
-//         }
-//         // println!("done in for each");
-//     }
-// }

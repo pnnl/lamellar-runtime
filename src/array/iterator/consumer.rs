@@ -92,22 +92,6 @@ impl IterSchedule {
             }
         }
     }
-    // pub(crate) fn monotonic_iter<I: MonotonicIterConsumer,J: IterConsumer>(&self, iter: I) -> IterScheduleIter<I> {
-    //     match self {
-    //         IterSchedule::Static(start, end) => {
-    //             IterScheduleIter::Static(iter.monotonic::<J>().init(*start,end-start))
-    //         }
-    //         IterSchedule::Dynamic(cur_i, max_i) => {
-    //             IterScheduleIter::Dynamic(iter.monotonic::<J>(), cur_i.clone(), *max_i)
-    //         }
-    //         IterSchedule::Chunk(ranges, range_i) => {
-    //             IterScheduleIter::Chunk(iter.monotonic::<J>().init(0,0), ranges.clone(),range_i.clone())
-    //         }
-    //         IterSchedule::WorkStealing(range, siblings) => {
-    //             let (start, end) = *range.range.lock();
-    //             IterScheduleIter::WorkStealing(iter.monotonic::<J>().init(start, end-start), range.clone(), siblings.clone())            }
-    //     }
-    // }
 }
 
 pub(crate) enum IterScheduleIter<I: IterConsumer> {
@@ -194,7 +178,3 @@ pub(crate) trait IterConsumer: SyncSend {
     ) -> Self::Handle;
     fn max_elems(&self, in_elems: usize) -> usize;
 }
-
-// pub(crate) trait MonotonicIterConsumer: IterConsumer{
-//     fn monotonic<I: IterConsumer>(&self) -> I;
-// }

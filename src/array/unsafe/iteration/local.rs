@@ -1,7 +1,7 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::private::*;
-use crate::array::r#unsafe::UnsafeArray;
+use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
 use crate::array::{ArrayOps, AsyncTeamFrom, Distribution};
 
 use crate::array::iterator::Schedule;
@@ -13,21 +13,23 @@ use futures_util::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
+impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {}
+
+impl LocalIteratorLauncher for UnsafeArrayInner {
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         // println!("global index cs:{:?}",chunk_size);
         if chunk_size == 1 {
-            self.inner.global_index_from_local(index)
+            self.global_index_from_local(index)
         } else {
-            Some(self.inner.global_index_from_local(index * chunk_size)? / chunk_size)
+            Some(self.global_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
 
     fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         if chunk_size == 1 {
-            self.inner.subarray_index_from_local(index)
+            self.subarray_index_from_local(index)
         } else {
-            Some(self.inner.subarray_index_from_local(index * chunk_size)? / chunk_size)
+            Some(self.subarray_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
 
@@ -54,11 +56,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             op,
         };
         match sched {
-            Schedule::Static => self.inner.sched_static(for_each),
-            Schedule::Dynamic => self.inner.sched_dynamic(for_each),
-            Schedule::Chunk(size) => self.inner.sched_chunk(for_each, size),
-            Schedule::Guided => self.inner.sched_guided(for_each),
-            Schedule::WorkStealing => self.inner.sched_work_stealing(for_each),
+            Schedule::Static => self.sched_static(for_each),
+            Schedule::Dynamic => self.sched_dynamic(for_each),
+            Schedule::Chunk(size) => self.sched_chunk(for_each, size),
+            Schedule::Guided => self.sched_guided(for_each),
+            Schedule::WorkStealing => self.sched_work_stealing(for_each),
         }
     }
 
@@ -87,11 +89,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             op: op.clone(),
         };
         match sched {
-            Schedule::Static => self.inner.sched_static(for_each),
-            Schedule::Dynamic => self.inner.sched_dynamic(for_each),
-            Schedule::Chunk(size) => self.inner.sched_chunk(for_each, size),
-            Schedule::Guided => self.inner.sched_guided(for_each),
-            Schedule::WorkStealing => self.inner.sched_work_stealing(for_each),
+            Schedule::Static => self.sched_static(for_each),
+            Schedule::Dynamic => self.sched_dynamic(for_each),
+            Schedule::Chunk(size) => self.sched_chunk(for_each, size),
+            Schedule::Guided => self.sched_guided(for_each),
+            Schedule::WorkStealing => self.sched_work_stealing(for_each),
         }
     }
 
@@ -120,11 +122,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             op,
         };
         match sched {
-            Schedule::Static => self.inner.sched_static(reduce),
-            Schedule::Dynamic => self.inner.sched_dynamic(reduce),
-            Schedule::Chunk(size) => self.inner.sched_chunk(reduce, size),
-            Schedule::Guided => self.inner.sched_guided(reduce),
-            Schedule::WorkStealing => self.inner.sched_work_stealing(reduce),
+            Schedule::Static => self.sched_static(reduce),
+            Schedule::Dynamic => self.sched_dynamic(reduce),
+            Schedule::Chunk(size) => self.sched_chunk(reduce, size),
+            Schedule::Guided => self.sched_guided(reduce),
+            Schedule::WorkStealing => self.sched_work_stealing(reduce),
         }
     }
 
@@ -154,11 +156,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             _phantom: PhantomData,
         };
         match sched {
-            Schedule::Static => self.inner.sched_static(collect),
-            Schedule::Dynamic => self.inner.sched_dynamic(collect),
-            Schedule::Chunk(size) => self.inner.sched_chunk(collect, size),
-            Schedule::Guided => self.inner.sched_guided(collect),
-            Schedule::WorkStealing => self.inner.sched_work_stealing(collect),
+            Schedule::Static => self.sched_static(collect),
+            Schedule::Dynamic => self.sched_dynamic(collect),
+            Schedule::Chunk(size) => self.sched_chunk(collect, size),
+            Schedule::Guided => self.sched_guided(collect),
+            Schedule::WorkStealing => self.sched_work_stealing(collect),
         }
     }
 
@@ -177,11 +179,11 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             iter: iter.iter_clone(Sealed),
         };
         match sched {
-            Schedule::Static => self.inner.sched_static(count),
-            Schedule::Dynamic => self.inner.sched_dynamic(count),
-            Schedule::Chunk(size) => self.inner.sched_chunk(count, size),
-            Schedule::Guided => self.inner.sched_guided(count),
-            Schedule::WorkStealing => self.inner.sched_work_stealing(count),
+            Schedule::Static => self.sched_static(count),
+            Schedule::Dynamic => self.sched_dynamic(count),
+            Schedule::Chunk(size) => self.sched_chunk(count, size),
+            Schedule::Guided => self.sched_guided(count),
+            Schedule::WorkStealing => self.sched_work_stealing(count),
         }
     }
 
@@ -202,15 +204,15 @@ impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
             iter: iter.iter_clone(Sealed),
         };
         match sched {
-            Schedule::Static => self.inner.sched_static(sum),
-            Schedule::Dynamic => self.inner.sched_dynamic(sum),
-            Schedule::Chunk(size) => self.inner.sched_chunk(sum, size),
-            Schedule::Guided => self.inner.sched_guided(sum),
-            Schedule::WorkStealing => self.inner.sched_work_stealing(sum),
+            Schedule::Static => self.sched_static(sum),
+            Schedule::Dynamic => self.sched_dynamic(sum),
+            Schedule::Chunk(size) => self.sched_chunk(sum, size),
+            Schedule::Guided => self.sched_guided(sum),
+            Schedule::WorkStealing => self.sched_work_stealing(sum),
         }
     }
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.inner.data.team.clone()
+        self.data.team.clone()
     }
 }

@@ -10,6 +10,7 @@ use crate::active_messaging::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
+use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
 use crate::lamellae::AllocationType;
@@ -2086,6 +2087,10 @@ impl UnsafeArrayInner {
                 ptr.offset((start_index * self.elem_size) as isize)
             }
         }
+    }
+
+    fn barrier_handle(&self) -> BarrierHandle {
+        self.data.team.barrier.barrier_handle()
     }
 }
 
