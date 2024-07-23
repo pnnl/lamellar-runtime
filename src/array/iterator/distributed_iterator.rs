@@ -38,15 +38,14 @@ pub(crate) use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
 use crate::array::{
-    operations::ArrayOps, AsyncTeamFrom, AtomicArray, Distribution, GenericAtomicArray, InnerArray,
-    LamellarArray, NativeAtomicArray,
+    operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray,
+    LamellarArray,
 };
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
 use crate::active_messaging::SyncSend;
 
-use enum_dispatch::enum_dispatch;
 use futures_util::Future;
 use paste::paste;
 use std::marker::PhantomData;

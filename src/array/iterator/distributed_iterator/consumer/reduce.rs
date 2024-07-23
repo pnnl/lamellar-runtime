@@ -14,7 +14,6 @@ use crate::Dist;
 use futures_util::{ready, Future, StreamExt};
 use pin_project::pin_project;
 use std::collections::VecDeque;
-use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};

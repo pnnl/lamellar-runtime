@@ -3,6 +3,7 @@ use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::{LocalIterator, Monotonic};
 use crate::array::iterator::private::*;
 use crate::array::operations::ArrayOps;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamInto};
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -43,7 +44,7 @@ where
     type AmOutput = Vec<(usize, I::Item)>;
     type Output = A;
     type Item = (usize, I::Item);
-    type Handle = LocalIterCollectHandle<I::Item, A>;
+    type Handle = InnerLocalIterCollectHandle<I::Item, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Collect {
             iter: self.iter.init(start, cnt),
@@ -66,11 +67,11 @@ where
         team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        LocalIterCollectHandle {
+        InnerLocalIterCollectHandle {
             reqs,
             distribution: self.distribution,
             team,
-            state: State::ReqsPending(Vec::new()),
+            state: InnerState::ReqsPending(Vec::new()),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -78,25 +79,99 @@ where
     }
 }
 
+#[derive(Debug)]
+pub(crate) struct CollectAsync<I, A, B> {
+    pub(crate) iter: Monotonic<I>,
+    pub(crate) distribution: Distribution,
+    pub(crate) _phantom: PhantomData<(A, B)>,
+}
+
+impl<I: IterClone, A, B> IterClone for CollectAsync<I, A, B> {
+    fn iter_clone(&self, _: Sealed) -> Self {
+        CollectAsync {
+            iter: self.iter.iter_clone(Sealed),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
+
+impl<I, A, B> IterConsumer for CollectAsync<I, A, B>
+where
+    I: LocalIterator,
+    I::Item: Future<Output = B> + Send + 'static,
+    B: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+{
+    type AmOutput = Vec<(usize, B)>;
+    type Output = A;
+    type Item = (usize, I::Item);
+    type Handle = InnerLocalIterCollectHandle<B, A>;
+    fn init(&self, start: usize, cnt: usize) -> Self {
+        CollectAsync {
+            iter: self.iter.init(start, cnt),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
+    }
+    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+        Arc::new(CollectAsyncAm {
+            iter: self.iter_clone(Sealed),
+            schedule,
+        })
+    }
+    fn create_handle(
+        self,
+        team: Pin<Arc<LamellarTeamRT>>,
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle {
+        InnerLocalIterCollectHandle {
+            reqs,
+            distribution: self.distribution,
+            team,
+            state: InnerState::ReqsPending(Vec::new()),
+        }
+    }
+    fn max_elems(&self, in_elems: usize) -> usize {
+        self.iter.elems(in_elems)
+    }
+}
+
+impl<I, A, B> Clone for CollectAsync<I, A, B>
+where
+    I: LocalIterator + Clone,
+    I::Item: Future<Output = B> + Send + 'static,
+    B: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+{
+    fn clone(&self) -> Self {
+        CollectAsync {
+            iter: self.iter.clone(),
+            distribution: self.distribution.clone(),
+            _phantom: self._phantom.clone(),
+        }
+    }
+}
+
 //#[doc(hidden)]
 #[pin_project]
-pub struct LocalIterCollectHandle<
-    T: Dist + ArrayOps,
-    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend,
-> {
+pub(crate) struct InnerLocalIterCollectHandle<T, A> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    state: State<T, A>,
+    state: InnerState<T, A>,
 }
 
-enum State<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend> {
+enum InnerState<T, A> {
     ReqsPending(Vec<(usize, T)>),
-    Collecting(Pin<Box<dyn Future<Output = A>>>),
+    Collecting(Pin<Box<dyn Future<Output = A> + Send>>),
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static>
-    LocalIterCollectHandle<T, A>
+    InnerLocalIterCollectHandle<T, A>
 {
     async fn async_create_array(
         local_vals: Vec<T>,
@@ -113,13 +188,13 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static> Future
-    for LocalIterCollectHandle<T, A>
+    for InnerLocalIterCollectHandle<T, A>
 {
     type Output = A;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            State::ReqsPending(vals) => {
+            InnerState::ReqsPending(vals) => {
                 while let Some(mut req) = this.reqs.pop_front() {
                     if !req.ready_or_set_waker(cx.waker()) {
                         this.reqs.push_front(req);
@@ -140,12 +215,12 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
                         return Poll::Ready(a);
                     }
                     Poll::Pending => {
-                        *this.state = State::Collecting(collect);
+                        *this.state = InnerState::Collecting(collect);
                         return Poll::Pending;
                     }
                 }
             }
-            State::Collecting(collect) => {
+            InnerState::Collecting(collect) => {
                 let a = ready!(Future::poll(collect.as_mut(), cx));
                 return Poll::Ready(a);
             }
@@ -154,7 +229,7 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static>
-    LamellarRequest for LocalIterCollectHandle<T, A>
+    LamellarRequest for InnerLocalIterCollectHandle<T, A>
 {
     fn blocking_wait(mut self) -> Self::Output {
         // let mut num_local_vals = 0;
@@ -188,6 +263,91 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
         self.create_array(local_vals)
     }
 }
+#[pin_project]
+pub struct LocalIterCollectHandle<T, A> {
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State<T, A>,
+}
+
+impl<T, A> LocalIterCollectHandle<T, A>
+where
+    T: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
+{
+    pub(crate) fn new(
+        inner: Pin<Box<dyn Future<Output = InnerLocalIterCollectHandle<T, A>> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        Self {
+            team: array.data.team.clone(),
+            state: State::Init(inner),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State<T, A> {
+    Init(Pin<Box<dyn Future<Output = InnerLocalIterCollectHandle<T, A>> + Send>>),
+    Reqs(#[pin] InnerLocalIterCollectHandle<T, A>),
+}
+impl<T, A> Future for LocalIterCollectHandle<T, A>
+where
+    T: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
+{
+    type Output = A;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Init(inner) => {
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(val) => Poll::Ready(val),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                let val = ready!(inner.poll(cx));
+                Poll::Ready(val)
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl<T, A> LamellarRequest for LocalIterCollectHandle<T, A>
+where
+    T: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
+{
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
+            State::Reqs(inner) => inner.blocking_wait(),
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Init(_) => {
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Init(_reqs) => {
+                unreachable!("should never be in init state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
+        }
+    }
+}
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct CollectAm<I, A> {
@@ -217,27 +377,32 @@ where
     }
 }
 
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct CollectAsyncAm<I>
-// where
-//     I: LocalIterator,
-// {
-//     pub(crate) iter: I,
-//     pub(crate) schedule: IterSchedule,
-// }
+#[lamellar_impl::AmLocalDataRT(Clone)]
+pub(crate) struct CollectAsyncAm<I, A, B>
+where
+    I: LocalIterator,
+    I::Item: Future<Output = B> + Send + 'static,
+    B: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+{
+    pub(crate) iter: CollectAsync<I, A, B>,
+    pub(crate) schedule: IterSchedule,
+}
 
-// #[lamellar_impl::rt_am_local]
-// impl<I> LamellarAm for CollectAsyncAm<I>
-// where
-//     I: LocalIterator + 'static,
-//     I::Item: Sync,
-// {
-//     async fn exec(&self) -> Vec<(usize,I::Item)> {
-//         let mut iter = self.schedule.monotonic_iter(self.iter.iter_clone(Sealed));
-//         let mut res = vec![];
-//         while let Some(elem) = iter.next(){
-//             res.push(elem.await);
-//         }
-//         res
-//     }
-// }
+#[lamellar_impl::rt_am_local]
+impl<I, A, B> LamellarAm for CollectAsyncAm<I, A, B>
+where
+    I: LocalIterator,
+    I::Item: Future<Output = B> + Send + 'static,
+    B: Dist + ArrayOps,
+    A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,
+{
+    async fn exec(&self) -> Vec<(usize, B)> {
+        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
+        let mut res = vec![];
+        while let Some((index, elem)) = iter.next() {
+            res.push((index, elem.await));
+        }
+        res
+    }
+}

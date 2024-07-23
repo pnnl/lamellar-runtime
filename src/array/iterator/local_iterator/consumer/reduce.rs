@@ -2,11 +2,12 @@ use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::private::*;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
-use futures_util::Future;
+use futures_util::{ready, Future};
 use pin_project::pin_project;
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -31,13 +32,13 @@ impl<I: IterClone, F: Clone> IterClone for Reduce<I, F> {
 impl<I, F> IterConsumer for Reduce<I, F>
 where
     I: LocalIterator + 'static,
-    I::Item: SyncSend,
+    I::Item: SyncSend + Copy,
     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
 {
     type AmOutput = Option<I::Item>;
     type Output = Option<I::Item>;
     type Item = I::Item;
-    type Handle = LocalIterReduceHandle<I::Item, F>;
+    type Handle = InnerLocalIterReduceHandle<I::Item, F>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Reduce {
             iter: self.iter.init(start, cnt),
@@ -59,10 +60,10 @@ where
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        LocalIterReduceHandle {
+        InnerLocalIterReduceHandle {
             op: self.op,
             reqs,
-            state: State::ReqsPending(None),
+            state: InnerState::ReqsPending(None),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -72,17 +73,17 @@ where
 
 //#[doc(hidden)]
 #[pin_project]
-pub struct LocalIterReduceHandle<T, F> {
+pub(crate) struct InnerLocalIterReduceHandle<T, F> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Option<T>>>,
     pub(crate) op: F,
-    state: State<T>,
+    state: InnerState<T>,
 }
 
-enum State<T> {
+enum InnerState<T> {
     ReqsPending(Option<T>),
 }
 
-impl<T, F> Future for LocalIterReduceHandle<T, F>
+impl<T, F> Future for InnerLocalIterReduceHandle<T, F>
 where
     T: SyncSend + Copy + 'static,
     F: Fn(T, T) -> T + SyncSend + 'static,
@@ -91,7 +92,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            State::ReqsPending(val) => {
+            InnerState::ReqsPending(val) => {
                 while let Some(mut req) = this.reqs.pop_front() {
                     if !req.ready_or_set_waker(cx.waker()) {
                         this.reqs.push_front(req);
@@ -113,7 +114,7 @@ where
 }
 
 //#[doc(hidden)]
-impl<T, F> LamellarRequest for LocalIterReduceHandle<T, F>
+impl<T, F> LamellarRequest for InnerLocalIterReduceHandle<T, F>
 where
     T: SyncSend + Copy + 'static,
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
@@ -142,6 +143,88 @@ where
     }
 }
 
+#[pin_project]
+pub struct LocalIterReduceHandle<T, F> {
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State<T, F>,
+}
+
+impl<T, F> LocalIterReduceHandle<T, F> {
+    pub(crate) fn new(
+        reqs: Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        Self {
+            team: array.data.team.clone(),
+            state: State::Init(reqs),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State<T, F> {
+    Init(Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>),
+    Reqs(#[pin] InnerLocalIterReduceHandle<T, F>),
+}
+impl<T, F> Future for LocalIterReduceHandle<T, F>
+where
+    T: SyncSend + Copy + 'static,
+    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
+{
+    type Output = Option<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Init(inner) => {
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(val) => Poll::Ready(val),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                let val = ready!(inner.poll(cx));
+                Poll::Ready(val)
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl<T, F> LamellarRequest for LocalIterReduceHandle<T, F>
+where
+    T: SyncSend + Copy + 'static,
+    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
+{
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
+            State::Reqs(inner) => inner.blocking_wait(),
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Init(_) => {
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Init(_reqs) => {
+                unreachable!("should never be in init state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
+        }
+    }
+}
+
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct ReduceAm<I, F> {
     pub(crate) op: F,
@@ -163,7 +246,7 @@ impl<I: IterClone, F: Clone> IterClone for ReduceAm<I, F> {
 impl<I, F> LamellarAm for ReduceAm<I, F>
 where
     I: LocalIterator + 'static,
-    I::Item: SyncSend,
+    I::Item: SyncSend + Copy,
     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
 {
     async fn exec(&self) -> Option<I::Item> {
@@ -179,31 +262,3 @@ where
         }
     }
 }
-
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct ReduceAsyncAm<I, F, Fut> {
-//     pub(crate) op: F,
-//     pub(crate) iter: I,
-//     pub(crate) schedule: IterSchedule,
-//     pub(crate) _phantom: PhantomData<Fut>
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, F, Fut> LamellarAm for ReduceAsyncAm<I, F, Fut>
-// where
-//     I: LocalIterator + 'static,
-//     I::Item: SyncSend,
-//     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-//     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static,
-// {
-//     async fn exec(&self) -> Option<I::Item> {
-//         let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
-//         let mut accum = iter.next();
-//         while let Some(elem) = iter.next() {
-//             accum = Some((self.op)(accum.unwrap(), elem).await);
-//             // cnt += 1;
-//         }
-//         accum
-//         // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
-//     }
-// }

@@ -156,22 +156,6 @@ where
     }
 }
 
-//#[doc(hidden)]
-// #[pin_project]
-// pub struct InnerDistIterCollectHandle<
-//     T: Dist + ArrayOps,
-//     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend,
-// > {
-//     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,
-//     pub(crate) distribution: Distribution,
-//     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-//     state: InnerState<T, A>,
-// }
-// enum InnerState<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend> {
-//     ReqsPending(Vec<(usize, T)>),
-//     Collecting(Pin<Box<dyn Future<Output = A>>>),
-// }
-
 #[pin_project]
 pub(crate) struct InnerDistIterCollectHandle<T, A> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,

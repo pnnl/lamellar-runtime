@@ -2,11 +2,12 @@ use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
 use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::private::*;
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
-use futures_util::Future;
+use futures_util::{ready, Future};
 use pin_project::pin_project;
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -34,7 +35,7 @@ where
     type AmOutput = I::Item;
     type Output = I::Item;
     type Item = I::Item;
-    type Handle = LocalIterSumHandle<I::Item>;
+    type Handle = InnerLocalIterSumHandle<I::Item>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Sum {
             iter: self.iter.init(start, cnt),
@@ -54,9 +55,9 @@ where
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        LocalIterSumHandle {
+        InnerLocalIterSumHandle {
             reqs,
-            state: State::ReqsPending(None),
+            state: InnerState::ReqsPending(None),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -66,16 +67,16 @@ where
 
 //#[doc(hidden)]
 #[pin_project]
-pub struct LocalIterSumHandle<T> {
+pub(crate) struct InnerLocalIterSumHandle<T> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
-    state: State<T>,
+    state: InnerState<T>,
 }
 
-enum State<T> {
+enum InnerState<T> {
     ReqsPending(Option<T>),
 }
 
-impl<T> Future for LocalIterSumHandle<T>
+impl<T> Future for InnerLocalIterSumHandle<T>
 where
     T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
 {
@@ -83,7 +84,7 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            State::ReqsPending(local_sum) => {
+            InnerState::ReqsPending(local_sum) => {
                 while let Some(mut req) = this.reqs.pop_front() {
                     if !req.ready_or_set_waker(cx.waker()) {
                         this.reqs.push_front(req);
@@ -106,7 +107,7 @@ where
 }
 
 //#[doc(hidden)]
-impl<T> LamellarRequest for LocalIterSumHandle<T>
+impl<T> LamellarRequest for InnerLocalIterSumHandle<T>
 where
     T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
 {
@@ -129,6 +130,86 @@ where
 
     fn val(&self) -> Self::Output {
         self.reqs.iter().map(|req| req.val()).sum::<Self::Output>()
+    }
+}
+
+#[pin_project]
+pub struct LocalIterSumHandle<T> {
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State<T>,
+}
+
+impl<T> LocalIterSumHandle<T> {
+    pub(crate) fn new(
+        inner: Pin<Box<dyn Future<Output = InnerLocalIterSumHandle<T>> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        Self {
+            team: array.data.team.clone(),
+            state: State::Init(inner),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State<T> {
+    Init(Pin<Box<dyn Future<Output = InnerLocalIterSumHandle<T>> + Send>>),
+    Reqs(#[pin] InnerLocalIterSumHandle<T>),
+}
+impl<T> Future for LocalIterSumHandle<T>
+where
+    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+{
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Init(inner) => {
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(val) => Poll::Ready(val),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                let val = ready!(inner.poll(cx));
+                Poll::Ready(val)
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl<T> LamellarRequest for LocalIterSumHandle<T>
+where
+    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+{
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
+            State::Reqs(inner) => inner.blocking_wait(),
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Init(_) => {
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Init(_reqs) => {
+                unreachable!("should never be in init state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
+        }
     }
 }
 
@@ -158,28 +239,3 @@ where
         iter.sum::<I::Item>()
     }
 }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I> LamellarAm for Sum<I>
-// where
-//     I: LocalIterator + 'static,
-//     I::Item: std::iter::Sum + SyncSend,
-// {
-//     async fn exec(&self) -> I::Item {
-//         let mut iter = self.iter.init(self.start_i, self.end_i - self.start_i);
-//         // println!("for each static thread {:?} {} {} {}",std::thread::current().id(),self.start_i, self.end_i, self.end_i - self.start_i);
-//         // let mut cnt = 0;
-//         let mut sum;
-//         if let Some(elem) = iter.next() {
-//             sum = elem;
-//             while let Some(elem) = iter.next() {
-//                 sum += elem;
-//             }
-//         }
-//         else {
-//             // sum = I::Item::default();
-//         }
-//         sum
-//         // println!("thread {:?} elems processed {:?}",std::thread::current().id(), cnt);
-//     }
-// }

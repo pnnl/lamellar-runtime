@@ -1,11 +1,12 @@
 use crate::active_messaging::LamellarArcLocalAm;
 use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::{consumer::*, private::*};
+use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
-use futures_util::Future;
+use futures_util::{ready, Future};
 use pin_project::pin_project;
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -32,7 +33,7 @@ where
     type AmOutput = usize;
     type Output = usize;
     type Item = I::Item;
-    type Handle = LocalIterCountHandle;
+    type Handle = InnerLocalIterCountHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Count {
             iter: self.iter.init(start, cnt),
@@ -51,10 +52,10 @@ where
         self,
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
-    ) -> LocalIterCountHandle {
-        LocalIterCountHandle {
+    ) -> InnerLocalIterCountHandle {
+        InnerLocalIterCountHandle {
             reqs,
-            state: State::ReqsPending(0),
+            state: InnerState::ReqsPending(0),
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -64,21 +65,21 @@ where
 
 //#[doc(hidden)]
 #[pin_project]
-pub struct LocalIterCountHandle {
+pub(crate) struct InnerLocalIterCountHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<usize>>,
-    state: State,
+    state: InnerState,
 }
 
-enum State {
+enum InnerState {
     ReqsPending(usize),
 }
 
-impl Future for LocalIterCountHandle {
+impl Future for InnerLocalIterCountHandle {
     type Output = usize;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
         match &mut this.state {
-            State::ReqsPending(cnt) => {
+            InnerState::ReqsPending(cnt) => {
                 while let Some(mut req) = this.reqs.pop_front() {
                     if !req.ready_or_set_waker(cx.waker()) {
                         this.reqs.push_front(req);
@@ -93,7 +94,7 @@ impl Future for LocalIterCountHandle {
 }
 
 //#[doc(hidden)]
-impl LamellarRequest for LocalIterCountHandle {
+impl LamellarRequest for InnerLocalIterCountHandle {
     fn blocking_wait(mut self) -> Self::Output {
         self.reqs
             .drain(..)
@@ -119,6 +120,79 @@ impl LamellarRequest for LocalIterCountHandle {
     }
 }
 
+#[pin_project]
+pub struct LocalIterCountHandle {
+    team: Pin<Arc<LamellarTeamRT>>,
+    #[pin]
+    state: State,
+}
+
+impl LocalIterCountHandle {
+    pub(crate) fn new(
+        inner: Pin<Box<dyn Future<Output = InnerLocalIterCountHandle> + Send>>,
+        array: &UnsafeArrayInner,
+    ) -> Self {
+        Self {
+            team: array.data.team.clone(),
+            state: State::Init(inner),
+        }
+    }
+}
+
+#[pin_project(project = StateProj)]
+enum State {
+    Init(Pin<Box<dyn Future<Output = InnerLocalIterCountHandle> + Send>>),
+    Reqs(#[pin] InnerLocalIterCountHandle),
+}
+impl Future for LocalIterCountHandle {
+    type Output = usize;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        match this.state.as_mut().project() {
+            StateProj::Init(inner) => {
+                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                match Pin::new(&mut inner).poll(cx) {
+                    Poll::Ready(val) => Poll::Ready(val),
+                    Poll::Pending => {
+                        *this.state = State::Reqs(inner);
+                        Poll::Pending
+                    }
+                }
+            }
+            StateProj::Reqs(inner) => {
+                let val = ready!(inner.poll(cx));
+                Poll::Ready(val)
+            }
+        }
+    }
+}
+
+//#[doc(hidden)]
+impl LamellarRequest for LocalIterCountHandle {
+    fn blocking_wait(self) -> Self::Output {
+        match self.state {
+            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
+            State::Reqs(inner) => inner.blocking_wait(),
+        }
+    }
+    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        match &mut self.state {
+            State::Init(_reqs) => {
+                waker.wake_by_ref();
+                false
+            }
+            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+        }
+    }
+    fn val(&self) -> Self::Output {
+        match &self.state {
+            State::Init(_reqs) => {
+                unreachable!("should never be in init state when val is called");
+            }
+            State::Reqs(inner) => inner.val(),
+        }
+    }
+}
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct CountAm<I> {
     pub(crate) iter: Count<I>,
