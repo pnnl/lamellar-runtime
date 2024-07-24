@@ -1,5 +1,5 @@
 use crate::env_var::config;
-use crate::scheduler::{LamellarExecutor, SchedulerStatus};
+use crate::scheduler::{LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
 
 //use tracing::*;
 
@@ -130,6 +130,24 @@ pub(crate) struct WorkStealing {
 }
 
 impl LamellarExecutor for WorkStealing {
+    fn spawn_task<F>(&self, task: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        // trace_span!("submit_task").in_scope(|| {
+        let work_inj = self.work_inj.clone();
+        let schedule = move |runnable| work_inj.push(runnable);
+        let (runnable, task) = Builder::new()
+            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
+            .spawn(move |_task_id| async move { task.await }, schedule);
+
+        runnable.schedule();
+        LamellarTask {
+            task: LamellarTaskInner::LamellarTask(Some(task)),
+        }
+        // });
+    }
     fn submit_task<F>(&self, task: F)
     where
         F: Future + Send + 'static,

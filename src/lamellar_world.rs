@@ -5,12 +5,13 @@ use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
 };
-use crate::scheduler::{create_scheduler, ExecutorType};
+use crate::scheduler::{create_scheduler, ExecutorType, LamellarTask};
 use crate::{active_messaging::*, config};
 // use log::trace;
 
 //use tracing::*;
 
+use futures_util::future::join_all;
 use futures_util::Future;
 use parking_lot::RwLock;
 use pin_weak::sync::PinWeak;
@@ -84,12 +85,34 @@ impl ActiveMessaging for LamellarWorld {
         self.team.async_barrier()
     }
 
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.team_rt.scheduler.spawn_task(f)
+    }
+
     fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future,
     {
         // trace_span!("block_on").in_scope(||
         self.team_rt.scheduler.block_on(f)
+        // )
+    }
+
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        // trace_span!("block_on_all").in_scope(||
+        self.team_rt.scheduler.block_on(join_all(
+            iter.into_iter()
+                .map(|task| self.team_rt.scheduler.spawn_task(task)),
+        ))
         // )
     }
 }

@@ -8,8 +8,11 @@ use crate::lamellae::{Des, Lamellae, SerializedData};
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
+use pin_project::{pin_project, pinned_drop};
+use std::pin::{pin, Pin};
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 pub(crate) mod work_stealing;
 use work_stealing::WorkStealing;
@@ -90,8 +93,74 @@ pub enum ExecutorType {
     // Dyn(impl LamellarExecutor),
 }
 
+#[derive(Debug)]
+#[pin_project]
+pub struct LamellarTask<T> {
+    #[pin]
+    task: LamellarTaskInner<T>,
+}
+
+impl<T> Future for LamellarTask<T> {
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project().task.poll(cx)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum LamellarTaskInner<T> {
+    LamellarTask(Option<async_task::Task<T, usize>>),
+    AsyncStdTask(async_std::task::JoinHandle<T>),
+    #[cfg(feature = "tokio-executor")]
+    TokioTask(tokio::task::JoinHandle<T>),
+    Dropped,
+}
+
+impl<T> Drop for LamellarTaskInner<T> {
+    fn drop(self: &mut Self) {
+        // let mut dropped = LamellarTaskInner::Dropped;
+
+        // std::mem::swap(&mut dropped, self);
+        match self {
+            LamellarTaskInner::LamellarTask(task) => {
+                task.take().expect("task already taken").detach();
+            }
+            LamellarTaskInner::AsyncStdTask(_task) => {}
+            #[cfg(feature = "tokio-executor")]
+            LamellarTaskInner::TokioTask(task) => {}
+            LamellarTaskInner::Dropped => {}
+        }
+    }
+}
+
+impl<T> Future for LamellarTaskInner<T> {
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        unsafe {
+            match self.get_unchecked_mut() {
+                LamellarTaskInner::LamellarTask(task) => {
+                    if let Some(task) = task {
+                        Pin::new_unchecked(task).poll(cx)
+                    } else {
+                        unreachable!()
+                    }
+                }
+                LamellarTaskInner::AsyncStdTask(task) => Pin::new_unchecked(task).poll(cx),
+                #[cfg(feature = "tokio-executor")]
+                LamellarTaskInner::TokioTask(task) => Pin::new_unchecked(task).poll(cx),
+                LamellarTaskInner::Dropped => unreachable!(),
+            }
+        }
+    }
+}
+
 #[enum_dispatch]
 pub(crate) trait LamellarExecutor {
+    fn spawn_task<F>(&self, future: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send;
+
     fn submit_task<F>(&self, future: F)
     where
         F: Future + Send + 'static,
@@ -296,6 +365,14 @@ impl Scheduler {
             // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
         };
         self.executor.submit_task(am_future);
+    }
+
+    pub(crate) fn spawn_task<F>(&self, task: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.executor.spawn_task(task)
     }
 
     pub(crate) fn submit_task<F>(&self, task: F)

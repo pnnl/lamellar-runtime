@@ -638,7 +638,7 @@ use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::NetMemRegionHandle;
-use crate::scheduler::{Executor, LamellarExecutor, ReqId};
+use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, ReqId};
 
 use async_trait::async_trait;
 use futures_util::Future;
@@ -1198,6 +1198,57 @@ pub trait ActiveMessaging {
     fn async_barrier(&self) -> impl Future<Output = ()> + Send;
 
     #[doc(alias("One-sided", "onesided"))]
+    /// Spawns a future on the worker threadpool
+    ///
+    /// This function returns a task handle that can be used to await the spawned future
+    ///
+    /// Users can spawn any future, including those returned from lamellar remote operations
+    ///
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
+    ///
+    /// # Examples
+    ///```no_run  
+    /// # use lamellar::active_messaging::prelude::*;
+    /// use async_std::fs::File;
+    /// use async_std::prelude::*;
+    /// # #[lamellar::AmData(Debug,Clone)]
+    /// # struct Am{
+    /// # // can contain anything that impls Sync, Send  
+    /// #     val: usize,
+    /// # }
+    /// #
+    /// # #[lamellar::am]
+    /// # impl LamellarAM for Am{
+    /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
+    /// #         //do some remote computation
+    /// #          println!("hello from PE{}",self.val);
+    /// #         lamellar::current_pe //return the executing pe
+    /// #     }
+    /// # }
+    /// #
+    /// # let world = lamellar::LamellarWorldBuilder::new().build();
+    /// # let num_pes = world.num_pes();
+    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally
+    /// let result = world.block_on(request); //block until am has executed
+    /// // you can also directly pass an async block
+    /// let world_clone = world.clone();
+    /// world.block_on(async move {
+    ///     let mut file = async_std::fs::File::open("a.txt").await.unwrap();
+    ///     let mut buf = vec![0u8;1000];
+    ///     for pe in 0..num_pes{
+    ///         let data = file.read(&mut buf).await.unwrap();
+    ///         world_clone.exec_am_pe(pe,Am{val: data}).await;
+    ///     }
+    ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
+    /// });
+    ///```
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send;
+
+    #[doc(alias("One-sided", "onesided"))]
     /// Run a future to completion on the current thread
     ///
     /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
@@ -1244,6 +1295,58 @@ pub trait ActiveMessaging {
     /// });
     ///```
     fn block_on<F: Future>(&self, f: F) -> F::Output;
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Run a collection of futures to completion
+    ///
+    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    ///
+    /// Users can await any future, including those returned from lamellar remote operations
+    ///
+    /// # One-sided Operation
+    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
+    ///
+    /// # Examples
+    ///```no_run  
+    /// # use lamellar::active_messaging::prelude::*;
+    /// use async_std::fs::File;
+    /// use async_std::prelude::*;
+    /// # #[lamellar::AmData(Debug,Clone)]
+    /// # struct Am{
+    /// # // can contain anything that impls Sync, Send  
+    /// #     val: usize,
+    /// # }
+    /// #
+    /// # #[lamellar::am]
+    /// # impl LamellarAM for Am{
+    /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
+    /// #         //do some remote computation
+    /// #          println!("hello from PE{}",self.val);
+    /// #         lamellar::current_pe //return the executing pe
+    /// #     }
+    /// # }
+    /// #
+    /// # let world = lamellar::LamellarWorldBuilder::new().build();
+    /// # let num_pes = world.num_pes();
+    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally
+    /// let result = world.block_on(request); //block until am has executed
+    /// // you can also directly pass an async block
+    /// let world_clone = world.clone();
+    /// world.block_on(async move {
+    ///     let mut file = async_std::fs::File::open("a.txt").await.unwrap();
+    ///     let mut buf = vec![0u8;1000];
+    ///     for pe in 0..num_pes{
+    ///         let data = file.read(&mut buf).await.unwrap();
+    ///         world_clone.exec_am_pe(pe,Am{val: data}).await;
+    ///     }
+    ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
+    /// });
+    ///```
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send;
 }
 
 #[async_trait]

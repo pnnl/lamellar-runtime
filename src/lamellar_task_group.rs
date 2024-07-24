@@ -7,12 +7,13 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_request::*;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::MemRegionHandleInner;
-use crate::scheduler::{ReqId, Scheduler};
+use crate::scheduler::{LamellarTask, ReqId, Scheduler};
 use crate::Darc;
 
 // use crossbeam::utils::CachePadded;
 // use futures_util::StreamExt;
 
+use futures_util::future::join_all;
 use futures_util::{Future, StreamExt};
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
@@ -578,6 +579,13 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_local_inner(am)
     }
 
+    fn spawn<F>(&self, task: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.team.scheduler.spawn_task(task)
+    }
     fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future,
@@ -585,6 +593,17 @@ impl ActiveMessaging for LamellarTaskGroup {
         // tracing::trace_span!("block_on").in_scope(||
         self.team.scheduler.block_on(f)
         // )
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        self.team.scheduler.block_on(join_all(
+            iter.into_iter()
+                .map(|task| self.team.scheduler.spawn_task(task)),
+        ))
     }
 }
 

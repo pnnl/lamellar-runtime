@@ -1,4 +1,4 @@
-use crate::scheduler::LamellarExecutor;
+use crate::scheduler::{LamellarExecutor, LamellarTask, LamellarTaskInner};
 
 use async_std::task;
 
@@ -10,6 +10,18 @@ pub(crate) struct AsyncStdRt {
 }
 
 impl LamellarExecutor for AsyncStdRt {
+    fn spawn_task<F>(&self, task: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        // trace_span!("spawn_task").in_scope(|| {
+        let task = task::spawn(task);
+        LamellarTask {
+            task: LamellarTaskInner::AsyncStdTask(task),
+        }
+        // })
+    }
     fn submit_task<F>(&self, task: F)
     where
         F: Future + Send + 'static,

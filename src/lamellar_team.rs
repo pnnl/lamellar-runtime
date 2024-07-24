@@ -11,7 +11,7 @@ use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
     MemoryRegion, RemoteMemoryRegion,
 };
-use crate::scheduler::{ReqId, Scheduler};
+use crate::scheduler::{LamellarTask, ReqId, Scheduler};
 #[cfg(feature = "nightly")]
 use crate::utils::ser_closure;
 
@@ -20,6 +20,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 // use std::any;
 use core::pin::Pin;
+use futures_util::future::join_all;
 use futures_util::Future;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
@@ -523,12 +524,34 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.async_barrier()
     }
 
+    fn spawn<F>(&self, task: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        self.team.scheduler.spawn_task(task)
+    }
+
     fn block_on<F: Future>(&self, f: F) -> F::Output {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         // trace_span!("block_on").in_scope(||
         self.team.scheduler.block_on(f)
         // )
+    }
+
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        self.team.scheduler.block_on(join_all(
+            iter.into_iter()
+                .map(|task| self.team.scheduler.spawn_task(task)),
+        ))
     }
 }
 
