@@ -132,32 +132,23 @@ fn main() {
         "cyclic_sum {:?} cyclic time {:?}, block_sum {:?} block time {:?}",
         cyclic_sum, cyclic_dist_time, block_sum, block_dist_time
     );
-    // for i in 0..total_len {
-    //     block_array.add(i, 10);
-    // }
-    // block_array.for_each_mut(|x| *x += *x);
 
-    world.block_on(unsafe { cyclic_array.dist_iter_mut().for_each(|x| *x += *x) });
-    world.block_on(unsafe {
+    unsafe { cyclic_array.dist_iter_mut().blocking_for_each(|x| *x += *x) };
+    unsafe {
         cyclic_array
             .dist_iter()
             .enumerate()
-            .for_each(|x| println!("x: {:?}", x))
-    });
+            .blocking_for_each(|x| println!("x: {:?}", x));
+    }
 
-    // cyclic_array.dist_iter().for_each(|x| println!("x: {:?}", x));
-
-    world.block_on(unsafe {
+    unsafe {
         block_array
             .dist_iter()
             .enumerate()
-            .for_each(|x| println!("x: {:?}", x))
-    });
+            .blocking_for_each(|x| println!("x: {:?}", x))
+    };
     let block_array = block_array.into_read_only();
-    let _ = block_array.sum();
-    // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
-    // block_array.for_each(|x| println!("x: {:?}", x));
-    // cyclic_array.for_each_mut(|x| *x += *x);
+    let _ = block_array.blocking_sum();
 
     let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block);
     let min = unsafe { one_elem_array.min() };

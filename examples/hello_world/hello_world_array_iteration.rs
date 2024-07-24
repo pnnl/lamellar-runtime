@@ -25,10 +25,10 @@ fn main() {
     world.barrier(); //wait for PE 0 to finish printing
 
     //initialize array, each PE will set its local elements equal to its ID
-    let request = array
+    array
         .dist_iter_mut() //create a mutable distributed iterator (i.e. data parallel iteration, similar to Rayon par_iter())
         .enumerate() // enumeration with respect to the global array
-        .for_each(move |(i, elem)| {
+        .blocking_for_each(move |(i, elem)| {
             println!(
                 "PE {:?} setting  array[{:?}]={:?} using thread {:?}",
                 my_pe,
@@ -38,9 +38,6 @@ fn main() {
             );
             elem.store(my_pe); //"store" because this is an AtomicArray
         });
-
-    //wait for local iteration to complete
-    world.block_on(request);
 
     //wait for all pes to finish
     world.barrier();

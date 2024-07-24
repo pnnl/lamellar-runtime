@@ -63,23 +63,6 @@ fn main() {
             )
         });
 
-    // println!("zip ");
-    // block_array
-    //     .dist_iter()
-    //     .zip(cyclic_array.dist_iter())
-    //     .skip(2)
-    //     .enumerate()
-    //     .chunks(4)
-    //     .step_by(3)
-    //     .for_each(move |chunk| {
-    //         println!("[pe({:?})-{:?}]", my_pe, std::thread::current().id(),);
-    //         for (i, elem) in chunk {
-    //             println!("i: {:?} {:?}", i, elem)
-    //         }
-    //     });
-    // block_array.wait_all();
-    // block_array.barrier();
-
     println!("--------------------------------------------------------");
     println!("cyclic skip enumerate");
 
@@ -98,23 +81,6 @@ fn main() {
         });
 
     println!("--------------------------------------------------------");
-
-    // block_array
-    //     .dist_iter()
-    //     .chunks(7)
-    //     .enumerate()
-    //     .for_each(move |(i, chunk)| {
-    //         let data = chunk.collect::<Vec<_>>();
-    //         println!(
-    //             "[pe({:?})-{:?}] chunk {:?} {:?}",
-    //             my_pe,
-    //             std::thread::current().id(),
-    //             i,
-    //             data
-    //         )
-    //     });
-    // block_array.wait_all();
-    // block_array.barrier();
 
     println!("--------------------------------------------------------");
     println!("cyclic enumerate map async for each");

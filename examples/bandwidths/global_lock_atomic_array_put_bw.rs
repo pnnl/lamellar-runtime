@@ -21,9 +21,9 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    let _ = array
+    array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8);
+        .blocking_for_each(move |elem| *elem = 255 as u8);
     array.wait_all();
     array.barrier();
 
@@ -96,9 +96,9 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        let _ = array
+        array
             .dist_iter_mut()
-            .for_each(move |elem| *elem = 255 as u8);
+            .blocking_for_each(move |elem| *elem = 255 as u8);
         array.wait_all();
         array.barrier();
     }

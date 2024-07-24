@@ -18,9 +18,9 @@ fn main() {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;
         }
-        let _ = array
+        array
             .dist_iter_mut()
-            .for_each(move |elem| *elem = num_pes as u8);
+            .blocking_for_each(move |elem| *elem = num_pes as u8);
     }
 
     array.wait_all();

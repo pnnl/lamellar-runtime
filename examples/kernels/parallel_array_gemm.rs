@@ -33,22 +33,23 @@ fn main() {
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
 
     //initialize matrices
-    let _ = a
-        .dist_iter_mut()
+    a.dist_iter_mut()
         .enumerate()
-        .for_each(|(i, x)| *x = i as f32);
-    let _ = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
-        //need global index so use dist_iter
-        //identity matrix
-        let row = i / dim;
-        let col = i % dim;
-        if row == col {
-            *x = 1 as f32
-        } else {
-            *x = 0 as f32;
-        }
-    });
-    let _ = c.dist_iter_mut().for_each(|x| x.store(0.0));
+        .blocking_for_each(|(i, x)| *x = i as f32);
+    b.dist_iter_mut()
+        .enumerate()
+        .blocking_for_each(move |(i, x)| {
+            //need global index so use dist_iter
+            //identity matrix
+            let row = i / dim;
+            let col = i % dim;
+            if row == col {
+                *x = 1 as f32
+            } else {
+                *x = 0 as f32;
+            }
+        });
+    c.dist_iter_mut().blocking_for_each(|x| x.store(0.0));
 
     world.wait_all();
     world.barrier();

@@ -23,9 +23,9 @@ fn main() {
         // }
     }
     unsafe {
-        let _ = array
+        array
             .local_iter_mut()
-            .for_each(move |elem| *elem = num_pes as u8);
+            .blocking_for_each(move |elem| *elem = num_pes as u8);
     }
     array.wait_all();
     array.barrier();

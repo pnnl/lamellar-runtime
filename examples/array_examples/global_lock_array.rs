@@ -47,14 +47,17 @@ fn main() {
     array.print();
     println!("PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 
-    let task = array.blocking_read_lock().dist_iter().enumerate().for_each(move |(i, elem)| {
-        println!(
-            "{my_pe}, {:?}: {i} {:?}",
-            std::thread::current().id(),
-            *elem
-        )
-    });
-    world.block_on(task);
+    array
+        .blocking_read_lock()
+        .dist_iter()
+        .enumerate()
+        .blocking_for_each(move |(i, elem)| {
+            println!(
+                "{my_pe}, {:?}: {i} {:?}",
+                std::thread::current().id(),
+                *elem
+            )
+        });
     world.barrier();
 
     let task = array

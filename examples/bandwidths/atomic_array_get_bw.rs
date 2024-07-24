@@ -20,9 +20,9 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    let _ = array
+    array
         .local_iter_mut()
-        .for_each(move |elem| *elem = num_pes as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, so use locallock for initializiation
+        .blocking_for_each(move |elem| *elem = num_pes as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, so use locallock for initializiation
     let array = array.into_atomic(); //this enforces a wait_all and barrier
                                      // array.wait_all();
                                      // array.barrier();

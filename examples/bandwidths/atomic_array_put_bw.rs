@@ -20,9 +20,9 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    let _ = array
+    array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8); //this is can be pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, local lock tends to perform better
+        .blocking_for_each(move |elem| *elem = 255 as u8); //this is can be pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, local lock tends to perform better
     let mut array = array.into_atomic(); //so we simply convert the LocalLockArray array to atomic after initalization
 
     world.barrier();
@@ -103,7 +103,8 @@ fn main() {
         //     }
         // };
         let temp = array.into_local_lock();
-        let _ = temp.dist_iter_mut().for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
+        temp.dist_iter_mut()
+            .blocking_for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
         array = temp.into_atomic();
         world.barrier();
     }
