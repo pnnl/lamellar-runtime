@@ -1,9 +1,11 @@
 mod iteration;
 pub(crate) mod operations;
 mod rdma;
+use crate::array::private::ArrayExecAm;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
+use crate::barrier::BarrierHandle;
 use crate::config;
 use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
@@ -12,6 +14,7 @@ use crate::darc::DarcMode;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
+use crate::scheduler::LamellarTask;
 
 use pin_project::pin_project;
 
@@ -376,11 +379,11 @@ impl<T: Dist> GlobalLockArray<T> {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
         }
         let self_clone: GlobalLockArray<T> = self.clone();
@@ -445,11 +448,11 @@ impl<T: Dist> GlobalLockArray<T> {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
         }
         let self_clone: GlobalLockArray<T> = self.clone();
@@ -514,11 +517,11 @@ impl<T: Dist> GlobalLockArray<T> {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
         }
         let self_clone: GlobalLockArray<T> = self.clone();
@@ -591,11 +594,11 @@ impl<T: Dist> GlobalLockArray<T> {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
         }
         let self_clone: GlobalLockArray<T> = self.clone();
@@ -670,11 +673,11 @@ impl<T: Dist> GlobalLockArray<T> {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_collective_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `collective_write_local_data().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_collective_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `collective_write_local_data().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
         }
         let self_clone: GlobalLockArray<T> = self.clone();
@@ -869,10 +872,6 @@ impl<T: Dist> GlobalLockArray<T> {
         // println!("GlobalLock into_read_only");
         self.array.into()
     }
-
-    // pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
-    //     self.array.async_barrier()
-    // }
 }
 
 impl<T: Dist + 'static> GlobalLockArray<T> {
@@ -1062,6 +1061,60 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for GlobalLockArray<T> {
     }
 }
 
+impl<T: Dist> ActiveMessaging for GlobalLockArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_all_tg(am)
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_pe_tg(pe, am)
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.array.exec_am_local_tg(am)
+    }
+    fn wait_all(&self) {
+        self.array.wait_all()
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        self.array.await_all()
+    }
+    fn barrier(&self) {
+        self.array.barrier()
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        self.array.async_barrier()
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.array.spawn(f)
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        self.array.block_on(f)
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        self.array.block_on_all(iter)
+    }
+}
+
 impl<T: Dist> LamellarArray<T> for GlobalLockArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
@@ -1078,16 +1131,16 @@ impl<T: Dist> LamellarArray<T> for GlobalLockArray<T> {
     fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
-    fn barrier(&self) {
-        self.array.barrier();
-    }
-    fn wait_all(&self) {
-        self.array.wait_all()
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
-    }
-    fn block_on<F: Future>(&self, f: F) -> F::Output {
-        self.array.block_on(f)
-    }
+    // fn barrier(&self) {
+    //     self.array.barrier();
+    // }
+    // fn wait_all(&self) {
+    //     self.array.wait_all()
+    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
+    // }
+    // fn block_on<F: Future>(&self, f: F) -> F::Output {
+    //     self.array.block_on(f)
+    // }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
@@ -1260,7 +1313,7 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_reduce` from within an async context which may lead to deadlock, it is recommended that you use `reduce(...).await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),

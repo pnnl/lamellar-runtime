@@ -632,6 +632,7 @@
 //!```
 //! Other than the addition of `#[AmData(static)]` the rest of the code as the previous example would be the same.
 
+use crate::barrier::BarrierHandle;
 use crate::darc::__NetworkDarc;
 use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
 use crate::lamellar_arch::IdError;
@@ -1195,7 +1196,7 @@ pub trait ActiveMessaging {
     ///     world_clone.async_barrier().await; //block until all PEs have entered the barrier
     /// });
     ///```
-    fn async_barrier(&self) -> impl Future<Output = ()> + Send;
+    fn async_barrier(&self) -> BarrierHandle;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Spawns a future on the worker threadpool

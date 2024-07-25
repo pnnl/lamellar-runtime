@@ -1,10 +1,9 @@
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
 
-fn initialize_array(array: &UnsafeArray<usize>) {
-    unsafe { array.dist_iter_mut().for_each(|x| *x = 0).block() };
-    array.wait_all();
-    array.barrier();
+async fn initialize_array(array: &UnsafeArray<usize>) {
+    unsafe { array.dist_iter_mut().for_each(|x| *x = 0).await };
+    array.async_barrier().await;
 }
 
 fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
@@ -32,8 +31,8 @@ fn main() {
         let cyclic_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic);
         let shared_mem_region = world.alloc_shared_mem_region(total_len).into(); //Convert into abstract LamellarMemoryRegion
         let local_mem_region = world.alloc_one_sided_mem_region(total_len).into();
-        initialize_array(&block_array);
-        initialize_array(&cyclic_array);
+        initialize_array(&block_array).await;
+        initialize_array(&cyclic_array).await;
         initialize_mem_region(&shared_mem_region);
         initialize_mem_region(&local_mem_region);
         println!("data initialized");
@@ -84,8 +83,8 @@ fn main() {
             println!("put elapsed {:?}", start.elapsed().as_secs_f64());
             world.async_barrier().await;
 
-            initialize_array(&block_array);
-            initialize_array(&cyclic_array);
+            initialize_array(&block_array).await;
+            initialize_array(&cyclic_array).await;
             // can use subregions
 
             block_array.print();

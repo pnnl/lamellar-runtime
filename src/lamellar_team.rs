@@ -1,6 +1,6 @@
 use crate::active_messaging::handle::AmHandleInner;
 use crate::active_messaging::*;
-use crate::barrier::Barrier;
+use crate::barrier::{Barrier, BarrierHandle};
 use crate::env_var::config;
 use crate::lamellae::{AllocationType, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
@@ -399,7 +399,7 @@ impl LamellarTeam {
     /// //do some work
     /// world.barrier(); //block until all PEs have entered the barrier
     ///```
-    pub fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+    pub fn async_barrier(&self) -> BarrierHandle {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.async_barrier()
@@ -518,7 +518,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.barrier();
     }
 
-    fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send {
+    fn async_barrier(&self) -> BarrierHandle {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.async_barrier()
@@ -1371,11 +1371,11 @@ impl LamellarTeamRT {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
             exec_task = false;
         }
@@ -1433,6 +1433,21 @@ impl LamellarTeamRT {
         self.scheduler.block_on(f)
     }
 
+    pub(crate) fn block_on_all<I>(
+        &self,
+        iter: I,
+    ) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        self.scheduler.block_on(join_all(
+            iter.into_iter().map(|task| self.scheduler.spawn_task(task)),
+        ))
+    }
+
     //#[tracing::instrument(skip_all)]
     pub(crate) fn barrier(&self) {
         self.barrier.barrier();
@@ -1442,8 +1457,8 @@ impl LamellarTeamRT {
     pub(crate) fn tasking_barrier(&self) {
         self.barrier.tasking_barrier();
     }
-    pub(crate) async fn async_barrier(&self) {
-        self.barrier.async_barrier().await;
+    pub(crate) fn async_barrier(&self) -> BarrierHandle {
+        self.barrier.barrier_handle()
     }
 
     pub(crate) fn flush(&self) {

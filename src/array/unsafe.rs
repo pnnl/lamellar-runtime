@@ -5,6 +5,7 @@ pub(crate) mod local_chunks;
 pub(crate) mod operations;
 mod rdma;
 
+use crate::active_messaging::ActiveMessaging;
 use crate::active_messaging::*;
 // use crate::array::r#unsafe::operations::BUFOPS;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
@@ -16,6 +17,7 @@ use crate::env_var::config;
 use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
+use crate::scheduler::LamellarTask;
 use crate::LamellarTaskGroup;
 
 use core::marker::PhantomData;
@@ -706,7 +708,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.data.team.tasking_barrier();
     }
 
-    pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
+    pub(crate) fn async_barrier(&self) -> BarrierHandle {
         self.inner.data.team.async_barrier()
     }
 }
@@ -820,7 +822,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `Array::team_from` from within an async context which may lead to deadlock, this is unintended and likely a Runtime bug.
                 Please open a github issue at https://github.com/pnnl/lamellar-runtime/issues including a backtrace if possible.
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -989,31 +991,37 @@ impl<T: Dist> LamellarArrayPrivate<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.inner.data.team.clone()
+impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.inner
+            .data
+            .team
+            .exec_am_all_tg(am, Some(self.team_counters()))
     }
-
-    // fn my_pe(&self) -> usize {
-    //     self.inner.data.my_pe
-    // }
-
-    // fn num_pes(&self) -> usize {
-    //     self.inner.data.num_pes
-    // }
-
-    fn len(&self) -> usize {
-        self.inner.size
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.inner
+            .data
+            .team
+            .exec_am_pe_tg(pe, am, Some(self.team_counters()))
     }
-
-    fn num_elems_local(&self) -> usize {
-        self.inner.num_elems_local()
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.inner
+            .data
+            .team
+            .exec_am_local_tg(am, Some(self.team_counters()))
     }
-
-    fn barrier(&self) {
-        self.inner.data.team.tasking_barrier();
-    }
-
     fn wait_all(&self) {
         let mut temp_now = Instant::now();
         // let mut first = true;
@@ -1051,12 +1059,104 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
             }
         }
         self.inner.data.task_group.wait_all();
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
-
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        self.await_all()
+    }
+    fn barrier(&self) {
+        self.inner.data.team.barrier()
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        self.inner.data.team.async_barrier()
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.inner.data.team.scheduler.spawn_task(f)
+    }
     fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.inner.data.team.scheduler.block_on(f)
     }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        self.inner.data.team.block_on_all(iter)
+    }
+}
+
+impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.inner.data.team.clone()
+    }
+
+    // fn my_pe(&self) -> usize {
+    //     self.inner.data.my_pe
+    // }
+
+    // fn num_pes(&self) -> usize {
+    //     self.inner.data.num_pes
+    // }
+
+    fn len(&self) -> usize {
+        self.inner.size
+    }
+
+    fn num_elems_local(&self) -> usize {
+        self.inner.num_elems_local()
+    }
+
+    // fn barrier(&self) {
+    //     self.inner.data.team.tasking_barrier();
+    // }
+
+    // fn wait_all(&self) {
+    //     let mut temp_now = Instant::now();
+    //     // let mut first = true;
+    //     while self
+    //         .inner
+    //         .data
+    //         .array_counters
+    //         .outstanding_reqs
+    //         .load(Ordering::SeqCst)
+    //         > 0
+    //         || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
+    //     {
+    //         // std::thread::yield_now();
+    //         // self.inner.data.team.flush();
+    //         self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
+    //         if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+    //             //|| first{
+    //             println!(
+    //                 "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+    //                 self.inner.data.team.world_pe,
+    //                 self.inner
+    //                     .data
+    //                     .array_counters
+    //                     .send_req_cnt
+    //                     .load(Ordering::SeqCst),
+    //                 self.inner
+    //                     .data
+    //                     .array_counters
+    //                     .outstanding_reqs
+    //                     .load(Ordering::SeqCst),
+    //                 self.inner.data.req_cnt.load(Ordering::SeqCst)
+    //             );
+    //             temp_now = Instant::now();
+    //             // first = false;
+    //         }
+    //     }
+    //     self.inner.data.task_group.wait_all();
+    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
+    // }
+
+    // fn block_on<F: Future>(&self, f: F) -> F::Output {
+    //     self.inner.data.team.scheduler.block_on(f)
+    // }
 
     //#[tracing::instrument(skip_all)]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
@@ -1285,7 +1385,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `UnsafeArray::blocking_reduce` from within an async context which may lead to deadlock, it is recommended that you use `reduce(...).await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),

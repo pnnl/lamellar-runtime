@@ -2,6 +2,7 @@ mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
 
+use crate::active_messaging::ActiveMessaging;
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
 use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
 use crate::array::iterator::local_iterator::LocalIteratorLauncher;
@@ -10,8 +11,11 @@ use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::config;
 // use crate::darc::{Darc, DarcMode};
+use crate::barrier::BarrierHandle;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::memregion::Dist;
+use crate::scheduler::LamellarTask;
+
 use std::any::TypeId;
 use std::collections::HashSet;
 // use std::sync::atomic::Ordering;
@@ -553,6 +557,91 @@ impl<T: Dist> SubArray<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.global_index(sub_index).into(),
             AtomicArray::GenericAtomicArray(array) => array.global_index(sub_index).into(),
+        }
+    }
+}
+
+impl<T: Dist> ActiveMessaging for AtomicArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.exec_am_all(am),
+            AtomicArray::GenericAtomicArray(array) => array.exec_am_all(am),
+        }
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.exec_am_pe(pe, am),
+            AtomicArray::GenericAtomicArray(array) => array.exec_am_pe(pe, am),
+        }
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.exec_am_local(am),
+            AtomicArray::GenericAtomicArray(array) => array.exec_am_local(am),
+        }
+    }
+    fn wait_all(&self) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.wait_all(),
+            AtomicArray::GenericAtomicArray(array) => array.wait_all(),
+        }
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        let fut: Pin<Box<dyn Future<Output = ()> + Send>> = match self {
+            AtomicArray::NativeAtomicArray(array) => Box::pin(array.await_all()),
+            AtomicArray::GenericAtomicArray(array) => Box::pin(array.await_all()),
+        };
+        fut
+    }
+    fn barrier(&self) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.barrier(),
+            AtomicArray::GenericAtomicArray(array) => array.barrier(),
+        }
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.async_barrier(),
+            AtomicArray::GenericAtomicArray(array) => array.async_barrier(),
+        }
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.spawn(f),
+            AtomicArray::GenericAtomicArray(array) => array.spawn(f),
+        }
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.block_on(f),
+            AtomicArray::GenericAtomicArray(array) => array.block_on(f),
+        }
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.block_on_all(iter),
+            AtomicArray::GenericAtomicArray(array) => array.block_on_all(iter),
         }
     }
 }
@@ -1262,7 +1351,7 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `AtomicArray::blocking_reduce` from within an async context which may lead to deadlock, it is recommended that you use `reduce(...).await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -1360,7 +1449,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `AtomicArray::blocking_sum` from within an async context which may lead to deadlock, it is recommended that you use `sum().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -1454,7 +1543,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `AtomicArray::blocking_prod` from within an async context which may lead to deadlock, it is recommended that you use `prod().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -1541,7 +1630,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `AtomicArray::blocking_max` from within an async context which may lead to deadlock, it is recommended that you use `max().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -1627,7 +1716,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `AtomicArray::blocking_min` from within an async context which may lead to deadlock, it is recommended that you use `min().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),

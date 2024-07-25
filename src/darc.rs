@@ -1370,7 +1370,7 @@ impl<T> Darc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `Darc::blocking_into_localrw` from within an async context which may lead to deadlock, it is recommended that you use `into_localrw().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             if let Some(val) = config().blocking_call_warning {
                 if val {
@@ -1476,7 +1476,7 @@ impl<T> Darc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `Darc::blocking_into_globalrw` from within an async context which may lead to deadlock, it is recommended that you use `into_globalrw().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),

@@ -22,7 +22,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle {
-        let req = self.exec_am_local(InitGetAm {
+        let req = self.exec_am_local_tg(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.into(),
@@ -34,7 +34,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        let req = self.exec_am_local(InitGetAm {
+        let req = self.exec_am_local_tg(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.clone().into(),
@@ -72,7 +72,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle {
-        let req = self.exec_am_local(InitPutAm {
+        let req = self.exec_am_local_tg(InitPutAm {
             array: self.clone(),
             index: index,
             buf: buf.into(),
@@ -127,7 +127,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                 start_index: self.index,
                 len: self.buf.len(),
             };
-            reqs.push(self.array.exec_am_pe(pe, remote_am));
+            reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
         }
         unsafe {
             match self.array.array.inner.distribution {
@@ -232,7 +232,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                         .into(),
                                     pe: self.array.my_pe(),
                                 };
-                                reqs.push(self.array.exec_am_pe(pe, remote_am));
+                                reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
                             } else {
                                 let remote_am = GlobalLockRemoteSmallPutAm {
                                     array: self.array.clone().into(), //inner of the indices we need to place data into
@@ -242,7 +242,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                         [cur_index..(cur_index + u8_buf_len)]
                                         .to_vec(),
                                 };
-                                reqs.push(self.array.exec_am_pe(pe, remote_am));
+                                reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
                             }
                             cur_index += u8_buf_len;
                         } else {
@@ -297,7 +297,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                             len: self.buf.len(),
                             data: vec,
                         };
-                        reqs.push(self.array.exec_am_pe(pe, remote_am));
+                        reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
                     }
                 }
             }

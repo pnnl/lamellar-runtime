@@ -3,12 +3,16 @@ pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
 // use crate::array::private::LamellarArrayPrivate;
+use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
+use crate::barrier::BarrierHandle;
 use crate::darc::Darc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
+use crate::scheduler::LamellarTask;
+
 use parking_lot::{Mutex, MutexGuard};
 use serde::ser::SerializeSeq;
 // use std::ops::{Deref, DerefMut};
@@ -566,10 +570,6 @@ impl<T: Dist> GenericAtomicArray<T> {
             .expect("invalid local index");
         self.locks[index].lock()
     }
-
-    // pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
-    //     self.array.async_barrier()
-    // }
 }
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
@@ -721,6 +721,60 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for GenericAtomicArray<T> {
     }
 }
 
+impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_all_tg(am)
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_pe_tg(pe, am)
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.array.exec_am_local_tg(am)
+    }
+    fn wait_all(&self) {
+        self.array.wait_all()
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        self.array.await_all()
+    }
+    fn barrier(&self) {
+        self.array.barrier()
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        self.array.async_barrier()
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.array.spawn(f)
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        self.array.block_on(f)
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        self.array.block_on_all(iter)
+    }
+}
+
 impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
@@ -737,17 +791,17 @@ impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
-    fn barrier(&self) {
-        self.array.barrier();
-    }
+    // fn barrier(&self) {
+    //     self.array.barrier();
+    // }
 
-    fn wait_all(&self) {
-        self.array.wait_all()
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
-    }
-    fn block_on<F: Future>(&self, f: F) -> F::Output {
-        self.array.block_on(f)
-    }
+    // fn wait_all(&self) {
+    //     self.array.wait_all()
+    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
+    // }
+    // fn block_on<F: Future>(&self, f: F) -> F::Output {
+    //     self.array.block_on(f)
+    // }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }

@@ -63,6 +63,7 @@
 //! // export to Vec<usize>
 //! let vec = array.local_data().to_vec();
 //! ```
+use crate::barrier::BarrierHandle;
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,
@@ -71,7 +72,9 @@ use crate::memregion::{
     LamellarMemoryRegion,
     RegisteredMemoryRegion, // RemoteMemoryRegion,
 };
+use crate::scheduler::LamellarTask;
 use crate::{active_messaging::*, LamellarTeam, LamellarTeamRT};
+
 // use crate::Darc;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
@@ -663,6 +666,121 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
     }
 }
 
+impl<T: Dist> ActiveMessaging for LamellarReadArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.exec_am_all(am),
+            LamellarReadArray::ReadOnlyArray(array) => array.exec_am_all(am),
+            LamellarReadArray::AtomicArray(array) => array.exec_am_all(am),
+            LamellarReadArray::LocalLockArray(array) => array.exec_am_all(am),
+            LamellarReadArray::GlobalLockArray(array) => array.exec_am_all(am),
+        }
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.exec_am_pe(pe, am),
+            LamellarReadArray::ReadOnlyArray(array) => array.exec_am_pe(pe, am),
+            LamellarReadArray::AtomicArray(array) => array.exec_am_pe(pe, am),
+            LamellarReadArray::LocalLockArray(array) => array.exec_am_pe(pe, am),
+            LamellarReadArray::GlobalLockArray(array) => array.exec_am_pe(pe, am),
+        }
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.exec_am_local(am),
+            LamellarReadArray::ReadOnlyArray(array) => array.exec_am_local(am),
+            LamellarReadArray::AtomicArray(array) => array.exec_am_local(am),
+            LamellarReadArray::LocalLockArray(array) => array.exec_am_local(am),
+            LamellarReadArray::GlobalLockArray(array) => array.exec_am_local(am),
+        }
+    }
+    fn wait_all(&self) {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.wait_all(),
+            LamellarReadArray::ReadOnlyArray(array) => array.wait_all(),
+            LamellarReadArray::AtomicArray(array) => array.wait_all(),
+            LamellarReadArray::LocalLockArray(array) => array.wait_all(),
+            LamellarReadArray::GlobalLockArray(array) => array.wait_all(),
+        }
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        let fut: Pin<Box<dyn Future<Output = ()> + Send>> = match self {
+            LamellarReadArray::UnsafeArray(array) => Box::pin(array.await_all()),
+            LamellarReadArray::ReadOnlyArray(array) => Box::pin(array.await_all()),
+            LamellarReadArray::AtomicArray(array) => Box::pin(array.await_all()),
+            LamellarReadArray::LocalLockArray(array) => Box::pin(array.await_all()),
+            LamellarReadArray::GlobalLockArray(array) => Box::pin(array.await_all()),
+        };
+        fut
+    }
+    fn barrier(&self) {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.barrier(),
+            LamellarReadArray::ReadOnlyArray(array) => array.barrier(),
+            LamellarReadArray::AtomicArray(array) => array.barrier(),
+            LamellarReadArray::LocalLockArray(array) => array.barrier(),
+            LamellarReadArray::GlobalLockArray(array) => array.barrier(),
+        }
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.async_barrier(),
+            LamellarReadArray::ReadOnlyArray(array) => array.async_barrier(),
+            LamellarReadArray::AtomicArray(array) => array.async_barrier(),
+            LamellarReadArray::LocalLockArray(array) => array.async_barrier(),
+            LamellarReadArray::GlobalLockArray(array) => array.async_barrier(),
+        }
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.spawn(f),
+            LamellarReadArray::ReadOnlyArray(array) => array.spawn(f),
+            LamellarReadArray::AtomicArray(array) => array.spawn(f),
+            LamellarReadArray::LocalLockArray(array) => array.spawn(f),
+            LamellarReadArray::GlobalLockArray(array) => array.spawn(f),
+        }
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.block_on(f),
+            LamellarReadArray::ReadOnlyArray(array) => array.block_on(f),
+            LamellarReadArray::AtomicArray(array) => array.block_on(f),
+            LamellarReadArray::LocalLockArray(array) => array.block_on(f),
+            LamellarReadArray::GlobalLockArray(array) => array.block_on(f),
+        }
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.block_on_all(iter),
+            LamellarReadArray::ReadOnlyArray(array) => array.block_on_all(iter),
+            LamellarReadArray::AtomicArray(array) => array.block_on_all(iter),
+            LamellarReadArray::LocalLockArray(array) => array.block_on_all(iter),
+            LamellarReadArray::GlobalLockArray(array) => array.block_on_all(iter),
+        }
+    }
+}
+
 /// Represents the array types that allow write  operations
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -695,6 +813,111 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
             LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
             LamellarWriteArray::LocalLockArray(array) => array.des(cur_pe),
             LamellarWriteArray::GlobalLockArray(array) => array.des(cur_pe),
+        }
+    }
+}
+
+impl<T: Dist> ActiveMessaging for LamellarWriteArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.exec_am_all(am),
+            LamellarWriteArray::AtomicArray(array) => array.exec_am_all(am),
+            LamellarWriteArray::LocalLockArray(array) => array.exec_am_all(am),
+            LamellarWriteArray::GlobalLockArray(array) => array.exec_am_all(am),
+        }
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.exec_am_pe(pe, am),
+            LamellarWriteArray::AtomicArray(array) => array.exec_am_pe(pe, am),
+            LamellarWriteArray::LocalLockArray(array) => array.exec_am_pe(pe, am),
+            LamellarWriteArray::GlobalLockArray(array) => array.exec_am_pe(pe, am),
+        }
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.exec_am_local(am),
+            LamellarWriteArray::AtomicArray(array) => array.exec_am_local(am),
+            LamellarWriteArray::LocalLockArray(array) => array.exec_am_local(am),
+            LamellarWriteArray::GlobalLockArray(array) => array.exec_am_local(am),
+        }
+    }
+    fn wait_all(&self) {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.wait_all(),
+            LamellarWriteArray::AtomicArray(array) => array.wait_all(),
+            LamellarWriteArray::LocalLockArray(array) => array.wait_all(),
+            LamellarWriteArray::GlobalLockArray(array) => array.wait_all(),
+        }
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        let fut: Pin<Box<dyn Future<Output = ()> + Send>> = match self {
+            LamellarWriteArray::UnsafeArray(array) => Box::pin(array.await_all()),
+            LamellarWriteArray::AtomicArray(array) => Box::pin(array.await_all()),
+            LamellarWriteArray::LocalLockArray(array) => Box::pin(array.await_all()),
+            LamellarWriteArray::GlobalLockArray(array) => Box::pin(array.await_all()),
+        };
+        fut
+    }
+    fn barrier(&self) {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.barrier(),
+            LamellarWriteArray::AtomicArray(array) => array.barrier(),
+            LamellarWriteArray::LocalLockArray(array) => array.barrier(),
+            LamellarWriteArray::GlobalLockArray(array) => array.barrier(),
+        }
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.async_barrier(),
+            LamellarWriteArray::AtomicArray(array) => array.async_barrier(),
+            LamellarWriteArray::LocalLockArray(array) => array.async_barrier(),
+            LamellarWriteArray::GlobalLockArray(array) => array.async_barrier(),
+        }
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.spawn(f),
+            LamellarWriteArray::AtomicArray(array) => array.spawn(f),
+            LamellarWriteArray::LocalLockArray(array) => array.spawn(f),
+            LamellarWriteArray::GlobalLockArray(array) => array.spawn(f),
+        }
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.block_on(f),
+            LamellarWriteArray::AtomicArray(array) => array.block_on(f),
+            LamellarWriteArray::LocalLockArray(array) => array.block_on(f),
+            LamellarWriteArray::GlobalLockArray(array) => array.block_on(f),
+        }
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.block_on_all(iter),
+            LamellarWriteArray::AtomicArray(array) => array.block_on_all(iter),
+            LamellarWriteArray::LocalLockArray(array) => array.block_on_all(iter),
+            LamellarWriteArray::GlobalLockArray(array) => array.block_on_all(iter),
         }
     }
 }
@@ -844,13 +1067,13 @@ pub(crate) mod private {
     pub(crate) trait ArrayExecAm<T: Dist> {
         fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
         fn team_counters(&self) -> Arc<AMCounters>;
-        fn exec_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
+        fn exec_am_local_tg<F>(&self, am: F) -> LocalAmHandle<F::Output>
         where
             F: LamellarActiveMessage + LocalAM + 'static,
         {
             self.team().exec_am_local_tg(am, Some(self.team_counters()))
         }
-        fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
+        fn exec_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
         {
@@ -864,19 +1087,19 @@ pub(crate) mod private {
         //     self.team()
         //         .exec_arc_am_pe(pe, am, Some(self.team_counters()))
         // }
-        // fn exec_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
-        // where
-        //     F: RemoteActiveMessage + LamellarAM + AmDist,
-        // {
-        //     self.team().exec_am_all_tg(am, Some(self.team_counters()))
-        // }
+        fn exec_am_all_tg<F>(&self, am: F) -> MultiAmHandle<F::Output>
+        where
+            F: RemoteActiveMessage + LamellarAM + AmDist,
+        {
+            self.team().exec_am_all_tg(am, Some(self.team_counters()))
+        }
     }
 }
 
 /// Represents a distributed array, providing some convenience functions for getting simple information about the array.
 /// This is mostly intended for use within the runtime (specifically for use in Proc Macros) but the available functions may be useful to endusers as well.
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
+pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessaging {
     #[doc(alias("One-sided", "onesided"))]
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
     ///
@@ -972,64 +1195,64 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> {
     ///```
     // fn use_distribution(self, distribution: Distribution) -> Self;
 
-    #[doc(alias = "Collective")]
-    /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
-    ///
-    /// # Collective Operation
-    /// Requires all PEs associated with the array to enter the barrier, otherwise deadlock will occur
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// array.barrier();
-    ///```
-    fn barrier(&self);
+    // #[doc(alias = "Collective")]
+    // /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
+    // ///
+    // /// # Collective Operation
+    // /// Requires all PEs associated with the array to enter the barrier, otherwise deadlock will occur
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// array.barrier();
+    // ///```
+    // fn barrier(&self);
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// blocks calling thread until all remote tasks (e.g. element wise operations)
-    /// initiated by the calling PE have completed.
-    ///
-    /// # One-sided Operation
-    /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
-    /// to finish that were initiated by the calling PE itself
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// for i in 0..100{
-    ///     array.add(i,1);
-    /// }
-    /// array.wait_all(); //block until the previous add operations have finished
-    ///```
-    fn wait_all(&self);
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// blocks calling thread until all remote tasks (e.g. element wise operations)
+    // /// initiated by the calling PE have completed.
+    // ///
+    // /// # One-sided Operation
+    // /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
+    // /// to finish that were initiated by the calling PE itself
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// for i in 0..100{
+    // ///     array.add(i,1);
+    // /// }
+    // /// array.wait_all(); //block until the previous add operations have finished
+    // ///```
+    // fn wait_all(&self);
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Run a future to completion on the current thread
-    ///
-    /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
-    ///
-    /// Users can await any future, including those returned from lamellar remote operations
-    ///
-    /// # One-sided Operation
-    /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it
-    /// let result = array.block_on(request); //block until am has executed
-    /// // we also could have used world.block_on() or team.block_on()
-    ///```
-    fn block_on<F: Future>(&self, f: F) -> F::Output;
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Run a future to completion on the current thread
+    // ///
+    // /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
+    // ///
+    // /// Users can await any future, including those returned from lamellar remote operations
+    // ///
+    // /// # One-sided Operation
+    // /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    // ///
+    // /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it
+    // /// let result = array.block_on(request); //block until am has executed
+    // /// // we also could have used world.block_on() or team.block_on()
+    // ///```
+    // fn block_on<F: Future>(&self, f: F) -> F::Output;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Given a global index, calculate the PE and offset on that PE where the element actually resides.

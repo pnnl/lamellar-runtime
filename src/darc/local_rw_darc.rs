@@ -170,7 +170,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_read` from within an async context which may lead to deadlock, it is recommended that you use `read().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -276,7 +276,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_write` from within an async context which may lead to deadlock, it is recommended that you use `write().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -456,7 +456,7 @@ impl<T> LocalRwDarc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_into_globalrw` from within an async context which may lead to deadlock, it is recommended that you use `into_globalrw().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -575,7 +575,7 @@ impl<T: Send + Sync> LocalRwDarc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_into_darc` from within an async context which may lead to deadlock, it is recommended that you use `into_darc().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),

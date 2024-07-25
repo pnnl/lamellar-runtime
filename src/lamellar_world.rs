@@ -1,3 +1,4 @@
+use crate::barrier::BarrierHandle;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_env::LamellarEnv;
@@ -81,7 +82,7 @@ impl ActiveMessaging for LamellarWorld {
         self.team.barrier();
     }
 
-    fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send {
+    fn async_barrier(&self) -> BarrierHandle {
         self.team.async_barrier()
     }
 

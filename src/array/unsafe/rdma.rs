@@ -99,7 +99,7 @@ impl<T: Dist> UnsafeArray<T> {
                                 },
                                 pe: self.inner.data.my_pe,
                             };
-                            reqs.push_back(self.exec_am_pe(pe, am));
+                            reqs.push_back(self.exec_am_pe_tg(pe, am));
                         } else {
                             let am = UnsafeSmallPutAm {
                                 array: self.clone().into(),
@@ -113,7 +113,7 @@ impl<T: Dist> UnsafeArray<T> {
                                         .to_vec()
                                 },
                             };
-                            reqs.push_back(self.exec_am_pe(pe, am));
+                            reqs.push_back(self.exec_am_pe_tg(pe, am));
                         }
                     }
                     ArrayRdmaCmd::GetAm => {
@@ -219,7 +219,7 @@ impl<T: Dist> UnsafeArray<T> {
                             data: unsafe { temp_memreg.to_base::<u8>().into() },
                             pe: self.inner.data.my_pe,
                         };
-                        reqs.push_back(self.exec_am_pe(pe, am));
+                        reqs.push_back(self.exec_am_pe_tg(pe, am));
                     } else {
                         let am = UnsafeSmallPutAm {
                             array: self.clone().into(),
@@ -234,7 +234,7 @@ impl<T: Dist> UnsafeArray<T> {
                                     .to_vec()
                             },
                         };
-                        reqs.push_back(self.exec_am_pe(pe, am));
+                        reqs.push_back(self.exec_am_pe_tg(pe, am));
                     }
                     if pe + 1 == num_pes {
                         overflow += 1;
@@ -1083,7 +1083,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                 start_index: self.index,
                 len: self.buf.len(),
             };
-            reqs.push(self.array.exec_am_pe(pe, remote_am));
+            reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
         }
         unsafe {
             match self.array.inner.distribution {

@@ -453,7 +453,7 @@ impl Barrier {
 // }
 
 #[pin_project]
-pub(crate) struct BarrierHandle {
+pub struct BarrierHandle {
     barrier_buf: Arc<Vec<MemoryRegion<usize>>>,
     arch: Arc<LamellarArchRT>,
     lamellae: Arc<Lamellae>,

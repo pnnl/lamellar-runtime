@@ -1,5 +1,6 @@
 use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
 use crate::active_messaging::*;
+use crate::barrier::BarrierHandle;
 use crate::env_var::config;
 use crate::lamellae::Des;
 use crate::lamellar_arch::LamellarArchRT;
@@ -550,7 +551,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.team.barrier();
     }
 
-    fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send {
+    fn async_barrier(&self) -> BarrierHandle {
         self.team.async_barrier()
     }
 
@@ -676,11 +677,11 @@ impl LamellarTaskGroup {
             if let Some(val) = config().blocking_call_warning {
                 if val {
                     println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
                 }
             } else {
                 println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture());
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
             }
             exec_task = false;
         }

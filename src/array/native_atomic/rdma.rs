@@ -116,7 +116,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                 start_index: self.index,
                 len: self.buf.len(),
             };
-            reqs.push(self.array.exec_am_pe(pe, remote_am));
+            reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
         }
         unsafe {
             match self.array.array.inner.distribution {
@@ -229,7 +229,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                     [cur_index..(cur_index + u8_buf_len)]
                                     .to_vec(),
                             };
-                            reqs.push(self.array.exec_am_pe(pe, remote_am));
+                            reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
                             cur_index += u8_buf_len;
                         } else {
                             panic!("this should not be possible");
@@ -282,7 +282,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                             len: self.buf.len(),
                             data: vec,
                         };
-                        reqs.push(self.array.exec_am_pe(pe, remote_am));
+                        reqs.push(self.array.exec_am_pe_tg(pe, remote_am));
                     }
                 }
             }

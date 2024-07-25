@@ -2,67 +2,17 @@ mod iteration;
 pub(crate) mod local_chunks;
 pub use local_chunks::ReadOnlyLocalChunks;
 mod rdma;
+use crate::array::private::ArrayExecAm;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
+use crate::barrier::BarrierHandle;
 use crate::config;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
+use crate::scheduler::LamellarTask;
+
 use std::sync::Arc;
-
-// type BufFn = fn(ReadOnlyByteArrayWeak) -> Arc<dyn BufferOp>;
-
-// type MultiMultiFn = fn(ReadOnlyByteArray,ArrayOpCmd,Vec<u8>) -> LamellarArcAm;
-// type MultiSingleFn = fn(ReadOnlyByteArray,ArrayOpCmd,Vec<u8>,Vec<usize>) -> LamellarArcAm;
-
-// lazy_static! {
-// pub(crate) static ref BUFOPS: HashMap<TypeId, BufFn> = {
-//     let mut map = HashMap::new();
-//     for op in crate::inventory::iter::<ReadOnlyArrayOpBuf> {
-//         map.insert(op.id.clone(), op.op);
-//     }
-//     map
-// };
-
-// pub(crate) static ref MULTIMULTIOPS: HashMap<TypeId, MultiMultiFn> = {
-//     let mut map = HashMap::new();
-//     for op in crate::inventory::iter::<ReadOnlyArrayMultiMultiOps> {
-//         map.insert(op.id.clone(), op.op);
-//     }
-//     map
-// };
-
-// pub(crate) static ref MULTISINGLEOPS: HashMap<TypeId, MultiSingleFn> = {
-//     let mut map = HashMap::new();
-//     for op in crate::inventory::iter::<ReadOnlyArrayMultiSingleOps> {
-//         map.insert(op.id.clone(), op.op);
-//     }
-//     map
-// };
-
-// }
-
-// //#[doc(hidden)]
-// pub struct ReadOnlyArrayOpBuf {
-//     pub id: TypeId,
-//     pub op: BufFn,
-// }
-
-// //#[doc(hidden)]
-// pub struct ReadOnlyArrayMultiMultiOps {
-//     pub id: TypeId,
-//     pub op: MultiMultiFn,
-// }
-
-// //#[doc(hidden)]
-// pub struct ReadOnlyArrayMultiSingleOps {
-//     pub id: TypeId,
-//     pub op: MultiSingleFn,
-// }
-
-// crate::inventory::collect!(ReadOnlyArrayOpBuf);
-// crate::inventory::collect!(ReadOnlyArrayMultiMultiOps);
-// crate::inventory::collect!(ReadOnlyArrayMultiSingleOps);
 
 /// A safe abstraction of a distributed array, providing only read access.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
@@ -336,10 +286,6 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
         // println!("readonly into_global_lock");
         self.array.into()
     }
-
-    // pub(crate) fn async_barrier(&self) -> impl std::future::Future<Output = ()> + Send + '_ {
-    //     self.array.async_barrier()
-    // }
 }
 
 impl<T: Dist + 'static> ReadOnlyArray<T> {
@@ -553,7 +499,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
             let msg = format!("
                 [LAMELLAR WARNING] You are calling `ReadOnlyArray::blocking_reduce` from within an async context which may lead to deadlock, it is recommended that you use `reduce(...).await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {:?}", std::backtrace::Backtrace::capture()
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
             match config().blocking_call_warning {
                 Some(val) if val => println!("{msg}"),
@@ -807,6 +753,60 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for ReadOnlyArray<T> {
     }
 }
 
+impl<T: Dist> ActiveMessaging for ReadOnlyArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_all_tg(am)
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_pe_tg(pe, am)
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.array.exec_am_local_tg(am)
+    }
+    fn wait_all(&self) {
+        self.array.wait_all()
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        self.array.await_all()
+    }
+    fn barrier(&self) {
+        self.array.barrier()
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        self.array.async_barrier()
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.array.spawn(f)
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        self.array.block_on(f)
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        self.array.block_on_all(iter)
+    }
+}
+
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt().clone()
@@ -823,17 +823,17 @@ impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
-    fn barrier(&self) {
-        self.array.barrier();
-    }
+    // fn barrier(&self) {
+    //     self.array.barrier();
+    // }
 
-    fn wait_all(&self) {
-        self.array.wait_all()
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
-    }
-    fn block_on<F: Future>(&self, f: F) -> F::Output {
-        self.array.block_on(f)
-    }
+    // fn wait_all(&self) {
+    //     self.array.wait_all()
+    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
+    // }
+    // fn block_on<F: Future>(&self, f: F) -> F::Output {
+    //     self.array.block_on(f)
+    // }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
