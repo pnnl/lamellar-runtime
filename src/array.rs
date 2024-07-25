@@ -641,6 +641,17 @@ impl LamellarByteArray {
             LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<GlobalLockByteArray>(),
         }
     }
+    pub(crate) fn team(&self) -> &Pin<Arc<LamellarTeamRT>> {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => array.team(),
+            LamellarByteArray::ReadOnlyArray(array) => array.team(),
+            LamellarByteArray::AtomicArray(array) => array.team(),
+            LamellarByteArray::NativeAtomicArray(array) => array.team(),
+            LamellarByteArray::GenericAtomicArray(array) => array.team(),
+            LamellarByteArray::LocalLockArray(array) => array.team(),
+            LamellarByteArray::GlobalLockArray(array) => array.team(),
+        }
+    }
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
