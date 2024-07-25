@@ -11,24 +11,13 @@ use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
     array::LamellarByteArray,
     lamellar_request::LamellarRequest,
-    scheduler::LamellarTask,
     Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,
 };
 
 /// a task handle for an array rdma (put/get) operation
 pub struct ArrayRdmaHandle {
-    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<AmHandle<()>>,
-}
-
-impl ArrayRdmaHandle {
-    pub fn spawn(self) -> LamellarTask<()> {
-        self.array.team().spawn_task(self)
-    }
-
-    pub fn block(self) -> () {
-        self.array.team().block_on(self)
-    }
 }
 
 impl LamellarRequest for ArrayRdmaHandle {
@@ -67,19 +56,9 @@ impl Future for ArrayRdmaHandle {
 /// a task handle for an array rdma 'at' operation
 #[pin_project]
 pub struct ArrayRdmaAtHandle<T: Dist> {
-    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: Option<LocalAmHandle<()>>,
     pub(crate) buf: OneSidedMemoryRegion<T>,
-}
-
-impl<T: Dist> ArrayRdmaAtHandle<T> {
-    pub fn spawn(self) -> LamellarTask<T> {
-        self.array.team().spawn_task(self)
-    }
-
-    pub fn block(self) -> T {
-        self.array.team().block_on(self)
-    }
 }
 
 impl<T: Dist> LamellarRequest for ArrayRdmaAtHandle<T> {

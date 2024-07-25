@@ -17,7 +17,7 @@ use crate::{
     lamellae::Des,
     lamellar_request::{InternalResult, LamellarRequest, LamellarRequestAddResult},
     memregion::one_sided::MemRegionHandleInner,
-    scheduler::{LamellarTask, Scheduler},
+    scheduler::Scheduler,
     Darc, LamellarArchRT,
 };
 
@@ -122,14 +122,6 @@ impl<T: AmDist> AmHandle<T> {
             }
         }
     }
-
-    pub fn spawn(self) -> LamellarTask<T> {
-        self.inner.scheduler.spawn_task(self)
-    }
-
-    pub fn block(self) -> T {
-        self.inner.scheduler.block_on(self)
-    }
 }
 
 impl<T: AmDist> LamellarRequest for AmHandle<T> {
@@ -216,14 +208,6 @@ impl<T: 'static> LocalAmHandle<T> {
                 }
             }
         }
-    }
-
-    pub fn spawn(self) -> LamellarTask<T> {
-        self.inner.scheduler.spawn_task(self)
-    }
-
-    pub fn block(self) -> T {
-        self.inner.scheduler.block_on(self)
     }
 }
 
@@ -379,14 +363,6 @@ impl<T: AmDist> MultiAmHandle<T> {
                 }
             }
         }
-    }
-
-    pub fn spawn(self) -> LamellarTask<Vec<T>> {
-        self.inner.scheduler.spawn_task(self)
-    }
-
-    pub fn block(self) -> Vec<T> {
-        self.inner.scheduler.block_on(self)
     }
 }
 
