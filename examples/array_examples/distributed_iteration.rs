@@ -23,8 +23,11 @@ fn main() {
     //for example lets initialize our arrays, where we store the value of my_pe to each local element a pe owns
     block_dist_iter
         .enumerate()
-        .blocking_for_each(move |(i, elem)| elem.store(i));
-    cyclic_dist_iter.blocking_for_each(move |elem| elem.store(my_pe));
+        .for_each(move |(i, elem)| elem.store(i))
+        .block();
+    cyclic_dist_iter
+        .for_each(move |elem| elem.store(my_pe))
+        .block();
 
     // let block_array = block_array.into_read_only();
     block_array.print();
@@ -53,7 +56,7 @@ fn main() {
         .skip(2)
         .enumerate()
         .step_by(3)
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -61,7 +64,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
     println!("cyclic skip enumerate");
@@ -70,7 +74,7 @@ fn main() {
         .dist_iter()
         .enumerate()
         .skip(2)
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -78,7 +82,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
 
@@ -100,14 +105,15 @@ fn main() {
             );
             async move { (i, elem, barray.load(i).await) }
         })
-        .blocking_for_each_async(move |i| async move {
+        .for_each_async(move |i| async move {
             println!(
                 "[pe({:?})-{:?}] for each {:?}",
                 my_pe,
                 std::thread::current().id(),
                 i.await
             );
-        });
+        })
+        .block();
     block_array.print();
 
     println!("--------------------------------------------------------");
@@ -135,7 +141,7 @@ fn main() {
         .dist_iter()
         .enumerate()
         .filter(|(_, elem)| elem.load() % 4 == 0)
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -143,7 +149,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
     println!("block enumerate filter_map");
@@ -157,7 +164,7 @@ fn main() {
                 None
             }
         })
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -165,7 +172,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
     println!("--------------------------------------------------------");
     println!("filter_map collect");
     let new_block_array = block_array.block_on(
@@ -191,7 +199,7 @@ fn main() {
         .dist_iter()
         .skip(10)
         .enumerate()
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -199,7 +207,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
     println!("block skip  step_by enumerate");
@@ -208,7 +217,7 @@ fn main() {
         .skip(10)
         .step_by(3)
         .enumerate()
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -216,7 +225,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
     println!("block take skip enumerate");
@@ -225,7 +235,7 @@ fn main() {
         .take(60)
         .skip(10)
         .enumerate()
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -233,7 +243,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
     println!("block take skip take enumerate");
@@ -243,7 +254,7 @@ fn main() {
         .skip(10)
         .take(30)
         .enumerate()
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
                 my_pe,
@@ -251,7 +262,8 @@ fn main() {
                 i,
                 elem
             )
-        });
+        })
+        .block();
 
     println!("--------------------------------------------------------");
     println!("block filter count");

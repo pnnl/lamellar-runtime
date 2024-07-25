@@ -8,6 +8,7 @@ use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::LamellarTask;
 use crate::Dist;
 use futures_util::{ready, Future};
 use pin_project::pin_project;
@@ -213,6 +214,13 @@ where
             team: array.data.team.clone(),
             state: State::Barrier(barrier_handle, inner),
         }
+    }
+
+    pub fn block(self) -> T {
+        self.team.clone().block_on(self)
+    }
+    pub fn spawn(self) -> LamellarTask<T> {
+        self.team.clone().scheduler.spawn_task(self)
     }
 }
 

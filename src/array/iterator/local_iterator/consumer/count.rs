@@ -5,6 +5,7 @@ use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::LamellarTask;
 
 use futures_util::{ready, Future};
 use pin_project::pin_project;
@@ -136,6 +137,13 @@ impl LocalIterCountHandle {
             team: array.data.team.clone(),
             state: State::Init(inner),
         }
+    }
+
+    pub fn block(self) -> usize {
+        self.team.clone().block_on(self)
+    }
+    pub fn spawn(self) -> LamellarTask<usize> {
+        self.team.clone().scheduler.spawn_task(self)
     }
 }
 

@@ -8,7 +8,7 @@ use crate::lamellae::{Des, Lamellae, SerializedData};
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
-use pin_project::{pin_project, pinned_drop};
+use pin_project::pin_project;
 use std::pin::{pin, Pin};
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -113,7 +113,6 @@ pub(crate) enum LamellarTaskInner<T> {
     AsyncStdTask(async_std::task::JoinHandle<T>),
     #[cfg(feature = "tokio-executor")]
     TokioTask(tokio::task::JoinHandle<T>),
-    Dropped,
 }
 
 impl<T> Drop for LamellarTaskInner<T> {
@@ -128,7 +127,6 @@ impl<T> Drop for LamellarTaskInner<T> {
             LamellarTaskInner::AsyncStdTask(_task) => {}
             #[cfg(feature = "tokio-executor")]
             LamellarTaskInner::TokioTask(task) => {}
-            LamellarTaskInner::Dropped => {}
         }
     }
 }
@@ -148,7 +146,6 @@ impl<T> Future for LamellarTaskInner<T> {
                 LamellarTaskInner::AsyncStdTask(task) => Pin::new_unchecked(task).poll(cx),
                 #[cfg(feature = "tokio-executor")]
                 LamellarTaskInner::TokioTask(task) => Pin::new_unchecked(task).poll(cx),
-                LamellarTaskInner::Dropped => unreachable!(),
             }
         }
     }

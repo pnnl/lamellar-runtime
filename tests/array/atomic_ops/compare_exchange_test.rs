@@ -2,23 +2,31 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -208,8 +216,6 @@ macro_rules! compare_exchange_test{
         }
     }
 }
-
-
 
 macro_rules! compare_exchange_epsilon_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{

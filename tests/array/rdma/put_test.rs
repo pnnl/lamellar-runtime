@@ -18,17 +18,29 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
         }
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
     };
 }
 

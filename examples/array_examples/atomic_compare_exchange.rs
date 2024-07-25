@@ -24,7 +24,7 @@ fn main() {
     let my_pe = world.my_pe();
 
     let array = AtomicArray::<usize>::new(world.team(), num_pes * 2, Distribution::Block);
-    array.dist_iter_mut().blocking_for_each(|x| x.store(0)); //initialize array -- use atomic store
+    array.dist_iter_mut().for_each(|x| x.store(0)).block(); //initialize array -- use atomic store
     array.wait_all();
     array.barrier();
 
@@ -46,7 +46,7 @@ fn main() {
     array.print();
 
     let array_2 = AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic);
-    array_2.dist_iter_mut().blocking_for_each(|x| x.store(0.0));
+    array_2.dist_iter_mut().for_each(|x| x.store(0.0)).spawn();
     array_2.wait_all();
     array_2.barrier();
 
@@ -85,7 +85,7 @@ fn main() {
     array
         .dist_iter()
         .enumerate()
-        .blocking_for_each_async(move |(i, e)| {
+        .for_each_async(move |(i, e)| {
             let a2c = array_2.clone();
             async move {
                 let res = a2c
@@ -100,7 +100,8 @@ fn main() {
                     }
                 }
             }
-        });
+        })
+        .block();
     println!("num_failed {num_failed} num_ok {num_ok}");
     // array2.print();
 }

@@ -86,8 +86,8 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
     array.barrier();
     array.print();
     array.barrier();
@@ -123,8 +123,8 @@ fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
     array.barrier();
     array.print();
     array.barrier();
@@ -154,8 +154,8 @@ fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
     array.barrier();
     array.print();
     array.barrier();
@@ -185,8 +185,9 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -216,8 +217,9 @@ fn test_rem<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -247,8 +249,9 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -261,8 +264,9 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
     array.barrier();
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
@@ -283,8 +287,9 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -297,8 +302,9 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     array.barrier();
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
@@ -319,8 +325,9 @@ fn test_xor<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -333,8 +340,9 @@ fn test_xor<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     array.barrier();
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
@@ -357,8 +365,9 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -389,8 +398,9 @@ fn test_shl<T: std::fmt::Debug + ElementShiftOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();
@@ -420,8 +430,9 @@ fn test_shr<T: std::fmt::Debug + ElementShiftOps + 'static>(
 ) {
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| elem.store(init_val));
-    array.wait_all();
+        .for_each(move |elem| elem.store(init_val))
+        .block();
+
     array.barrier();
     array.print();
     array.barrier();

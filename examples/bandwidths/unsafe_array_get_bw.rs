@@ -22,9 +22,9 @@ fn main() {
 
         array
             .local_iter_mut()
-            .blocking_for_each(move |elem| *elem = num_pes as u8);
+            .for_each(move |elem| *elem = num_pes as u8)
+            .block();
     }
-    array.wait_all();
     array.barrier();
 
     world.barrier();

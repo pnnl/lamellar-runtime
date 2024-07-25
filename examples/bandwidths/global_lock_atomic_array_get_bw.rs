@@ -26,8 +26,8 @@ fn main() {
     }
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| *elem = num_pes as u8);
-    array.wait_all();
+        .for_each(move |elem| *elem = num_pes as u8)
+        .block();
     array.barrier();
 
     world.barrier();

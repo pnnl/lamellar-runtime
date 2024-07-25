@@ -43,7 +43,6 @@ use crate::array::{
 };
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
-
 use crate::active_messaging::SyncSend;
 
 use futures_util::Future;
@@ -53,7 +52,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 macro_rules! consumer_impl {
-    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ; [$(-> $($blocking_ret:tt)*)? ]) => {
+    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ; [$($blocking_ret:tt)*]) => {
         fn $name<$($generics),*>(&self, $($arg : $arg_ty),*) -> $($return_type)*
         where
            $($bounds)+
@@ -73,26 +72,47 @@ macro_rules! consumer_impl {
                 self.as_inner().[<$name _with_schedule>](sched, $($arg),*)
             }
 
-            fn [<blocking_ $name >]<$($generics),*>(
-                &self,
-                $($arg : $arg_ty),*
-            )   $(-> $($blocking_ret)*)?
-            where
-                $($bounds)+
-            {
-                self.as_inner().[<blocking_ $name >]($($arg),*)
-            }
+            // fn [<spawn_ $name >]<$($generics),*>(
+            //     &self,
+            //     $($arg : $arg_ty),*
+            // )   -> LamellarTask<$($blocking_ret)*>
+            // where
+            //     $($bounds)+
+            // {
+            //     self.as_inner().[<spawn_ $name >]($($arg),*)
+            // }
 
-            fn [<blocking_ $name _with_schedule >]<$($generics),*>(
-                &self,
-                sched: Schedule,
-                $($arg : $arg_ty),*
-            )  $(-> $($blocking_ret)*)?
-            where
-                $($bounds)+
-            {
-                self.as_inner().[<blocking_ $name _with_schedule>](sched, $($arg),*)
-            }
+            // fn [<spawn_ $name _with_schedule >]<$($generics),*>(
+            //     &self,
+            //     sched: Schedule,
+            //     $($arg : $arg_ty),*
+            // ) -> LamellarTask<$($blocking_ret)*>
+            // where
+            //     $($bounds)+
+            // {
+            //     self.as_inner().[<spawn_ $name _with_schedule>](sched, $($arg),*)
+            // }
+
+            // fn [<blocking_ $name >]<$($generics),*>(
+            //     &self,
+            //     $($arg : $arg_ty),*
+            // )   -> $($blocking_ret)*
+            // where
+            //     $($bounds)+
+            // {
+            //     self.as_inner().[<blocking_ $name >]($($arg),*)
+            // }
+
+            // fn [<blocking_ $name _with_schedule >]<$($generics),*>(
+            //     &self,
+            //     sched: Schedule,
+            //     $($arg : $arg_ty),*
+            // )  -> $($blocking_ret)*
+            // where
+            //     $($bounds)+
+            // {
+            //     self.as_inner().[<blocking_ $name _with_schedule>](sched, $($arg),*)
+            // }
         }
     };
 }
@@ -103,43 +123,43 @@ pub trait DistIteratorLauncher: InnerArray {
         for_each<I, F>(iter: &I, op: F);
         [DistIterForEachHandle];
         [I: DistributedIterator + 'static, F: Fn(I::Item) + SyncSend + Clone + 'static];
-        []
+        [()]
     );
     consumer_impl!(
         for_each_async<I, F, Fut>(iter: &I, op: F); 
         [DistIterForEachHandle];
         [I: DistributedIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static];
-        []);
+        [()]);
 
     consumer_impl!(
         reduce<I, F>(iter: &I, op: F); 
         [DistIterReduceHandle<I::Item, F>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
-        [-> Option<I::Item>]);
+        [Option<I::Item>]);
 
     consumer_impl!(
         collect<I, A>(iter: &I, d: Distribution); 
         [DistIterCollectHandle<I::Item, A>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static];
-        [-> A]);
+        [A]);
 
     consumer_impl!(
         collect_async<I, A, B>(iter: &I, d: Distribution); 
         [DistIterCollectHandle<B, A>];
         [I: DistributedIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
-        [-> A]);
+        [A]);
 
     consumer_impl!(
         count<I>(iter: &I); 
         [DistIterCountHandle];
         [I: DistributedIterator + 'static ];
-        [-> usize]);
+        [usize]);
 
     consumer_impl!(
         sum<I>(iter: &I); 
         [DistIterSumHandle<I::Item>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum, ];
-        [-> I::Item]);
+        [I::Item]);
 
     //#[doc(hidden)]
     fn global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -171,6 +191,7 @@ pub trait DistIteratorLauncher: InnerArray {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.as_inner().team()
     }
+
 }
 
 /// An interface for dealing with distributed iterators (intended as a parallel and distributed version of the standard iterator trait)
@@ -342,6 +363,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         Monotonic::new(self, 0)
     }
 
+    
+
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
@@ -349,8 +372,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
-    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -364,7 +387,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
     /// );
     ///```
-    #[must_use]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each<F>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
@@ -372,32 +395,65 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().for_each(self, op)
     }
 
-    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array
-    ///
-    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    ///
-    /// The iteration will have been completed by the time this function returns
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array
-    ///     .dist_iter()
-    ///     .blocking_for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
-    /// );
-    ///```
-    fn blocking_for_each<F>(&self, op: F) 
-    where
-        F: Fn(Self::Item) + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_for_each(self, op)
-    }
+    // /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array
+    // ///
+    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// This function returns a future which can be used to poll for completion of the iteration.
+    // /// # Note 
+    // /// Calling this function launches the iteration regardless of if the returned future is used or not.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let _ = array
+    // ///     .dist_iter()
+    // ///     .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()));
+    // /// array.wait_all(); //wait for the iteration to complete
+    // /// 
+    // ///```
+    // #[must_use = "The iteration has already been launched. Await this future to wait for completion and retrieve the result.
+    // You can use 'let _ = spawn_[iterator]` to supress the warning, but likely will want to also call '<the_array>.wait_all()' at
+    // somepoint to ensure the iteration has completed"]
+    // fn spawn_for_each<F>(&self, op: F) -> LamellarTask<()>
+    // where
+    //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
+    // {
+    //     self.array().spawn_for_each(self, op)
+    // }
+
+    // /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array
+    // ///
+    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// The iteration will have been completed by the time this function returns
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// array
+    // ///     .dist_iter()
+    // ///     .blocking_for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
+    // /// );
+    // ///```
+    // fn blocking_for_each<F>(&self, op: F) 
+    // where
+    //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_for_each(self, op)
+    // }
 
     /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
     ///
@@ -408,7 +464,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -428,7 +485,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///     fut.await;
     /// }
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -437,48 +494,91 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().for_each_async(self, op)
     }
 
-    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array
-    ///
-    /// The supplied closure must return a future.
-    ///
-    /// Each thread will only drive a single future at a time.
-    ///
-    /// Iteration is completed by the time this function returns
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array.dist_iter().blocking_for_each_async(|elem| async move {
-    ///     async_std::task::yield_now().await;
-    ///     println!("{:?} {elem}",std::thread::current().id())
-    /// });
-    /// ```
-    /// essentially the for_each_async call gets converted into (on each thread)
-    ///```ignore
-    /// for fut in array.iter(){
-    ///     fut.await;
-    /// }
-    ///```
-    fn blocking_for_each_async<F, Fut>(&self, op: F)
-    where
-        F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        self.array().blocking_for_each_async(self, op)
-    }
+    // /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array
+    // ///
+    // /// The supplied closure must return a future.
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// This function returns a future which can be used to poll for completion of the iteration.
+    // /// # Note 
+    // /// Calling this function launches the iteration regardless of if the returned future is used or not.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let iter = array.dist_iter().spawn_for_each_async(|elem| async move {
+    // ///     async_std::task::yield_now().await;
+    // ///     println!("{:?} {elem}",std::thread::current().id())
+    // /// });
+    // /// world.block_on(iter);
+    // /// ```
+    // /// essentially the for_each_async call gets converted into (on each thread)
+    // ///```ignore
+    // /// for fut in array.iter(){
+    // ///     fut.await;
+    // /// }
+    // ///```
+    // #[must_use = "The iteration has already been launched. Await this future to wait for completion and retrieve the result.
+    // You can use 'let _ = spawn_[iterator]` to supress the warning, but likely will want to also call '<the_array>.wait_all()' at
+    // somepoint to ensure the iteration has completed"]
+    // fn spawn_for_each_async<F, Fut>(&self, op: F) -> LamellarTask<()>
+    // where
+    //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = ()> + Send + 'static,
+    // {
+    //     self.array().spawn_for_each_async(self, op)
+    // }
+
+    // /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array
+    // ///
+    // /// The supplied closure must return a future.
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// Iteration is completed by the time this function returns
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// array.dist_iter().blocking_for_each_async(|elem| async move {
+    // ///     async_std::task::yield_now().await;
+    // ///     println!("{:?} {elem}",std::thread::current().id())
+    // /// });
+    // /// ```
+    // /// essentially the for_each_async call gets converted into (on each thread)
+    // ///```ignore
+    // /// for fut in array.iter(){
+    // ///     fut.await;
+    // /// }
+    // ///```
+    // fn blocking_for_each_async<F, Fut>(&self, op: F)
+    // where
+    //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = ()> + Send + 'static,
+    // {
+    //     self.array().blocking_for_each_async(self, op)
+    // }
 
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -486,10 +586,9 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
-    /// array.wait_all();
+    /// array.block_on(array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id())));
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
@@ -497,27 +596,55 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().for_each_with_schedule(sched, self, op)
     }
 
-    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array
-    ///
-    /// Iteration is completed by the time this function returns
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array.dist_iter().blocking_for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
-    ///```
-    fn blocking_for_each_with_schedule<F>(&self, sched: Schedule, op: F)
-    where
-        F: Fn(Self::Item) + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_for_each_with_schedule(sched, self, op)
-    }
+    //  /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array
+    // ///
+    // /// This function returns a future which can be used to poll for completion of the iteration.
+    // /// # Note 
+    // /// Calling this function launches the iteration regardless of if the returned future is used or not.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
+    // /// array.wait_all();
+    // ///```
+    // #[must_use = "The iteration has already been launched. Await this future to wait for completion and retrieve the result.
+    // You can use 'let _ = spawn_[iterator]` to supress the warning, but likely will want to also call '<the_array>.wait_all()' at
+    // somepoint to ensure the iteration has completed"]
+    // fn spawn_for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> LamellarTask<()>
+    // where
+    //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
+    // {
+    //     self.array().spawn_for_each_with_schedule(sched, self, op)
+    // }
+
+    // /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array
+    // ///
+    // /// Iteration is completed by the time this function returns
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// array.dist_iter().blocking_for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
+    // ///```
+    // fn blocking_for_each_with_schedule<F>(&self, sched: Schedule, op: F)
+    // where
+    //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_for_each_with_schedule(sched, self, op)
+    // }
 
     /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
     ///
@@ -529,7 +656,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Each thread will only drive a single future at a time.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
-    /// Note calling this function launches the iteration regardless of if the returned future is used or not.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterForEachHandle::spawn] or [blocked on][DistIterForEachHandle::block]
     ///
     /// # Examples
     ///```
@@ -538,13 +666,13 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// array.dist_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
+    /// let iter = array.dist_iter().spawn_for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
-    /// array.wait_all();
+    /// array.block_on(iter);
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -553,43 +681,81 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().for_each_async_with_schedule(sched, self, op)
     }
 
-    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
-    /// as each PE will only process elements local to itself
-    ///
-    /// The supplied closure must return a future.
-    ///
-    /// Each thread will only drive a single future at a time.
-    ///
-    /// Iteration is completed by the time this function returns
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// array.dist_iter().blocking_for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
-    ///     async_std::task::yield_now().await;
-    ///     println!("{:?} {elem}",std::thread::current().id())
-    /// });
-    ///```
-    fn blocking_for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F)
-    where
-        F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        self.array().blocking_for_each_async_with_schedule(sched, self, op)
-    }
+    // /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    // /// as each PE will only process elements local to itself
+    // ///
+    // /// The supplied closure must return a future.
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// This function returns a future which can be used to poll for completion of the iteration.
+    // /// # Note 
+    // /// Calling this function launches the iteration regardless of if the returned future is used or not.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// array.dist_iter().spawn_for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
+    // ///     async_std::task::yield_now().await;
+    // ///     println!("{:?} {elem}",std::thread::current().id())
+    // /// });
+    // /// array.wait_all();
+    // ///```
+    // #[must_use = "The iteration has already been launched. Await this future to wait for completion and retrieve the result.
+    // You can use 'let _ = spawn_[iterator]` to supress the warning, but likely will want to also call '<the_array>.wait_all()' at
+    // somepoint to ensure the iteration has completed"]
+    // fn spawn_for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> LamellarTask<()>
+    // where
+    //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = ()> + Send + 'static,
+    // {
+    //     self.array().spawn_for_each_async_with_schedule(sched, self, op)
+    // }
+
+    // /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
+    // /// as each PE will only process elements local to itself
+    // ///
+    // /// The supplied closure must return a future.
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// Iteration is completed by the time this function returns
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// array.dist_iter().blocking_for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
+    // ///     async_std::task::yield_now().await;
+    // ///     println!("{:?} {elem}",std::thread::current().id())
+    // /// });
+    // ///```
+    // fn blocking_for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F)
+    // where
+    //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
+    //     Fut: Future<Output = ()> + Send + 'static,
+    // {
+    //     self.array().blocking_for_each_async_with_schedule(sched, self, op)
+    // }
 
     /// Reduces the elements of the dist iterator using the provided closure
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the reduced value.
     ///
     /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterReduceHandle::spawn] or [blocked on][DistIterReduceHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -600,7 +766,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn reduce<F>(&self, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
@@ -610,33 +776,64 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().reduce(self, op)
     }
 
-    /// Reduces the elements of the dist iterator using the provided closure
-    ///
-    /// The function returns the reduced value
-    ///
-    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let req = array.dist_iter().blocking_reduce(|acc,elem| acc+elem);
-    ///```
-    fn blocking_reduce<F>(&self, op: F) -> Option<Self::Item>
-    where
-        // &'static Self: LocalIterator + 'static,
-        Self::Item: Dist + ArrayOps,
-        F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_reduce(self, op)
-    }
+    // /// Reduces the elements of the dist iterator using the provided closure
+    // ///
+    // /// This function returns a future which needs to be driven to completion to retrieve the reduced value.
+    // ///
+    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    // /// # Note 
+    // /// Calling this function launches the iteration regardless of if the returned future is used or not.
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let req = array.dist_iter().spawn_reduce(|acc,elem| acc+elem);
+    // /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    // ///```
+    // #[must_use = "The iteration has already been launched. Await this future to wait for completion and retrieve the result.
+    // You can use 'let _ = spawn_[iterator]` to supress the warning, but likely will want to also call '<the_array>.wait_all()' at
+    // somepoint to ensure the iteration has completed"]
+    // fn spawn_reduce<F>(&self, op: F) -> LamellarTask<Option<Self::Item>>
+    // where
+    //     // &'static Self: LocalIterator + 'static,
+    //     Self::Item: Dist + ArrayOps,
+    //     F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    // {
+    //     self.array().spawn_reduce(self, op)
+    // }
+
+    // /// Reduces the elements of the dist iterator using the provided closure
+    // ///
+    // /// The function returns the reduced value
+    // ///
+    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let req = array.dist_iter().blocking_reduce(|acc,elem| acc+elem);
+    // ///```
+    // fn blocking_reduce<F>(&self, op: F) -> Option<Self::Item>
+    // where
+    //     // &'static Self: LocalIterator + 'static,
+    //     Self::Item: Dist + ArrayOps,
+    //     F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_reduce(self, op)
+    // }
 
     /// Reduces the elements of the dist iterator using the provided closure and [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the  reduced value.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterReduceHandle::spawn] or [blocked on][DistIterReduceHandle::block]
     ///
     /// # Examples
     ///```
@@ -648,7 +845,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
@@ -658,27 +855,51 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().reduce_with_schedule(sched, self, op)
     }
 
-    /// Reduces the elements of the dist iterator using the provided closure and [Schedule][crate::array::iterator::Schedule] policy
-    ///
-    /// This function returns the reduced value.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let req = array.dist_iter().blocking_reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);//wait on the collect request to get the new array
-    ///```
-    fn blocking_reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> Option<Self::Item>
-    where
-        // &'static Self: LocalIterator + 'static,
-        Self::Item: Dist + ArrayOps,
-        F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_reduce_with_schedule(sched, self, op)
-    }
+    // /// Reduces the elements of the dist iterator using the provided closure and [Schedule][crate::array::iterator::Schedule] policy
+    // ///
+    // /// This function returns a future which needs to be driven to completion to retrieve the  reduced value.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let req = array.dist_iter().reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
+    // /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    // ///```
+    // #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    // fn spawn_reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterReduceHandle<Self::Item, F>
+    // where
+    //     // &'static Self: LocalIterator + 'static,
+    //     Self::Item: Dist + ArrayOps,
+    //     F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    // {
+    //     self.array().reduce_with_schedule(sched, self, op)
+    // }
+
+    // /// Reduces the elements of the dist iterator using the provided closure and [Schedule][crate::array::iterator::Schedule] policy
+    // ///
+    // /// This function returns the reduced value.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let req = array.dist_iter().blocking_reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);//wait on the collect request to get the new array
+    // ///```
+    // fn blocking_reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> Option<Self::Item>
+    // where
+    //     // &'static Self: LocalIterator + 'static,
+    //     Self::Item: Dist + ArrayOps,
+    //     F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_reduce_with_schedule(sched, self, op)
+    // }
 
     /// Collects the elements of the distributed iterator into a new LamellarArray
     ///
@@ -692,7 +913,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// distribute data across the PEs as evenly as possible.
     ///
     /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -706,7 +928,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect<A>(&self, d: Distribution) -> DistIterCollectHandle<Self::Item, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -716,38 +938,38 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect(self, d)
     }
 
-    /// Collects the elements of the distributed iterator into a new LamellarArray
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    ///
-    /// This function returns the new LamellarArray upon completion.
-    ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    /// distribute data across the PEs as evenly as possible.
-    ///
-    /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let new_array = array.dist_iter()
-    ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
-    ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
-    ///                .blocking_collect::<AtomicArray<usize>>(Distribution::Block);
-    ///```
-    fn blocking_collect<A>(&self, d: Distribution) -> A
-    where
-        // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_collect(self, d)
-    }
+    // /// Collects the elements of the distributed iterator into a new LamellarArray
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    // ///
+    // /// This function returns the new LamellarArray upon completion.
+    // ///
+    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    // /// distribute data across the PEs as evenly as possible.
+    // ///
+    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let new_array = array.dist_iter()
+    // ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
+    // ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
+    // ///                .blocking_collect::<AtomicArray<usize>>(Distribution::Block);
+    // ///```
+    // fn blocking_collect<A>(&self, d: Distribution) -> A
+    // where
+    //     // &'static Self: DistributedIterator + 'static,
+    //     Self::Item: Dist + ArrayOps,
+    //     A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_collect(self, d)
+    // }
 
     /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
     ///
@@ -759,7 +981,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -773,7 +996,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_with_schedule<A>(&self,sched: Schedule, d: Distribution) -> DistIterCollectHandle<Self::Item, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -783,37 +1006,37 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect_with_schedule(sched,self,  d)
     }
 
-    /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    ///
-    /// This function returns the new LamellarArray upon completion.
-    ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    /// distribute data across the PEs as evenly as possible.
-    ///
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let new_array = array.dist_iter()
-    ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
-    ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
-    ///                .blocking_collect_with_scheduler::<AtomicArray<usize>>(Schedule::Dynamic, Distribution::Block);
-    ///```
-    fn blocking_collect_with_schedule<A>(&self,sched: Schedule, d: Distribution) -> A
-    where
-        // &'static Self: DistributedIterator + 'static,
-        Self::Item: Dist + ArrayOps,
-        A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_collect_with_schedule(sched,self, d)
-    }
+    // /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    // ///
+    // /// This function returns the new LamellarArray upon completion.
+    // ///
+    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    // /// distribute data across the PEs as evenly as possible.
+    // ///
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let new_array = array.dist_iter()
+    // ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
+    // ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
+    // ///                .blocking_collect_with_scheduler::<AtomicArray<usize>>(Schedule::Dynamic, Distribution::Block);
+    // ///```
+    // fn blocking_collect_with_schedule<A>(&self,sched: Schedule, d: Distribution) -> A
+    // where
+    //     // &'static Self: DistributedIterator + 'static,
+    //     Self::Item: Dist + ArrayOps,
+    //     A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_collect_with_schedule(sched,self, d)
+    // }
 
     /// Collects the awaited elements of the distributed iterator into a new LamellarArray
     ///
@@ -829,7 +1052,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -851,7 +1075,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_async<A, T>(&self, d: Distribution) -> DistIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -862,49 +1086,49 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect_async(self, d)
     }
 
-    /// Collects the awaited elements of the distributed iterator into a new LamellarArray
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    ///
-    /// Each element from the iterator must return a Future
-    ///
-    /// Each thread will only drive a single future at a time.
-    ///
-    /// The function returns the new LamellarArray upon completion.
-    ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    /// distribute data across the PEs as evenly as possible.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// // initialize a world and an atomic array
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    ///
-    /// // clone the array; this doesn't duplicate the underlying
-    /// // data but it does create a second pointer that we can
-    /// // discard when necessary
-    /// let array_clone = array.clone();
-    ///
-    /// // run collect
-    /// let _new_array
-    ///     = array_clone.dist_iter().map(
-    ///         move |elem|
-    ///         array_clone
-    ///             .fetch_add(elem.load(),1000))
-    ///             .blocking_collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    ///```
-    fn blocking_collect_async<A, T>(&self, d: Distribution) -> A
-    where
-        // &'static Self: DistributedIterator + 'static,
-        T: Dist + ArrayOps,
-        Self::Item: Future<Output = T> + Send + 'static,
-        A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_collect_async(self, d)
-    }
+    // /// Collects the awaited elements of the distributed iterator into a new LamellarArray
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    // ///
+    // /// Each element from the iterator must return a Future
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// The function returns the new LamellarArray upon completion.
+    // ///
+    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    // /// distribute data across the PEs as evenly as possible.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// // initialize a world and an atomic array
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// // clone the array; this doesn't duplicate the underlying
+    // /// // data but it does create a second pointer that we can
+    // /// // discard when necessary
+    // /// let array_clone = array.clone();
+    // ///
+    // /// // run collect
+    // /// let _new_array
+    // ///     = array_clone.dist_iter().map(
+    // ///         move |elem|
+    // ///         array_clone
+    // ///             .fetch_add(elem.load(),1000))
+    // ///             .blocking_collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
+    // ///```
+    // fn blocking_collect_async<A, T>(&self, d: Distribution) -> A
+    // where
+    //     // &'static Self: DistributedIterator + 'static,
+    //     T: Dist + ArrayOps,
+    //     Self::Item: Future<Output = T> + Send + 'static,
+    //     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_collect_async(self, d)
+    // }
 
     /// Collects the awaited elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
     ///
@@ -920,7 +1144,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
     /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
     /// distribute data across the PEs as evenly as possible.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCollectHandle::spawn] or [blocked on][DistIterCollectHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -942,7 +1167,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Scheduler::Dynamic, Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_async_with_schedule<A, T>(&self, sched: Schedule,   d: Distribution) -> DistIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -953,56 +1178,57 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect_async_with_schedule(sched, self, d)
     }
 
-    /// Collects the awaited elements of the distributed iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy 
-    ///
-    /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    ///
-    /// Each element from the iterator must return a Future
-    ///
-    /// Each thread will only drive a single future at a time.
-    ///
-    /// The function returns the new LamellarArray upon completion.
-    ///
-    /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    /// distribute data across the PEs as evenly as possible.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// // initialize a world and an atomic array
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    ///
-    /// // clone the array; this doesn't duplicate the underlying
-    /// // data but it does create a second pointer that we can
-    /// // discard when necessary
-    /// let array_clone = array.clone();
-    ///
-    /// // run collect
-    /// let _new_array
-    ///     = array_clone.dist_iter().map(
-    ///         move |elem|
-    ///         array_clone
-    ///             .fetch_add(elem.load(),1000))
-    ///             .blocking_collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    ///```
-    fn blocking_collect_async_with_schedule<A, T>(&self, sched: Schedule, d: Distribution) -> A
-    where
-        // &'static Self: DistributedIterator + 'static,
-        T: Dist + ArrayOps,
-        Self::Item: Future<Output = T> + Send + 'static,
-        A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        self.array().blocking_collect_async_with_schedule(sched,self, d)
-    }
+    // /// Collects the awaited elements of the distributed iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    // ///
+    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
+    // ///
+    // /// Each element from the iterator must return a Future
+    // ///
+    // /// Each thread will only drive a single future at a time.
+    // ///
+    // /// The function returns the new LamellarArray upon completion.
+    // ///
+    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
+    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
+    // /// distribute data across the PEs as evenly as possible.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// // initialize a world and an atomic array
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// // clone the array; this doesn't duplicate the underlying
+    // /// // data but it does create a second pointer that we can
+    // /// // discard when necessary
+    // /// let array_clone = array.clone();
+    // ///
+    // /// // run collect
+    // /// let _new_array
+    // ///     = array_clone.dist_iter().map(
+    // ///         move |elem|
+    // ///         array_clone
+    // ///             .fetch_add(elem.load(),1000))
+    // ///             .blocking_collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
+    // ///```
+    // fn blocking_collect_async_with_schedule<A, T>(&self, sched: Schedule, d: Distribution) -> A
+    // where
+    //     // &'static Self: DistributedIterator + 'static,
+    //     T: Dist + ArrayOps,
+    //     Self::Item: Future<Output = T> + Send + 'static,
+    //     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + Clone + 'static,
+    // {
+    //     self.array().blocking_collect_async_with_schedule(sched,self, d)
+    // }
 
     /// Counts the number of the elements of the distriubted iterator
     /// 
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve count.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCountHandle::spawn] or [blocked on][DistIterCountHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1013,36 +1239,37 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().filter(|elem|  elem < 10).count();
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn count(&self) -> DistIterCountHandle {
         self.array().count(self)
     }
 
-    /// Counts the number of the elements of the distributed iterator
-    ///
-    /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
-    /// 
-    /// This function returns the count upon completion.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let cnt = array.dist_iter().filter(|elem|  elem < 10).blocking_count();
-    ///```
-    fn blocking_count(&self) -> usize {
-        self.array().blocking_count(self)
-    }
+    // /// Counts the number of the elements of the distributed iterator
+    // ///
+    // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
+    // /// 
+    // /// This function returns the count upon completion.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let cnt = array.dist_iter().filter(|elem|  elem < 10).blocking_count();
+    // ///```
+    // fn blocking_count(&self) -> usize {
+    //     self.array().blocking_count(self)
+    // }
 
     /// Counts the number of the elements of the distriubted iterator, using the provided [Schedule][crate::array::iterator::Schedule] policy
     /// 
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve count.
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterCountHandle::spawn] or [blocked on][DistIterCountHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1058,24 +1285,24 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     }
 
 
-    /// Counts the number of the elements of the distributed iterator, using the provided [Schedule][crate::array::iterator::Schedule] policy
-    ///
-    /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
-    /// 
-    /// This function returns the count upon completion.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let cnt = array.dist_iter().filter(|elem|  elem < 10).blocking_count_with_schedule(Schedule::Dynamic);
-    ///```
-    fn blocking_count_with_schedule(&self, sched: Schedule) -> usize {
-        self.array().blocking_count_with_schedule(sched, self)
-    }
+    // /// Counts the number of the elements of the distributed iterator, using the provided [Schedule][crate::array::iterator::Schedule] policy
+    // ///
+    // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
+    // /// 
+    // /// This function returns the count upon completion.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let cnt = array.dist_iter().filter(|elem|  elem < 10).blocking_count_with_schedule(Schedule::Dynamic);
+    // ///```
+    // fn blocking_count_with_schedule(&self, sched: Schedule) -> usize {
+    //     self.array().blocking_count_with_schedule(sched, self)
+    // }
 
     /// Sums the elements of the distributed iterator.
     ///
@@ -1086,7 +1313,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// An empty iterator returns the zero value of the type.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the sum
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterSumHandle::spawn] or [blocked on][DistIterSumHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1097,7 +1325,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().sum();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> DistIterSumHandle<Self::Item>
     where
         Self::Item: Dist + ArrayOps + std::iter::Sum,
@@ -1105,31 +1333,31 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().sum(self)
     }
 
-    /// Sums the elements of the distributed iterator.
-    ///
-    /// Takes each element, adds them together, and returns the result.
-    /// 
-    /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
-    ///
-    /// An empty iterator returns the zero value of the type.
-    ///
-    /// This function returns the sum upon completion.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let sum = array.dist_iter().blocking_sum();
-    ///```
-    fn blocking_sum(&self) -> Self::Item
-    where
-        Self::Item: Dist + ArrayOps + std::iter::Sum,
-    {
-        self.array().blocking_sum(self)
-    }
+    // /// Sums the elements of the distributed iterator.
+    // ///
+    // /// Takes each element, adds them together, and returns the result.
+    // /// 
+    // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
+    // ///
+    // /// An empty iterator returns the zero value of the type.
+    // ///
+    // /// This function returns the sum upon completion.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let sum = array.dist_iter().blocking_sum();
+    // ///```
+    // fn blocking_sum(&self) -> Self::Item
+    // where
+    //     Self::Item: Dist + ArrayOps + std::iter::Sum,
+    // {
+    //     self.array().blocking_sum(self)
+    // }
 
     /// Sums the elements of the distributed iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
     ///
@@ -1140,7 +1368,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// An empty iterator returns the zero value of the type.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the sum
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][DistIterSumHandle::spawn] or [blocked on][DistIterSumHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1151,7 +1380,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().sum_with_schedule(Schedule::Guided);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-    #[must_use]
+     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn sum_with_schedule(&self, sched: Schedule) -> DistIterSumHandle<Self::Item>
     where
         Self::Item: Dist + ArrayOps + std::iter::Sum,
@@ -1159,31 +1388,31 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().sum_with_schedule(sched, self)
     }
 
-    /// Sums the elements of the distributed iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
-    ///
-    /// Takes each element, adds them together, and returns the result.
-    /// 
-    /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
-    ///
-    /// An empty iterator returns the zero value of the type.
-    ///
-    /// This function returns the sum upon completion.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    ///
-    /// let sum = array.dist_iter().blocking_sum_with_schedule(Schedule::Guided);
-    ///```
-    fn blocking_sum_with_schedule(&self, sched: Schedule) -> Self::Item
-    where
-        Self::Item: Dist + ArrayOps + std::iter::Sum,
-    {
-        self.array().blocking_sum_with_schedule(sched, self)
-    }
+    // /// Sums the elements of the distributed iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
+    // ///
+    // /// Takes each element, adds them together, and returns the result.
+    // /// 
+    // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
+    // ///
+    // /// An empty iterator returns the zero value of the type.
+    // ///
+    // /// This function returns the sum upon completion.
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    // ///
+    // /// let sum = array.dist_iter().blocking_sum_with_schedule(Schedule::Guided);
+    // ///```
+    // fn blocking_sum_with_schedule(&self, sched: Schedule) -> Self::Item
+    // where
+    //     Self::Item: Dist + ArrayOps + std::iter::Sum,
+    // {
+    //     self.array().blocking_sum_with_schedule(sched, self)
+    // }
 }
 
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length

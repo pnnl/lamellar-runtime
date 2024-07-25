@@ -9,6 +9,7 @@ use crate::darc::DarcMode;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::LamellarTask;
 use crate::Darc;
 
 use async_trait::async_trait;
@@ -210,6 +211,12 @@ impl DistIterCountHandle {
             team: array.data.team.clone(),
             state: State::Barrier(barrier_handle, inner),
         }
+    }
+    pub fn block(self) -> usize {
+        self.team.clone().block_on(self)
+    }
+    pub fn spawn(self) -> LamellarTask<usize> {
+        self.team.clone().scheduler.spawn_task(self)
     }
 }
 

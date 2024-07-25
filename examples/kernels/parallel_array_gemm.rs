@@ -35,10 +35,11 @@ fn main() {
     //initialize matrices
     a.dist_iter_mut()
         .enumerate()
-        .blocking_for_each(|(i, x)| *x = i as f32);
+        .for_each(|(i, x)| *x = i as f32)
+        .block();
     b.dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(i, x)| {
+        .for_each(move |(i, x)| {
             //need global index so use dist_iter
             //identity matrix
             let row = i / dim;
@@ -48,8 +49,9 @@ fn main() {
             } else {
                 *x = 0 as f32;
             }
-        });
-    c.dist_iter_mut().blocking_for_each(|x| x.store(0.0));
+        })
+        .block();
+    c.dist_iter_mut().for_each(|x| x.store(0.0)).block();
 
     world.wait_all();
     world.barrier();
@@ -69,7 +71,7 @@ fn main() {
         .for_each(|(j, col)| {
             let col = col.clone();
             let c = c.clone();
-            let _ = a
+            a
                 // .local_iter() //LocalIterator (each pe will iterate through only its local data -- in parallel)
                 // .chunks(n) // chunk by the row size
                 .local_chunks(n)
@@ -81,7 +83,8 @@ fn main() {
                     //we know all updates to c are local so directly update the raw data
                     //we could also use:
                     //c.add(j+i*m,sum) -- but some overheads are introduce from PGAS calculations performed by the runtime, and since its all local updates we can avoid them
-                });
+                })
+                .spawn();
         });
 
     world.wait_all();

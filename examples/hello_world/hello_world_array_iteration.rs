@@ -28,7 +28,7 @@ fn main() {
     array
         .dist_iter_mut() //create a mutable distributed iterator (i.e. data parallel iteration, similar to Rayon par_iter())
         .enumerate() // enumeration with respect to the global array
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "PE {:?} setting  array[{:?}]={:?} using thread {:?}",
                 my_pe,
@@ -37,7 +37,8 @@ fn main() {
                 std::thread::current().id()
             );
             elem.store(my_pe); //"store" because this is an AtomicArray
-        });
+        })
+        .block();
 
     //wait for all pes to finish
     world.barrier();

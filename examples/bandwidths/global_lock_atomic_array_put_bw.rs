@@ -23,8 +23,8 @@ fn main() {
     }
     array
         .dist_iter_mut()
-        .blocking_for_each(move |elem| *elem = 255 as u8);
-    array.wait_all();
+        .for_each(move |elem| *elem = 255 as u8)
+        .block();
     array.barrier();
 
     world.barrier();
@@ -98,8 +98,8 @@ fn main() {
         bws.push((sum as f64 / 1048576.0) / cur_t);
         array
             .dist_iter_mut()
-            .blocking_for_each(move |elem| *elem = 255 as u8);
-        array.wait_all();
+            .for_each(move |elem| *elem = 255 as u8)
+            .block();
         array.barrier();
     }
     if my_pe == num_pes - 1 {

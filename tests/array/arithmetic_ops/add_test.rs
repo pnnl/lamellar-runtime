@@ -10,24 +10,28 @@ macro_rules! initialize_array {
         unsafe {
             $array
                 .dist_iter_mut()
-                .blocking_for_each(move |x| *x = $init_val)
+                .for_each(move |x| *x = $init_val)
+                .block()
         };
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter()
-            .blocking_for_each(move |x| x.store($init_val));
+            .for_each(move |x| x.store($init_val))
+            .block();
         // println!("----------------------------------------------");
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter_mut()
-            .blocking_for_each(move |x| *x = $init_val);
+            .for_each(move |x| *x = $init_val)
+            .block();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
         $array
             .dist_iter_mut()
-            .blocking_for_each(move |x| *x = $init_val);
+            .for_each(move |x| *x = $init_val)
+            .block();
     };
 }
 
@@ -332,16 +336,15 @@ macro_rules! input_test{
                     let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {
                         // println!("i: {:?}",i);
                         *x = i%array_total_len}
-                    );
+                    ).block();
                 }
                 else{
                     let _ = input_array.dist_iter_mut().enumerate().for_each(move |(i,x)| {
                         //println!("i: {:?}",i);
                         *x = i/num_pes}
-                    );
+                    ).block();
                 }
             }
-            input_array.wait_all();
             input_array.barrier();
             input_array.print();
             //individual T------------------------------

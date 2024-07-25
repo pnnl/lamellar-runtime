@@ -48,10 +48,11 @@ fn main() {
         }
     });
     let c_init = c.dist_iter_mut().for_each(|x| *x = 0.0);
+    world.block_on_all([a_init, b_init, c_init]);
     let a = a.into_read_only();
     let b = b.into_read_only();
-    world.block_on_all((a, b, c));
-    worldc.barrier();
+
+    world.barrier();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
     let blocksize = std::cmp::min(1000000, dim / num_pes); // / 32;
@@ -72,14 +73,16 @@ fn main() {
     nblks_array
         .dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(i, x)| *x = i % n_blks);
+        .for_each(move |(i, x)| *x = i % n_blks)
+        .block();
 
     let m_blks_pe_array = LocalLockArray::new(&world, m_blks_pe * num_pes, Distribution::Block);
 
     m_blks_pe_array
         .dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(i, x)| *x = i % m_blks_pe);
+        .for_each(move |(i, x)| *x = i % m_blks_pe)
+        .block();
     world.barrier();
     let nblks_array = nblks_array.into_read_only();
     let m_blks_pe_array = m_blks_pe_array.into_read_only();

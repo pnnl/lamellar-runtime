@@ -6,6 +6,7 @@ use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::LamellarTask;
 
 use futures_util::{ready, Future};
 use pin_project::pin_project;
@@ -150,7 +151,11 @@ pub struct LocalIterReduceHandle<T, F> {
     state: State<T, F>,
 }
 
-impl<T, F> LocalIterReduceHandle<T, F> {
+impl<T, F> LocalIterReduceHandle<T, F>
+where
+    T: SyncSend + Copy + 'static,
+    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
+{
     pub(crate) fn new(
         reqs: Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>,
         array: &UnsafeArrayInner,
@@ -159,6 +164,13 @@ impl<T, F> LocalIterReduceHandle<T, F> {
             team: array.data.team.clone(),
             state: State::Init(reqs),
         }
+    }
+
+    pub fn block(self) -> Option<T> {
+        self.team.clone().block_on(self)
+    }
+    pub fn spawn(self) -> LamellarTask<Option<T>> {
+        self.team.clone().scheduler.spawn_task(self)
     }
 }
 

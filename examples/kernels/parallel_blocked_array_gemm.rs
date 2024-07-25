@@ -42,10 +42,11 @@ fn main() {
                                                                          //initialize
     a.dist_iter_mut()
         .enumerate()
-        .blocking_for_each(|(i, x)| *x = i as f32);
+        .for_each(|(i, x)| *x = i as f32)
+        .block();
     b.dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(i, x)| {
+        .for_each(move |(i, x)| {
             //identity matrix
             let row = i / dim;
             let col = i % dim;
@@ -54,8 +55,9 @@ fn main() {
             } else {
                 *x = 0 as f32;
             }
-        });
-    c.dist_iter_mut().blocking_for_each(|x| x.store(0.0));
+        })
+        .block();
+    c.dist_iter_mut().for_each(|x| x.store(0.0)).block();
     world.barrier();
     let a = a.into_read_only();
     let b = b.into_read_only();
@@ -78,11 +80,12 @@ fn main() {
     nblks_array
         .dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(g_i, x)| {
+        .for_each(move |(g_i, x)| {
             let i = g_i % (n_blks * n_blks);
             x.j = i / n_blks;
             x.k = i % n_blks
-        });
+        })
+        .block();
     let nblks_array = nblks_array.into_read_only();
 
     let start = std::time::Instant::now();
@@ -91,7 +94,7 @@ fn main() {
     let c_clone = c.clone();
     nblks_array
         .dist_iter()
-        .blocking_for_each_async(move |block| {
+        .for_each_async(move |block| {
             let b = b_clone.clone();
             let a: ReadOnlyArray<f32> = a_clone.clone();
             let c = c_clone.clone();
@@ -172,7 +175,8 @@ fn main() {
                 }
             }
             // }
-        });
+        })
+        .block();
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();

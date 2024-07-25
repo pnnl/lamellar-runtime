@@ -17,10 +17,11 @@ fn for_each_with_schedule(
     array
         .local_iter()
         .filter(|e| e.load() % 2 == 0)
-        .blocking_for_each_with_schedule(schedule, move |e| {
+        .for_each_with_schedule(schedule, move |e| {
             std::thread::sleep(Duration::from_millis((e.load() * 1) as u64));
             *tc.lock().entry(std::thread::current().id()).or_insert(0) += 1;
-        });
+        })
+        .block();
     array.barrier();
     println!("elapsed time {:?}", timer.elapsed().as_secs_f64());
     println!("counts {:?}", thread_cnts.lock());
@@ -109,10 +110,11 @@ fn main() {
     let _my_pe = world.my_pe();
     let _num_pes = world.num_pes();
     let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    block_array
+    let _ = block_array
         .dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(i, e)| e.store(i));
+        .for_each(move |(i, e)| e.store(i))
+        .spawn();
     world.wait_all();
     block_array.print();
 

@@ -9,6 +9,7 @@ use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
+use crate::scheduler::LamellarTask;
 use crate::Dist;
 
 use futures_util::{ready, Future, StreamExt};
@@ -315,16 +316,15 @@ where
 
 #[pin_project]
 pub struct DistIterReduceHandle<T, F> {
-    // pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
     team: Pin<Arc<LamellarTeamRT>>,
     #[pin]
     state: State<T, F>,
 }
 
 impl<T, F> DistIterReduceHandle<T, F>
-// where
-//     T: Dist + Send + ArrayOps,
-//     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
+where
+    T: Dist + ArrayOps,
+    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     pub(crate) fn new(
         barrier: BarrierHandle,
@@ -335,6 +335,13 @@ impl<T, F> DistIterReduceHandle<T, F>
             team: array.data.team.clone(),
             state: State::Barrier(barrier, reqs),
         }
+    }
+
+    pub fn block(self) -> Option<T> {
+        self.team.clone().block_on(self)
+    }
+    pub fn spawn(self) -> LamellarTask<Option<T>> {
+        self.team.clone().scheduler.spawn_task(self)
     }
 }
 

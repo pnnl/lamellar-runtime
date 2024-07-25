@@ -30,10 +30,11 @@ fn main() {
 
     a.dist_iter_mut()
         .enumerate()
-        .blocking_for_each(|(i, x)| *x = i as f32);
+        .for_each(|(i, x)| *x = i as f32)
+        .block();
     b.dist_iter_mut()
         .enumerate()
-        .blocking_for_each(move |(i, x)| {
+        .for_each(move |(i, x)| {
             //identity matrix
             let row = i / dim;
             let col = i % dim;
@@ -42,8 +43,9 @@ fn main() {
             } else {
                 *x = 0 as f32;
             }
-        });
-    c.dist_iter_mut().blocking_for_each(|x| x.store(0.0));
+        })
+        .block();
+    c.dist_iter_mut().for_each(|x| x.store(0.0)).block();
 
     world.barrier();
 

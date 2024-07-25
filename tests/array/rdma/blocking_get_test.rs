@@ -24,29 +24,30 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
         unsafe {
-            let _ = $array
+            $array
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block()
         }
         $array.wait_all();
     };
     (AtomicArray,$array:ident,$t:ty) => {
-        let _ = $array
+        $array
             .dist_iter()
             .enumerate()
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
     (LocalLockArray,$array:ident,$t:ty) => {
-        let _ = $array
+        $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
     };
     (GlobalLockArray,$array:ident,$t:ty) => {
-        let _ = $array
+        $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
@@ -55,12 +56,11 @@ macro_rules! initialize_array {
     (ReadOnlyArray,$array:ident,$t:ty) => {
         let temp = $array.into_unsafe();
         unsafe {
-            let _ = temp
-                .dist_iter_mut()
+            temp.dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block();
         }
-        temp.wait_all();
         $array = temp.into_read_only();
     };
 }
@@ -69,47 +69,47 @@ macro_rules! initialize_array_range {
     (UnsafeArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         unsafe {
-            let _ = subarray
+            subarray
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block();
         }
-        subarray.wait_all();
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        let _ = subarray
+        subarray
             .dist_iter()
             .enumerate()
-            .for_each(move |(i, x)| x.store(i as $t));
-        subarray.wait_all();
+            .for_each(move |(i, x)| x.store(i as $t))
+            .block();
     }};
     (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        let _ = subarray
+        subarray
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
-        subarray.wait_all();
+            .for_each(move |(i, x)| *x = i as $t)
+            .block();
     }};
     (GlobalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        let _ = subarray
+        subarray
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
-        subarray.wait_all();
+            .for_each(move |(i, x)| *x = i as $t)
+            .block();
     }};
     (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {{
         let temp = $array.into_unsafe();
         let subarray = temp.sub_array($range);
         unsafe {
-            let _ = subarray
+            subarray
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block();
         }
-        subarray.wait_all();
         drop(subarray);
         $array = temp.into_read_only();
     }};

@@ -51,13 +51,14 @@ fn main() {
         .blocking_read_lock()
         .dist_iter()
         .enumerate()
-        .blocking_for_each(move |(i, elem)| {
+        .for_each(move |(i, elem)| {
             println!(
                 "{my_pe}, {:?}: {i} {:?}",
                 std::thread::current().id(),
                 *elem
             )
-        });
+        })
+        .block();
     world.barrier();
 
     let task = array

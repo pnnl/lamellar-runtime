@@ -2,24 +2,32 @@ use lamellar::array::prelude::*;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
         }
-        $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -58,7 +66,7 @@ macro_rules! max_updates {
     };
 }
 
-macro_rules! onesided_iter{
+macro_rules! onesided_iter {
     (GlobalLockArray,$array:ident) => {
         $array.blocking_read_lock().onesided_iter()
     };

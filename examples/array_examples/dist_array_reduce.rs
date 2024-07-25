@@ -133,19 +133,21 @@ fn main() {
         cyclic_sum, cyclic_dist_time, block_sum, block_dist_time
     );
 
-    unsafe { cyclic_array.dist_iter_mut().blocking_for_each(|x| *x += *x) };
+    unsafe { cyclic_array.dist_iter_mut().for_each(|x| *x += *x).block() };
     unsafe {
         cyclic_array
             .dist_iter()
             .enumerate()
-            .blocking_for_each(|x| println!("x: {:?}", x));
+            .for_each(|x| println!("x: {:?}", x))
+            .block();
     }
 
     unsafe {
         block_array
             .dist_iter()
             .enumerate()
-            .blocking_for_each(|x| println!("x: {:?}", x))
+            .for_each(|x| println!("x: {:?}", x))
+            .block()
     };
     let block_array = block_array.into_read_only();
     let _ = block_array.blocking_sum();
