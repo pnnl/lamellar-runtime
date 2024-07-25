@@ -10,9 +10,9 @@ use crate::memregion::Dist;
 
 use core::marker::PhantomData;
 use futures_util::Future;
+use paste::paste;
 use std::pin::Pin;
 use std::sync::Arc;
-use paste::paste;
 
 impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {}
 
@@ -68,7 +68,7 @@ macro_rules! consumer_impl {
             //     if std::thread::current().id() != *crate::MAIN_THREAD {
             //         let name = stringify!{$name};
             //         let msg = format!("
-            //             [LAMELLAR WARNING] You are calling `blocking_{name}[_with_schedule]` from within an async context which may lead to deadlock, it is recommended that you use `{name}[_with_schedule]().await;` instead! 
+            //             [LAMELLAR WARNING] You are calling `blocking_{name}[_with_schedule]` from within an async context which may lead to deadlock, it is recommended that you use `{name}[_with_schedule]().await;` instead!
             //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             //         );
             //         if let Some(val) = config().blocking_call_warning {
@@ -138,9 +138,8 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
         []
     );
 
-
     consumer_impl!(
-        reduce<I, F>( iter: &I, op: F); 
+        reduce<I, F>( iter: &I, op: F);
         [LocalIterReduceHandle<I::Item, F>];
         [I: LocalIterator + 'static, I::Item: SyncSend + Copy, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
         [
@@ -153,7 +152,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
     );
 
     consumer_impl!(
-        collect<I, A>( iter: &I, d: Distribution); 
+        collect<I, A>( iter: &I, d: Distribution);
         [LocalIterCollectHandle<I::Item, A>];
         [I: LocalIterator + 'static, I::Item: Dist + ArrayOps,  A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,];
         [
@@ -167,7 +166,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
     );
 
     consumer_impl!(
-        collect_async<I, A, B>( iter: &I, d: Distribution); 
+        collect_async<I, A, B>( iter: &I, d: Distribution);
         [LocalIterCollectHandle<B, A>];
         [I: LocalIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
         [
@@ -181,7 +180,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
     );
 
     consumer_impl!(
-        count<I>( iter: &I); 
+        count<I>( iter: &I);
         [LocalIterCountHandle];
         [I: LocalIterator + 'static ];
         [
@@ -193,7 +192,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
     );
 
     consumer_impl!(
-        sum<I>(iter: &I); 
+        sum<I>(iter: &I);
         [LocalIterSumHandle<I::Item>];
         [I: LocalIterator + 'static, I::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a I::Item> , ];
         [

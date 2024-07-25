@@ -687,7 +687,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             IndexSize::U64 => std::mem::size_of::<IdxVal<u64, T>>(),
             IndexSize::Usize => std::mem::size_of::<IdxVal<usize, T>>(),
         };
-        let num_per_batch = (config().am_size_threshold as f32 / idx_val_bytes as f32).ceil() as usize;
+        let num_per_batch =
+            (config().am_size_threshold as f32 / idx_val_bytes as f32).ceil() as usize;
         let bytes_per_batch = num_per_batch * idx_val_bytes;
 
         let num_pes = self.inner.data.team.num_pes();

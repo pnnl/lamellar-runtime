@@ -79,7 +79,8 @@ impl LamellarArch for BlockStridedArch {
         let block = parent_pe / self.block_size;
         let start_block = self.start_pe / self.block_size;
         let remainder = parent_pe % self.block_size;
-        if block >= start_block && (block - start_block) % self.stride == 0
+        if block >= start_block
+            && (block - start_block) % self.stride == 0
             && self.start_pe <= *parent_pe
             && *parent_pe <= self.end_pe
         {

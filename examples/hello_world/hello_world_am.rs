@@ -37,6 +37,3 @@ fn main() {
     //wait for the request to complete
     world.block_on(request);
 } //when world drops there is an implicit world.barrier() that occurs
-
-
-    

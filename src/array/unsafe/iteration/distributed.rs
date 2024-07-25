@@ -1,9 +1,9 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::private::Sealed;
+use crate::array::iterator::Schedule;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
 use crate::array::{ArrayOps, AsyncTeamFrom, Distribution, InnerArray};
-use crate::array::iterator::Schedule;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
 
@@ -100,7 +100,7 @@ macro_rules! consumer_impl {
             //     if std::thread::current().id() != *crate::MAIN_THREAD {
             //         let name = stringify!{$name};
             //         let msg = format!("
-            //             [LAMELLAR WARNING] You are calling `blocking_{name}[_with_schedule]` from within an async context which may lead to deadlock, it is recommended that you use `{name}[_with_schedule]().await;` instead! 
+            //             [LAMELLAR WARNING] You are calling `blocking_{name}[_with_schedule]` from within an async context which may lead to deadlock, it is recommended that you use `{name}[_with_schedule]().await;` instead!
             //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             //         );
             //         if let Some(val) = config().blocking_call_warning {
@@ -145,9 +145,9 @@ impl DistIteratorLauncher for UnsafeArrayInner {
             Some(self.subarray_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
-    
+
     consumer_impl!(
-    for_each<I, F>(iter: &I, op: F); 
+    for_each<I, F>(iter: &I, op: F);
     [DistIterForEachHandle];
     [I: DistributedIterator + 'static, F: Fn(I::Item) + SyncSend + Clone + 'static];
     [
@@ -159,7 +159,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
     [()]);
 
     consumer_impl!(
-        for_each_async<I, F, Fut>(iter: &I, op: F); 
+        for_each_async<I, F, Fut>(iter: &I, op: F);
         [DistIterForEachHandle];
         [I: DistributedIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static];
         [
@@ -172,7 +172,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
     );
 
     consumer_impl!(
-        reduce<I, F>( iter: &I, op: F); 
+        reduce<I, F>( iter: &I, op: F);
         [DistIterReduceHandle<I::Item, F>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
         [
@@ -184,7 +184,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
         [Option<I::Item>]);
 
     consumer_impl!(
-        collect<I, A>( iter: &I, d: Distribution); 
+        collect<I, A>( iter: &I, d: Distribution);
         [DistIterCollectHandle<I::Item, A>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps,  A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,];
         [
@@ -196,7 +196,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
         ];
         [A]);
     consumer_impl!(
-        collect_async<I, A, B>( iter: &I, d: Distribution); 
+        collect_async<I, A, B>( iter: &I, d: Distribution);
         [DistIterCollectHandle<B, A>];
         [I: DistributedIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
         [
@@ -209,7 +209,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
         [A]);
 
     consumer_impl!(
-        count<I>( iter: &I); 
+        count<I>( iter: &I);
         [DistIterCountHandle];
         [I: DistributedIterator + 'static ];
         [
@@ -220,7 +220,7 @@ impl DistIteratorLauncher for UnsafeArrayInner {
         [usize]);
 
     consumer_impl!(
-        sum<I>(iter: &I); 
+        sum<I>(iter: &I);
         [DistIterSumHandle<I::Item>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum, ];
         [

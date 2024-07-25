@@ -36,14 +36,11 @@ use take::*;
 
 pub(crate) use consumer::*;
 
+use crate::active_messaging::SyncSend;
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{
-    operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray,
-    LamellarArray,
-};
+use crate::array::{operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
-use crate::active_messaging::SyncSend;
 
 use futures_util::Future;
 use paste::paste;
@@ -126,37 +123,37 @@ pub trait DistIteratorLauncher: InnerArray {
         [()]
     );
     consumer_impl!(
-        for_each_async<I, F, Fut>(iter: &I, op: F); 
+        for_each_async<I, F, Fut>(iter: &I, op: F);
         [DistIterForEachHandle];
         [I: DistributedIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static];
         [()]);
 
     consumer_impl!(
-        reduce<I, F>(iter: &I, op: F); 
+        reduce<I, F>(iter: &I, op: F);
         [DistIterReduceHandle<I::Item, F>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
         [Option<I::Item>]);
 
     consumer_impl!(
-        collect<I, A>(iter: &I, d: Distribution); 
+        collect<I, A>(iter: &I, d: Distribution);
         [DistIterCollectHandle<I::Item, A>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static];
         [A]);
 
     consumer_impl!(
-        collect_async<I, A, B>(iter: &I, d: Distribution); 
+        collect_async<I, A, B>(iter: &I, d: Distribution);
         [DistIterCollectHandle<B, A>];
         [I: DistributedIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
         [A]);
 
     consumer_impl!(
-        count<I>(iter: &I); 
+        count<I>(iter: &I);
         [DistIterCountHandle];
         [I: DistributedIterator + 'static ];
         [usize]);
 
     consumer_impl!(
-        sum<I>(iter: &I); 
+        sum<I>(iter: &I);
         [DistIterSumHandle<I::Item>];
         [I: DistributedIterator + 'static, I::Item: Dist + ArrayOps + std::iter::Sum, ];
         [I::Item]);
@@ -191,7 +188,6 @@ pub trait DistIteratorLauncher: InnerArray {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.as_inner().team()
     }
-
 }
 
 /// An interface for dealing with distributed iterators (intended as a parallel and distributed version of the standard iterator trait)
@@ -363,8 +359,6 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         Monotonic::new(self, 0)
     }
 
-    
-
     /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array).
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
@@ -402,7 +396,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
     // ///
     // /// This function returns a future which can be used to poll for completion of the iteration.
-    // /// # Note 
+    // /// # Note
     // /// Calling this function launches the iteration regardless of if the returned future is used or not.
     // ///
     // /// # Examples
@@ -416,7 +410,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // ///     .dist_iter()
     // ///     .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()));
     // /// array.wait_all(); //wait for the iteration to complete
-    // /// 
+    // ///
     // ///```
     // #[must_use = "The iteration has already been launched. Await this future to wait for completion and retrieve the result.
     // You can use 'let _ = spawn_[iterator]` to supress the warning, but likely will want to also call '<the_array>.wait_all()' at
@@ -448,7 +442,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // ///     .blocking_for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
     // /// );
     // ///```
-    // fn blocking_for_each<F>(&self, op: F) 
+    // fn blocking_for_each<F>(&self, op: F)
     // where
     //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
     // {
@@ -485,7 +479,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///     fut.await;
     /// }
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_async<F, Fut>(&self, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -503,7 +497,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// Each thread will only drive a single future at a time.
     // ///
     // /// This function returns a future which can be used to poll for completion of the iteration.
-    // /// # Note 
+    // /// # Note
     // /// Calling this function launches the iteration regardless of if the returned future is used or not.
     // ///
     // /// # Examples
@@ -588,7 +582,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///
     /// array.block_on(array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id())));
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
@@ -601,7 +595,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// Calling this function invokes an implicit barrier across all PEs in the Array
     // ///
     // /// This function returns a future which can be used to poll for completion of the iteration.
-    // /// # Note 
+    // /// # Note
     // /// Calling this function launches the iteration regardless of if the returned future is used or not.
     // ///
     // /// # Examples
@@ -672,7 +666,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// });
     /// array.block_on(iter);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -691,7 +685,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// Each thread will only drive a single future at a time.
     // ///
     // /// This function returns a future which can be used to poll for completion of the iteration.
-    // /// # Note 
+    // /// # Note
     // /// Calling this function launches the iteration regardless of if the returned future is used or not.
     // ///
     // /// # Examples
@@ -766,7 +760,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn reduce<F>(&self, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
@@ -781,7 +775,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// This function returns a future which needs to be driven to completion to retrieve the reduced value.
     // ///
     // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    // /// # Note 
+    // /// # Note
     // /// Calling this function launches the iteration regardless of if the returned future is used or not.
     // /// # Examples
     // ///```
@@ -845,7 +839,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
@@ -928,7 +922,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect<A>(&self, d: Distribution) -> DistIterCollectHandle<Self::Item, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -971,7 +965,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     //     self.array().blocking_collect(self, d)
     // }
 
-    /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
     ///
@@ -996,17 +990,21 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    fn collect_with_schedule<A>(&self,sched: Schedule, d: Distribution) -> DistIterCollectHandle<Self::Item, A>
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    fn collect_with_schedule<A>(
+        &self,
+        sched: Schedule,
+        d: Distribution,
+    ) -> DistIterCollectHandle<Self::Item, A>
     where
         // &'static Self: DistributedIterator + 'static,
         Self::Item: Dist + ArrayOps,
         A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
     {
-        self.array().collect_with_schedule(sched,self,  d)
+        self.array().collect_with_schedule(sched, self, d)
     }
 
-    // /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    // /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
     // ///
     // /// Calling this function invokes an implicit barrier across all PEs in the Array.
     // ///
@@ -1075,7 +1073,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_async<A, T>(&self, d: Distribution) -> DistIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -1130,7 +1128,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     //     self.array().blocking_collect_async(self, d)
     // }
 
-    /// Collects the awaited elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    /// Collects the awaited elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
     ///
@@ -1167,8 +1165,12 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Scheduler::Dynamic, Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    fn collect_async_with_schedule<A, T>(&self, sched: Schedule,   d: Distribution) -> DistIterCollectHandle<T, A>
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    fn collect_async_with_schedule<A, T>(
+        &self,
+        sched: Schedule,
+        d: Distribution,
+    ) -> DistIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist + ArrayOps,
@@ -1178,7 +1180,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect_async_with_schedule(sched, self, d)
     }
 
-    // /// Collects the awaited elements of the distributed iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    // /// Collects the awaited elements of the distributed iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy
     // ///
     // /// Calling this function invokes an implicit barrier across all PEs in the Array.
     // ///
@@ -1223,7 +1225,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // }
 
     /// Counts the number of the elements of the distriubted iterator
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve count.
@@ -1239,7 +1241,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().filter(|elem|  elem < 10).count();
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn count(&self) -> DistIterCountHandle {
         self.array().count(self)
     }
@@ -1247,7 +1249,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// Counts the number of the elements of the distributed iterator
     // ///
     // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
-    // /// 
+    // ///
     // /// This function returns the count upon completion.
     // ///
     // /// # Examples
@@ -1264,7 +1266,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // }
 
     /// Counts the number of the elements of the distriubted iterator, using the provided [Schedule][crate::array::iterator::Schedule] policy
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// This function returns a future which needs to be driven to completion to retrieve count.
@@ -1284,11 +1286,10 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().count_with_schedule(sched, self)
     }
 
-
     // /// Counts the number of the elements of the distributed iterator, using the provided [Schedule][crate::array::iterator::Schedule] policy
     // ///
     // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
-    // /// 
+    // ///
     // /// This function returns the count upon completion.
     // ///
     // /// # Examples
@@ -1307,7 +1308,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Sums the elements of the distributed iterator.
     ///
     /// Takes each element, adds them together, and returns the result.
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// An empty iterator returns the zero value of the type.
@@ -1325,7 +1326,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().sum();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> DistIterSumHandle<Self::Item>
     where
         Self::Item: Dist + ArrayOps + std::iter::Sum,
@@ -1336,7 +1337,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// Sums the elements of the distributed iterator.
     // ///
     // /// Takes each element, adds them together, and returns the result.
-    // /// 
+    // ///
     // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     // ///
     // /// An empty iterator returns the zero value of the type.
@@ -1362,7 +1363,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// Sums the elements of the distributed iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// Takes each element, adds them together, and returns the result.
-    /// 
+    ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
     /// An empty iterator returns the zero value of the type.
@@ -1380,7 +1381,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let req = array.dist_iter().sum_with_schedule(Schedule::Guided);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn sum_with_schedule(&self, sched: Schedule) -> DistIterSumHandle<Self::Item>
     where
         Self::Item: Dist + ArrayOps + std::iter::Sum,
@@ -1391,7 +1392,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     // /// Sums the elements of the distributed iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
     // ///
     // /// Takes each element, adds them together, and returns the result.
-    // /// 
+    // ///
     // /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     // ///
     // /// An empty iterator returns the zero value of the type.

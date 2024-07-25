@@ -35,9 +35,7 @@ use zip::*;
 pub(crate) use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
-use crate::array::{
-    operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray,
-};
+use crate::array::{operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
 use crate::memregion::Dist;
 use crate::LamellarTeamRT;
 
@@ -45,10 +43,10 @@ use crate::active_messaging::SyncSend;
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
+use paste::paste;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
-use paste::paste;
 
 macro_rules! consumer_impl {
     ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ; [$(-> $($blocking_ret:tt)*)? ]) => {
@@ -98,7 +96,6 @@ macro_rules! consumer_impl {
 #[doc(hidden)]
 #[enum_dispatch]
 pub trait LocalIteratorLauncher: InnerArray {
-
     consumer_impl!(
         for_each<I, F>(iter: &I, op: F);
         [LocalIterForEachHandle];
@@ -106,37 +103,37 @@ pub trait LocalIteratorLauncher: InnerArray {
         []
     );
     consumer_impl!(
-        for_each_async<I, F, Fut>(iter: &I, op: F); 
+        for_each_async<I, F, Fut>(iter: &I, op: F);
         [LocalIterForEachHandle];
         [I: LocalIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static];
         []);
 
     consumer_impl!(
-        reduce<I, F>(iter: &I, op: F); 
+        reduce<I, F>(iter: &I, op: F);
         [LocalIterReduceHandle<I::Item, F>];
         [I: LocalIterator + 'static, I::Item: SyncSend + Copy, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
         [-> Option<I::Item>]);
 
     consumer_impl!(
-        collect<I, A>(iter: &I, d: Distribution); 
+        collect<I, A>(iter: &I, d: Distribution);
         [LocalIterCollectHandle<I::Item, A>];
         [I: LocalIterator + 'static, I::Item: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static];
         [-> A]);
 
     consumer_impl!(
-        collect_async<I, A, B>(iter: &I, d: Distribution); 
+        collect_async<I, A, B>(iter: &I, d: Distribution);
         [LocalIterCollectHandle<B, A>];
         [I: LocalIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
         [-> A]);
 
     consumer_impl!(
-        count<I>(iter: &I); 
+        count<I>(iter: &I);
         [LocalIterCountHandle];
         [I: LocalIterator + 'static ];
         [-> usize]);
 
     consumer_impl!(
-        sum<I>(iter: &I); 
+        sum<I>(iter: &I);
         [LocalIterSumHandle<I::Item>];
         [I: LocalIterator + 'static, I::Item: SyncSend +  std::iter::Sum + for<'a> std::iter::Sum<&'a I::Item> , ];
         [-> I::Item]);
@@ -358,7 +355,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
     /// );
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each<F>(&self, op: F) -> LocalIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
@@ -379,11 +376,11 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     // /// let world = LamellarWorldBuilder::new().build();
     // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     // ///
-    // /// 
+    // ///
     // ///     array
     // ///         .local_iter()
     // ///         .blocking_for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()));
-    // /// 
+    // ///
     // ///```
     // fn blocking_for_each<F>(&self, op: F)
     // where
@@ -408,7 +405,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// array.local_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
     /// array.wait_all();
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> LocalIterForEachHandle
     where
         F: Fn(Self::Item) + SyncSend + Clone + 'static,
@@ -429,7 +426,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     // ///
     // /// array.local_iter().blocking_for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
     // ///```
-    // fn blocking_for_each_with_schedule<F>(&self, sched: Schedule, op: F) 
+    // fn blocking_for_each_with_schedule<F>(&self, sched: Schedule, op: F)
     // where
     //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
     // {
@@ -467,7 +464,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     ///     fut.await;
     /// }
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each_async<F, Fut>(&self, op: F) -> LocalIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -504,14 +501,13 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     // ///     fut.await;
     // /// }
     // ///```
-    // fn blocking_for_each_async<F, Fut>(&self, op: F) 
+    // fn blocking_for_each_async<F, Fut>(&self, op: F)
     // where
     //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
     //     Fut: Future<Output = ()> + Send + 'static,
     // {
     //     self.array().blocking_for_each_async(self, op)
     // }
-
 
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
     ///
@@ -536,7 +532,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// });
     /// array.wait_all();
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> LocalIterForEachHandle
     where
         F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
@@ -588,7 +584,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn reduce<F>(&self, op: F) -> LocalIterReduceHandle<Self::Item, F>
     where
         // &'static Self: LocalIterator + 'static,
@@ -635,7 +631,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().reduce_with_schedule(Schedule::Chunk(10),|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn reduce_with_schedule<F>(
         &self,
         sched: Schedule,
@@ -691,7 +687,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).collect::<ReadOnlyArray<usize>>(Distribution::Cyclic);
     /// let new_array = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect<A>(&self, d: Distribution) -> LocalIterCollectHandle<Self::Item, A>
     where
         // &'static Self: LocalIterator + 'static,
@@ -740,7 +736,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).collect_with_schedule::<ReadOnlyArray<usize>>(Scheduler::WorkStealing,Distribution::Cyclic);
     /// let new_array = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect_with_schedule<A>(
         &self,
         sched: Schedule,
@@ -819,7 +815,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect_async<A, T>(&self, d: Distribution) -> LocalIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
@@ -874,7 +870,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     //     self.array().blocking_collect_async(self, d)
     // }
 
-    /// Collects the awaited elements of the local iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    /// Collects the awaited elements of the local iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
     ///
@@ -911,8 +907,12 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Scheduler::Dynamic, Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
-    fn collect_async_with_schedule<A, T>(&self, sched: Schedule,   d: Distribution) -> LocalIterCollectHandle<T, A>
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    fn collect_async_with_schedule<A, T>(
+        &self,
+        sched: Schedule,
+        d: Distribution,
+    ) -> LocalIterCollectHandle<T, A>
     where
         // &'static Self: DistributedIterator + 'static,
         T: Dist + ArrayOps,
@@ -922,7 +922,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().collect_async_with_schedule(sched, self, d)
     }
 
-    // /// Collects the awaited elements of the local iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy 
+    // /// Collects the awaited elements of the local iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy
     // ///
     // /// Calling this function invokes an implicit barrier across all PEs in the Array.
     // ///
@@ -981,7 +981,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().count();
     /// let cnt = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn count(&self) -> LocalIterCountHandle {
         self.array().count(self)
     }
@@ -1018,7 +1018,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().count_with_schedule(Schedule::Dynamic);
     /// let cnt = array.block_on(req);
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn count_with_schedule(&self, sched: Schedule) -> LocalIterCountHandle {
         self.array().count_with_schedule(sched, self)
     }
@@ -1040,7 +1040,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     //     self.array().blocking_count_with_schedule(sched, self)
     // }
 
-
     /// Sums the elements of the local iterator.
     ///
     /// Takes each element, adds them together, and returns the result.
@@ -1060,7 +1059,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let req = array.local_iter().sum();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
-     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
+    #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> LocalIterSumHandle<Self::Item>
     where
         Self::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a Self::Item>,
