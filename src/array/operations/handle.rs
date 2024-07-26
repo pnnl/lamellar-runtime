@@ -1,6 +1,7 @@
 use crate::{
     array::{AmDist, LamellarByteArray},
     lamellar_request::LamellarRequest,
+    scheduler::LamellarTask,
     AmHandle,
 };
 
@@ -15,12 +16,26 @@ use pin_project::pin_project;
 
 /// a task handle for a batched array operation that doesnt return any values
 pub struct ArrayBatchOpHandle {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<()>, Vec<usize>)>,
 }
-
 /// a task handle for a single array operation that doesnt return any values
 pub type ArrayOpHandle = ArrayBatchOpHandle;
+
+impl ArrayBatchOpHandle {
+    /// This method will spawn the associated Array Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<()> {
+        self.array.team().spawn(self)
+    }
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> () {
+        self.array.team().block_on(self)
+    }
+}
 
 impl LamellarRequest for ArrayBatchOpHandle {
     fn blocking_wait(mut self) -> Self::Output {
@@ -57,8 +72,24 @@ impl Future for ArrayBatchOpHandle {
 
 /// a task handle for a single array operation that returns a value
 pub struct ArrayFetchOpHandle<R: AmDist> {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: AmHandle<Vec<R>>,
+}
+
+impl<R: AmDist> ArrayFetchOpHandle<R> {
+    /// This method will spawn the associated Array Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<R> {
+        self.array.team().spawn(self)
+    }
+
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> R {
+        self.array.team().block_on(self)
+    }
 }
 
 impl<R: AmDist> LamellarRequest for ArrayFetchOpHandle<R> {
@@ -89,15 +120,31 @@ impl<R: AmDist> Future for ArrayFetchOpHandle<R> {
 /// a task handle for a batched array operation that return values
 #[pin_project]
 pub struct ArrayFetchBatchOpHandle<R: AmDist> {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>,
     results: Vec<R>,
+}
+
+impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
+    /// This method will spawn the associated Array Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<Vec<R>> {
+        self.array.team().spawn(self)
+    }
+
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> Vec<R> {
+        self.array.team().block_on(self)
+    }
 }
 
 impl<R: AmDist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
     fn from(mut req: ArrayFetchBatchOpHandle<R>) -> Self {
         Self {
-            _array: req._array,
+            array: req.array,
             req: req.reqs.pop_front().unwrap().0,
         }
     }
@@ -114,7 +161,7 @@ impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
             results.set_len(max_index);
         }
         Self {
-            _array: array,
+            array: array,
             reqs,
             results,
         }
@@ -174,8 +221,24 @@ impl<R: AmDist> Future for ArrayFetchBatchOpHandle<R> {
 
 /// a task handle for a single array operation that returns a result
 pub struct ArrayResultOpHandle<R: AmDist> {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: AmHandle<Vec<Result<R, R>>>,
+}
+
+impl<R: AmDist> ArrayResultOpHandle<R> {
+    /// This method will spawn the associated Array Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<Result<R, R>> {
+        self.array.team().spawn(self)
+    }
+
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> Result<R, R> {
+        self.array.team().block_on(self)
+    }
 }
 
 impl<R: AmDist> LamellarRequest for ArrayResultOpHandle<R> {
@@ -206,15 +269,31 @@ impl<R: AmDist> Future for ArrayResultOpHandle<R> {
 /// a task handle for a batched array operation that returns results
 #[pin_project]
 pub struct ArrayResultBatchOpHandle<R: AmDist> {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<Vec<Result<R, R>>>, Vec<usize>)>,
     results: Vec<Result<R, R>>,
+}
+
+impl<R: AmDist> ArrayResultBatchOpHandle<R> {
+    /// This method will spawn the associated Array Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<Vec<Result<R, R>>> {
+        self.array.team().spawn(self)
+    }
+
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> Vec<Result<R, R>> {
+        self.array.team().block_on(self)
+    }
 }
 
 impl<R: AmDist> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHandle<R> {
     fn from(mut req: ArrayResultBatchOpHandle<R>) -> Self {
         Self {
-            _array: req._array,
+            array: req.array,
             req: req.reqs.pop_front().unwrap().0,
         }
     }
@@ -231,7 +310,7 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
             results.set_len(max_index);
         }
         Self {
-            _array: array,
+            array: array,
             reqs,
             results,
         }

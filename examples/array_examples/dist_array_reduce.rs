@@ -150,7 +150,7 @@ fn main() {
             .block()
     };
     let block_array = block_array.into_read_only();
-    let _ = block_array.blocking_sum();
+    let _ = block_array.sum().block();
 
     let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block);
     let min = unsafe { one_elem_array.min() };

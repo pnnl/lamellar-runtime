@@ -76,7 +76,7 @@ fn main() {
                         let b_val = b_c.at(j + k * n);
                         sum += a_val.await * b_val.await;
                     }
-                    let _ = c_c.store(j + i * m, sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
+                    let _ = c_c.store(j + i * m, sum).spawn(); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
                 }
             }
         });

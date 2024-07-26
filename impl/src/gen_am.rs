@@ -285,22 +285,25 @@ fn gen_return_stmt(
         AmType::ReturnData(ref ret) => {
             let last_expr = get_expr(&last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
+            let last_expr =
+                quote_spanned! {last_stmt.span()=> let __lamellar_last_expr: #ret = #last_expr; };
             let remote_last_expr = match ret {
                 syn::Type::Array(a) => match &*a.elem {
                     syn::Type::Path(type_path)
                         if type_path.clone().into_token_stream().to_string() == "u8" =>
                     {
                         byte_buf = true;
-                        quote_spanned! {last_stmt.span()=> ByteBuf::from(#last_expr)}
+                        quote_spanned! {last_stmt.span()=> ByteBuf::from(__lamellar_last_expr)}
                     }
-                    _ => quote_spanned! {last_stmt.span()=> #last_expr},
+                    _ => quote_spanned! {last_stmt.span()=> __lamellar_last_expr},
                 },
-                _ => quote_spanned! {last_stmt.span()=> #last_expr},
+                _ => quote_spanned! {last_stmt.span()=> __lamellar_last_expr},
             };
             if !local {
                 quote_spanned! {last_stmt.span()=>
+                    #last_expr
                     let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(#last_expr)),
+                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__lamellar_last_expr)),
                         false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct_name{
                             val: #remote_last_expr,
                         })),
@@ -309,24 +312,29 @@ fn gen_return_stmt(
                 }
             } else {
                 quote_spanned! {last_stmt.span()=>
-                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(#last_expr))
+                    #last_expr
+                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__lamellar_last_expr))
                 }
             }
         }
-        AmType::ReturnAm(_, _) => {
+        AmType::ReturnAm(ret, _) => {
             let last_expr = get_expr(&last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
+            let last_expr =
+                quote_spanned! {last_stmt.span()=> let __lamellar_last_expr: #ret = #last_expr; };
             if !local {
                 quote_spanned! {last_stmt.span()=>
+                    #last_expr
                     let ret = match __local{
-                        true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(#last_expr)),
-                        false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new(#last_expr)),
+                        true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(__lamellar_last_expr)),
+                        false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new(__lamellar_last_expr)),
                     };
                     ret
                 }
             } else {
                 quote_spanned! {last_stmt.span()=>
-                    #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(#last_expr))
+                    #last_expr
+                    #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(__lamellar_last_expr))
                 }
             }
         }

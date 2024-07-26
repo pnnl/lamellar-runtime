@@ -641,6 +641,18 @@ impl LamellarByteArray {
             LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<GlobalLockByteArray>(),
         }
     }
+
+    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => array.inner.data.team(),
+            LamellarByteArray::ReadOnlyArray(array) => array.array.inner.data.team(),
+            LamellarByteArray::AtomicArray(array) => array.team(),
+            LamellarByteArray::NativeAtomicArray(array) => array.array.inner.data.team(),
+            LamellarByteArray::GenericAtomicArray(array) => array.array.inner.data.team(),
+            LamellarByteArray::LocalLockArray(array) => array.array.inner.data.team(),
+            LamellarByteArray::GlobalLockArray(array) => array.array.inner.data.team(),
+        }
+    }
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
@@ -921,116 +933,6 @@ impl<T: Dist> ActiveMessaging for LamellarWriteArray<T> {
         }
     }
 }
-
-// impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarReadArray<T> {
-//     fn reduce(&self, reduction: &str) -> AmHandle<T> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
-//             LamellarReadArray::AtomicArray(array) => array.reduce(reduction),
-//             LamellarReadArray::LocalLockArray(array) => array.blocking_reduce(reduction),
-//             LamellarReadArray::GlobalLockArray(array) => array.reduce(reduction),
-//             LamellarReadArray::ReadOnlyArray(array) => array.reduce(reduction),
-//         }
-//     }
-// }
-
-// impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-//     for LamellarReadArray<T>
-// {
-//     fn sum(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => unsafe { array.sum() },
-//             LamellarReadArray::AtomicArray(array) => array.sum(),
-//             LamellarReadArray::LocalLockArray(array) => array.sum(),
-//             LamellarReadArray::GlobalLockArray(array) => array.sum(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.sum(),
-//         }
-//     }
-//     fn prod(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => unsafe { array.prod() },
-//             LamellarReadArray::AtomicArray(array) => array.prod(),
-//             LamellarReadArray::LocalLockArray(array) => array.prod(),
-//             LamellarReadArray::GlobalLockArray(array) => array.prod(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.prod(),
-//         }
-//     }
-// }
-
-// impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-//     for LamellarReadArray<T>
-// {
-//     fn max(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => unsafe { array.max() },
-//             LamellarReadArray::AtomicArray(array) => array.max(),
-//             LamellarReadArray::LocalLockArray(array) => array.max(),
-//             LamellarReadArray::GlobalLockArray(array) => array.max(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.max(),
-//         }
-//     }
-//     fn min(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarReadArray::UnsafeArray(array) => unsafe { array.min() },
-//             LamellarReadArray::AtomicArray(array) => array.min(),
-//             LamellarReadArray::LocalLockArray(array) => array.min(),
-//             LamellarReadArray::GlobalLockArray(array) => array.min(),
-//             LamellarReadArray::ReadOnlyArray(array) => array.min(),
-//         }
-//     }
-// }
-
-// impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for LamellarWriteArray<T> {
-//     fn reduce(&self, reduction: &str) -> AmHandle<T> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => unsafe { array.reduce(reduction) },
-//             LamellarWriteArray::AtomicArray(array) => array.reduce(reduction),
-//             LamellarWriteArray::LocalLockArray(array) => array.reduce(reduction),
-//             LamellarWriteArray::GlobalLockArray(array) => array.reduce(reduction),
-//         }
-//     }
-// }
-// impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-//     for LamellarWriteArray<T>
-// {
-//     fn sum(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => unsafe { array.sum() },
-//             LamellarWriteArray::AtomicArray(array) => array.sum(),
-//             LamellarWriteArray::LocalLockArray(array) => array.sum(),
-//             LamellarWriteArray::GlobalLockArray(array) => array.sum(),
-//         }
-//     }
-//     fn prod(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => unsafe { array.prod() },
-//             LamellarWriteArray::AtomicArray(array) => array.prod(),
-//             LamellarWriteArray::LocalLockArray(array) => array.prod(),
-//             LamellarWriteArray::GlobalLockArray(array) => array.prod(),
-//         }
-//     }
-// }
-
-// impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-//     for LamellarWriteArray<T>
-// {
-//     fn max(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => unsafe { array.max() },
-//             LamellarWriteArray::AtomicArray(array) => array.max(),
-//             LamellarWriteArray::LocalLockArray(array) => array.max(),
-//             LamellarWriteArray::GlobalLockArray(array) => array.max(),
-//         }
-//     }
-//     fn min(&self) -> AmHandle<T> {
-//         match self {
-//             LamellarWriteArray::UnsafeArray(array) => unsafe { array.min() },
-//             LamellarWriteArray::AtomicArray(array) => array.min(),
-//             LamellarWriteArray::LocalLockArray(array) => array.min(),
-//             LamellarWriteArray::GlobalLockArray(array) => array.min(),
-//         }
-//     }
-// }
 
 // private sealed trait
 #[doc(hidden)]
@@ -1478,7 +1380,8 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     ///
     /// # One-sided Operation
     /// the remote transfer is initiated by the calling PE
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1517,6 +1420,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
@@ -1538,7 +1442,8 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     ///
     /// # One-sided Operation
     /// the remote transfer is initiated by the calling PE
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1569,6 +1474,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// PE2: array[9] = 3
     /// PE3: array[0] = 0
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn at(&self, index: usize) -> ArrayRdmaAtHandle<T>;
 }
 
@@ -1614,7 +1520,8 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     ///
     /// # One-sided Operation
     /// the remote transfer is initiated by the calling PE
-    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1661,6 +1568,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// PE2: array data [6,7,8]
     /// PE3: array data [9,10,11]
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
         &self,
         index: usize,

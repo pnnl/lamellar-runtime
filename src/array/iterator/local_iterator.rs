@@ -49,7 +49,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 macro_rules! consumer_impl {
-    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ; [$(-> $($blocking_ret:tt)*)? ]) => {
+    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ) => {
         fn $name<$($generics),*>(&self, $($arg : $arg_ty),*) -> $($return_type)*
         where
            $($bounds)+
@@ -68,27 +68,6 @@ macro_rules! consumer_impl {
             {
                 self.as_inner().[<$name _with_schedule>](sched, $($arg),*)
             }
-
-            // fn [<blocking_ $name >]<$($generics),*>(
-            //     &self,
-            //     $($arg : $arg_ty),*
-            // )   $(-> $($blocking_ret)*)?
-            // where
-            //     $($bounds)+
-            // {
-            //     self.as_inner().[<blocking_ $name >]($($arg),*)
-            // }
-
-            // fn [<blocking_ $name _with_schedule >]<$($generics),*>(
-            //     &self,
-            //     sched: Schedule,
-            //     $($arg : $arg_ty),*
-            // )  $(-> $($blocking_ret)*)?
-            // where
-            //     $($bounds)+
-            // {
-            //     self.as_inner().[<blocking_ $name _with_schedule>](sched, $($arg),*)
-            // }
         }
     };
 }
@@ -99,44 +78,37 @@ pub trait LocalIteratorLauncher: InnerArray {
     consumer_impl!(
         for_each<I, F>(iter: &I, op: F);
         [LocalIterForEachHandle];
-        [I: LocalIterator + 'static, F: Fn(I::Item) + SyncSend + Clone + 'static];
-        []
+        [I: LocalIterator + 'static, F: Fn(I::Item) + SyncSend + Clone + 'static]
     );
     consumer_impl!(
         for_each_async<I, F, Fut>(iter: &I, op: F);
         [LocalIterForEachHandle];
-        [I: LocalIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static];
-        []);
+        [I: LocalIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static]);
 
     consumer_impl!(
         reduce<I, F>(iter: &I, op: F);
         [LocalIterReduceHandle<I::Item, F>];
-        [I: LocalIterator + 'static, I::Item: SyncSend + Copy, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
-        [-> Option<I::Item>]);
+        [I: LocalIterator + 'static, I::Item: SyncSend + Copy, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static]);
 
     consumer_impl!(
         collect<I, A>(iter: &I, d: Distribution);
         [LocalIterCollectHandle<I::Item, A>];
-        [I: LocalIterator + 'static, I::Item: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static];
-        [-> A]);
+        [I: LocalIterator + 'static, I::Item: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static]);
 
     consumer_impl!(
         collect_async<I, A, B>(iter: &I, d: Distribution);
         [LocalIterCollectHandle<B, A>];
-        [I: LocalIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
-        [-> A]);
+        [I: LocalIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,]);
 
     consumer_impl!(
         count<I>(iter: &I);
         [LocalIterCountHandle];
-        [I: LocalIterator + 'static ];
-        [-> usize]);
+        [I: LocalIterator + 'static ]);
 
     consumer_impl!(
         sum<I>(iter: &I);
         [LocalIterSumHandle<I::Item>];
-        [I: LocalIterator + 'static, I::Item: SyncSend +  std::iter::Sum + for<'a> std::iter::Sum<&'a I::Item> , ];
-        [-> I::Item]);
+        [I: LocalIterator + 'static, I::Item: SyncSend +  std::iter::Sum + for<'a> std::iter::Sum<&'a I::Item> , ]);
 
     //#[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -363,32 +335,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().for_each(self, op)
     }
 
-    //  /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
-    // ///
-    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    // ///
-    // /// The iteration will be complete upon return from this function
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // ///
-    // ///     array
-    // ///         .local_iter()
-    // ///         .blocking_for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()));
-    // ///
-    // ///```
-    // fn blocking_for_each<F>(&self, op: F)
-    // where
-    //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_for_each(self, op)
-    // }
-
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Scehedule][crate::array::iterator::Schedule] policy.
     ///
     /// This function returns a future which can be used to poll for completion of the iteration.
@@ -412,26 +358,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     {
         self.array().for_each_with_schedule(sched, self, op)
     }
-
-    // /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Scehedule][crate::array::iterator::Schedule] policy.
-    // ///
-    // /// The iteration will be complete upon return from this function
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// array.local_iter().blocking_for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
-    // ///```
-    // fn blocking_for_each_with_schedule<F>(&self, sched: Schedule, op: F)
-    // where
-    //     F: Fn(Self::Item) + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_for_each_with_schedule(sched, self, op)
-    // }
 
     /// Calls a closure and immediately awaits the result on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
     ///
@@ -473,42 +399,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().for_each_async(self, op)
     }
 
-    // /// Calls a closure and immediately awaits the result on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array).
-    // ///
-    // /// This call utilizes the [Schedule::Static][crate::array::iterator::Schedule] policy.
-    // ///
-    // /// The supplied closure must return a future.
-    // ///
-    // /// Each thread will only drive a single future at a time.
-    // ///
-    // /// The iteration will have been completed by the time this function returns
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// array.local_iter().blocking_for_each_async(|elem| async move {
-    // ///     async_std::task::yield_now().await;
-    // ///     println!("{:?} {elem}",std::thread::current().id())
-    // /// });
-    // /// ```
-    // /// essentially the for_each_async call gets converted into (on each thread)
-    // ///```ignore
-    // /// for fut in array.iter(){
-    // ///     fut.await;
-    // /// }
-    // ///```
-    // fn blocking_for_each_async<F, Fut>(&self, op: F)
-    // where
-    //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-    //     Fut: Future<Output = ()> + Send + 'static,
-    // {
-    //     self.array().blocking_for_each_async(self, op)
-    // }
-
     /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
     ///
     /// The supplied closure must return a future.
@@ -541,34 +431,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().for_each_async_with_schedule(sched, self, op)
     }
 
-    // /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
-    // ///
-    // /// The supplied closure must return a future.
-    // ///
-    // /// Each thread will only drive a single future at a time.
-    // ///
-    // /// The iteration will have been completed by the time this function returns
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// array.local_iter().blocking_for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
-    // ///     async_std::task::yield_now().await;
-    // ///     println!("{:?} {elem}",std::thread::current().id())
-    // /// });
-    // ///```
-    // fn blocking_for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F)
-    // where
-    //     F: Fn(Self::Item) -> Fut + SyncSend + Clone + 'static,
-    //     Fut: Future<Output = ()> + Send + 'static,
-    // {
-    //     self.array().blocking_for_each_async_with_schedule(sched, self, op)
-    // }
-
     /// Reduces the elements of the local iterator using the provided closure
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the reduced value.
@@ -593,28 +455,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     {
         self.array().reduce(self, op)
     }
-
-    // /// Reduces the elements of the local iterator using the provided closure
-    // ///
-    // /// This function returns the reduced value
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let sum  = array.blocking_local_iter().reduce(|acc,elem| acc+elem);
-    // ///```
-    // fn blocking_reduce<F>(&self, op: F) -> Option<Self::Item>
-    // where
-    //     // &'static Self: LocalIterator + 'static,
-    //     Self::Item: SyncSend + Copy,
-    //     F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_reduce(self, op)
-    // }
 
     /// Reduces the elements of the local iterator using the provided closure and specififed [Schedule][crate::array::iterator::Schedule] policy
     ///
@@ -645,32 +485,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().reduce_with_schedule(sched, self, op)
     }
 
-    // /// Reduces the elements of the local iterator using the provided closure and specififed [Schedule][crate::array::iterator::Schedule] policy
-    // ///
-    // /// This function returns the reduced value
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let sum = array.local_iter().blocking_reduce_with_schedule(Schedule::Chunk(10),|acc,elem| acc+elem);
-    // ///```
-    // fn blocking_reduce_with_schedule<F>(
-    //     &self,
-    //     sched: Schedule,
-    //     op: F,
-    // ) -> Option<Self::Item>
-    // where
-    //     // &'static Self: LocalIterator + 'static,
-    //     Self::Item: SyncSend + Copy,
-    //     F: Fn(Self::Item, Self::Item) -> Self::Item + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_reduce_with_schedule(sched, self, op)
-    // }
-
     /// Collects the elements of the local iterator into the specified container type
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
@@ -696,29 +510,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     {
         self.array().collect(self, d)
     }
-
-    // /// Collects the elements of the local iterator into the specified container type
-    // ///
-    // /// This function returns the new container
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let array_clone = array.clone();
-    // /// let new_array = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).blocking_collect::<ReadOnlyArray<usize>>(Distribution::Cyclic);
-    // ///```
-    // fn blocking_collect<A>(&self, d: Distribution) ->A
-    // where
-    //     // &'static Self: LocalIterator + 'static,
-    //     Self::Item: Dist + ArrayOps,
-    //     A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_collect(self, d)
-    // }
 
     /// Collects the elements of the local iterator into the specified container type using the specified [Schedule][crate::array::iterator::Schedule] policy
     ///
@@ -749,34 +540,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     {
         self.array().collect_with_schedule(sched, self, d)
     }
-
-    // /// Collects the elements of the local iterator into the specified container type using the specified [Schedule][crate::array::iterator::Schedule] policy
-    // ///
-    // /// This function returns the new container
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let array_clone = array.clone();
-    // /// let new_array = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).blocking_collect_with_schedule::<ReadOnlyArray<usize>>(Scheduler::WorkStealing,Distribution::Cyclic);
-    // ///
-    // ///``
-    // fn blocking_collect_with_schedule<A>(
-    //     &self,
-    //     sched: Schedule,
-    //     d: Distribution,
-    // ) -> A
-    // where
-    //     // &'static Self: LocalIterator + 'static,
-    //     Self::Item: Dist + ArrayOps,
-    //     A: AsyncTeamFrom<(Vec<Self::Item>, Distribution)> + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_collect_with_schedule(sched, self, d)
-    // }
 
     /// Collects the awaited elements of the local iterator into a new LamellarArray
     ///
@@ -825,50 +588,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     {
         self.array().collect_async(self, d)
     }
-
-    // /// Collects the awaited elements of the local iterator into a new LamellarArray
-    // ///
-    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    // ///
-    // /// Each element from the iterator must return a Future
-    // ///
-    // /// Each thread will only drive a single future at a time.
-    // ///
-    // /// The function returns the new LamellarArray upon completion.
-    // ///
-    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    // /// distribute data across the PEs as evenly as possible.
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// // initialize a world and an atomic array
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// // clone the array; this doesn't duplicate the underlying
-    // /// // data but it does create a second pointer that we can
-    // /// // discard when necessary
-    // /// let array_clone = array.clone();
-    // ///
-    // /// // run collect
-    // /// let _new_array
-    // ///     = array_clone.local_iter().map(
-    // ///         move |elem|
-    // ///         array_clone
-    // ///             .fetch_add(elem.load(),1000))
-    // ///             .blocking_collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    // ///```
-    // fn blocking_collect_async<A, T>(&self, d: Distribution) -> A
-    // where
-    //     // &'static Self: DistributedIterator + 'static,
-    //     T: Dist + ArrayOps,
-    //     Self::Item: Future<Output = T> + Send + 'static,
-    //     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_collect_async(self, d)
-    // }
 
     /// Collects the awaited elements of the local iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
     ///
@@ -922,50 +641,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().collect_async_with_schedule(sched, self, d)
     }
 
-    // /// Collects the awaited elements of the local iterator into a new LamellarArray,using the provided [Schedule][crate::array::iterator::Schedule] policy
-    // ///
-    // /// Calling this function invokes an implicit barrier across all PEs in the Array.
-    // ///
-    // /// Each element from the iterator must return a Future
-    // ///
-    // /// Each thread will only drive a single future at a time.
-    // ///
-    // /// The function returns the new LamellarArray upon completion.
-    // ///
-    // /// Creating the new array potentially results in data transfers depending on the distribution mode and the fact there is no gaurantee
-    // /// that each PE will contribute an equal number of elements to the new array, and currently LamellarArrays
-    // /// distribute data across the PEs as evenly as possible.
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// // initialize a world and an atomic array
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// // clone the array; this doesn't duplicate the underlying
-    // /// // data but it does create a second pointer that we can
-    // /// // discard when necessary
-    // /// let array_clone = array.clone();
-    // ///
-    // /// // run collect
-    // /// let _new_array
-    // ///     = array_clone.local_iter().map(
-    // ///         move |elem|
-    // ///         array_clone
-    // ///             .fetch_add(elem.load(),1000))
-    // ///             .blocking_collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    // ///```
-    // fn blocking_collect_async_with_schedule<A, T>(&self, sched: Schedule, d: Distribution) -> A
-    // where
-    //     // &'static Self: DistributedIterator + 'static,
-    //     T: Dist + ArrayOps,
-    //     Self::Item: Future<Output = T> + Send + 'static,
-    //     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + Clone + 'static,
-    // {
-    //     self.array().blocking_collect_async_with_schedule(sched,self, d)
-    // }
-
     /// Counts the number of the elements of the local iterator
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the number of elements in the local iterator
@@ -986,23 +661,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().count(self)
     }
 
-    // /// Counts the number of the elements of the local iterator
-    // ///
-    // /// This returns the number of elements in the local iterator
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let cnt = array.local_iter().blocking_count();
-    // ///```
-    // fn blocking_count(&self) -> usize {
-    //     self.array().blocking_count(self)
-    // }
-
     /// Counts the number of the elements of the local iterator using the provided [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the number of elements in the local iterator
@@ -1022,23 +680,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     fn count_with_schedule(&self, sched: Schedule) -> LocalIterCountHandle {
         self.array().count_with_schedule(sched, self)
     }
-
-    // /// Counts the number of the elements of the local iterator using the provided [Schedule][crate::array::iterator::Schedule] policy
-    // ///
-    // /// This returns the number of elements in the local iterator
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let cnt = array.local_iter().blocking_count_with_schedule(Schedule::Dynamic);
-    // ///```
-    // fn blocking_count_with_schedule(&self, sched: Schedule) -> usize {
-    //     self.array().blocking_count_with_schedule(sched, self)
-    // }
 
     /// Sums the elements of the local iterator.
     ///
@@ -1067,30 +708,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().sum(self)
     }
 
-    // /// Sums the elements of the local iterator.
-    // ///
-    // /// Takes each element, adds them together, and returns the result.
-    // ///
-    // /// An empty iterator returns the zero value of the type.
-    // ///
-    // /// This function the sum upon completion.
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let req = array.local_iter().blocking_sum();
-    // ///```
-    // fn blocking_sum(&self) -> Self::Item
-    // where
-    //     Self::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a Self::Item>,
-    // {
-    //     self.array().blocking_sum(self)
-    // }
-
     /// Sums the elements of the local iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
     ///
     /// Takes each element, adds them together, and returns the result.
@@ -1117,30 +734,6 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     {
         self.array().sum_with_schedule(sched, self)
     }
-
-    // /// Sums the elements of the local iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
-    // ///
-    // /// Takes each element, adds them together, and returns the result.
-    // ///
-    // /// An empty iterator returns the zero value of the type.
-    // ///
-    // /// This function returns the sum upon completion.
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
-    // ///
-    // /// let sum = array.local_iter().blocking_sum_with_schedule(Schedule::Guided);
-    // ///```
-    // fn blocking_sum_with_schedule(&self, sched: Schedule) -> Self::Item
-    // where
-    //     Self::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a Self::Item>,
-    // {
-    //     self.array().blocking_sum_with_schedule(sched, self)
-    // }
 }
 
 /// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length

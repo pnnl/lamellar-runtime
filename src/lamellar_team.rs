@@ -1364,6 +1364,15 @@ impl LamellarTeamRT {
             .fetch_sub(cnt, Ordering::SeqCst);
     }
 
+    pub(crate) fn spawn<F>(&self, task: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        self.scheduler.spawn_task(task)
+    }
+
     //#[tracing::instrument(skip_all)]
     pub(crate) fn wait_all(&self) {
         let mut exec_task = true;

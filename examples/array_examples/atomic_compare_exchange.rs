@@ -46,8 +46,7 @@ fn main() {
     array.print();
 
     let array_2 = AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic);
-    array_2.dist_iter_mut().for_each(|x| x.store(0.0)).spawn();
-    array_2.wait_all();
+    array_2.dist_iter_mut().for_each(|x| x.store(0.0)).block();
     array_2.barrier();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(my_pe as u64);

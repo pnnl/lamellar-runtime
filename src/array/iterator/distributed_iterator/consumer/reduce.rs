@@ -337,9 +337,16 @@ where
         }
     }
 
+    /// This method will block until the associated Reduce operation completes and returns the result
     pub fn block(self) -> Option<T> {
         self.team.clone().block_on(self)
     }
+
+    /// This method will spawn the associated Reduce Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Option<T>> {
         self.team.clone().scheduler.spawn_task(self)
     }

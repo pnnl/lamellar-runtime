@@ -17,7 +17,7 @@ use crate::{
     lamellae::Des,
     lamellar_request::{InternalResult, LamellarRequest, LamellarRequestAddResult},
     memregion::one_sided::MemRegionHandleInner,
-    scheduler::Scheduler,
+    scheduler::{LamellarTask, Scheduler},
     Darc, LamellarArchRT,
 };
 
@@ -122,6 +122,19 @@ impl<T: AmDist> AmHandle<T> {
             }
         }
     }
+
+    /// This method will spawn the associated Active Message on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<T> {
+        self.inner.scheduler.clone().spawn_task(self)
+    }
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> T {
+        self.inner.scheduler.clone().block_on(self)
+    }
 }
 
 impl<T: AmDist> LamellarRequest for AmHandle<T> {
@@ -208,6 +221,21 @@ impl<T: 'static> LocalAmHandle<T> {
                 }
             }
         }
+    }
+}
+
+impl<T: Send + 'static> LocalAmHandle<T> {
+    /// This method will spawn the associated Active Message on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<T> {
+        self.inner.scheduler.clone().spawn_task(self)
+    }
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> T {
+        self.inner.scheduler.clone().block_on(self)
     }
 }
 
@@ -363,6 +391,18 @@ impl<T: AmDist> MultiAmHandle<T> {
                 }
             }
         }
+    }
+    /// This method will spawn the associated Active Message on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<Vec<T>> {
+        self.inner.scheduler.clone().spawn_task(self)
+    }
+    /// This method will block the calling thread until the associated Array Operation completes
+    pub fn block(self) -> Vec<T> {
+        self.inner.scheduler.clone().block_on(self)
     }
 }
 

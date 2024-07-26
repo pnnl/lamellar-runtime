@@ -106,7 +106,7 @@ fn main() {
             array: array.clone(),
             orig_pe: my_pe,
             index: index,
-        });
+        }).spawn();
         index += 1;
     }
 

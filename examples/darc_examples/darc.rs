@@ -104,8 +104,8 @@ fn main() {
                 my_arc: Darc::new(team.clone(), Arc::new(0)).unwrap(),
             };
             println!("here 7");
-            let _ = team.exec_am_pe(0, darc_am.clone());
-            let _ = team.exec_am_all(darc_am.clone());
+            let _ = team.exec_am_pe(0, darc_am.clone()).spawn();
+            let _ = team.exec_am_all(darc_am.clone()).spawn();
             tg.add_am_pe(0, darc_am.clone());
             tg.add_am_all(darc_am);
             team.block_on(tg.exec());

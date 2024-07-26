@@ -294,13 +294,15 @@ impl LamellarAm for MyAm {
                 //     buffer_size: self.buffer_size,
                 //     comm_lock: self.comm_lock.clone(),
                 // }));
-                task_group.exec_am_local(SendAm {
-                    indices,
-                    buffers: self.buffers.clone(),
-                    remote_pe: pe,
-                    buffer_size: self.buffer_size,
-                    comm_lock: self.comm_lock.clone(),
-                });
+                let _ = task_group
+                    .exec_am_local(SendAm {
+                        indices,
+                        buffers: self.buffers.clone(),
+                        remote_pe: pe,
+                        buffer_size: self.buffer_size,
+                        comm_lock: self.comm_lock.clone(),
+                    })
+                    .spawn();
                 cnt += 1;
                 // }
             }
@@ -394,12 +396,14 @@ fn main() {
     world.barrier();
     let timer = std::time::Instant::now();
     for (pe, buffer) in res_am_buffers.iter().enumerate() {
-        world.exec_am_local(RecvAm {
-            buffer: buffer.clone(),
-            remote_pe: pe,
-            finished: finished.clone(),
-            buffer_size,
-        });
+        let _ = world
+            .exec_am_local(RecvAm {
+                buffer: buffer.clone(),
+                remote_pe: pe,
+                finished: finished.clone(),
+                buffer_size,
+            })
+            .spawn();
     }
     let mut reqs = vec![];
     // if my_pe == 0 {
@@ -413,9 +417,7 @@ fn main() {
             comm_lock: comm_lock.clone(),
         }));
     }
-    for req in reqs {
-        world.block_on(req);
-    }
+    world.block_on_all(reqs);
     // }
     world.barrier();
     println!(

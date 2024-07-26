@@ -961,8 +961,8 @@ pub trait ActiveMessaging {
     /// Returns a future allow the user to poll for complete and retrive the result of the Active Message stored within a vector,
     /// each index in the vector corresponds to the data returned by the corresponding PE
     ///
-    /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
-    /// the future is only used to check for completion and/or retrieving any returned data
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][MultiAmHandle::spawn] or [blocked on][MultiAmHandle::block]
     ///
     /// # One-sided Operation
     /// The calling PE manages creating and transfering the active message to the remote PEs (without user intervention on the remote PEs).
@@ -995,6 +995,7 @@ pub trait ActiveMessaging {
     ///     assert_eq!(i,results[i]);
     /// }
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
@@ -1007,8 +1008,8 @@ pub trait ActiveMessaging {
     /// Returns a future allow the user to poll for complete and retrive the result of the Active Message
     ///
     ///
-    /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
-    /// the future is only used to check for completeion and/or retrieving any returned data
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     ///
     /// # One-sided Operation
     /// The calling PE manages creating and transfering the active message to the remote PE (without user intervention on the remote PE).
@@ -1039,6 +1040,7 @@ pub trait ActiveMessaging {
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
@@ -1051,8 +1053,8 @@ pub trait ActiveMessaging {
     /// Returns a future allow the user to poll for complete and retrive the result of the Active Message.
     ///
     ///
-    /// NOTE: lamellar active messages are not lazy, i.e. you do not need to drive the returned future to launch the computation,
-    /// the future is only used to check for completeion and/or retrieving any returned data.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][LocalAmHandle::spawn] or [blocked on][LocalAmHandle::block]
     ///
     /// # One-sided Operation
     /// The calling PE manages creating and executing the active message local (remote PEs are not involved).
@@ -1086,6 +1088,7 @@ pub trait ActiveMessaging {
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.my_pe(),result);
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static;
@@ -1158,6 +1161,7 @@ pub trait ActiveMessaging {
     ///     world_clone.await_all().await; //block until the previous am has finished
     /// });
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited"]
     fn await_all(&self) -> impl Future<Output = ()> + Send;
 
     #[doc(alias = "Collective")]
@@ -1196,6 +1200,7 @@ pub trait ActiveMessaging {
     ///     world_clone.async_barrier().await; //block until all PEs have entered the barrier
     /// });
     ///```
+    #[must_use = "this function is lazy and does nothing unless awaited."]
     fn async_barrier(&self) -> BarrierHandle;
 
     #[doc(alias("One-sided", "onesided"))]

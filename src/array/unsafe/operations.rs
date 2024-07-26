@@ -347,7 +347,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             VecDeque::new()
         };
         ArrayBatchOpHandle {
-            _array: byte_array,
+            array: byte_array,
             reqs: res,
         }
     }

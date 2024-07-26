@@ -36,7 +36,7 @@ fn main() {
     let timer = std::time::Instant::now();
     //add 1 to each element of array
     // for i in 0..global_length {
-    let _ = array.batch_add(0, &local_vec[0..100]);
+    let _ = array.batch_add(0, &local_vec[0..100]).spawn();
     // }
     //wait for all the local add operations to finish
     array.wait_all();

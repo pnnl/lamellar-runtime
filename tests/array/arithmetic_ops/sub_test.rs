@@ -104,7 +104,7 @@ macro_rules! sub_test{
 
                         for idx in 0..array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    let _ = array.sub(idx,1 as $t);
+                    let _ = array.sub(idx,1 as $t).spawn();
                 }
             }
             array.wait_all();
@@ -126,7 +126,7 @@ macro_rules! sub_test{
 
                         for _i in 0..num_updates  as usize{
                 let idx = rand_idx.sample(&mut rng);
-                let _ = array.sub(idx,1 as $t);
+                let _ = array.sub(idx,1 as $t).spawn();
             }
             array.wait_all();
             array.barrier();
@@ -152,7 +152,7 @@ macro_rules! sub_test{
                         // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(pe_max_val as usize){
-                    let _ = sub_array.sub(idx,1 as $t);
+                    let _ = sub_array.sub(idx,1 as $t).spawn();
                 }
             }
             sub_array.wait_all();
@@ -174,7 +174,7 @@ macro_rules! sub_test{
 
                         for _i in 0..num_updates as usize{
                 let idx = rand_idx.sample(&mut rng);
-                let _ = sub_array.sub(idx,1 as $t);
+                let _ = sub_array.sub(idx,1 as $t).spawn();
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -200,7 +200,7 @@ macro_rules! sub_test{
                 sub_array.barrier();
                                 for idx in 0..sub_array.len(){
                     for _i in 0..(pe_max_val as usize){
-                        let _ = sub_array.sub(idx,1 as $t);
+                        let _ = sub_array.sub(idx,1 as $t).spawn();
                     }
                 }
                 sub_array.wait_all();
@@ -222,7 +222,7 @@ macro_rules! sub_test{
 
                                 for _i in 0..num_updates as usize{
                     let idx = rand_idx.sample(&mut rng);
-                    let _ = sub_array.sub(idx,1 as $t);
+                    let _ = sub_array.sub(idx,1 as $t).spawn();
                 }
                 sub_array.wait_all();
                 sub_array.barrier();

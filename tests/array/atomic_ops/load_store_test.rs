@@ -81,7 +81,7 @@ macro_rules! load_store_test{
             array.barrier();
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
-                    let _ = array.store(idx,my_pe as $t);
+                    let _ = array.store(idx,my_pe as $t).spawn();
                 }
             }
             array.wait_all();
@@ -114,7 +114,7 @@ macro_rules! load_store_test{
             sub_array.barrier();
             for idx in 0..sub_array.len(){
                 if idx%num_pes == my_pe{
-                    let _ = sub_array.store(idx,my_pe as $t);
+                    let _ = sub_array.store(idx,my_pe as $t).spawn();
                 }
             }
             sub_array.wait_all();
@@ -150,7 +150,7 @@ macro_rules! load_store_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        let _ = sub_array.store(idx,my_pe as $t);
+                        let _ = sub_array.store(idx,my_pe as $t).spawn();
                     }
                 }
                 sub_array.wait_all();

@@ -11,13 +11,30 @@ use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
     array::LamellarByteArray,
     lamellar_request::LamellarRequest,
+    scheduler::LamellarTask,
     Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,
 };
 
 /// a task handle for an array rdma (put/get) operation
 pub struct ArrayRdmaHandle {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<AmHandle<()>>,
+}
+
+impl ArrayRdmaHandle {
+    /// This method will spawn the associated Array RDMA Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<()> {
+        self.array.team().spawn(self)
+    }
+
+    /// This method will block the calling thread until the associated Array RDMA Operation completes
+    pub fn block(self) -> () {
+        self.array.team().block_on(self)
+    }
 }
 
 impl LamellarRequest for ArrayRdmaHandle {
@@ -56,9 +73,25 @@ impl Future for ArrayRdmaHandle {
 /// a task handle for an array rdma 'at' operation
 #[pin_project]
 pub struct ArrayRdmaAtHandle<T: Dist> {
-    pub(crate) _array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: Option<LocalAmHandle<()>>,
     pub(crate) buf: OneSidedMemoryRegion<T>,
+}
+
+impl<T: Dist> ArrayRdmaAtHandle<T> {
+    /// This method will spawn the associated Array RDMA at Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<T> {
+        self.array.team().spawn(self)
+    }
+
+    /// This method will block the calling thread until the associated Array RDMA at Operation completes
+    pub fn block(self) -> T {
+        self.array.team().block_on(self)
+    }
 }
 
 impl<T: Dist> LamellarRequest for ArrayRdmaAtHandle<T> {

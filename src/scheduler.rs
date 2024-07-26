@@ -126,7 +126,7 @@ impl<T> Drop for LamellarTaskInner<T> {
             }
             LamellarTaskInner::AsyncStdTask(_task) => {}
             #[cfg(feature = "tokio-executor")]
-            LamellarTaskInner::TokioTask(task) => {}
+            LamellarTaskInner::TokioTask(_task) => {}
         }
     }
 }
@@ -145,7 +145,10 @@ impl<T> Future for LamellarTaskInner<T> {
                 }
                 LamellarTaskInner::AsyncStdTask(task) => Pin::new_unchecked(task).poll(cx),
                 #[cfg(feature = "tokio-executor")]
-                LamellarTaskInner::TokioTask(task) => Pin::new_unchecked(task).poll(cx),
+                LamellarTaskInner::TokioTask(task) => match Pin::new_unchecked(task).poll(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(res) => Poll::Ready(res.expect("tokio task failed")),
+                },
             }
         }
     }

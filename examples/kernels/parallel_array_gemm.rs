@@ -71,7 +71,7 @@ fn main() {
         .for_each(|(j, col)| {
             let col = col.clone();
             let c = c.clone();
-            a
+            let _ = a
                 // .local_iter() //LocalIterator (each pe will iterate through only its local data -- in parallel)
                 // .chunks(n) // chunk by the row size
                 .local_chunks(n)

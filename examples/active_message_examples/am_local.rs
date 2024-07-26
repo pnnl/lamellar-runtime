@@ -64,7 +64,7 @@ impl LamellarAM for AmReturnUsize {
             std::thread::sleep(Duration::from_millis(1000));
             i = self.index.fetch_add(1, Ordering::Relaxed);
         }
-        println!("\t{:?} leaving, sum{:?}", self.my_id, sum);
+        println!("\t{:?} leaving, sum{:?}", self.my_id, sum,);
         sum
     }
 }
@@ -88,22 +88,26 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         for i in 0..map.len() {
-            let _ = world.exec_am_local(AmNoReturn {
-                my_id: i,
-                data: map.clone(),
-                index: index.clone(),
-            });
+            let _ = world
+                .exec_am_local(AmNoReturn {
+                    my_id: i,
+                    data: map.clone(),
+                    index: index.clone(),
+                })
+                .spawn();
         }
         world.wait_all();
         println!("-----------------------------------");
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         for i in 0..map.len() {
-            let _ = world.exec_am_local(AmReturnUsize {
-                my_id: i,
-                data: map.clone(),
-                index: index.clone(),
-            });
+            let _ = world
+                .exec_am_local(AmReturnUsize {
+                    my_id: i,
+                    data: map.clone(),
+                    index: index.clone(),
+                })
+                .spawn();
         }
         world.wait_all();
         println!("-----------------------------------");

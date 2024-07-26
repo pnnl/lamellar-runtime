@@ -18,7 +18,7 @@ mkdir -p ${results_dir}
 ln -s ${output_dir}/rofiverbs_lamellae rofiverbs_lamellae
 
 
-cargo build --release --features enable-rofi --features tokio-executor --examples -j 20
+# cargo build --release --features enable-rofi --features tokio-executor --examples -j 20
 
 
 cd rofiverbs_lamellae/${local_results_dir}

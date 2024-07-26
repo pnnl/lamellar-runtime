@@ -140,7 +140,7 @@ macro_rules! get_test{
                 let num_txs = mem_seg_len/tx_size;
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                    unsafe {let _ = array.get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)));}
+                    unsafe {let _ = array.get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).spawn();}
                 }
                 array.wait_all();
                 array.barrier();
@@ -180,7 +180,7 @@ macro_rules! get_test{
                 let num_txs = half_len/tx_size;
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    unsafe {let _ = sub_array.get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)));}
+                    unsafe {let _ = sub_array.get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).spawn();}
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
@@ -225,7 +225,7 @@ macro_rules! get_test{
                     let num_txs = len/tx_size;
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                        unsafe {let _ = sub_array.get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))); }
+                        unsafe {let _ = sub_array.get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).spawn(); }
                     }
                     sub_array.wait_all();
                     sub_array.barrier();

@@ -142,91 +142,111 @@ fn main() {
             // let am_type = 7;
             match am_type {
                 0 => {
-                    let _ = world.exec_am_all(AmEmpty {});
+                    let _ = world.exec_am_all(AmEmpty {}).spawn();
                     cnts[0] += 1;
                 } //batch msg ,batch unit return
                 1 => {
-                    let _ = world.exec_am_all(AmEmptyReturnAmEmpty {});
+                    let _ = world.exec_am_all(AmEmptyReturnAmEmpty {}).spawn();
                     cnts[1] += 1;
                 } //batch msg, batch return am
                 2 => {
-                    let _ = world.exec_am_all(AmNoReturn {
-                        my_pe: my_pe,
-                        index: i,
-                        data: vec![i; 1],
-                    });
+                    let _ = world
+                        .exec_am_all(AmNoReturn {
+                            my_pe: my_pe,
+                            index: i,
+                            data: vec![i; 1],
+                        })
+                        .spawn();
                     cnts[2] += 1;
                 } //batch msg ,batch unit return
                 3 => {
-                    let _ = world.exec_am_all(AmNoReturn {
-                        my_pe: my_pe,
-                        index: i,
-                        data: vec![i; len1],
-                    });
+                    let _ = world
+                        .exec_am_all(AmNoReturn {
+                            my_pe: my_pe,
+                            index: i,
+                            data: vec![i; len1],
+                        })
+                        .spawn();
                     cnts[3] += 1;
                 } //direct msg , batch unit return
                 4 => {
-                    let _ = world.exec_am_all(AmReturnVec {
-                        my_pe: my_pe,
-                        vec_size: 1,
-                        data: vec![i; 1],
-                    });
+                    let _ = world
+                        .exec_am_all(AmReturnVec {
+                            my_pe: my_pe,
+                            vec_size: 1,
+                            data: vec![i; 1],
+                        })
+                        .spawn();
                     cnts[4] += 1;
                 } //batch message, batch return
                 5 => {
-                    let _ = world.exec_am_all(AmReturnVec {
-                        my_pe: my_pe,
-                        vec_size: 1,
-                        data: vec![i; len1],
-                    });
+                    let _ = world
+                        .exec_am_all(AmReturnVec {
+                            my_pe: my_pe,
+                            vec_size: 1,
+                            data: vec![i; len1],
+                        })
+                        .spawn();
                     cnts[5] += 1;
                 } //direct msg, batch return
                 6 => {
-                    let _ = world.exec_am_all(AmReturnVec {
-                        my_pe: my_pe,
-                        vec_size: 100000,
-                        data: vec![i; 1],
-                    });
+                    let _ = world
+                        .exec_am_all(AmReturnVec {
+                            my_pe: my_pe,
+                            vec_size: 100000,
+                            data: vec![i; 1],
+                        })
+                        .spawn();
                     cnts[6] += 1;
                 } //batch message, direct return
                 7 => {
-                    let _ = world.exec_am_all(AmReturnVec {
-                        my_pe: my_pe,
-                        vec_size: 100000,
-                        data: vec![i; len1],
-                    });
+                    let _ = world
+                        .exec_am_all(AmReturnVec {
+                            my_pe: my_pe,
+                            vec_size: 100000,
+                            data: vec![i; len1],
+                        })
+                        .spawn();
                     cnts[7] += 1;
                 } //direct msg, direct return
                 8 => {
-                    let _ = world.exec_am_all(InitialAMVec {
-                        val1: 1,
-                        val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                        vec: vec![i; 1],
-                    });
+                    let _ = world
+                        .exec_am_all(InitialAMVec {
+                            val1: 1,
+                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                            vec: vec![i; 1],
+                        })
+                        .spawn();
                     cnts[8] += 1;
                 } //batch msg ,batch return
                 9 => {
-                    let _ = world.exec_am_all(InitialAMVec {
-                        val1: 1,
-                        val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                        vec: vec![i; len1],
-                    });
+                    let _ = world
+                        .exec_am_all(InitialAMVec {
+                            val1: 1,
+                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                            vec: vec![i; len1],
+                        })
+                        .spawn();
                     cnts[9] += 1;
                 } //direct msg , batch return
                 10 => {
-                    let _ = world.exec_am_all(InitialAMVec {
-                        val1: 100000,
-                        val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                        vec: vec![i; 1],
-                    });
+                    let _ = world
+                        .exec_am_all(InitialAMVec {
+                            val1: 100000,
+                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                            vec: vec![i; 1],
+                        })
+                        .spawn();
                     cnts[10] += 1;
                 } //batch message, direct return
                 _ => {
-                    let _ = world.exec_am_all(InitialAMVec {
-                        val1: 100000,
-                        val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                        vec: vec![i; len1],
-                    });
+                    let _ = world
+                        .exec_am_all(InitialAMVec {
+                            val1: 100000,
+                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                            vec: vec![i; len1],
+                        })
+                        .spawn();
                     cnts[11] += 1;
                 } //direct msg, direct return
             }
@@ -235,121 +255,141 @@ fn main() {
             // let am_type = 7;
             match am_type {
                 0 => {
-                    let _ = world.exec_am_pe(pe, AmEmpty {});
+                    let _ = world.exec_am_pe(pe, AmEmpty {}).spawn();
                     cnts[0] += 1;
                 } //batch msg ,batch unit return
                 1 => {
-                    let _ = world.exec_am_pe(pe, AmEmptyReturnAmEmpty {});
+                    let _ = world.exec_am_pe(pe, AmEmptyReturnAmEmpty {}).spawn();
                     cnts[1] += 1;
                 } //batch msg, batch return am
                 2 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        AmNoReturn {
-                            my_pe: my_pe,
-                            index: i,
-                            data: vec![i; 1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            AmNoReturn {
+                                my_pe: my_pe,
+                                index: i,
+                                data: vec![i; 1],
+                            },
+                        )
+                        .spawn();
                     cnts[2] += 1;
                 } //batch msg ,batch unit return
                 3 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        AmNoReturn {
-                            my_pe: my_pe,
-                            index: i,
-                            data: vec![i; len1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            AmNoReturn {
+                                my_pe: my_pe,
+                                index: i,
+                                data: vec![i; len1],
+                            },
+                        )
+                        .spawn();
                     cnts[3] += 1;
                 } //direct msg , batch unit return
                 4 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        AmReturnVec {
-                            my_pe: my_pe,
-                            vec_size: 1,
-                            data: vec![i; 1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            AmReturnVec {
+                                my_pe: my_pe,
+                                vec_size: 1,
+                                data: vec![i; 1],
+                            },
+                        )
+                        .spawn();
                     cnts[4] += 1;
                 } //batch message, batch return
                 5 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        AmReturnVec {
-                            my_pe: my_pe,
-                            vec_size: 1,
-                            data: vec![i; len1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            AmReturnVec {
+                                my_pe: my_pe,
+                                vec_size: 1,
+                                data: vec![i; len1],
+                            },
+                        )
+                        .spawn();
                     cnts[5] += 1;
                 } //direct msg, batch return
                 6 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        AmReturnVec {
-                            my_pe: my_pe,
-                            vec_size: len2,
-                            data: vec![i; 1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            AmReturnVec {
+                                my_pe: my_pe,
+                                vec_size: len2,
+                                data: vec![i; 1],
+                            },
+                        )
+                        .spawn();
                     cnts[6] += 1;
                 } //batch message, direct return
                 7 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        AmReturnVec {
-                            my_pe: my_pe,
-                            vec_size: len2,
-                            data: vec![i; len1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            AmReturnVec {
+                                my_pe: my_pe,
+                                vec_size: len2,
+                                data: vec![i; len1],
+                            },
+                        )
+                        .spawn();
                     cnts[7] += 1;
                 } //direct msg, direct return
                 8 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        InitialAMVec {
-                            val1: 1,
-                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; 1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            InitialAMVec {
+                                val1: 1,
+                                val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                                vec: vec![i; 1],
+                            },
+                        )
+                        .spawn();
                     cnts[8] += 1;
                 } //batch msg ,batch return
                 9 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        InitialAMVec {
-                            val1: 1,
-                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; len1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            InitialAMVec {
+                                val1: 1,
+                                val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                                vec: vec![i; len1],
+                            },
+                        )
+                        .spawn();
                     cnts[9] += 1;
                 } //direct msg , batch return
                 10 => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        InitialAMVec {
-                            val1: len2,
-                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; 1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            InitialAMVec {
+                                val1: len2,
+                                val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                                vec: vec![i; 1],
+                            },
+                        )
+                        .spawn();
                     cnts[10] += 1;
                 } //batch message, direct return
                 _ => {
-                    let _ = world.exec_am_pe(
-                        pe,
-                        InitialAMVec {
-                            val1: len2,
-                            val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; len1],
-                        },
-                    );
+                    let _ = world
+                        .exec_am_pe(
+                            pe,
+                            InitialAMVec {
+                                val1: len2,
+                                val2: hostname::get().unwrap().to_string_lossy().to_string(),
+                                vec: vec![i; len1],
+                            },
+                        )
+                        .spawn();
                     cnts[11] += 1;
                 } //direct msg, direct return
             }
