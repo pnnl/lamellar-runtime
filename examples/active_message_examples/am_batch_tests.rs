@@ -396,7 +396,7 @@ fn main() {
         }
     }
     println!("issue time: {:?}", s.elapsed().as_secs_f64());
-    println!("cnts: {:?}", cnts);
+    println!("cnts: {:?} {:?}", cnts, cnts.iter().sum::<usize>());
     world.wait_all();
     println!("local finished time: {:?}", s.elapsed().as_secs_f64());
     world.barrier();

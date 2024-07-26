@@ -61,6 +61,7 @@ impl LamellarExecutor for TokioRt {
     // #[tracing::instrument(skip_all)]
     fn shutdown(&self) {
         // i think we just let tokio do this on drop
+        // println!("shutting down tokio runtime");
     }
 
     // #[tracing::instrument(skip_all)]

@@ -1375,6 +1375,7 @@ impl LamellarTeamRT {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn wait_all(&self) {
+        // println!("wait_all called on pe: {}", self.world_pe);
         let mut exec_task = true;
         if std::thread::current().id() != *crate::MAIN_THREAD {
             if let Some(val) = config().blocking_call_warning {
@@ -1389,6 +1390,12 @@ impl LamellarTeamRT {
             exec_task = false;
         }
         let mut temp_now = Instant::now();
+        // println!(
+        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
         while self.panic.load(Ordering::SeqCst) == 0
             && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
                 || (self.parent.is_none()
@@ -1409,6 +1416,12 @@ impl LamellarTeamRT {
                 temp_now = Instant::now();
             }
         }
+        // println!(
+        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
     }
     pub(crate) async fn await_all(&self) {
         let mut temp_now = Instant::now();
@@ -2129,7 +2142,7 @@ impl LamellarTeamRT {
 impl Drop for LamellarTeamRT {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
-        // println!("LamellarTeamRT Drop");
+        println!("LamellarTeamRT Drop");
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}", Arc::strong_count(&self.arch));
@@ -2139,6 +2152,8 @@ impl Drop for LamellarTeamRT {
         // );
         // println!("removing {:?} ", self.team_hash);
         self.lamellae.free(self.remote_ptr_addr);
+        // println!("Lamellae Cnt: {:?}", Arc::strong_count(&self.lamellae));
+        // println!("scheduler Cnt: {:?}", Arc::strong_count(&self.scheduler));
         // println!("LamellarTeamRT dropped {:?}", self.team_hash);
         // unsafe {
         //     for duration in crate::SERIALIZE_TIMER.iter() {

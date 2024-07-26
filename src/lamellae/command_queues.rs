@@ -1371,6 +1371,7 @@ impl CommandQueue {
             async_std::task::yield_now().await;
         }
         // println!("leaving alloc_task task {:?}", scheduler.active());
+        // println!("sechduler_new: {:?}", Arc::strong_count(&scheduler));
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1387,6 +1388,7 @@ impl CommandQueue {
             panic!("received panic from other PE");
         }
         // println!("leaving panic_task task {:?}", scheduler.active());
+        // println!("sechduler_new: {:?}", Arc::strong_count(&scheduler));
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1525,6 +1527,7 @@ impl CommandQueue {
         //     print!("{:?} ", cnt.load(Ordering::Relaxed));
         // }
         // println!("");
+        // println!("sechduler_new: {:?}", Arc::strong_count(&scheduler));
     }
 
     //#[tracing::instrument(skip_all)]

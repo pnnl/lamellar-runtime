@@ -292,6 +292,11 @@ impl Drop for LamellarWorld {
         if cnt == 1 {
             // println!("[{:?}] world dropping", self.my_pe);
             // println!(
+            //     "lamellae cnt {:?} sched cnt {:?}",
+            //     Arc::strong_count(&self.team_rt.lamellae),
+            //     Arc::strong_count(&self.team_rt.scheduler)
+            // );
+            // println!(
             //     "in team destroy mype: {:?} cnt: {:?} {:?}",
             //     self.my_pe,
             //     self._counters.send_req_cnt.load(Ordering::SeqCst),
@@ -353,10 +358,15 @@ impl Drop for LamellarWorld {
             // println!(
             //     "team: {:?} team_rt: {:?}",
             //     Arc::strong_count(&self.team),
-            //     unsafe { Arc::strong_count(&team_rt) }
+            //     unsafe { Arc::strong_count(&self.team_rt) }
             // );
 
             // println!("counters: {:?}", Arc::strong_count(&self._counters));
+            // println!(
+            //     "sechduler_new: {:?}",
+            //     Arc::strong_count(&self.team_rt.scheduler)
+            // );
+            // println!("[{:?}] world dropped", self.my_pe);
         }
         // println!("[{:?}] world dropped", self.my_pe);
     }
@@ -434,62 +444,8 @@ impl LamellarWorldBuilder {
             "lamellar3" => ExecutorType::LamellarWorkStealing3,
             _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'async_std', or (if tokio-executor feature is enabled, 'tokio'.")
         };
-        // let executor = match std::env::var("LAMELLAR_EXECUTOR") {
-        //     Ok(val) => {
-        //         let executor = val.parse::<usize>().unwrap();
-        //         if executor == 0 {
-        //             ExecutorType::LamellarWorkStealing
-        //         } else if executor == 1 {
-        //             #[cfg(feature = "tokio-executor")]
-        //             {
-        //                 ExecutorType::Tokio
-        //             }
-        //             #[cfg(not(feature = "tokio-executor"))]
-        //             {
-        //                 println!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled,  defaulting to lamellar work stealing executor");
-        //                 ExecutorType::LamellarWorkStealing
-        //             }
-        //         } else if executor == 2 {
-        //             ExecutorType::LamellarWorkStealing2
-        //         } else if executor == 3 {
-        //             ExecutorType::LamellarWorkStealing3
-        //         } else if executor == 4 {
-        //             ExecutorType::AsyncStd
-        //         } else {
-        //             println!("[LAMELLAR WARNING]: invalid executor selected defaulting to lamellar work stealing executor");
-        //             ExecutorType::LamellarWorkStealing
-        //         }
-        //     }
-        //     Err(_) => {
-        //         #[cfg(feature = "tokio-executor")]
-        //         {
-        //             ExecutorType::Tokio
-        //         }
-        //         #[cfg(not(feature = "tokio-executor"))]
-        //         {
-        //             ExecutorType::LamellarWorkStealing
-        //         }
-        //     }
-        // };
-        // println!("executor: {:?}", executor);
 
         let num_threads = config().threads;
-        //     let num_threads = match std::env::var("LAMELLAR_THREADS") {
-        //     Ok(n) => {
-        //         if let Ok(num_threads) = n.parse::<usize>() {
-        //             if num_threads == 0 {
-        //                 panic!("LAMELLAR_THREADS must be greater than 0");
-        //             } else if num_threads == 1 {
-        //                 num_threads
-        //             } else {
-        //                 num_threads - 1
-        //             }
-        //         } else {
-        //             panic!("LAMELLAR_THREADS must be an integer greater than 0");
-        //         }
-        //     }
-        //     Err(_) => 4,
-        // };
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
@@ -612,7 +568,11 @@ impl LamellarWorldBuilder {
             self.num_threads,
             panic.clone(),
         ));
-        // println!("{:?}: create_scheduler", timer.elapsed());
+        // println!(
+        //     " create_scheduler  cnt {:?}",
+        //     // timer.elapsed(),
+        //     Arc::strong_count(&sched_new)
+        // );
 
         // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());

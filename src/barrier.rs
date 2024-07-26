@@ -446,9 +446,10 @@ impl Barrier {
 
 // impl Drop for Barrier {
 //     fn drop(&mut self) {
-//         //println!("dropping barrier");
-//         // println!("arch: {:?}",Arc::strong_count(&self.arch));
-//         //println!("dropped barrier");
+//         println!("dropping barrier");
+//         println!("lamellae cnt: {:?}", Arc::strong_count(&self.lamellae));
+//         println!("scheduler cnt: {:?}", Arc::strong_count(&self.scheduler));
+//         println!("dropped barrier");
 //     }
 // }
 
