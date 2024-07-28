@@ -2142,7 +2142,7 @@ impl LamellarTeamRT {
 impl Drop for LamellarTeamRT {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
-        println!("LamellarTeamRT Drop");
+        // println!("LamellarTeamRT Drop");
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
         // println!("lamellae: {:?}", Arc::strong_count(&self.lamellae));
         // println!("arch: {:?}", Arc::strong_count(&self.arch));

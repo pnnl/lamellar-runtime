@@ -215,14 +215,22 @@ impl Drop for MemRegionHandle {
                             parent_id: self.inner.grand_parent_id,
                         };
                         // println!("sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
-                        self.inner.team.exec_am_pe(self.inner.parent_id.1, temp);
+                        let _ = self
+                            .inner
+                            .team
+                            .exec_am_pe(self.inner.parent_id.1, temp)
+                            .spawn();
                     }
                 }
             } else {
                 //need to wait for references I sent to return
-                self.inner.team.exec_am_local(MemRegionDropWaitAm {
-                    inner: self.inner.clone(),
-                });
+                let _ = self
+                    .inner
+                    .team
+                    .exec_am_local(MemRegionDropWaitAm {
+                        inner: self.inner.clone(),
+                    })
+                    .spawn();
             }
         }
     }
@@ -285,7 +293,11 @@ impl LamellarAM for MemRegionDropWaitAm {
                                 parent_id: self.inner.grand_parent_id,
                             };
                             // println!("waited sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
-                            self.inner.team.exec_am_pe(self.inner.parent_id.1, temp);
+                            let _ = self
+                                .inner
+                                .team
+                                .exec_am_pe(self.inner.parent_id.1, temp)
+                                .spawn();
                         }
                     }
                     break;

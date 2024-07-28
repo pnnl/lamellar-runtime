@@ -115,10 +115,13 @@ impl InnerDistIterCountHandle {
     }
 
     fn reduce_remote_counts(&self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
-        self.team.exec_am_all(UpdateCntAm {
-            remote_cnt: local_cnt,
-            cnt: cnt.clone(),
-        });
+        let _ = self
+            .team
+            .exec_am_all(UpdateCntAm {
+                remote_cnt: local_cnt,
+                cnt: cnt.clone(),
+            })
+            .spawn();
         self.team.wait_all();
         self.team.tasking_barrier();
         cnt.load(Ordering::SeqCst)

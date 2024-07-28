@@ -288,15 +288,17 @@ impl<T> Drop for GlobalRwDarcReadGuard<T> {
                 0,
                 inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
             );
-            team.exec_am_pe_tg(
-                0,
-                UnlockAm {
-                    rwlock_addr: remote_rwlock_addr,
-                    orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
-                    lock_type: LockType::Read,
-                },
-                Some(inner.am_counters()),
-            );
+            let _ = team
+                .exec_am_pe_tg(
+                    0,
+                    UnlockAm {
+                        rwlock_addr: remote_rwlock_addr,
+                        orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
+                        lock_type: LockType::Read,
+                    },
+                    Some(inner.am_counters()),
+                )
+                .spawn();
         }
     }
 }
@@ -337,15 +339,17 @@ impl<T> Drop for GlobalRwDarcWriteGuard<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe_tg(
-            0,
-            UnlockAm {
-                rwlock_addr: remote_rwlock_addr,
-                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
-                lock_type: LockType::Write,
-            },
-            Some(inner.am_counters()),
-        );
+        let _ = team
+            .exec_am_pe_tg(
+                0,
+                UnlockAm {
+                    rwlock_addr: remote_rwlock_addr,
+                    orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
+                    lock_type: LockType::Write,
+                },
+                Some(inner.am_counters()),
+            )
+            .spawn();
     }
 }
 
@@ -385,15 +389,17 @@ impl<T> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe_tg(
-            0,
-            UnlockAm {
-                rwlock_addr: remote_rwlock_addr,
-                orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
-                lock_type: LockType::CollectiveWrite(self.collective_cnt),
-            },
-            Some(inner.am_counters()),
-        );
+        let _ = team
+            .exec_am_pe_tg(
+                0,
+                UnlockAm {
+                    rwlock_addr: remote_rwlock_addr,
+                    orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
+                    lock_type: LockType::CollectiveWrite(self.collective_cnt),
+                },
+                Some(inner.am_counters()),
+            )
+            .spawn();
     }
 }
 

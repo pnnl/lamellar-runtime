@@ -67,6 +67,7 @@ impl LamellarRequestAddResult for AmHandleInner {
 /// A handle to an active messaging request that executes on a singe PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
+#[must_use = "active messaging handles do nothing unless polled or awaited or 'spawn()' or 'block()' are called"]
 pub struct AmHandle<T> {
     pub(crate) inner: Arc<AmHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
@@ -188,6 +189,7 @@ impl<T: AmDist> Future for AmHandle<T> {
 /// A handle to an active messaging request that executes on the local (originating) PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
+#[must_use = "active messaging handles do nothing unless polled or awaited or 'spawn()' or 'block()' are called"]
 pub struct LocalAmHandle<T> {
     pub(crate) inner: Arc<AmHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
@@ -315,6 +317,7 @@ pub(crate) struct MultiAmHandleInner {
 /// A handle to an active messaging request that executes on multiple PEs, returned from a call to [exec_am_all][crate::ActiveMessaging::exec_am_all]
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
+#[must_use = "active messaging handles do nothing unless polled or awaited or 'spawn()' or 'block()' are called"]
 pub struct MultiAmHandle<T> {
     pub(crate) inner: Arc<MultiAmHandleInner>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
