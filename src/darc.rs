@@ -59,7 +59,7 @@ use std::sync::Arc;
 
 // //use tracing::*;
 
-use crate::active_messaging::{AMCounters, AmHandle, RemotePtr};
+use crate::active_messaging::{AMCounters, RemotePtr};
 use crate::barrier::Barrier;
 use crate::env_var::config;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};

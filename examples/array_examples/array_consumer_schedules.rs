@@ -107,15 +107,22 @@ fn sum_with_schedule(
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
+    println!("world created");
     let _my_pe = world.my_pe();
     let _num_pes = world.num_pes();
     let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    println!("array created");
+    block_array.print();
     let _ = block_array
         .dist_iter_mut()
         .enumerate()
-        .for_each(move |(i, e)| e.store(i))
+        .for_each(move |(i, e)| {
+            println!("setting {i} to {i}");
+            e.store(i)
+        })
         .spawn();
     world.wait_all();
+    println!("Done");
     block_array.print();
 
     let thread_cnts: Arc<Mutex<HashMap<ThreadId, usize>>> = Arc::new(Mutex::new(HashMap::new()));

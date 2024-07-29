@@ -542,13 +542,12 @@ impl Scheduler {
         while self.panic.load(Ordering::SeqCst) == 0
             && self.num_tasks.load(Ordering::Relaxed) > 3
             && self.num_ams.load(Ordering::Relaxed) > 0
-        {}
         //TODO maybe this should be > 2
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
-                    "shurtdown timeout, tasks remaining: {:?} panic: {:?}",
+                    "shutdown timeout, tasks remaining: {:?} panic: {:?}",
                     self.num_tasks.load(Ordering::Relaxed),
                     self.panic.load(Ordering::SeqCst),
                 );

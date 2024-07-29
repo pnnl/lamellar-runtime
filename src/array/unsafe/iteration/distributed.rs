@@ -11,6 +11,7 @@ use core::marker::PhantomData;
 use futures_util::Future;
 use paste::paste;
 use std::pin::Pin;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 impl<T> InnerArray for UnsafeArray<T> {
@@ -48,15 +49,27 @@ macro_rules! consumer_impl {
                 $($bounds)+
             {
                 let am = $($am)*;
+                // set req counters so that wait all works
+                self.data.team.team_counters.add_send_req(1);
+                self.data.team.world_counters.add_send_req(1);
+                self.data.task_group.counters.add_send_req(1);
+
                 let barrier = self.barrier_handle();
                 let inner = self.clone();
-                let reqs_future = Box::pin(async move{match sched {
-                    Schedule::Static => inner.sched_static(am),
-                    Schedule::Dynamic => inner.sched_dynamic(am),
-                    Schedule::Chunk(size) => inner.sched_chunk(am,size),
-                    Schedule::Guided => inner.sched_guided(am),
-                    Schedule::WorkStealing => inner.sched_work_stealing(am),
-                }});
+                let reqs_future = Box::pin(async move{
+                    let reqs = match sched {
+                        Schedule::Static => inner.sched_static(am),
+                        Schedule::Dynamic => inner.sched_dynamic(am),
+                        Schedule::Chunk(size) => inner.sched_chunk(am,size),
+                        Schedule::Guided => inner.sched_guided(am),
+                        Schedule::WorkStealing => inner.sched_work_stealing(am),
+                    };
+                    // remove req counters after individual ams have been launched.
+                    inner.data.team.team_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    inner.data.team.world_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    inner.data.task_group.counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    reqs
+                });
                 $return_type::new(barrier,reqs_future,self)
             }
 

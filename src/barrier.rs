@@ -297,6 +297,7 @@ impl Barrier {
     // but for the case of Darcs, or any case where the barrier is being called in a worker thread
     // we actually want to be able to process other tasks while the barrier is active
     pub(crate) fn tasking_barrier(&self) {
+        // println!("calling tasking barrier");
         self.barrier_internal(|| {
             self.scheduler.exec_task();
         });
@@ -314,10 +315,13 @@ impl Barrier {
             n: self.n,
             state: State::RoundInit(self.num_rounds),
         };
+        // println!("in barrier handle");
+        // self.print_bar();
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(_) = &self.send_buf {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
+                    // println!("barrier id: {:?}", barrier_id);
                     handle.barrier_id = barrier_id;
                     handle.my_index = my_index;
                     handle.state = State::RoundInit(0);
@@ -459,7 +463,7 @@ impl BarrierHandle {
                 - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
                 as isize)
                 .rem_euclid(self.num_pes as isize) as isize;
-            let recv_pe = self.arch.single_iter(team_recv_pe as usize).next().unwrap();
+            // let recv_pe = self.arch.single_iter(team_recv_pe as usize).next().unwrap();
             if team_recv_pe as usize != self.my_index {
                 unsafe {
                     //safe as  each pe is only capable of writing to its own index
