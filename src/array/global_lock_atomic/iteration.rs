@@ -389,7 +389,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for GlobalLockArray<T> {
             self.array
                 .block_on(async move { lock.collective_write().await }),
         );
-        self.barrier();
+        // self.barrier();
         // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         GlobalLockDistIterMut {
             data: self.clone(),

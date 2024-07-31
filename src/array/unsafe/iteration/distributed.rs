@@ -54,9 +54,14 @@ macro_rules! consumer_impl {
                 self.data.team.world_counters.add_send_req(1);
                 self.data.task_group.counters.add_send_req(1);
 
+                // self.data.team.scheduler.print_status();
                 let barrier = self.barrier_handle();
+                // let barrier_id  = barrier.barrier_id;
+                // println!("barrier_id {:?} creating dist iter handle",barrier_id);
                 let inner = self.clone();
                 let reqs_future = Box::pin(async move{
+
+                    // println!("barrier id {:?} entering dist iter sched {:?} {:?} {:?}",barrier_id, inner.data.team.team_counters.outstanding_reqs.load(Ordering::SeqCst), inner.data.team.world_counters.outstanding_reqs.load(Ordering::SeqCst), inner.data.task_group.counters.outstanding_reqs.load(Ordering::SeqCst));
                     let reqs = match sched {
                         Schedule::Static => inner.sched_static(am),
                         Schedule::Dynamic => inner.sched_dynamic(am),
@@ -68,6 +73,7 @@ macro_rules! consumer_impl {
                     inner.data.team.team_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
                     inner.data.team.world_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
                     inner.data.task_group.counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    // println!("barrier id {:?} done with dist iter sched {:?} {:?} {:?}",barrier_id,inner.data.team.team_counters.outstanding_reqs.load(Ordering::SeqCst), inner.data.team.world_counters.outstanding_reqs.load(Ordering::SeqCst), inner.data.task_group.counters.outstanding_reqs.load(Ordering::SeqCst));
                     reqs
                 });
                 $return_type::new(barrier,reqs_future,self)

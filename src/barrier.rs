@@ -22,6 +22,7 @@ pub(crate) struct Barrier {
     pub(crate) scheduler: Arc<Scheduler>,
     lamellae: Arc<Lamellae>,
     barrier_cnt: AtomicUsize,
+    cur_barrier_id: Arc<AtomicUsize>,
     barrier_buf: Arc<Vec<MemoryRegion<usize>>>,
     send_buf: Option<MemoryRegion<usize>>,
     panic: Arc<AtomicU8>,
@@ -93,6 +94,7 @@ impl Barrier {
             scheduler,
             lamellae,
             barrier_cnt: AtomicUsize::new(1),
+            cur_barrier_id: Arc::new(AtomicUsize::new(1)),
             barrier_buf: Arc::new(buffs),
             send_buf,
             panic,
@@ -186,6 +188,12 @@ impl Barrier {
                     //     std::thread::current().id(),
                     //     barrier_id
                     // );
+                    while barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                        wait_func();
+                        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+                            break;
+                        }
+                    }
 
                     for round in 0..self.num_rounds {
                         for i in 1..=self.n {
@@ -265,10 +273,12 @@ impl Barrier {
                             }
                         }
                     }
+                    self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
+                    // println!("leaving barrier {:?}", barrier_id);
                 }
             }
         }
-        // println!("leaving barrier");
+
         // self.print_bar();
         // self.lamellae.flush();
     }
@@ -311,6 +321,7 @@ impl Barrier {
             my_index: 0,
             num_pes: self.num_pes,
             barrier_id: 0,
+            cur_barrier_id: self.cur_barrier_id.clone(),
             num_rounds: self.num_rounds,
             n: self.n,
             state: State::RoundInit(self.num_rounds),
@@ -324,6 +335,15 @@ impl Barrier {
                     // println!("barrier id: {:?}", barrier_id);
                     handle.barrier_id = barrier_id;
                     handle.my_index = my_index;
+
+                    if barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                        handle.state = State::Waiting;
+                        return handle;
+                    }
+                    // else if barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
+                    //     println!("should this happen>?");
+                    // }
+
                     handle.state = State::RoundInit(0);
                     let mut round = 0;
                     while round < self.num_rounds {
@@ -334,6 +354,7 @@ impl Barrier {
                         }
                         round += 1;
                     }
+                    self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
                     handle.state = State::RoundInit(self.num_rounds);
                 }
             }
@@ -429,13 +450,15 @@ pub struct BarrierHandle {
     lamellae: Arc<Lamellae>,
     my_index: usize,
     num_pes: usize,
-    barrier_id: usize,
+    pub(crate) barrier_id: usize,
+    cur_barrier_id: Arc<AtomicUsize>,
     num_rounds: usize,
     n: usize,
     state: State,
 }
 
 enum State {
+    Waiting,
     RoundInit(usize),              //the round we are in
     RoundInProgress(usize, usize), //the round we are in, pe we are waiting to hear from
 }
@@ -487,6 +510,18 @@ impl Future for BarrierHandle {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // let mut this = self.project();
         match self.state {
+            State::Waiting => {
+                if self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
+                }
+                // else if self.barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
+                //     println!("barrier id is less than cur barrier id");
+                // }
+                *self.project().state = State::RoundInit(0);
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
             State::RoundInit(round) => {
                 let mut round = round;
                 while round < self.num_rounds {
@@ -499,7 +534,10 @@ impl Future for BarrierHandle {
                     }
                     round += 1;
                 }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
                 *self.project().state = State::RoundInit(round);
+
                 Poll::Ready(())
             }
             State::RoundInProgress(round, recv_pe) => {
@@ -521,7 +559,10 @@ impl Future for BarrierHandle {
                     }
                     round += 1;
                 }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
                 *self.project().state = State::RoundInit(round);
+
                 Poll::Ready(())
             }
         }
@@ -531,6 +572,26 @@ impl Future for BarrierHandle {
 impl LamellarRequest for BarrierHandle {
     fn blocking_wait(self) -> Self::Output {
         match self.state {
+            State::Waiting => {
+                while self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                    std::thread::yield_now();
+                }
+                if self.barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
+                    println!("barrier id is less than cur barrier id");
+                }
+                let mut round = 0;
+                while round < self.num_rounds {
+                    self.do_send_round(round);
+                    let mut recv_pe_index = 1;
+                    while let Some(recv_pe) = self.do_recv_round(round, recv_pe_index) {
+                        recv_pe_index = recv_pe;
+                        std::thread::yield_now();
+                    }
+                    round += 1;
+                }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
+            }
             State::RoundInit(round) => {
                 let mut round = round;
                 while round < self.num_rounds {
@@ -542,6 +603,8 @@ impl LamellarRequest for BarrierHandle {
                     }
                     round += 1;
                 }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
             }
             State::RoundInProgress(round, recv_pe) => {
                 let mut round = round;
@@ -559,12 +622,15 @@ impl LamellarRequest for BarrierHandle {
                     }
                     round += 1;
                 }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
             }
         }
     }
 
     fn ready_or_set_waker(&mut self, _waker: &Waker) -> bool {
         match self.state {
+            State::Waiting => false,
             State::RoundInit(round) => {
                 if round < self.num_rounds {
                     false
@@ -584,6 +650,26 @@ impl LamellarRequest for BarrierHandle {
 
     fn val(&self) -> Self::Output {
         match self.state {
+            State::Waiting => {
+                while self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                    std::thread::yield_now();
+                }
+                // if self.barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
+                //     println!("barrier id is less than cur barrier id");
+                // }
+                let mut round = 0;
+                while round < self.num_rounds {
+                    self.do_send_round(round);
+                    let mut recv_pe_index = 1;
+                    while let Some(recv_pe) = self.do_recv_round(round, recv_pe_index) {
+                        recv_pe_index = recv_pe;
+                        std::thread::yield_now();
+                    }
+                    round += 1;
+                }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
+            }
             State::RoundInit(round) => {
                 let mut round = round;
                 while round < self.num_rounds {
@@ -595,6 +681,8 @@ impl LamellarRequest for BarrierHandle {
                     }
                     round += 1;
                 }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
             }
             State::RoundInProgress(round, recv_pe) => {
                 let mut round = round;
@@ -612,6 +700,8 @@ impl LamellarRequest for BarrierHandle {
                     }
                     round += 1;
                 }
+                self.cur_barrier_id
+                    .store(self.barrier_id + 1, Ordering::SeqCst);
             }
         }
     }

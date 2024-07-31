@@ -36,7 +36,7 @@ fn main() {
     let a_init = a
         .dist_iter_mut()
         .enumerate()
-        .for_each(|(i, x)| *x = i as f32);
+        .for_each(move |(i, x)| *x = i as f32);
     let b_init = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
         //identity matrix
         let row = i / dim;
@@ -47,7 +47,7 @@ fn main() {
             *x = 0 as f32;
         }
     });
-    let c_init = c.dist_iter_mut().for_each(|x| *x = 0.0);
+    let c_init = c.dist_iter_mut().for_each(move |x| *x = 0.0);
     world.block_on_all([a_init, b_init, c_init]);
     let a = a.into_read_only();
     let b = b.into_read_only();

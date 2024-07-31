@@ -18,7 +18,8 @@ use futures_util::future::join_all;
 use futures_util::{Future, StreamExt};
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::hash::Hash;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -36,6 +37,7 @@ pub(crate) struct TaskGroupAmHandleInner {
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
     pub(crate) scheduler: Arc<Scheduler>,
+    // pending_reqs: Arc<Mutex<HashSet<usize>>>,
 }
 
 //#[doc(hidden)]
@@ -61,16 +63,18 @@ impl LamellarRequestAddResult for TaskGroupAmHandleInner {
     fn add_result(&self, _pe: usize, sub_id: usize, data: InternalResult) {
         self.data.lock().insert(sub_id, data);
         if let Some(waker) = self.wakers.lock().remove(&sub_id) {
+            // println!("waker found for sub_id {}", sub_id);
             waker.wake();
         }
     }
-    fn update_counters(&self) {
+    fn update_counters(&self, _sub_id: usize) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
+        // self.pending_reqs.lock().remove(&sub_id);
     }
 }
 
@@ -204,6 +208,7 @@ pub(crate) struct TaskGroupMultiAmHandleInner {
     world_outstanding_reqs: Arc<AtomicUsize>,
     tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
     pub(crate) scheduler: Arc<Scheduler>,
+    // pending_reqs: Arc<Mutex<HashSet<usize>>>,
 }
 
 //#[doc(hidden)]
@@ -237,13 +242,14 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
             waker.wake();
         }
     }
-    fn update_counters(&self) {
+    fn update_counters(&self, _sub_id: usize) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
             tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         }
+        // self.pending_reqs.lock().remove(&sub_id);
     }
 }
 
@@ -466,8 +472,10 @@ impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         let data = self.inner.data.lock();
         if data.contains_key(&self.sub_id) {
+            // println!("request ready {:?}", self.sub_id);
             true
         } else {
+            // println!("request not ready setting waker {:?}", self.sub_id);
             //this can probably be optimized similar to set_waker of MultiAmHandle
             // where we check if the waker already exists and if it wakes to same task
             self.inner.wakers.lock().insert(self.sub_id, waker.clone());
@@ -571,6 +579,8 @@ pub struct LamellarTaskGroup {
     rt_req: Arc<LamellarRequestResult>, //for exec_pe requests
     rt_multi_req: Arc<LamellarRequestResult>, //for exec_all requests
     rt_local_req: Arc<LamellarRequestResult>, //for exec_local requests
+
+    // pub(crate) pending_reqs: Arc<Mutex<HashSet<usize>>>,
 }
 
 impl ActiveMessaging for LamellarTaskGroup {
@@ -664,6 +674,7 @@ impl LamellarTaskGroup {
         let team = team.into().team.clone();
         let counters = AMCounters::new();
         let cnt = Arc::new(AtomicUsize::new(1)); //this lamellarTaskGroup instance represents 1 handle (even though we maintain a single and multi req handle)
+        // let pending_reqs = Arc::new(Mutex::new(HashSet::new()));
         let req = Arc::new(TaskGroupAmHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
@@ -672,6 +683,7 @@ impl LamellarTaskGroup {
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
             scheduler: team.scheduler.clone(),
+            // pending_reqs: pending_reqs.clone(),
         });
         let rt_req = Arc::new(LamellarRequestResult::TgAm(req.clone()));
         let multi_req = Arc::new(TaskGroupMultiAmHandleInner {
@@ -683,6 +695,7 @@ impl LamellarTaskGroup {
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
             scheduler: team.scheduler.clone(),
+            // pending_reqs: pending_reqs.clone(),
         });
         let rt_multi_req = Arc::new(LamellarRequestResult::TgMultiAm(multi_req.clone()));
         let local_req = Arc::new(TaskGroupAmHandleInner {
@@ -693,6 +706,7 @@ impl LamellarTaskGroup {
             world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
             tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
             scheduler: team.scheduler.clone(),
+            // pending_reqs: pending_reqs.clone(),
         });
         let rt_local_req = Arc::new(LamellarRequestResult::TgAm(local_req.clone()));
         LamellarTaskGroup {
@@ -709,6 +723,7 @@ impl LamellarTaskGroup {
             rt_req: rt_req,
             rt_multi_req: rt_multi_req,
             rt_local_req: rt_local_req,
+            // pending_reqs: pending_reqs,
         }
     }
 
@@ -734,14 +749,18 @@ impl LamellarTaskGroup {
             }
             if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!(
-                    "in task group wait_all mype: {:?} cnt: {:?} {:?}",
+                    "in task group wait_all mype: {:?} cnt: team {:?} team {:?} tg {:?} tg {:?}",
                     self.team.world_pe,
                     self.team.team_counters.send_req_cnt.load(Ordering::SeqCst),
                     self.team
                         .team_counters
                         .outstanding_reqs
                         .load(Ordering::SeqCst),
+                    self.counters.send_req_cnt.load(Ordering::SeqCst),
+                    self.counters.outstanding_reqs.load(Ordering::SeqCst),
+                    // self.pending_reqs.lock()
                 );
+                self.team.scheduler.print_status();
                 temp_now = Instant::now();
             }
         }
@@ -793,6 +812,7 @@ impl LamellarTaskGroup {
             id: self.multi_id,
             sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
         };
+        // self.pending_reqs.lock().insert(req_id.sub_id);
 
         let req_data = ReqMetaData {
             src: self.team.world_pe,
@@ -834,6 +854,7 @@ impl LamellarTaskGroup {
             id: self.id,
             sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
         };
+        // self.pending_reqs.lock().insert(req_id.sub_id);
         let req_data = ReqMetaData {
             src: self.team.world_pe,
             dst: Some(self.team.arch.world_pe(pe).expect("pe not member of team")),
@@ -880,6 +901,7 @@ impl LamellarTaskGroup {
             id: self.local_id,
             sub_id: self.sub_id_counter.fetch_add(1, Ordering::SeqCst),
         };
+        // self.pending_reqs.lock().insert(req_id.sub_id);
         let req_data = ReqMetaData {
             src: self.team.world_pe,
             dst: Some(self.team.world_pe),

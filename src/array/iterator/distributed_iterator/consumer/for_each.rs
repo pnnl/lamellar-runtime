@@ -226,6 +226,14 @@ impl DistIterForEachHandle {
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
+        // match self.state {
+        //     State::Barrier(ref barrier, _) => {
+        //         println!("spawning task barrier id {:?}", barrier.barrier_id);
+        //     }
+        //     State::Reqs(_, barrier_id) => {
+        //         println!("spawning task not sure I can be here {:?}", barrier_id);
+        //     }
+        // }
         self.team.clone().scheduler.spawn_task(self)
     }
 }
@@ -236,7 +244,7 @@ enum State {
         #[pin] BarrierHandle,
         Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
     ),
-    Reqs(#[pin] InnerDistIterForEachHandle),
+    Reqs(#[pin] InnerDistIterForEachHandle, usize),
 }
 
 impl Future for DistIterForEachHandle {
@@ -245,19 +253,42 @@ impl Future for DistIterForEachHandle {
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Barrier(barrier, inner) => {
+                let barrier_id = barrier.barrier_id;
+                // println!("in task barrier {:?}", barrier_id);
                 ready!(barrier.poll(cx));
-                let mut inner = ready!(Future::poll(inner.as_mut(), cx));
+                // println!("past barrier {:?}", barrier_id);
+                let mut inner: InnerDistIterForEachHandle =
+                    ready!(Future::poll(inner.as_mut(), cx));
+
                 match Pin::new(&mut inner).poll(cx) {
-                    Poll::Ready(()) => Poll::Ready(()),
+                    Poll::Ready(()) => {
+                        // println!("past reqs  barrier_id {:?}", barrier_id);
+                        Poll::Ready(())
+                    }
                     Poll::Pending => {
-                        *this.state = State::Reqs(inner);
+                        // println!(
+                        //     "reqs remaining {:?} barrier_id {:?}",
+                        //     inner.reqs.len(),
+                        //     barrier_id
+                        // );
+                        *this.state = State::Reqs(inner, barrier_id);
                         Poll::Pending
                     }
                 }
             }
-            StateProj::Reqs(inner) => {
-                ready!(inner.poll(cx));
-                Poll::Ready(())
+            StateProj::Reqs(inner, barrier_id) => {
+                // println!(
+                //     "reqs remaining {:?} barrier_id {:?}",
+                //     inner.reqs.len(),
+                //     barrier_id
+                // );
+                match inner.poll(cx) {
+                    Poll::Ready(()) => {
+                        // println!("past reqs barrier_id {:?}", barrier_id);
+                        Poll::Ready(())
+                    }
+                    Poll::Pending => Poll::Pending,
+                }
             }
         }
     }
@@ -271,7 +302,7 @@ impl LamellarRequest for DistIterForEachHandle {
                 barrier.blocking_wait();
                 self.team.block_on(reqs).blocking_wait();
             }
-            State::Reqs(inner) => {
+            State::Reqs(inner, _) => {
                 inner.blocking_wait();
             }
         }
@@ -285,7 +316,7 @@ impl LamellarRequest for DistIterForEachHandle {
                 waker.wake_by_ref();
                 false
             }
-            State::Reqs(inner) => inner.ready_or_set_waker(waker),
+            State::Reqs(inner, _) => inner.ready_or_set_waker(waker),
         }
     }
     fn val(&self) -> Self::Output {
@@ -293,7 +324,7 @@ impl LamellarRequest for DistIterForEachHandle {
             State::Barrier(_barrier, _reqs) => {
                 unreachable!("should never be in barrier state when val is called");
             }
-            State::Reqs(inner) => inner.val(),
+            State::Reqs(inner, _) => inner.val(),
         }
     }
 }

@@ -399,7 +399,7 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     fn dist_iter_mut(&self) -> Self::DistIter {
         let lock: LocalRwDarc<()> = self.lock.clone();
         let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
-        self.barrier();
+        // self.barrier();
         // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         LocalLockDistIterMut {
             data: self.clone(),

@@ -55,7 +55,7 @@ impl LamellarRequestAddResult for AmHandleInner {
             waker.wake();
         }
     }
-    fn update_counters(&self) {
+    fn update_counters(&self, _sub_id: usize) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
@@ -344,7 +344,7 @@ impl LamellarRequestAddResult for MultiAmHandleInner {
             }
         }
     }
-    fn update_counters(&self) {
+    fn update_counters(&self, _sub_id: usize) {
         let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
         if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {

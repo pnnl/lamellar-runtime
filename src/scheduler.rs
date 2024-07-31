@@ -510,6 +510,17 @@ impl Scheduler {
         self.executor.clone()
     }
 
+    pub(crate) fn print_status(&self) {
+        println!(
+            "status: {:?} num tasks: {:?} max tasks: {:?} num ams  {:?} max ams {:?}",
+            self.status.load(Ordering::SeqCst),
+            self.num_tasks.load(Ordering::SeqCst),
+            self.max_tasks.load(Ordering::SeqCst),
+            self.num_ams.load(Ordering::SeqCst),
+            self.max_ams.load(Ordering::SeqCst)
+        );
+    }
+
     pub(crate) fn active(&self) -> bool {
         // if self.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8 {
         //     println!(
