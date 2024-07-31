@@ -2,7 +2,7 @@ use quote::{format_ident, quote, quote_spanned, ToTokens};
 use syn::fold::Fold;
 use syn::parse::Result;
 use syn::spanned::Spanned;
-use syn::visit_mut::VisitMut;
+// use syn::visit_mut::VisitMut;
 use syn::{parse_quote, parse_quote_spanned};
 
 use crate::parse::{FormatArgs, VecArgs};
@@ -105,7 +105,7 @@ impl Fold for ReplaceSelf {
 }
 
 pub(crate) struct LamellarDSLReplace;
-pub(crate) struct DarcReplace;
+// pub(crate) struct DarcReplace;
 
 impl Fold for LamellarDSLReplace {
     fn fold_expr_path(&mut self, path: syn::ExprPath) -> syn::ExprPath {
@@ -186,32 +186,32 @@ impl Fold for LamellarDSLReplace {
     }
 }
 
-impl VisitMut for DarcReplace {
-    fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
-        let span = i.span();
-        // println!("ident: {:?}",i);
-        if i.to_string() == "Darc<" {
-            *i = syn::Ident::new("__AmDarc", span);
-        }
-        // println!("ident: {:?}",i);
-        syn::visit_mut::visit_ident_mut(self, i);
-    }
+// impl VisitMut for DarcReplace {
+//     fn visit_ident_mut(&mut self, i: &mut syn::Ident) {
+//         let span = i.span();
+//         // println!("ident: {:?}",i);
+//         if i.to_string() == "Darc<" {
+//             *i = syn::Ident::new("__AmDarc", span);
+//         }
+//         // println!("ident: {:?}",i);
+//         syn::visit_mut::visit_ident_mut(self, i);
+//     }
 
-    fn visit_macro_mut(&mut self, i: &mut syn::Macro) {
-        let args: Result<FormatArgs> = i.parse_body();
+//     fn visit_macro_mut(&mut self, i: &mut syn::Macro) {
+//         let args: Result<FormatArgs> = i.parse_body();
 
-        if args.is_ok() {
-            let tok_str = i.tokens.to_string();
-            let tok_str = tok_str.split(",").collect::<Vec<&str>>();
-            let mut new_tok_str: String = tok_str[0].to_string();
-            for i in 1..tok_str.len() {
-                new_tok_str +=
-                    &(",".to_owned() + &tok_str[i].to_string().replace("self", "__lamellar_data"));
-            }
-            i.tokens = new_tok_str.parse().unwrap();
-        } else {
-            // println!("warning unrecognized macro {:?} in lamellar::am expansion can currently only handle format like macros", i);
-        }
-        syn::visit_mut::visit_macro_mut(self, i);
-    }
-}
+//         if args.is_ok() {
+//             let tok_str = i.tokens.to_string();
+//             let tok_str = tok_str.split(",").collect::<Vec<&str>>();
+//             let mut new_tok_str: String = tok_str[0].to_string();
+//             for i in 1..tok_str.len() {
+//                 new_tok_str +=
+//                     &(",".to_owned() + &tok_str[i].to_string().replace("self", "__lamellar_data"));
+//             }
+//             i.tokens = new_tok_str.parse().unwrap();
+//         } else {
+//             // println!("warning unrecognized macro {:?} in lamellar::am expansion can currently only handle format like macros", i);
+//         }
+//         syn::visit_mut::visit_macro_mut(self, i);
+//     }
+// }

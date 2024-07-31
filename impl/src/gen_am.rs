@@ -351,7 +351,7 @@ pub(crate) fn impl_return_struct(
     bytes_buf: bool,
     local: bool,
 ) -> proc_macro2::TokenStream {
-    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let (impl_generics, _ty_generics, where_clause) = generics.split_for_impl();
 
     let generic_phantoms = generics.type_params().fold(quote! {}, |acc, t| {
         let name = quote::format_ident!("_phantom_{}", t.ident.to_string().to_lowercase());
@@ -363,7 +363,7 @@ pub(crate) fn impl_return_struct(
     let mut the_ret_struct = if bytes_buf {
         quote! {
             #am_data_header
-            struct #ret_struct_name #ty_generics #where_clause{
+            struct #ret_struct_name #impl_generics #where_clause{
                 val: serde_bytes::ByteBuf,
                 #generic_phantoms
             }
@@ -371,7 +371,7 @@ pub(crate) fn impl_return_struct(
     } else {
         quote! {
             #am_data_header
-            struct #ret_struct_name #ty_generics #where_clause{
+            struct #ret_struct_name #impl_generics #where_clause{
                 val: #ret_type,
                 #generic_phantoms
             }
