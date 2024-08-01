@@ -559,8 +559,10 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     //#[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
-
+        // let mut timer = std::time::Instant::now();
         self.team.barrier.barrier();
+        // println!("shared alloc barrier 1 time: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
             SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
         } else {
@@ -570,7 +572,10 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
                 AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
         };
+        // println!("shared alloc time: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         self.team.barrier.barrier();
+        // println!("shared alloc barrier 2 time: {:?}", timer.elapsed());
         mr
     }
 

@@ -296,8 +296,13 @@ impl<T: Dist + ArrayOps + std::default::Default> LocalLockArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> LocalLockArray<T> {
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        array.block_on_outstanding(DarcMode::LocalLockArray);
+        let array = UnsafeArray::inner_new(
+            team.clone(),
+            array_size,
+            distribution,
+            DarcMode::LocalLockArray,
+        );
+        // array.block_on_outstanding(DarcMode::LocalLockArray);
         let lock = LocalRwDarc::new(team, ()).unwrap();
 
         LocalLockArray {

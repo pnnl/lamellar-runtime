@@ -155,9 +155,25 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> UnsafeArray<T> {
+        UnsafeArray::inner_new(
+            team,
+            array_size,
+            distribution,
+            crate::darc::DarcMode::UnsafeArray,
+        )
+    }
+
+    pub(crate) fn inner_new<U: Into<IntoLamellarTeam>>(
+        team: U,
+        array_size: usize,
+        distribution: Distribution,
+        darc_mode: DarcMode,
+    ) -> UnsafeArray<T> {
         // let mut timer = std::time::Instant::now();
         let team = team.into().team.clone();
-        team.tasking_barrier();
+        team.barrier();
+        // println!("new array barrier1: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         let task_group = LamellarTaskGroup::new(team.clone());
         let my_pe = team.team_pe_id().unwrap();
         let num_pes = team.num_pes();
@@ -220,13 +236,12 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 num_pes: num_pes,
                 req_cnt: Arc::new(AtomicUsize::new(0)),
             },
-            crate::darc::DarcMode::UnsafeArray,
+            darc_mode,
             None,
         )
         .expect("trying to create array on non team member");
 
         // println!("new array darc {:?}", timer.elapsed());
-
         // timer = std::time::Instant::now();
         // println!("new unsafe array darc {:?}", data);
         // data.print();
@@ -245,7 +260,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             phantom: PhantomData,
         };
 
-        // println!("new array unsafe: {:?}", timer.elapsed());
+        //
         // timer = std::time::Instant::now();
         // println!("new unsafe");
         // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
@@ -254,14 +269,16 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
         // }
         // array.inner.data.print();
-        if full_array_size != array_size {
+        let res = if full_array_size != array_size {
             println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
             array.sub_array(0..array_size)
         } else {
             array
-        }
+        };
+        // println!("new array unsafe: {:?}", timer.elapsed());
         // println!("after buffered ops");
         // array.inner.data.print();
+        res
     }
 
     pub(crate) async fn async_new<U: Into<IntoLamellarTeam>>(

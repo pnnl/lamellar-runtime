@@ -286,8 +286,8 @@ impl Barrier {
     pub(crate) fn barrier(&self) {
         if std::thread::current().id() == *crate::MAIN_THREAD {
             self.barrier_internal(|| {
-                // std::thread::yield_now();
-                self.scheduler.exec_task();
+                std::thread::yield_now();
+                // self.scheduler.exec_task();
             });
         } else {
             if let Some(val) = config().blocking_call_warning {

@@ -1271,7 +1271,7 @@ impl<T> Darc<T> {
         // println!("creating new darc");
         // println!("new darc time init: {:?}", timer.elapsed());
         // timer = std::time::Instant::now();
-        team_rt.tasking_barrier();
+        team_rt.barrier();
         // println!("new darc time init barrier: {:?}", timer.elapsed());
         // timer = std::time::Instant::now();
         // println!("creating new darc after barrier");
@@ -1369,7 +1369,7 @@ impl<T> Darc<T> {
         //     DARC_ID.load(Ordering::Relaxed)
         // );
         // d.print();
-        team_rt.tasking_barrier();
+        team_rt.barrier();
         // println!("new darc time: {:?}", timer.elapsed());
         // team_rt.print_cnt();
         Ok(d)

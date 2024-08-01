@@ -75,7 +75,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> ReadOnlyArray<T> {
-        let array = UnsafeArray::new(team, array_size, distribution);
+        let array = UnsafeArray::inner_new(team, array_size, distribution, DarcMode::ReadOnlyArray);
         array.block_on_outstanding(DarcMode::ReadOnlyArray);
 
         ReadOnlyArray { array: array }

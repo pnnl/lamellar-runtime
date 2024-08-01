@@ -413,8 +413,13 @@ impl<T: Dist + ArrayOps + std::default::Default> GenericAtomicArray<T> {
         distribution: Distribution,
     ) -> GenericAtomicArray<T> {
         // println!("new generic_atomic array");
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        array.block_on_outstanding(DarcMode::GenericAtomicArray);
+        let array = UnsafeArray::inner_new(
+            team.clone(),
+            array_size,
+            distribution,
+            DarcMode::GenericAtomicArray,
+        );
+        // array.block_on_outstanding(DarcMode::GenericAtomicArray);
         let mut vec = vec![];
         for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));

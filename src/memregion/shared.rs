@@ -99,15 +99,21 @@ impl<T: Dist> SharedMemoryRegion<T> {
         alloc: AllocationType,
     ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
+        // let mut timer = std::time::Instant::now();
         let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
+        // println!("shared alloc alloc time: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         let mr = unsafe { mr_t.to_base::<u8>() };
-        Ok(SharedMemoryRegion {
+        let res = Ok(SharedMemoryRegion {
             mr: Darc::try_new(team.clone(), mr, crate::darc::DarcMode::Darc)
                 .expect("memregions can only be created on a member of the team"),
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,
-        })
+        });
+        // println!("shared alloc darc time: {:?}", timer.elapsed());
+
+        res
     }
 }
 

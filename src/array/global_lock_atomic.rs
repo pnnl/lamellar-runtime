@@ -321,7 +321,12 @@ impl<T: Dist + ArrayOps + std::default::Default> GlobalLockArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> GlobalLockArray<T> {
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        let array = UnsafeArray::inner_new(
+            team.clone(),
+            array_size,
+            distribution,
+            DarcMode::GlobalLockArray,
+        );
         let lock = GlobalRwDarc::new(team, ()).unwrap();
 
         GlobalLockArray {
