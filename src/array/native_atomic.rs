@@ -897,8 +897,13 @@ impl<T: Dist + ArrayOps + std::default::Default> NativeAtomicArray<T> {
         distribution: Distribution,
     ) -> NativeAtomicArray<T> {
         // println!("new native atomic array 1");
+        // let mut timer = std::time::Instant::now();
         let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        // println!("atomic - unsafe array {:?}", timer.elapsed());
+
+        // let mut timer = std::time::Instant::now();
         array.block_on_outstanding(DarcMode::NativeAtomicArray);
+        // println!("atomic - outstanding {:?}", timer.elapsed());
 
         NativeAtomicArray {
             array: array,

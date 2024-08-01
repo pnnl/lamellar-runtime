@@ -753,11 +753,15 @@ impl<T: Dist> MemoryRegion<T> {
                 mode = Mode::Local;
                 lamellae.rt_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
             } else {
-                lamellae.alloc(
-                    size * std::mem::size_of::<T>(),
-                    alloc,
-                    std::mem::align_of::<T>(),
-                )? //did we call team barrer before this?
+                lamellae
+                    .symmetric_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
+
+                // lamellae.alloc(
+                //     size * std::mem::size_of::<T>(),
+                //     alloc,
+                //     std::mem::align_of::<T>(),
+                // )?
+                //did we call team barrer before this?
             }
         } else {
             println!(
@@ -1233,7 +1237,8 @@ impl<T: Dist> Drop for MemoryRegion<T> {
         if self.addr != 0 {
             match self.mode {
                 Mode::Local => self.rdma.rt_free(self.addr), // - self.rdma.base_addr());
-                Mode::Shared => self.rdma.free(self.addr),
+                Mode::Shared => self.rdma.symmetric_free(self.addr),
+                // Mode::Shared => self.rdma.free(self.addr),
                 Mode::Remote => {}
             }
         }

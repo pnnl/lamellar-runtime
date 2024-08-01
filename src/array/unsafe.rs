@@ -155,6 +155,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> UnsafeArray<T> {
+        // let mut timer = std::time::Instant::now();
         let team = team.into().team.clone();
         team.tasking_barrier();
         let task_group = LamellarTaskGroup::new(team.clone());
@@ -168,9 +169,13 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         if remaining_elems > 0 {
             per_pe_size += 1
         }
+        // println!("new array init: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         // println!("new unsafe array {:?} {:?}", elem_per_pe, per_pe_size);
         let rmr_t: MemoryRegion<T> =
             MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global);
+        // println!("new array memregion {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         // let rmr = MemoryRegion::new(
         //     per_pe_size * std::mem::size_of::<T>(),
         //     team.lamellae.clone(),
@@ -199,6 +204,8 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 )
             }
         }
+        // println!("new array zeroing {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         let rmr = unsafe { rmr_t.to_base::<u8>() };
         // println!("new array u8 {:?}",rmr.as_ptr());
 
@@ -217,6 +224,10 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             None,
         )
         .expect("trying to create array on non team member");
+
+        // println!("new array darc {:?}", timer.elapsed());
+
+        // timer = std::time::Instant::now();
         // println!("new unsafe array darc {:?}", data);
         // data.print();
         let array = UnsafeArray {
@@ -233,6 +244,9 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             },
             phantom: PhantomData,
         };
+
+        // println!("new array unsafe: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         // println!("new unsafe");
         // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
         // println!("elem per pe {:?}", elem_per_pe);

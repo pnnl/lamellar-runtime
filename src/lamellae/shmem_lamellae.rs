@@ -243,6 +243,12 @@ impl LamellaeRDMA for Shmem {
     fn free(&self, addr: usize) {
         self.shmem_comm.free(addr)
     }
+    fn symmetric_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        self.shmem_comm.symmetric_alloc(size, align)
+    }
+    fn symmetric_free(&self, addr: usize) {
+        self.shmem_comm.symmetric_free(addr)
+    }
     fn base_addr(&self) -> usize {
         self.shmem_comm.base_addr()
     }

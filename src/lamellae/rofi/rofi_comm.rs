@@ -36,6 +36,7 @@ const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like te
 pub(crate) struct RofiComm {
     pub(crate) rofi_base_address: Arc<RwLock<usize>>,
     alloc: RwLock<Vec<BTreeAlloc>>,
+    sym_heap: BTreeAlloc,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
@@ -68,9 +69,10 @@ impl RofiComm {
         let total_mem = cmd_q_mem + RT_MEM + ROFI_MEM.load(Ordering::SeqCst);
         // println!("rofi comm total_mem {:?}",total_mem);
         let addr = rofi_alloc(total_mem, AllocationType::Global);
-        let rofi = RofiComm {
+        let mut rofi = RofiComm {
             rofi_base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: RwLock::new(vec![BTreeAlloc::new("rofi_mem".to_string())]),
+            sym_heap: BTreeAlloc::new("rofi_sym".to_string()),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: rofi_get_id(),
@@ -88,7 +90,14 @@ impl RofiComm {
         //     rofi.my_pe,
         //     *rofi.rofi_base_address.read()
         // );
-        rofi.alloc.write()[0].init(addr as usize, total_mem);
+        rofi.alloc.write()[0].init(
+            addr as usize,
+            total_mem - ROFI_MEM.load(Ordering::SeqCst) / 2,
+        );
+        rofi.sym_heap.init(
+            addr as usize + total_mem - ROFI_MEM.load(Ordering::SeqCst) / 2,
+            ROFI_MEM.load(Ordering::SeqCst) / 2,
+        );
         rofi
     }
 
@@ -312,6 +321,17 @@ impl CommOps for RofiComm {
         // println!("free {:x}", addr);
         // let _lock = self.comm_mutex.write();
         rofi_release(addr);
+    }
+
+    fn symmetric_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        if let Some(addr) = self.sym_heap.try_malloc(size, align) {
+            return Ok(addr);
+        }
+        Err(AllocError::OutOfMemoryError(size))
+    }
+
+    fn symmetric_free(&self, addr: usize) {
+        self.sym_heap.free(addr);
     }
 
     #[allow(dead_code)]

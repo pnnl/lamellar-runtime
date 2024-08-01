@@ -12,7 +12,7 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
-lamellar-impl = { version = "0.6.0", path = "impl" }
+lamellar-impl = {  path = "impl" }
 #rofisys = { version ="0.3", optional = true }
 rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
 #rofisys = { path = "../rofi-sys-junction", optional = true}

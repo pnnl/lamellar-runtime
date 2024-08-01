@@ -18,8 +18,8 @@ use futures_util::future::join_all;
 use futures_util::{Future, StreamExt};
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::hash::Hash;
+use std::collections::{BTreeMap, HashMap};
+
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -580,7 +580,7 @@ pub struct LamellarTaskGroup {
     rt_multi_req: Arc<LamellarRequestResult>, //for exec_all requests
     rt_local_req: Arc<LamellarRequestResult>, //for exec_local requests
 
-    // pub(crate) pending_reqs: Arc<Mutex<HashSet<usize>>>,
+                                        // pub(crate) pending_reqs: Arc<Mutex<HashSet<usize>>>,
 }
 
 impl ActiveMessaging for LamellarTaskGroup {
@@ -674,7 +674,7 @@ impl LamellarTaskGroup {
         let team = team.into().team.clone();
         let counters = AMCounters::new();
         let cnt = Arc::new(AtomicUsize::new(1)); //this lamellarTaskGroup instance represents 1 handle (even though we maintain a single and multi req handle)
-        // let pending_reqs = Arc::new(Mutex::new(HashSet::new()));
+                                                 // let pending_reqs = Arc::new(Mutex::new(HashSet::new()));
         let req = Arc::new(TaskGroupAmHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),

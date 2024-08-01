@@ -1231,6 +1231,7 @@ impl<T> Darc<T> {
         state: DarcMode,
         drop: Option<fn(&mut T)>,
     ) -> Result<Darc<T>, IdError> {
+        // let mut timer = std::time::Instant::now();
         let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
 
@@ -1268,13 +1269,18 @@ impl<T> Darc<T> {
         let mode_barrier_offset = size + padding;
         size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
         // println!("creating new darc");
-
+        // println!("new darc time init: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         team_rt.tasking_barrier();
+        // println!("new darc time init barrier: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         // println!("creating new darc after barrier");
         let addr = team_rt
             .lamellae
             .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
             .expect("out of memory");
+        // println!("new darc time alloc: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         // let temp_team = team_rt.clone();
         // team_rt.print_cnt();
         let team_ptr = unsafe {
@@ -1337,6 +1343,8 @@ impl<T> Darc<T> {
         unsafe {
             std::ptr::copy_nonoverlapping(&darc_temp, addr as *mut DarcInner<T>, 1);
         }
+        // println!("new darc time inner: {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
 
         let d = Darc {
@@ -1362,6 +1370,7 @@ impl<T> Darc<T> {
         // );
         // d.print();
         team_rt.tasking_barrier();
+        // println!("new darc time: {:?}", timer.elapsed());
         // team_rt.print_cnt();
         Ok(d)
     }

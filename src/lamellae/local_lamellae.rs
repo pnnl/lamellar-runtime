@@ -215,6 +215,12 @@ impl LamellaeRDMA for Local {
             }; //it will free when dropping from scope
         }
     }
+
+    fn symmetric_alloc(&self, _size: usize, _align: usize) -> AllocResult<usize> {
+        Ok(0)
+    }
+
+    fn symmetric_free(&self, _addr: usize) {}
     fn base_addr(&self) -> usize {
         0
     }

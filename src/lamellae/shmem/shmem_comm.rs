@@ -486,6 +486,14 @@ impl CommOps for ShmemComm {
         Ok(addr)
     }
 
+    fn symmetric_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        Err(AllocError::OutOfMemoryError(size))
+    }
+
+    fn symmetric_free(&self, addr: usize) {
+        // self.free(addr);
+    }
+
     fn free(&self, addr: usize) {
         //maybe need to do something more intelligent on the drop of the shmem_alloc
         let mut alloc = self.alloc_lock.write();

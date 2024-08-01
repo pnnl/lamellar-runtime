@@ -109,6 +109,8 @@ pub(crate) trait CommOps {
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
     fn free(&self, addr: usize);
+    fn symmetric_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
+    fn symmetric_free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
