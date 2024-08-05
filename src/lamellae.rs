@@ -1,3 +1,6 @@
+use crate::lamellae::libfab_lamellae::LibFab;
+use crate::lamellae::libfab_lamellae::LibFabBuilder;
+use crate::lamellae::libfabric::libfabric_comm::LibFabData;
 use crate::active_messaging::Msg;
 use crate::config;
 use crate::lamellar_arch::LamellarArchRT;
@@ -24,6 +27,9 @@ use rofi::rofi_comm::RofiData;
 #[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
 
+pub(crate) mod libfab_lamellae;
+mod libfabric;
+
 pub(crate) mod shmem_lamellae;
 use shmem::shmem_comm::ShmemData;
 use shmem_lamellae::{Shmem, ShmemBuilder};
@@ -42,6 +48,7 @@ pub enum Backend {
     #[cfg(feature = "enable-rofi")]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
+    LibFab,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -63,6 +70,9 @@ impl Default for Backend {
                 return Backend::Rofi;
                 #[cfg(not(feature = "enable-rofi"))]
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+            }
+            "libfab" => {
+                return Backend::LibFab;
             }
             "shmem" => {
                 return Backend::Shmem;
@@ -108,6 +118,7 @@ pub(crate) struct SerializeHeader {
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
+    LibFabData,
     ShmemData,
     LocalData,
 }
@@ -137,6 +148,7 @@ pub(crate) trait SubData {
 pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi")]
     RofiBuilder,
+    LibFabBuilder,
     ShmemBuilder,
     Local,
 }
@@ -168,6 +180,7 @@ pub(crate) trait Ser {
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
+    LibFab,
     Shmem,
     Local,
 }
@@ -230,6 +243,11 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::RofiBuilder(RofiBuilder::new(&provider, &domain))
         }
+        Backend::LibFab => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::LibFabBuilder(LibFabBuilder::new(&provider, &domain))
+        },
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }

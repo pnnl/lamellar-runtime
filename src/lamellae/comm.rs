@@ -1,5 +1,6 @@
 #[cfg(feature = "enable-rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
+use crate::lamellae::libfabric::libfabric_comm::*;
 use crate::lamellae::shmem::shmem_comm::*;
 use crate::lamellae::{AllocationType, SerializedData};
 // use crate::lamellae::shmem::ShmemComm;
@@ -78,6 +79,7 @@ impl<T: Copy> Remote for T {}
 pub(crate) enum Comm {
     #[cfg(feature = "enable-rofi")]
     Rofi(RofiComm),
+    LibFab(LibFabComm),
     Shmem(ShmemComm),
 }
 
@@ -89,6 +91,7 @@ impl Comm {
         match self.as_ref() {
             #[cfg(feature = "enable-rofi")]
             Comm::Rofi(_) => Ok(RofiData::new(self.clone(), size)?.into()),
+            Comm::LibFab(_) => Ok(LibFabData::new(self.clone(), size)?.into()),
             Comm::Shmem(_) => Ok(ShmemData::new(self.clone(), size)?.into()),
         }
     }

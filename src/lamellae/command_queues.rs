@@ -325,7 +325,7 @@ impl CmdMsgBuffer {
                 }
                 Cmd::Release | Cmd::Free => {
                     //free is valid still but we need to make sure we release the send_buffer
-                    //     println!("transfer complete!!");
+                        println!("transfer complete!!");
                     if buf.allocated_cnt > 0 {
                         self.waiting_bufs.insert(buf.addr(), buf);
                         true
@@ -613,6 +613,7 @@ impl InnerCQ {
                 Cmd::Clear => None,
                 // Cmd::Free => panic!("should not see free in recv buffer"),
                 Cmd::Tx | Cmd::Print | Cmd::Free | Cmd::Release => {
+                    println!("Received something {:?}", cmd.cmd);
                     if cmd.daddr == 0 {
                         println!("received cmd src {:?} {:?} ", src, cmd);
                         return None;
@@ -688,9 +689,9 @@ impl InnerCQ {
                 // println!{"send_buf  after{:?}",send_buf[dst]};
                 if send_buf[dst].dsize > 0 {
                     let recv_buffer = self.recv_buffer.lock();
-                    // println! {"sending data to dst {:?} {:?} {:?} {:?}",recv_buffer[self.my_pe].as_addr()-self.comm.base_addr(),send_buf[dst],send_buf[dst].as_bytes(),send_buf};
-                    // println!("sending cmd {:?}", send_buf);
-                    // println!("Command Queue sending buffer");
+                    println! {"sending data to dst {:?} {:?} {:?} {:?}",recv_buffer[self.my_pe].as_addr()-self.comm.base_addr(),send_buf[dst],send_buf[dst].as_bytes(),send_buf};
+                    println!("sending cmd {:?}", send_buf);
+                    println!("Command Queue sending buffer");
                     self.comm.put(
                         dst,
                         send_buf[dst].as_bytes(),
@@ -845,7 +846,7 @@ impl InnerCQ {
                 cmd.calc_hash();
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
-                        // println!("putting alloc cmd to pe {:?}", pe);
+                        println!("putting alloc cmd to pe {:?}", pe);
                         self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                     }
                 }
@@ -860,9 +861,9 @@ impl InnerCQ {
                         start = std::time::Instant::now();
                     }
                 }
-                // println!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
+                println!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
             }
-            // panic!("exiting");
+            panic!("exiting");
 
             self.comm.alloc_pool(min_size);
             let cmd = &mut alloc_buf[self.my_pe];
@@ -873,7 +874,7 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    // println!("putting clear cmd to pe {:?}", pe);
+                    println!("putting clear cmd to pe {:?}", pe);
                     self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
             }
@@ -887,9 +888,9 @@ impl InnerCQ {
                     }
                     std::thread::yield_now();
                 }
-                // println!(" pe {:?} has alloced", pe);
+                println!(" pe {:?} has alloced", pe);
             }
-            // println!("created new alloc pool");
+            println!("created new alloc pool");
         }
     }
 
@@ -914,9 +915,9 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn send_release(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
-        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
+        println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
         let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-        // println!("sending release to {dst}");
+        println!("sending release to {dst}");
         self.comm.put(
             dst,
             self.release_cmd.cmd_as_bytes(),
@@ -927,9 +928,9 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
-        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
+        println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
         let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-        // println!("sending free to {dst}");
+        println!("sending free to {dst}");
         self.comm.put(
             dst,
             self.free_cmd.cmd_as_bytes(),
@@ -952,7 +953,7 @@ impl InnerCQ {
                     send_buf[dst].calc_hash();
                     // println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
                     let recv_buffer = self.recv_buffer.lock();
-                    // println!("sending cmd {:?}",send_buf);
+                    println!("sending cmd {:?}",send_buf);
                     println!("sending print to {dst}");
                     self.comm.put(
                         dst,
@@ -995,7 +996,7 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
-        // println!("command queue getting data from {src}");
+        println!("command queue getting data from {src}, {:?}", cmd.daddr);
         self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
@@ -1017,7 +1018,7 @@ impl InnerCQ {
                 timer = std::time::Instant::now();
             }
         }
-        // println!("got data {:?}", data_slice);
+        println!("got data {:?}", data_slice);
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1112,19 +1113,19 @@ impl InnerCQ {
                 timer = std::time::Instant::now();
             }
         }
-        // println!("getting into {:?} 0x{:x} ",data, data.unwrap() + self.comm.base_addr());
+        println!("getting into {:?} 0x{:x} ",data, data.unwrap() + self.comm.base_addr());
         let data = data.unwrap();
         let data_slice =
             unsafe { std::slice::from_raw_parts_mut(data as *mut u8, cmd.dsize as usize) };
         self.get_data(src, cmd, data_slice).await;
-        // println!("received cmd_buf {:?}", data_slice);
-        // println!(
-        //     "sending release to src: {:?} {:?} (s: {:?} r: {:?})",
-        //     src,
-        //     cmd.daddr,
-        //     self.sent_cnt.load(Ordering::SeqCst),
-        //     self.recv_cnt.load(Ordering::SeqCst)
-        // );
+        println!("received cmd_buf {:?}", data_slice);
+        println!(
+            "sending release to src: {:?} {:?} (s: {:?} r: {:?})",
+            src,
+            cmd.daddr,
+            self.sent_cnt.load(Ordering::SeqCst),
+            self.recv_cnt.load(Ordering::SeqCst)
+        );
         self.send_release(src, cmd);
         data
     }
@@ -1350,6 +1351,24 @@ impl CommandQueue {
 
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;
             }
+            SerializedData::LibFabData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                        // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
             SerializedData::ShmemData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
@@ -1423,10 +1442,10 @@ impl CommandQueue {
                                 let scheduler1 = scheduler.clone();
                                 let comm = self.comm.clone();
                                 let task = async move {
-                                    // println!(
-                                    //     "going to get cmd_buf {:?} from {:?}",
-                                    //     cmd_buf_cmd, src
-                                    // );
+                                    println!(
+                                        "going to get cmd_buf {:?} from {:?}",
+                                        cmd_buf_cmd, src
+                                    );
                                     let data = cq.get_cmd_buf(src, cmd_buf_cmd).await;
                                     let cmd_buf = unsafe {
                                         std::slice::from_raw_parts(

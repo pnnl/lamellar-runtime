@@ -13,9 +13,13 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
+libfabric = {path = "/people/thom895/rofi/libfabric", features = ["thread-safe"]}
+pmi = {path = "/people/thom895/rofi/pmi/"}
+memmap = "0.7.0"
+page_size= "0.6.0" 
 #rofisys = { version ="0.3", optional = true }
-rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
-#rofisys = { path = "../rofi-sys-junction", optional = true}
+#rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
+# rofisys = { path = "../rofi-sys-junction", optional = true}
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -71,7 +75,7 @@ opt-level = 3
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-enable-rofi=["rofisys", "libc"]
+# enable-rofi=["rofisys", "libc"]
 tokio-executor=["tokio"]
 slurm-test=[]
 default=[]
@@ -443,9 +447,9 @@ path="examples/misc/lamellar_env.rs"
 name="ping_pong"
 path="examples/misc/ping_pong.rs"
 
-[[example]]
-name="dist_hashmap"
-path="examples/misc/dist_hashmap.rs"
+# [[example]]
+# name="dist_hashmap"
+# path="examples/misc/dist_hashmap.rs"
 
 
 ##------------ Darc examples ------------------##
