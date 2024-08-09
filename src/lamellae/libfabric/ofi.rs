@@ -8,6 +8,8 @@ use pmi::pmi::Pmi;
 use std::{collections::HashMap, rc::Rc, sync::{atomic::{AtomicBool, AtomicUsize, Ordering}}};
 use crate::lamellae::comm::Remote;
 use parking_lot::RwLock;
+use std::sync::Arc;
+use libfabric::info::Version;
 
 #[derive(Debug)]
 enum BarrierImpl {
@@ -36,35 +38,50 @@ pub(crate) struct Ofi {
     fabric: libfabric::fabric::Fabric,
     info_entry: libfabric::info::InfoEntry<RmaAtomicCollEp>,
     alloc_manager: AllocInfoManager,
-    my_pmi: pmi::pmi1::Pmi1,
+    my_pmi: Arc<dyn Pmi + Sync + Send>,
     put_cnt: AtomicUsize,
     get_cnt: AtomicUsize,
 }
 
+unsafe impl Sync for Ofi {}
+unsafe impl Send for Ofi {}
+
 impl Ofi {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> Result<Self, libfabric::error::Error> {
-        let my_pmi = pmi::pmi1::Pmi1::new().unwrap();
+        let my_pmi = pmi::pmi::PmiBuilder::with_pmi1().unwrap();
 
-        let info_caps = libfabric::infocapsoptions::InfoCaps::new().rma().atomic().collective();
-        let mut domain_conf = libfabric::domain::DomainAttr::new();
-        domain_conf.resource_mgmt= libfabric::enums::ResourceMgmt::Enabled;
-        domain_conf.threading = libfabric::enums::Threading::Domain;
-        domain_conf.mr_mode = libfabric::enums::MrMode::new().allocated().prov_key().virt_addr();
-        domain_conf.data_progress = libfabric::enums::Progress::Manual;
+        // let info_caps = libfabric::infocapsoptions::InfoCaps::new().rma().atomic().collective();
+        // let mut domain_conf = libfabric::domain::DomainAttr::new();
+        // domain_conf.resource_mgmt= libfabric::enums::ResourceMgmt::Enabled;
+        // domain_conf.threading = libfabric::enums::Threading::Domain;
+        // domain_conf.mr_mode = libfabric::enums::MrMode::new().allocated().prov_key().virt_addr();
+        // domain_conf.data_progress = libfabric::enums::Progress::Manual;
         
-        let mut endpoint_conf = libfabric::ep::EndpointAttr::new();
-            endpoint_conf
-            .ep_type(libfabric::enums::EndpointType::Rdm);
+        // let mut endpoint_conf = libfabric::ep::EndpointAttr::new();
+        //     endpoint_conf
+        //     .ep_type(libfabric::enums::EndpointType::Rdm);
         
-        let info_hints = libfabric::info::InfoHints::new()
-            .caps(info_caps)
-            .domain_attr(domain_conf)
-            .mode(libfabric::enums::Mode::new().context())
-            .ep_attr(endpoint_conf);
+        // let info_hints = libfabric::info::InfoHints::new()
+        //     .caps(info_caps)
+        //     .domain_attr(domain_conf)
+        //     .mode(libfabric::enums::Mode::new().context())
+        //     .ep_attr(endpoint_conf);
 
-        let info = libfabric::info::Info::new()
-            .hints(&info_hints)
-            .build()?;
+        let info = libfabric::info::Info::new(&Version{major:1, minor: 19})
+            .enter_hints()
+                .caps(libfabric::infocapsoptions::InfoCaps::new().rma().atomic().collective())
+                .mode(libfabric::enums::Mode::new().context())
+                .enter_domain_attr()
+                    .resource_mgmt(libfabric::enums::ResourceMgmt::Enabled)
+                    .threading(libfabric::enums::Threading::Domain)
+                    .mr_mode(libfabric::enums::MrMode::new().allocated().prov_key().virt_addr())
+                    .data_progress(libfabric::enums::Progress::Manual)
+                .leave_domain_attr()
+                .enter_ep_attr()
+                    .type_(libfabric::enums::EndpointType::Rdm)
+                .leave_ep_attr()
+            .leave_hints()
+            .get()?;
 
         // println!("Found the following providers");
         // info.iter().for_each(|e| println!("{:?}", e));
@@ -149,7 +166,7 @@ impl Ofi {
         let mut ofi = Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
-            my_pmi,
+            my_pmi: Arc::new(my_pmi),
             info_entry, 
             fabric,
             domain,
