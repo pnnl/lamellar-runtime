@@ -5,8 +5,8 @@
 // };
 // pub use crate::active_messaging::{ActiveMessaging, LamellarAM, LocalAM};
 pub use crate::active_messaging::{
-    am, local_am, typed_am_group, ActiveMessaging, AmData, AmGroupData, AmHandle, AmLocalData,
-    LamellarSerde,
+    am, local_am, typed_am_group, ActiveMessaging, AmData, AmDist, AmGroupData, AmHandle,
+    AmLocalData, LamellarAM, LamellarSerde, RemoteActiveMessage, Serde,
 };
 
 pub use crate::async_trait;
