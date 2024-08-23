@@ -6,7 +6,9 @@ use crate::config;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 use std::sync::Arc;
-
+use crate::lamellae::libfabasync_lamellae::LibFabAsync;
+use crate::lamellae::libfabasync_lamellae::LibFabAsyncBuilder;
+use crate::lamellae::libfabric_async::libfabric_async_comm::LibFabAsyncData;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 
@@ -28,7 +30,9 @@ use rofi::rofi_comm::RofiData;
 use rofi_lamellae::{Rofi, RofiBuilder};
 
 pub(crate) mod libfab_lamellae;
+pub(crate) mod libfabasync_lamellae;
 mod libfabric;
+pub(crate) mod libfabric_async;
 
 pub(crate) mod shmem_lamellae;
 use shmem::shmem_comm::ShmemData;
@@ -49,6 +53,7 @@ pub enum Backend {
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
     LibFab,
+    LibFabAsync,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -73,6 +78,9 @@ impl Default for Backend {
             }
             "libfab" => {
                 return Backend::LibFab;
+            }
+            "libfabasync" => {
+                return Backend::LibFabAsync;
             }
             "shmem" => {
                 return Backend::Shmem;
@@ -119,6 +127,7 @@ pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
     LibFabData,
+    LibFabAsyncData,
     ShmemData,
     LocalData,
 }
@@ -149,6 +158,7 @@ pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi")]
     RofiBuilder,
     LibFabBuilder,
+    LibFabAsyncBuilder,
     ShmemBuilder,
     Local,
 }
@@ -181,6 +191,7 @@ pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
     LibFab,
+    LibFabAsync,
     Shmem,
     Local,
 }
@@ -247,6 +258,11 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibFabBuilder(LibFabBuilder::new(&provider, &domain))
+        },
+        Backend::LibFabAsync => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::LibFabAsyncBuilder(LibFabAsyncBuilder::new(&provider, &domain))
         },
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),

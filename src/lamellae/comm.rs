@@ -1,8 +1,10 @@
 #[cfg(feature = "enable-rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
 use crate::lamellae::libfabric::libfabric_comm::*;
+use crate::lamellae::libfabric_async::libfabric_async_comm::*;
 use crate::lamellae::shmem::shmem_comm::*;
 use crate::lamellae::{AllocationType, SerializedData};
+use crate::lamellae::LibFabAsyncData;
 // use crate::lamellae::shmem::ShmemComm;
 
 use async_trait::async_trait;
@@ -80,6 +82,7 @@ pub(crate) enum Comm {
     #[cfg(feature = "enable-rofi")]
     Rofi(RofiComm),
     LibFab(LibFabComm),
+    LibFabAsync(LibFabAsyncComm),
     Shmem(ShmemComm),
 }
 
@@ -92,6 +95,7 @@ impl Comm {
             #[cfg(feature = "enable-rofi")]
             Comm::Rofi(_) => Ok(RofiData::new(self.clone(), size)?.into()),
             Comm::LibFab(_) => Ok(LibFabData::new(self.clone(), size)?.into()),
+            Comm::LibFabAsync(_) => Ok(LibFabAsyncData::new(self.clone(), size)?.into()),
             Comm::Shmem(_) => Ok(ShmemData::new(self.clone(), size)?.into()),
         }
     }

@@ -1369,6 +1369,24 @@ impl CommandQueue {
 
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;
             }
+            SerializedData::LibFabAsyncData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                        // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
             SerializedData::ShmemData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
