@@ -171,7 +171,7 @@ impl OfiAsync {
             .remote_read()
             .cntr(&get_cntr)?;
         
-        ep.bind_shared_cq(&cq, false)?;
+        ep.bind_shared_cq(&cq)?;
 
         ep.bind_eq(&eq)?;
 

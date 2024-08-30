@@ -487,7 +487,19 @@ impl Ofi {
                 panic!("Barrier is not initialized");
             },
             BarrierImpl::Collective(mc) => {
-                self.ep.barrier(mc)?;
+                let mut ctx = self.info_entry.allocate_context();
+                loop {
+                    let ret = self.ep.barrier_with_context(mc, &mut ctx);
+                    match &ret {
+                        Ok(_) => {break},
+                        Err(err) => {
+                            if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
+                                return ret;
+                            }
+                        }
+                    }
+                }
+                self.wait_for_completion(&ctx)?;
                 println!("Done with barrier");
                 Ok(())
             },
