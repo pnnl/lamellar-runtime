@@ -56,7 +56,7 @@ macro_rules!  post_async{
     };
 }
 
-pub(crate) struct OfiAsync {
+pub struct OfiAsync {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     mapped_addresses: Vec<libfabric::MappedAddress>,

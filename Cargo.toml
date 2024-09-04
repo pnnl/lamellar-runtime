@@ -13,7 +13,8 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
-libfabric = {path = "/people/thom895/rofi/libfabric"}
+libfabric = {path = "/people/thom895/rofi/libfabric", features = ["use-async-std"]}
+rofi-rust = {path ="/people/thom895/rofi/rofi-rust", features = ["async-rofi"]}
 pmi = {path = "/people/thom895/rofi/pmi/"}
 memmap = "0.7.0"
 page_size= "0.6.0" 

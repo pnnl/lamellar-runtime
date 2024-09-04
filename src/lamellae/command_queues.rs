@@ -1351,6 +1351,42 @@ impl CommandQueue {
 
                 self.cq.send(data.relative_addr, data.len, dst, hash).await;
             }
+            SerializedData::RofiRustData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
+            SerializedData::RofiRustAsyncData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
             SerializedData::LibFabData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);

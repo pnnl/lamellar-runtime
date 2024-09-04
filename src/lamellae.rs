@@ -26,13 +26,23 @@ pub(crate) mod rofi_lamellae;
 
 #[cfg(feature = "enable-rofi")]
 use rofi::rofi_comm::RofiData;
+use rofi_rust::rofi_rust_comm::RofiRustData;
+use rofi_rust_async::rofi_rust_async_comm::RofiRustAsyncData;
+
 #[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
+use rofi_rust_lamellae::{RofiRust, RofiRustBuilder};
+use rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder};
 
 pub(crate) mod libfab_lamellae;
 pub(crate) mod libfabasync_lamellae;
+pub(crate) mod rofi_rust_lamellae;
+pub(crate) mod rofi_rust_async_lamellae;
+
 mod libfabric;
 pub(crate) mod libfabric_async;
+mod rofi_rust;
+mod rofi_rust_async;
 
 pub(crate) mod shmem_lamellae;
 use shmem::shmem_comm::ShmemData;
@@ -52,6 +62,8 @@ pub enum Backend {
     #[cfg(feature = "enable-rofi")]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
+    RofiRust,
+    RofiRustAsync,
     LibFab,
     LibFabAsync,
     /// The Local backend -- intended for single process environments
@@ -75,6 +87,12 @@ impl Default for Backend {
                 return Backend::Rofi;
                 #[cfg(not(feature = "enable-rofi"))]
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+            }
+            "rofi_rust" => {
+                return Backend::RofiRust;
+            }
+            "rofi_rust_async" => {
+                return Backend::RofiRustAsync;
             }
             "libfab" => {
                 return Backend::LibFab;
@@ -126,6 +144,8 @@ pub(crate) struct SerializeHeader {
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
+    RofiRustData,
+    RofiRustAsyncData,
     LibFabData,
     LibFabAsyncData,
     ShmemData,
@@ -157,6 +177,8 @@ pub(crate) trait SubData {
 pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi")]
     RofiBuilder,
+    RofiRustBuilder,
+    RofiRustAsyncBuilder,
     LibFabBuilder,
     LibFabAsyncBuilder,
     ShmemBuilder,
@@ -190,6 +212,8 @@ pub(crate) trait Ser {
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
+    RofiRust,
+    RofiRustAsync,
     LibFab,
     LibFabAsync,
     Shmem,
@@ -253,6 +277,16 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::RofiBuilder(RofiBuilder::new(&provider, &domain))
+        }
+        Backend::RofiRust => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::RofiRustBuilder(RofiRustBuilder::new(&provider, &domain))
+        }
+        Backend::RofiRustAsync => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::RofiRustAsyncBuilder(RofiRustAsyncBuilder::new(&provider, &domain))
         }
         Backend::LibFab => {
             let provider = config().rofi_provider.clone();
