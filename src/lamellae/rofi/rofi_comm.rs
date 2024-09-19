@@ -125,6 +125,8 @@ impl RofiComm {
         let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
         let r_ptr = dst_addr.as_ptr() as *mut T as *mut R;
 
+        // println!("num_r {:?}", num_r);
+
         let mut timer = std::time::Instant::now();
         for i in 0..num_r - 2 {
             while r_ptr.offset(i as isize).read_unaligned() == val
@@ -160,12 +162,16 @@ impl RofiComm {
     //#[tracing::instrument(skip_all)]
     fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()> {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+        // if bytes_len > 0 {
+
+        // find largest int size that evenly divides bytes_len
+        // we multiply by 2 because we check two ints at a time
         unsafe {
-            if bytes_len % std::mem::size_of::<u64>() == 0 {
+            if bytes_len % (2 * std::mem::size_of::<u64>()) == 0 {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_8)?;
-            } else if bytes_len % std::mem::size_of::<u32>() == 0 {
+            } else if bytes_len % (2 * std::mem::size_of::<u32>()) == 0 {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_4)?;
-            } else if bytes_len % std::mem::size_of::<u16>() == 0 {
+            } else if bytes_len % (2 * std::mem::size_of::<u16>()) == 0 {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_2)?;
             } else {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_1)?;
