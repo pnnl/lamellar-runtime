@@ -842,9 +842,7 @@ fn main() {
                     .for_each(|elem| *elem = 0.0)
                     .block();
             }
-            println!("here 0");
             full_spectrum_array.wait_all();
-            println!("here 1");
             full_spectrum_array.barrier();
             times[ti].push(dft_lamellar_array_opt_test(
                 full_signal_array.clone(),

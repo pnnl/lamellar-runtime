@@ -721,9 +721,9 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
     }
 }
 
-// Internal Runtime handle to a lamellar team
-// used by proc macros
-// users should never need to use this
+/// Internal Runtime handle to a lamellar team
+/// this is typicallyused by proc macros (hence why it is public)
+/// end users should never use this directly and should instead use the [LamellarTeam] and/or [LamellarWorld] struct
 #[doc(hidden)]
 pub struct LamellarTeamRT {
     #[allow(dead_code)]

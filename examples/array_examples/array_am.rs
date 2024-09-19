@@ -79,7 +79,6 @@ fn main() {
         world.block_on(unsafe { array.put(0, &local_mem_region) });
     }
 
-    println!("here!!! {:?}", my_pe);
     array.print();
     for i in unsafe { array.local_as_slice() } {
         while *i != 255_u8 {

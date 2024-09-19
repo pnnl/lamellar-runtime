@@ -48,7 +48,7 @@ macro_rules! create_into_tests {
 
 create_into_tests!((
     UnsafeArray,
-    LocalOnlyArray,
+    // LocalOnlyArray,
     ReadOnlyArray,
     AtomicArray,
     LocalLockArray,

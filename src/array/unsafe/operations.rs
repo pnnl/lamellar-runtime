@@ -360,7 +360,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
     ) -> ArrayFetchBatchOpHandle<T> {
-        // println!("here in batch fetch op 2");
         let (indices, i_len) = index.as_op_input();
         let (vals, v_len) = val.as_op_input();
         let max_local_size = (0..self.num_pes())

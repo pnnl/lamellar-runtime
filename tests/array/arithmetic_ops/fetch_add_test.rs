@@ -387,7 +387,6 @@ macro_rules! check_results {
                 req_cnt+=1;
             }
         }
-        // println!("here");
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { buffered_onesided_iter!($array_ty,$array).into_iter().enumerate() }{
             let val = *elem;
@@ -410,7 +409,6 @@ macro_rules! check_results {
                 break;
             }
         }
-        // println!("here2");
         $array.barrier();
         // let init_val = 0;
         initialize_array2!($array_ty, $array, init_val);

@@ -120,6 +120,7 @@ pub(crate) trait CommOps {
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
+    #[allow(dead_code)]
     fn MB_sent(&self) -> f64;
     fn force_shutdown(&self);
 }

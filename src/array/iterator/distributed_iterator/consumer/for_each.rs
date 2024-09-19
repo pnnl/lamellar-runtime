@@ -276,7 +276,7 @@ impl Future for DistIterForEachHandle {
                     }
                 }
             }
-            StateProj::Reqs(inner, barrier_id) => {
+            StateProj::Reqs(inner, _barrier_id) => {
                 // println!(
                 //     "reqs remaining {:?} barrier_id {:?}",
                 //     inner.reqs.len(),

@@ -222,7 +222,6 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
     let args =
         parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    // println!("here");
     derive_am_data(input, args, quote! {__lamellar}, false, false, false)
 }
 

@@ -49,18 +49,13 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    println!("here 0");
-
     let even_team = world.create_team_from_arch(StridedArch::new(
         0,                                      // start pe
         2,                                      // stride
         (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
     ));
 
-    println!("here 1");
-
     let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
-    println!("here 2");
     let read_lock = global_darc.blocking_read();
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
@@ -68,7 +63,6 @@ fn main() {
     println!("I have the write lock!!!! {:?}", my_pe);
     std::thread::sleep(std::time::Duration::from_secs(1));
     drop(write_lock);
-    println!("here3");
     //----
     let local_darc = LocalRwDarc::new(world.team(), 10).unwrap();
     println!("created new local rw");
@@ -81,11 +75,8 @@ fn main() {
             },
         },
     };
-    // println!("here 4");
     let darc1 = Darc::new(world.team(), 10).unwrap();
-    // println!("here 5");
     let darc2 = Darc::new(world.team(), 20).unwrap();
-    // println!("here 6");
     if let Some(team) = even_team {
         let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
         let mut tg = typed_am_group!(DarcAm, team.clone());
@@ -103,20 +94,16 @@ fn main() {
                 darc_tuple: (darc1.clone(), darc2.clone()),
                 my_arc: Darc::new(team.clone(), Arc::new(0)).unwrap(),
             };
-            println!("here 7");
             let _ = team.exec_am_pe(0, darc_am.clone()).spawn();
             let _ = team.exec_am_all(darc_am.clone()).spawn();
             tg.add_am_pe(0, darc_am.clone());
             tg.add_am_all(darc_am);
             team.block_on(tg.exec());
-            println!("here 8");
         } else {
-            // println!("here");
             *local_darc.blocking_write() += 1;
         }
     }
     // --------
-    println!("here 9");
 
     // drop(darc1);
     // drop(darc2);

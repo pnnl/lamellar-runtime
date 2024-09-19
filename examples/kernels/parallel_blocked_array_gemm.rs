@@ -114,7 +114,6 @@ fn main() {
                     .take(blocksize) // we only need to take blocksize columns
                     .collect::<Vec<_>>()
                     .await; //gather local memory regions containing each columns data
-                            // println!("here");
                             //need to store the submatrix in a contiguous memory segment for use with the MatrixMultiply library
                 let mut b_block_vec = vec![0.0; blocksize * blocksize];
                 for (j, col) in b_block.iter().enumerate() {
