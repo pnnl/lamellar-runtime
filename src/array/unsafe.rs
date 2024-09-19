@@ -169,8 +169,15 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             per_pe_size += 1
         }
         // println!("new unsafe array {:?} {:?}", elem_per_pe, per_pe_size);
-        let rmr_t: MemoryRegion<T> =
-            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global);
+        let rmr_t: MemoryRegion<T> = if team.num_world_pes == team.num_pes {
+            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global)
+        } else {
+            MemoryRegion::new(
+                per_pe_size,
+                team.lamellae.clone(),
+                AllocationType::Sub(team.get_pes()),
+            )
+        };
         // let rmr = MemoryRegion::new(
         //     per_pe_size * std::mem::size_of::<T>(),
         //     team.lamellae.clone(),
@@ -268,8 +275,15 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         if remaining_elems > 0 {
             per_pe_size += 1
         }
-        let rmr_t: MemoryRegion<T> =
-            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global);
+        let rmr_t: MemoryRegion<T> = if team.num_world_pes == team.num_pes {
+            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global)
+        } else {
+            MemoryRegion::new(
+                per_pe_size,
+                team.lamellae.clone(),
+                AllocationType::Sub(team.get_pes()),
+            )
+        };
         // let rmr = MemoryRegion::new(
         //     per_pe_size * std::mem::size_of::<T>(),
         //     team.lamellae.clone(),
@@ -1545,7 +1559,7 @@ impl UnsafeArrayInner {
         index: usize,
     ) -> Option<(usize, usize)> {
         if self.size > index {
-            let mut global_index = index;
+            let global_index = index;
             match self.distribution {
                 Distribution::Block => {
                     let rem_index = self.orig_remaining_elems * (self.orig_elem_per_pe + 1);
@@ -1584,7 +1598,7 @@ impl UnsafeArrayInner {
     pub(crate) fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         // println!("pe_for_dist_index {index} {}", self.size);
         if self.size > index {
-            let mut global_index = index + self.offset;
+            let global_index = index + self.offset;
 
             match self.distribution {
                 Distribution::Block => {
@@ -1609,7 +1623,7 @@ impl UnsafeArrayInner {
     // //#[tracing::instrument(skip_all)]
     pub(crate) fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         // println!("pe_full_offset_for_dist_index pe {pe} index {index}");
-        let mut global_index = self.offset + index;
+        let global_index = self.offset + index;
         match self.distribution {
             Distribution::Block => {
                 let rem_index = self.orig_remaining_elems * (self.orig_elem_per_pe + 1);
