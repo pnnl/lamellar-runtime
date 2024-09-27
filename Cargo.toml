@@ -15,7 +15,6 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 lamellar-impl = { version = "0.7.0", path = "impl" }
 #rofisys = { version ="0.3", optional = true }
 rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
-#rofisys = { path = "../rofi-sys-junction", optional = true}
 inventory = "0.3" 
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -72,6 +71,7 @@ opt-level = 3
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 enable-rofi=["rofisys", "libc"]
+enable-rofi-shared=["rofisys/shared","libc"]
 tokio-executor=["tokio"]
 slurm-test=[]
 default=[]
