@@ -14,14 +14,14 @@ use comm::Comm;
 
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 mod rofi;
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 pub(crate) mod rofi_lamellae;
 
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 use rofi::rofi_comm::RofiData;
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
 
 pub(crate) mod shmem_lamellae;
@@ -39,7 +39,7 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
     /// The Local backend -- intended for single process environments
@@ -59,9 +59,9 @@ impl Default for Backend {
     fn default() -> Self {
         match config().backend.as_str() {
             "rofi" => {
-                #[cfg(feature = "enable-rofi")]
+                #[cfg(feature = "rofi")]
                 return Backend::Rofi;
-                #[cfg(not(feature = "enable-rofi"))]
+                #[cfg(not(feature = "rofi"))]
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
             }
             "shmem" => {
@@ -77,9 +77,9 @@ impl Default for Backend {
 //     match std::env::var("LAMELLAE_BACKEND") {
 //         Ok(p) => match p.as_str() {
 //             "rofi" => {
-//                 #[cfg(feature = "enable-rofi")]
+//                 #[cfg(feature = "rofi")]
 //                 return Backend::Rofi;
-//                 #[cfg(not(feature = "enable-rofi"))]
+//                 #[cfg(not(feature = "rofi"))]
 //                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
 //             }
 //             "shmem" => {
@@ -90,9 +90,9 @@ impl Default for Backend {
 //             }
 //         },
 //         Err(_) => {
-//             #[cfg(feature = "enable-rofi")]
+//             #[cfg(feature = "rofi")]
 //             return Backend::Rofi;
-//             #[cfg(not(feature = "enable-rofi"))]
+//             #[cfg(not(feature = "rofi"))]
 //             return Backend::Local;
 //         }
 //     };
@@ -106,7 +106,7 @@ pub(crate) struct SerializeHeader {
 #[enum_dispatch(Des, SubData, SerializedDataOps)]
 #[derive(Clone, Debug)]
 pub(crate) enum SerializedData {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     RofiData,
     ShmemData,
     LocalData,
@@ -135,7 +135,7 @@ pub(crate) trait SubData {
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     RofiBuilder,
     ShmemBuilder,
     Local,
@@ -166,7 +166,7 @@ pub(crate) trait Ser {
 #[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     Rofi,
     Shmem,
     Local,
@@ -224,7 +224,7 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
 
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
-        #[cfg(feature = "enable-rofi")]
+        #[cfg(feature = "rofi")]
         Backend::Rofi => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();

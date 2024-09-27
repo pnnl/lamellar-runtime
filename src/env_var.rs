@@ -56,9 +56,9 @@ fn default_dissemination_factor() -> usize {
 }
 
 fn default_backend() -> String {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     return "rofi".to_owned();
-    #[cfg(not(feature = "enable-rofi"))]
+    #[cfg(not(feature = "rofi"))]
     return "local".to_owned();
 }
 

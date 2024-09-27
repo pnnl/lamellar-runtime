@@ -70,8 +70,9 @@ opt-level = 3
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-enable-rofi=["rofisys", "libc"]
-enable-rofi-shared=["rofisys/shared","libc"]
+enable-rofi=["rofi","rofisys", "libc"]
+enable-rofi-shared=["rofi","rofisys/shared","libc"]
+rofi=[]
 tokio-executor=["tokio"]
 slurm-test=[]
 default=[]

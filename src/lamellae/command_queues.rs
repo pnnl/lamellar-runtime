@@ -1331,7 +1331,7 @@ impl CommandQueue {
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
         match data {
-            #[cfg(feature = "enable-rofi")]
+            #[cfg(feature = "rofi")]
             SerializedData::RofiData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);

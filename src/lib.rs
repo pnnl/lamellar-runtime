@@ -54,7 +54,7 @@
 //! - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
 //! - `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
 //!     - By default support for Rofi is disabled as using it relies on both the Rofi C-library and the libfabrics library, which may not be installed on your system.
-//!     - It can be enabled by adding ```features = ["enable-rofi"]``` to the lamellar entry in your `Cargo.toml` file
+//!     - It can be enabled by adding ```features = ["enable-rofi"] or `features = ["enable-rofi-shared"]``` to the lamellar entry in your `Cargo.toml` file
 //!
 //! The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to the `rofi` backend with no changes to your code.
 //! Currently the inverse is true, if it compiles and runs using `rofi` it will compile and run when using `local` and `shmem` with no changes.
