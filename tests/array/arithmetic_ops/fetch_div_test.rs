@@ -127,7 +127,8 @@ macro_rules! fetch_div_test{
             for idx in 0..array.len(){
                 let mut reqs = vec![];
                 for _i in 0..(max_updates as usize){
-                    reqs.push(array.fetch_div(idx,2 as $t));
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe{array.fetch_div(idx,2 as $t)});
                 }
                 #[allow(unused_mut)]
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
@@ -166,7 +167,8 @@ macro_rules! fetch_div_test{
             for idx in 0..sub_array.len(){
                 let mut reqs = vec![];
                 for _i in 0..(max_updates as usize){
-                    reqs.push(sub_array.fetch_div(idx,2 as $t));
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe{sub_array.fetch_div(idx,2 as $t)});
                 }
                 #[allow(unused_mut)]
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
@@ -204,7 +206,8 @@ macro_rules! fetch_div_test{
                 for idx in 0..sub_array.len(){
                     let mut reqs = vec![];
                     for _i in 0..(max_updates as usize){
-                        reqs.push(sub_array.fetch_div(idx,2 as $t));
+                        #[allow(unused_unsafe)]
+                        reqs.push(unsafe{sub_array.fetch_div(idx,2 as $t)});
                     }
                     #[allow(unused_mut)]
                     let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();

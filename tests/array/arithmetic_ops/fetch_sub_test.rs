@@ -119,7 +119,8 @@ macro_rules! fetch_sub_test{
             for idx in 0..array.len(){
                 let mut reqs = vec![];
                 for _i in 0..(pe_max_val as usize){
-                    reqs.push(array.fetch_sub(idx,1 as $t));
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe{array.fetch_sub(idx,1 as $t)});
                 }
                 #[allow(unused_mut)]
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
@@ -153,7 +154,8 @@ macro_rules! fetch_sub_test{
             // println!("2------------");
             for _i in 0..num_updates{
                 let idx = rand_idx.sample(&mut rng);
-                reqs.push((array.fetch_sub(idx,1 as $t),idx))
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{array.fetch_sub(idx,1 as $t)},idx))
             }
             for (req,_idx) in reqs{
                 let _val =  world.block_on(req);
@@ -182,7 +184,8 @@ macro_rules! fetch_sub_test{
             for idx in 0..sub_array.len(){
                 let mut reqs = vec![];
                 for _i in 0..(pe_max_val as usize){
-                    reqs.push(sub_array.fetch_sub(idx,1 as $t));
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe{sub_array.fetch_sub(idx,1 as $t)});
                 }
                 #[allow(unused_mut)]
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
@@ -215,7 +218,8 @@ macro_rules! fetch_sub_test{
             // println!("2------------");
             for _i in 0..num_updates{
                 let idx = rand_idx.sample(&mut rng);
-                reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{sub_array.fetch_sub(idx,1 as $t)},idx))
             }
             for (req,_idx) in reqs{
                 let _val =  world.block_on(req);
@@ -244,7 +248,8 @@ macro_rules! fetch_sub_test{
                 for idx in 0..sub_array.len(){
                     let mut reqs = vec![];
                     for _i in 0..(pe_max_val as usize){
-                        reqs.push(sub_array.fetch_sub(idx,1 as $t));
+                        #[allow(unused_unsafe)]
+                        reqs.push(unsafe{sub_array.fetch_sub(idx,1 as $t)});
                     }
                     #[allow(unused_mut)]
                     let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
@@ -276,7 +281,8 @@ macro_rules! fetch_sub_test{
                 // println!("2------------");
                 for _i in 0..num_updates{
                     let idx = rand_idx.sample(&mut rng);
-                    reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{sub_array.fetch_sub(idx,1 as $t)},idx))
                 }
                 for (req,_idx) in reqs{
                     let _val =  world.block_on(req);

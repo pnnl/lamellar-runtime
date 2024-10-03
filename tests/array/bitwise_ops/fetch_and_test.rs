@@ -86,7 +86,8 @@ macro_rules! fetch_and_test{
 
             let mut reqs = vec![];
             for idx in 0..array.len(){
-                reqs.push((array.fetch_bit_and(idx,my_val),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{array.fetch_bit_and(idx,my_val)},idx));
             }
             for (req,idx) in reqs{
                 let val =  world.block_on(req);
@@ -123,7 +124,8 @@ macro_rules! fetch_and_test{
 
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
-                reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{sub_array.fetch_bit_and(idx,my_val)},idx));
             }
             for (req,idx) in reqs{
                 let val =  world.block_on(req);
@@ -161,7 +163,8 @@ macro_rules! fetch_and_test{
 
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
-                    reqs.push((sub_array.fetch_bit_and(idx,my_val),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{sub_array.fetch_bit_and(idx,my_val)},idx));
                 }
                 for (req,idx) in reqs{
                     let val =  world.block_on(req);

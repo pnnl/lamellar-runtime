@@ -976,16 +976,19 @@ impl MultiValMultiIndex {
     }
 }
 
-impl<T: ElementOps + 'static> ReadOnlyOps<T> for UnsafeArray<T> {}
+impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementOps + 'static> AccessOps<T> for UnsafeArray<T> {}
+impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for UnsafeArray<T> {}
+impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for UnsafeArray<T> {}
+impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementShiftOps + 'static> ShiftOps<T> for UnsafeArray<T> {}
+impl<T: ElementShiftOps + 'static> UnsafeShiftOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for UnsafeArray<T> {}
+impl<T: ElementCompareEqOps + 'static> UnsafeCompareExchangeOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T> for UnsafeArray<T> {}
+impl<T: ElementComparePartialEqOps + 'static> UnsafeCompareExchangeEpsilonOps<T>
+    for UnsafeArray<T>
+{
+}

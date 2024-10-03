@@ -650,8 +650,8 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     }
 }
 
-// Intenal Runtime handle to a lamellar team
-// users generally don't need to use this
+/// Intenal Runtime handle to a lamellar team
+/// users generally don't need to use this
 #[doc(hidden)]
 pub struct ArcLamellarTeam {
     pub team: Arc<LamellarTeam>,
@@ -722,9 +722,8 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
 }
 
 /// Internal Runtime handle to a lamellar team
-/// this is typicallyused by proc macros (hence why it is public)
+/// this is typically used by proc macros (hence why it is public)
 /// end users should never use this directly and should instead use the [LamellarTeam] and/or [LamellarWorld] struct
-#[doc(hidden)]
 pub struct LamellarTeamRT {
     #[allow(dead_code)]
     pub(crate) world: Option<Pin<Arc<LamellarTeamRT>>>,
@@ -1017,15 +1016,14 @@ impl LamellarTeamRT {
         // println!("team destroyed")
     }
     #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
     pub fn get_pes(&self) -> Vec<usize> {
         self.arch.team_iter().collect::<Vec<usize>>()
     }
-    //#[tracing::instrument(skip_all)]
+
     pub fn world_pe_id(&self) -> usize {
         self.world_pe
     }
-    //#[tracing::instrument(skip_all)]
+
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         self.arch.team_pe(self.world_pe)
     }
@@ -1215,7 +1213,7 @@ impl LamellarTeamRT {
                         println!("[WARNING]  Potential deadlock detected when trying construct a new LamellarTeam.\n\
                         Creating a team is a collective operation requiring all PEs associated with the Parent Team (or LamellarWorld) to enter the call, not just the PEs that will be part of the new team.\n\
                         The following indicates which PEs have not entered the call: {:?}\n\
-                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",status,config().deadlock_timeout,std::backtrace::Backtrace::capture()
                     );
@@ -1303,7 +1301,7 @@ impl LamellarTeamRT {
                     if s.elapsed().as_secs_f64() > config().deadlock_timeout {
                         println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
                             The following indicates the dropped status on each PE: {:?}\n\
-                            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                             To view backtrace set RUST_LIB_BACKTRACE=1\n\
                             {}",
                             self.dropped.as_slice(),

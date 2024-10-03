@@ -43,7 +43,7 @@
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-fn default_deadlock_timeout() -> f64 {
+fn default_deadlock_warning_timeout() -> f64 {
     600.0
 }
 

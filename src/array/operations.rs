@@ -16,19 +16,22 @@ pub use handle::{
     ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
 };
 pub(crate) mod access;
-pub use access::{AccessOps, LocalAtomicOps};
+pub use access::{AccessOps, LocalAtomicOps, UnsafeAccessOps};
 pub(crate) mod arithmetic;
-pub use arithmetic::{ArithmeticOps, ElementArithmeticOps, LocalArithmeticOps};
+pub use arithmetic::{
+    ArithmeticOps, ElementArithmeticOps, LocalArithmeticOps, UnsafeArithmeticOps,
+};
 pub(crate) mod bitwise;
-pub use bitwise::{BitWiseOps, ElementBitWiseOps, LocalBitWiseOps};
+pub use bitwise::{BitWiseOps, ElementBitWiseOps, LocalBitWiseOps, UnsafeBitWiseOps};
 pub(crate) mod compare_exchange;
 pub use compare_exchange::{
     CompareExchangeEpsilonOps, CompareExchangeOps, ElementCompareEqOps, ElementComparePartialEqOps,
+    UnsafeCompareExchangeEpsilonOps, UnsafeCompareExchangeOps,
 };
 pub(crate) mod read_only;
-pub use read_only::ReadOnlyOps;
+pub use read_only::{ReadOnlyOps, UnsafeReadOnlyOps};
 pub(crate) mod shift;
-pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps};
+pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps, UnsafeShiftOps};
 
 // use async_trait::async_trait;
 // use parking_lot::Mutex;

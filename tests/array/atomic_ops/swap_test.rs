@@ -74,7 +74,8 @@ macro_rules! swap{
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
-                    reqs.push((array.swap(idx,my_pe as $t),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{array.swap(idx,my_pe as $t)},idx));
                 }
             }
             for (req,idx) in reqs{
@@ -90,7 +91,8 @@ macro_rules! swap{
 
             let mut reqs = vec![];
             for idx in 0..array.len(){
-                reqs.push((array.load(idx),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{array.load(idx)},idx));
             }
             for (req,idx) in reqs{
                 let val =  world.block_on(req);
@@ -118,7 +120,8 @@ macro_rules! swap{
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 if idx%num_pes == my_pe{
-                    reqs.push((sub_array.swap(idx,my_pe as $t),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{sub_array.swap(idx,my_pe as $t)},idx));
                 }
             }
             for (req,idx) in reqs{
@@ -134,7 +137,8 @@ macro_rules! swap{
 
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
-                reqs.push((sub_array.load(idx),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{sub_array.load(idx)},idx));
             }
             for (req,idx) in reqs{
                 let val =  world.block_on(req);
@@ -164,7 +168,8 @@ macro_rules! swap{
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        reqs.push((sub_array.swap(idx,my_pe as $t),idx));
+                        #[allow(unused_unsafe)]
+                        reqs.push((unsafe{sub_array.swap(idx,my_pe as $t)},idx));
                     }
                 }
                 for (req,idx) in reqs{
@@ -180,7 +185,9 @@ macro_rules! swap{
 
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
-                    reqs.push((sub_array.load(idx),idx));
+
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{sub_array.load(idx)},idx));
                 }
                 for (req,idx) in reqs{
                     let val =  world.block_on(req);

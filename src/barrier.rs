@@ -139,7 +139,7 @@ impl Barrier {
             Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
             You may be seeing this message if you have called barrier within an async context (meaning it was executed on a worker thread).\n\
             A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
-            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
             To view backtrace set RUST_LIB_BACKTRACE=1\n\
         {}",
         std::thread::current().id()

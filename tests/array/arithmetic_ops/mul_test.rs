@@ -103,7 +103,8 @@ macro_rules! mul_test{
             // array.print();
             for idx in 0..array.len(){
                 for _i in 0..(max_updates as usize){
-                    let _ = array.mul(idx,2 as $t).spawn();
+                    #[allow(unused_unsafe)]
+                    let _ = unsafe{array.mul(idx,2 as $t).spawn()};
                 }
             }
             array.wait_all();
@@ -130,7 +131,8 @@ macro_rules! mul_test{
             // // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(max_updates as usize){
-                    let _ =  sub_array.mul(idx,2 as $t).spawn();
+                    #[allow(unused_unsafe)]
+                    let _ =  unsafe{sub_array.mul(idx,2 as $t).spawn()};
                 }
             }
             sub_array.wait_all();
@@ -156,7 +158,8 @@ macro_rules! mul_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     for _i in 0..(max_updates as usize){
-                        let _ = sub_array.mul(idx,2 as $t).spawn();
+                        #[allow(unused_unsafe)]
+                        let _ = unsafe{sub_array.mul(idx,2 as $t).spawn()};
                     }
                 }
                 sub_array.wait_all();

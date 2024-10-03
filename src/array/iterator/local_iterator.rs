@@ -399,7 +399,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().for_each_async(self, op)
     }
 
-    /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    /// Calls a closure on each element of a Local Iterator in parallel on the calling PE (the PE must have some local data of the array) using the specififed [Schedule] policy.
     ///
     /// The supplied closure must return a future.
     ///
@@ -456,7 +456,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().reduce(self, op)
     }
 
-    /// Reduces the elements of the local iterator using the provided closure and specififed [Schedule][crate::array::iterator::Schedule] policy
+    /// Reduces the elements of the local iterator using the provided closure and specififed [Schedule] policy
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the reduced value.
     /// # Note
@@ -511,7 +511,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().collect(self, d)
     }
 
-    /// Collects the elements of the local iterator into the specified container type using the specified [Schedule][crate::array::iterator::Schedule] policy
+    /// Collects the elements of the local iterator into the specified container type using the specified [Schedule] policy
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the new container.
     /// # Note
@@ -589,7 +589,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().collect_async(self, d)
     }
 
-    /// Collects the awaited elements of the local iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
+    /// Collects the awaited elements of the local iterator into a new LamellarArray, using the provided [Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
     ///
@@ -661,7 +661,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().count(self)
     }
 
-    /// Counts the number of the elements of the local iterator using the provided [Schedule][crate::array::iterator::Schedule] policy
+    /// Counts the number of the elements of the local iterator using the provided [Schedule] policy
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the number of elements in the local iterator
     /// # Note
@@ -708,7 +708,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
         self.array().sum(self)
     }
 
-    /// Sums the elements of the local iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
+    /// Sums the elements of the local iterator, using the specified [Schedule] policy
     ///
     /// Takes each element, adds them together, and returns the result.
     ///

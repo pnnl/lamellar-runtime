@@ -32,7 +32,7 @@ pub use crate::array::operations::{
     AccessOps, ArithmeticOps, ArrayOps as _ArrayOps, BitWiseOps, CompareExchangeEpsilonOps,
     CompareExchangeOps, ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps,
     ElementComparePartialEqOps, ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps,
-    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps,
+    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps, UnsafeAccessOps, UnsafeArithmeticOps, UnsafeBitWiseOps, UnsafeCompareExchangeEpsilonOps, UnsafeCompareExchangeOps, UnsafeShiftOps, UnsafeReadOnlyOps
 };
 // pub use crate::array::operations::*;
 

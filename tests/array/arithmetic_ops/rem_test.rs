@@ -96,7 +96,8 @@ macro_rules! rem_test{
             // array.print();
             for idx in 0..array.len(){
                 for _i in 0..(max_updates as usize){
-                    array.rem(idx,2 as $t);
+                    #[allow(unused_unsafe)]
+                    unsafe{array.rem(idx,2 as $t)};
                 }
             }
             array.wait_all();
@@ -123,7 +124,8 @@ macro_rules! rem_test{
             // // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(max_updates as usize){
-                    sub_array.rem(idx,2 as $t);
+                    #[allow(unused_unsafe)]
+                    unsafe{sub_array.rem(idx,2 as $t)};
                 }
             }
             sub_array.wait_all();
@@ -149,7 +151,8 @@ macro_rules! rem_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     for _i in 0..(max_updates as usize){
-                        sub_array.rem(idx,2 as $t);
+                        #[allow(unused_unsafe)]
+                        unsafe{sub_array.rem(idx,2 as $t)};
                     }
                 }
                 sub_array.wait_all();

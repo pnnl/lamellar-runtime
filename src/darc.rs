@@ -491,7 +491,7 @@ impl<T: 'static> DarcInner<T> {
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The object is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
                         An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
-                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         inner.my_pe,
@@ -1832,7 +1832,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[{:?}][WARNING] -- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         std::thread::current().id(),
@@ -1872,7 +1872,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[{:?}][WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         std::thread::current().id(),

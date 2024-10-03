@@ -74,7 +74,8 @@ macro_rules! compare_exchange_test{
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
-                    reqs.push((array.compare_exchange(idx,init_val, my_pe as $t),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{array.compare_exchange(idx,init_val, my_pe as $t)},idx));
                 }
             }
             for (req,idx) in reqs{
@@ -94,7 +95,8 @@ macro_rules! compare_exchange_test{
             array.barrier();
             let mut reqs = vec![];
             for idx in 0..array.len(){ //these should all fail
-                reqs.push((array.compare_exchange(idx,init_val,my_pe as $t),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{array.compare_exchange(idx,init_val,my_pe as $t)},idx));
             }
             for (req,idx) in reqs{
                 match  world.block_on(req){
@@ -121,7 +123,8 @@ macro_rules! compare_exchange_test{
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 if idx%num_pes == my_pe{
-                    reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{sub_array.compare_exchange(idx,init_val,my_pe as $t)},idx));
                 }
             }
             for (req,idx) in reqs{
@@ -141,7 +144,8 @@ macro_rules! compare_exchange_test{
             sub_array.barrier();
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
-                reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{sub_array.compare_exchange(idx,init_val,my_pe as $t)},idx));
             }
             for (req,idx) in reqs{
                 match  world.block_on(req){
@@ -170,7 +174,8 @@ macro_rules! compare_exchange_test{
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
+                        #[allow(unused_unsafe)]
+                        reqs.push((unsafe{sub_array.compare_exchange(idx,init_val,my_pe as $t)},idx));
                     }
                 }
                 for (req,idx) in reqs{
@@ -191,7 +196,8 @@ macro_rules! compare_exchange_test{
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
+                        #[allow(unused_unsafe)]
+                        reqs.push((unsafe{sub_array.compare_exchange(idx,init_val,my_pe as $t)},idx));
                     }
                 }
                 for (req,idx) in reqs{
@@ -237,7 +243,8 @@ macro_rules! compare_exchange_epsilon_test{
             let mut reqs = vec![];
             for idx in 0..array.len(){
                 if idx%num_pes == my_pe{
-                    reqs.push((array.compare_exchange_epsilon(idx,init_val, my_pe as $t,epsilon),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{array.compare_exchange_epsilon(idx,init_val, my_pe as $t,epsilon)},idx));
                 }
             }
             for (req,idx) in reqs{
@@ -257,7 +264,8 @@ macro_rules! compare_exchange_epsilon_test{
             array.barrier();
             let mut reqs = vec![];
             for idx in 0..array.len(){ //these should all fail
-                reqs.push((array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon)},idx));
             }
             for (req,idx) in reqs{
                 match  world.block_on(req){
@@ -284,7 +292,8 @@ macro_rules! compare_exchange_epsilon_test{
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
                 if idx%num_pes == my_pe{
-                    reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+                    #[allow(unused_unsafe)]
+                    reqs.push((unsafe{sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon)},idx));
                 }
             }
             for (req,idx) in reqs{
@@ -304,7 +313,8 @@ macro_rules! compare_exchange_epsilon_test{
             sub_array.barrier();
             let mut reqs = vec![];
             for idx in 0..sub_array.len(){
-                reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe{sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon)},idx));
             }
             for (req,idx) in reqs{
                 match  world.block_on(req){
@@ -333,7 +343,8 @@ macro_rules! compare_exchange_epsilon_test{
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+                        #[allow(unused_unsafe)]
+                        reqs.push((unsafe{sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon)},idx));
                     }
                 }
                 for (req,idx) in reqs{
@@ -354,7 +365,8 @@ macro_rules! compare_exchange_epsilon_test{
                 let mut reqs = vec![];
                 for idx in 0..sub_array.len(){
                     if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+                        #[allow(unused_unsafe)]
+                        reqs.push((unsafe{sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon)},idx));
                     }
                 }
                 for (req,idx) in reqs{

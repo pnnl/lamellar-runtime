@@ -84,7 +84,8 @@ macro_rules! or_test{
             array.barrier();
             let my_val = 1 as $t << my_pe;
             for idx in 0..array.len(){
-                let _ = array.bit_or(idx,my_val).spawn();
+                #[allow(unused_unsafe)]
+                let _ = unsafe{array.bit_or(idx,my_val).spawn()};
 
             }
             array.wait_all();
@@ -112,7 +113,8 @@ macro_rules! or_test{
             sub_array.barrier();
             // sub_array.print();
             for idx in 0..sub_array.len(){
-                let _ = sub_array.bit_or(idx,my_val).spawn();
+                #[allow(unused_unsafe)]
+                let _ = unsafe {sub_array.bit_or(idx,my_val).spawn()};
             }
             sub_array.wait_all();
             sub_array.barrier();
@@ -140,7 +142,8 @@ macro_rules! or_test{
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
-                    let _ = sub_array.bit_or(idx,my_val).spawn();
+                    #[allow(unused_unsafe)]
+                    let _ = unsafe{sub_array.bit_or(idx,my_val).spawn()};
                 }
                 sub_array.wait_all();
                 sub_array.barrier();

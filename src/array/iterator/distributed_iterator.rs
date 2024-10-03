@@ -381,7 +381,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().for_each_async(self, op)
     }
 
-    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    /// Calls a closure on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule] policy.
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array
     ///
@@ -405,7 +405,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().for_each_with_schedule(sched, self, op)
     }
 
-    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule][crate::array::iterator::Schedule] policy.
+    /// Calls a closure and immediately awaits the result on each element of a Distributed Iterator in parallel and distributed on each PE (which owns data of the iterated array) using the specififed [Schedule] policy.
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array, after this barrier no further communication is performed
     /// as each PE will only process elements local to itself
@@ -467,7 +467,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().reduce(self, op)
     }
 
-    /// Reduces the elements of the dist iterator using the provided closure and [Schedule][crate::array::iterator::Schedule] policy
+    /// Reduces the elements of the dist iterator using the provided closure and [Schedule] policy
     ///
     /// This function returns a future which needs to be driven to completion to retrieve the  reduced value.
     /// # Note
@@ -530,7 +530,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect(self, d)
     }
 
-    /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
+    /// Collects the elements of the distributed iterator into a new LamellarArray, using the provided [Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
     ///
@@ -617,7 +617,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().collect_async(self, d)
     }
 
-    /// Collects the awaited elements of the distributed iterator into a new LamellarArray, using the provided [Schedule][crate::array::iterator::Schedule] policy
+    /// Collects the awaited elements of the distributed iterator into a new LamellarArray, using the provided [Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier across all PEs in the Array.
     ///
@@ -691,7 +691,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().count(self)
     }
 
-    /// Counts the number of the elements of the distriubted iterator, using the provided [Schedule][crate::array::iterator::Schedule] policy
+    /// Counts the number of the elements of the distriubted iterator, using the provided [Schedule] policy
     ///
     /// Calling this function invokes an implicit barrier and distributed reduction across all PEs in the Array.
     ///
@@ -741,7 +741,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
         self.array().sum(self)
     }
 
-    /// Sums the elements of the distributed iterator, using the specified [Schedule][crate::array::iterator::Schedule] policy
+    /// Sums the elements of the distributed iterator, using the specified [Schedule] policy
     ///
     /// Takes each element, adds them together, and returns the result.
     ///

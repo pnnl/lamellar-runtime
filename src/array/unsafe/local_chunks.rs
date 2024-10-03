@@ -190,7 +190,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// array.wait_all();
     ///
     /// ```
-    pub fn local_chunks(&self, chunk_size: usize) -> UnsafeLocalChunks<T> {
+    pub unsafe fn local_chunks(&self, chunk_size: usize) -> UnsafeLocalChunks<T> {
         UnsafeLocalChunks {
             chunk_size,
             index: 0,
@@ -216,7 +216,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// array.wait_all();
     ///
     /// ```
-    pub fn local_chunks_mut(&self, chunk_size: usize) -> UnsafeLocalChunksMut<T> {
+    pub unsafe fn local_chunks_mut(&self, chunk_size: usize) -> UnsafeLocalChunksMut<T> {
         UnsafeLocalChunksMut {
             chunk_size,
             index: 0,
