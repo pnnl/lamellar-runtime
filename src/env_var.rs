@@ -27,7 +27,7 @@
 //!           This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime
 //!           will print a message at the end of execution with how many additional pools were allocated.
 //!              - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_HEAP_SIZE` to a larger value
-//! - `LAMELLAR_DEADLOCK_TIMEOUT` - the timeout in seconds before a deadlock warning is printed. Defaults to 600
+//! - `LAMELLAR_DEADLOCK_WARNING_TIMEOUT` - the timeout in seconds before a deadlock warning is printed. Defaults to 600. Note this does not cause your application to terminate
 //! - `LAMELLAR_AM_GROUP_BATCH_SIZE` - The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
 //! - `LAMELLAR_BLOCKING_CALL_WARNING` - flag used to print warnings when users call barriers on worker threads. Default: true
 //! - `LAMELLAR_BARRIER_DISSEMINATION_FACTOR` - (Experimental) The dissemination factor for the n-way barrier, default: 2
@@ -139,7 +139,7 @@ fn default_rofi_domain() -> String {
 #[derive(Deserialize, Debug)]
 pub struct Config {
     /// A general timeout in seconds for various operations which may indicate a deadlock, default: 600.0 seconds
-    #[serde(default = "default_deadlock_timeout")]
+    #[serde(default = "default_deadlock_warning_timeout")]
     pub deadlock_timeout: f64,
 
     /// The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
