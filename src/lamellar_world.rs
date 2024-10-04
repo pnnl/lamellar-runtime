@@ -516,7 +516,7 @@ impl LamellarWorldBuilder {
     /// use lamellar::{LamellarWorldBuilder,ExecutorType};
     ///
     /// let builder = LamellarWorldBuilder::new()
-    ///                             .set_num_workers(10);
+    ///                             .set_num_threads(10);
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn set_num_threads(mut self, num_threads: usize) -> LamellarWorldBuilder {
