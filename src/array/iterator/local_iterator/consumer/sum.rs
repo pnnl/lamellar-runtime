@@ -31,7 +31,7 @@ impl<I: IterClone> IterClone for Sum<I> {
 impl<I> IterConsumer for Sum<I>
 where
     I: LocalIterator + 'static,
-    I::Item: SyncSend + std::iter::Sum,
+    I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>,
 {
     type AmOutput = I::Item;
     type Output = I::Item;
@@ -79,7 +79,7 @@ enum InnerState<T> {
 
 impl<T> Future for InnerLocalIterSumHandle<T>
 where
-    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -110,7 +110,7 @@ where
 //#[doc(hidden)]
 impl<T> LamellarRequest for InnerLocalIterSumHandle<T>
 where
-    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     fn blocking_wait(mut self) -> Self::Output {
         self.reqs
@@ -143,7 +143,7 @@ pub struct LocalIterSumHandle<T> {
 
 impl<T> LocalIterSumHandle<T>
 where
-    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     pub(crate) fn new(
         inner: Pin<Box<dyn Future<Output = InnerLocalIterSumHandle<T>> + Send>>,
@@ -176,7 +176,7 @@ enum State<T> {
 }
 impl<T> Future for LocalIterSumHandle<T>
 where
-    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -203,7 +203,7 @@ where
 //#[doc(hidden)]
 impl<T> LamellarRequest for LocalIterSumHandle<T>
 where
-    T: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a T> + 'static,
+    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     fn blocking_wait(self) -> Self::Output {
         match self.state {
@@ -249,7 +249,7 @@ impl<I: IterClone> IterClone for SumAm<I> {
 impl<I> LamellarAm for SumAm<I>
 where
     I: LocalIterator + 'static,
-    I::Item: SyncSend + std::iter::Sum,
+    I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>,
 {
     async fn exec(&self) -> I::Item {
         let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));

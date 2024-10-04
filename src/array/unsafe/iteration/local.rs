@@ -145,7 +145,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
     consumer_impl!(
     sum<I>(iter: &I);
     [LocalIterSumHandle<I::Item>];
-    [I: LocalIterator + 'static, I::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a I::Item> , ];
+    [I: LocalIterator + 'static, I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>  , ];
     [
         Sum {
             iter: iter.iter_clone(Sealed),

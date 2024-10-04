@@ -108,7 +108,7 @@ pub trait LocalIteratorLauncher: InnerArray {
     consumer_impl!(
         sum<I>(iter: &I);
         [LocalIterSumHandle<I::Item>];
-        [I: LocalIterator + 'static, I::Item: SyncSend +  std::iter::Sum + for<'a> std::iter::Sum<&'a I::Item> , ]);
+        [I: LocalIterator + 'static, I::Item: SyncSend +  for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>, ]);
 
     //#[doc(hidden)]
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
@@ -182,10 +182,10 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// let init_iter = array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
+    /// let init_iter = array.local_iter_mut().for_each(move|e| *e = my_pe).spawn(); //initialize array
     /// let filter_iter = array.local_iter()
     ///                        .enumerate() //we can call enumerate before the filter
-    ///                        .filter(|(_,e)| **e%2 == 1).for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}"));
+    ///                        .filter(|(_,e)| **e%2 == 1).for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")).spawn();
     /// world.block_on(async move {
     ///     init_iter.await;
     ///     filter_iter.await;
@@ -215,8 +215,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
-    /// array.wait_all();
+    /// array.local_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array
     /// let filter_iter = array.local_iter()
     ///                        .enumerate() //we can call enumerate before the filter
     ///                        .filter_map(|(i,e)| {
@@ -250,8 +249,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.local_iter().enumerate().map(|(i,elem)| (i,*elem as f64)).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -284,8 +282,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,16,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
-    /// array.wait_all();
+    /// array.local_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array
     /// let filter_iter = array.local_iter()
     ///                        .enumerate() //we can call enumerate before the filter
     ///                        .filter_map(|(i,e)| {
@@ -348,8 +345,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// array.local_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id()));
-    /// array.wait_all();
+    /// array.local_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id())).block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> LocalIterForEachHandle
@@ -419,8 +415,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// array.local_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
-    /// });
-    /// array.wait_all();
+    /// }).block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> LocalIterForEachHandle
@@ -443,7 +438,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().reduce(|acc,elem| acc+elem);
+    /// let req = array.local_iter().map(|elem| *elem).reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
@@ -468,7 +463,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().reduce_with_schedule(Schedule::Chunk(10),|acc,elem| acc+elem);
+    /// let req = array.local_iter().map(|elem| *elem).reduce_with_schedule(Schedule::Chunk(10),|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
@@ -498,7 +493,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
     ///
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).collect::<ReadOnlyArray<usize>>(Distribution::Cyclic);
+    /// let req = array.local_iter().map(|elem|elem.load()).filter(|elem| elem % 2 == 0).collect::<ReadOnlyArray<usize>>(Distribution::Cyclic);
     /// let new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
@@ -524,7 +519,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
     ///
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().map(elem.load()).filter(|elem| elem % 2 == 0).collect_with_schedule::<ReadOnlyArray<usize>>(Scheduler::WorkStealing,Distribution::Cyclic);
+    /// let req = array.local_iter().map(|elem|elem.load()).filter(|elem| elem % 2 == 0).collect_with_schedule::<ReadOnlyArray<usize>>(Schedule::WorkStealing,Distribution::Cyclic);
     /// let new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
@@ -623,7 +618,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     ///         move |elem|
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
-    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Scheduler::Dynamic, Distribution::Cyclic);
+    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
@@ -697,13 +692,13 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().sum();
+    /// let req = array.local_iter().map(|elem| *elem).sum().spawn();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> LocalIterSumHandle<Self::Item>
     where
-        Self::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a Self::Item>,
+        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + std::iter::Sum<Self::Item>,
     {
         self.array().sum(self)
     }
@@ -724,13 +719,13 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.local_iter().sum_with_schedule(Schedule::Guided);
+    /// let req = array.local_iter().map(|elem| *elem).sum_with_schedule(Schedule::Guided);
     /// let sum = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum_with_schedule(&self, sched: Schedule) -> LocalIterSumHandle<Self::Item>
     where
-        Self::Item: SyncSend + std::iter::Sum + for<'a> std::iter::Sum<&'a Self::Item>,
+        Self::Item: SyncSend + for<'a> std::iter::Sum<&'a Self::Item> + std::iter::Sum<Self::Item>,
     {
         self.array().sum_with_schedule(sched, self)
     }
@@ -748,8 +743,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.local_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -788,8 +782,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// array.local_iter().chunks(5).enumerate().for_each(move|(i,chunk)| {
     ///     let chunk_vec: Vec<usize> = chunk.map(|elem| *elem).collect();
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk_vec:?}");
-    /// });
-    /// array.wait_all();
+    /// }).block();
     /// ```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -848,8 +841,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,16,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.local_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -872,7 +864,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,28,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
+    /// let _ =array.local_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).spawn();
     /// array.wait_all();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
@@ -904,8 +896,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,16,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.local_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -939,11 +930,9 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// let my_pe = world.my_pe();
     ///
     /// //initalize array_B
-    /// array_B.local_iter_mut().enumerate().for_each(move|(i,elem)| *elem = i);
-    /// array_B.wait_all();
+    /// array_B.local_iter_mut().enumerate().for_each(move|(i,elem)| *elem = i).block();
     ///
-    /// array_A.local_iter().zip(array_B.local_iter()).for_each(move|(elem_A,elem_B)| println!("PE: {my_pe} A: {elem_A} B: {elem_B}"));
-    /// array_A.wait_all();
+    /// array_A.local_iter().zip(array_B.local_iter()).for_each(move|(elem_A,elem_B)| println!("PE: {my_pe} A: {elem_A} B: {elem_B}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
