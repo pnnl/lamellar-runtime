@@ -74,6 +74,8 @@ fn default_batcher() -> String {
 }
 
 fn default_threads() -> usize {
+    #[cfg(doctest)]
+    return 1;
     match std::thread::available_parallelism() {
         Ok(n) => n.into(),
         Err(_) => 4,

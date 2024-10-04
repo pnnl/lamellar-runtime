@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
-
+#![doc(test(attr(deny(unused_must_use))))]
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
 //!
 //! # Some Nomenclature

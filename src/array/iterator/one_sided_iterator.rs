@@ -108,8 +108,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = LocalLockArray::<usize>::new(&world,24,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
-    /// array.wait_all();
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
     ///     for chunk in array.onesided_iter().chunks(5).into_iter() { //convert into a standard Iterator
     ///         // SAFETY: chunk is safe in self instance because self will be the only handle to the memory region,
@@ -142,8 +141,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
-    /// array.wait_all();
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
     ///     for elem in array.onesided_iter().skip(3).into_iter() {  //convert into a standard Iterator
     ///         println!("PE: {my_pe} elem: {elem}");
@@ -174,8 +172,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
-    /// array.wait_all();
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
     ///     for elem in array.onesided_iter().step_by(3).into_iter() { //convert into a standard Iterator
     ///         println!("PE: {my_pe} elem: {elem}");
@@ -207,8 +204,8 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// let array_B: LocalLockArray<usize> = LocalLockArray::new(&world,12,Distribution::Block);
     /// let my_pe = world.my_pe();
     /// //initialize arrays using a distributed iterator
-    /// array_A.dist_iter_mut().for_each(move|e| *e = my_pe);
-    /// array_B.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = i);
+    /// let _ = array_A.dist_iter_mut().for_each(move|e| *e = my_pe).spawn();
+    /// let _ = array_B.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = i).spawn();
     /// world.wait_all(); // instead of waiting on both arrays in separate calls, just wait for all tasks at the world level
     ///
     /// if my_pe == 0 {
@@ -252,10 +249,9 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
-    /// array.wait_all();
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
-    ///     let sum = onesided_iter!($array,array).into_iter().take(4).map(|elem| *elem as f64).sum::<f64>();
+    ///     let sum = array.onesided_iter().into_iter().take(4).map(|elem| *elem as f64).sum::<f64>();
     ///     println!("Sum: {sum}")
     /// }
     /// ```
@@ -284,23 +280,22 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
+    /// use futures_util::stream::{StreamExt};
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array using a distributed iterator
+    /// let num_pes = world.num_pes();
+    /// let _ =array.dist_iter_mut().for_each(move|e| *e = my_pe).spawn(); //initialize array using a distributed iterator
     /// array.wait_all();
+    ///
     /// world.block_on (async move {
-    ///     if my_pe == 0 {
-    ///         let sum = array.onesided_iter().into_stream().take(4).map(|elem| *elem as f64).sum::<f64>().await;
-    ///         println!("Sum: {sum}")
-    ///     }
-    /// });
+    ///      if my_pe == 0 {
+    ///          let result = array.onesided_iter().into_stream().take(4).map(|elem|*elem as f64).all(|elem|async move{ elem < num_pes as f64});
+    ///          assert_eq!(result.await, true);
+    ///      }
+    ///  });
     /// ```
-    ///  Output on a 4 PE execution
-    ///```text
-    /// Sum: 2.0
-    ///```
     fn into_stream(mut self) -> OneSidedStream<Self>
     where
         Self: Sized + Send,
@@ -324,7 +319,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 ///
-/// let std_iter = onesided_iter!($array,array).into_iter();
+/// let std_iter = array.onesided_iter().into_iter();
 /// for e in std_iter {
 ///     println!("{e}");
 /// }
@@ -352,12 +347,12 @@ where
 /// # Examples
 ///```
 /// use lamellar::array::prelude::*;
-/// use futures::stream::StreamExt;
+/// use futures_util::stream::StreamExt;
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
 /// world.block_on(async move {
-///     let stream = array.onesided_iter().into_stream();
+///     let mut stream = array.onesided_iter().into_stream();
 ///     while let Some(e) = stream.next().await {
 ///         println!("{e}");
 ///     }
