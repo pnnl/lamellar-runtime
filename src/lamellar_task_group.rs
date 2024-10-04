@@ -1126,8 +1126,8 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 ///    foo: usize,
 /// }
 /// #[lamellar::am]
-/// impl LamellarAm for RingAm{
-///     async fn exec(self) -> Vec<usize>{
+/// impl LamellarAm for Am1{
+///     async fn exec(self) {
 ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
 ///     }
 /// }
@@ -1137,8 +1137,8 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 ///    bar: String,
 /// }
 /// #[lamellar::am]
-/// impl LamellarAm for RingAm{
-///     async fn exec(self) -> Vec<usize>{
+/// impl LamellarAm for Am2{
+///     async fn exec(self) {
 ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
 ///     }
 /// }
@@ -1150,8 +1150,8 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 ///
 ///     let am1 = Am1{foo: 1};
 ///     let am2 = Am2{bar: "hello".to_string()};
-///     //create a new AMGroup
-///     let am_group = AMGroup::new(&world);
+///     //create a new AmGroup
+///     let mut am_group = AmGroup::new(&world);
 ///     // add the AMs to the group
 ///     // we can specify individual PEs to execute on or all PEs
 ///     am_group.add_am_pe(0,am1.clone());
@@ -1183,7 +1183,7 @@ pub struct AmGroup {
 }
 
 impl AmGroup {
-    /// create a new AMGroup associated with the given team
+    /// create a new AmGroup associated with the given team
     /// # Example
     /// ```
     /// use lamellar::active_messaging::prelude::*;
@@ -1191,7 +1191,7 @@ impl AmGroup {
     ///     let world = lamellar::LamellarWorldBuilder::new().build();
     ///     let my_pe = world.my_pe();
     ///     let num_pes = world.num_pes();
-    ///     let am_group = AMGroup::new(&world);
+    ///     let mut am_group = AmGroup::new(&world);
     /// }
     /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> AmGroup {
@@ -1211,8 +1211,8 @@ impl AmGroup {
     ///    foo: usize,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for RingAm{
-    ///     async fn exec(self) -> Vec<usize>{
+    /// impl LamellarAm for Am1{
+    ///     async fn exec(self) {
     ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
     ///     }
     /// }
@@ -1222,8 +1222,8 @@ impl AmGroup {
     ///    bar: String,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for RingAm{
-    ///     async fn exec(self) -> Vec<usize>{
+    /// impl LamellarAm for Am2{
+    ///     async fn exec(self) {
     ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
     ///     }
     /// }
@@ -1235,8 +1235,8 @@ impl AmGroup {
     ///
     ///     let am1 = Am1{foo: 1};
     ///     let am2 = Am2{bar: "hello".to_string()};
-    ///     //create a new AMGroup
-    ///     let am_group = AMGroup::new(&world);
+    ///     //create a new AmGroup
+    ///     let mut am_group = AmGroup::new(&world);
     ///     // add the AMs to the group
     ///     // we can specify individual PEs to execute on or all PEs
     ///     am_group.add_am_all(am1.clone());
@@ -1267,8 +1267,8 @@ impl AmGroup {
     ///    foo: usize,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for RingAm{
-    ///     async fn exec(self) -> Vec<usize>{
+    /// impl LamellarAm for Am1{
+    ///     async fn exec(self){
     ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
     ///     }
     /// }
@@ -1278,8 +1278,8 @@ impl AmGroup {
     ///    bar: String,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for RingAm{
-    ///     async fn exec(self) -> Vec<usize>{
+    /// impl LamellarAm for Am2{
+    ///     async fn exec(self) {
     ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
     ///     }
     /// }
@@ -1291,8 +1291,8 @@ impl AmGroup {
     ///
     ///     let am1 = Am1{foo: 1};
     ///     let am2 = Am2{bar: "hello".to_string()};
-    ///     //create a new AMGroup
-    ///     let am_group = AMGroup::new(&world);
+    ///     //create a new AmGroup
+    ///     let mut am_group = AmGroup::new(&world);
     ///     // add the AMs to the group
     ///     // we can specify individual PEs to execute on or all PEs
     ///     am_group.add_am_pe(0,am1.clone());
@@ -1319,8 +1319,8 @@ impl AmGroup {
     ///    foo: usize,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for RingAm{
-    ///     async fn exec(self) -> Vec<usize>{
+    /// impl LamellarAm for Am1{
+    ///     async fn exec(self) {
     ///         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
     ///     }
     /// }
@@ -1330,8 +1330,8 @@ impl AmGroup {
     ///    bar: String,
     /// }
     /// #[lamellar::am]
-    /// impl LamellarAm for RingAm{
-    ///     async fn exec(self) -> Vec<usize>{
+    /// impl LamellarAm for Am2{
+    ///     async fn exec(self){
     ///         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
     ///     }
     /// }
@@ -1343,8 +1343,8 @@ impl AmGroup {
     ///
     ///     let am1 = Am1{foo: 1};
     ///     let am2 = Am2{bar: "hello".to_string()};
-    ///     //create a new AMGroup
-    ///     let am_group = AMGroup::new(&world);
+    ///     //create a new AmGroup
+    ///     let mut am_group = AmGroup::new(&world);
     ///     // add the AMs to the group
     ///     // we can specify individual PEs to execute on or all PEs
     ///     am_group.add_am_pe(0,am1.clone());
