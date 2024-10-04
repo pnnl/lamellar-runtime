@@ -549,15 +549,16 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// #[am]
     /// impl LamellarAm for MemRegionAm{
     ///     async fn exec(self){
-    ///         let temp_buffer = OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(mem_region.len());
+    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
     ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer)};
+    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
     ///         unsafe {
     ///             for elem in temp_buffer.iter(){
     ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_secs(self.secs)).await;
+    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
     ///                 }
-    ///                 assert_eq!(lamellar::num_pes,*elem);
+    ///                 let num_pes = lamellar::num_pes;
+    ///                 assert_eq!(num_pes,*elem);
     ///             }
     ///         }
     ///     }
@@ -604,15 +605,16 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// #[am]
     /// impl LamellarAm for MemRegionAm{
     ///     async fn exec(self){
-    ///         let temp_buffer = OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(mem_region.len());
+    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
     ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer)};
+    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
     ///         unsafe {
     ///             for elem in temp_buffer.iter(){
     ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_secs(self.secs)).await;
+    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
     ///                 }
-    ///                 assert_eq!(lamellar::num_pes,*elem);
+    ///                 let num_pes = lamellar::num_pes;
+    ///                 assert_eq!(num_pes,*elem);
     ///             }
     ///         }
     ///     }
