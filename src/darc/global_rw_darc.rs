@@ -634,8 +634,8 @@ impl<T> GlobalRwDarc<T> {
     ///     let mut guard = counter.write().await;
     ///     *guard += my_pe;
     ///     drop(guard); //release the
-    ///     world.wait_all(); // wait for my active message to return
-    ///     world.barrier(); //at this point all updates will have been performed
+    ///     world.await_all().await; // wait for my active message to return
+    ///     world.async_barrier().await; //at this point all updates will have been performed
     /// });
     ///```
     pub async fn write(&self) -> GlobalRwDarcWriteGuard<T> {
@@ -888,7 +888,7 @@ impl<T> GlobalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let mut counter = self.counter.async_write().await; // await until we get the write lock
+    ///         let mut counter = self.counter.write().await; // await until we get the write lock
     ///         *counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
     ///     }
     ///  }

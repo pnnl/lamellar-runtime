@@ -135,29 +135,86 @@ unsafe impl Send for MyPtr {}
 impl LamellaeRDMA for Local {
     fn flush(&self) {}
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+        let src_ptr = src.as_ptr();
+
+        if !((src_ptr as usize <= dst
+            && dst < src_ptr as usize + src.len()) //dst start overlaps src
+            || (src_ptr as usize <= dst + src.len()
+            && dst + src.len() < src_ptr as usize + src.len()))
+        //dst end overlaps src
+        {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+            }
+        } else {
+            unsafe {
+                std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
+            }
         }
     }
     fn iput(&self, _pe: usize, src: &[u8], dst: usize) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+        let src_ptr = src.as_ptr();
+        if !((src_ptr as usize <= dst
+            && dst < src_ptr as usize + src.len()) //dst start overlaps src
+            || (src_ptr as usize <= dst + src.len()
+            && dst + src.len() < src_ptr as usize + src.len()))
+        //dst end overlaps src
+        {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+            }
+        } else {
+            unsafe {
+                std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
+            }
         }
     }
     fn put_all(&self, src: &[u8], dst: usize) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+        let src_ptr = src.as_ptr();
+        if !((src_ptr as usize <= dst
+            && dst < src_ptr as usize + src.len()) //dst start overlaps src
+            || (src_ptr as usize <= dst + src.len()
+            && dst + src.len() < src_ptr as usize + src.len()))
+        //dst end overlaps src
+        {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+            }
+        } else {
+            unsafe {
+                std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
+            }
         }
     }
     fn get(&self, _pe: usize, src: usize, dst: &mut [u8]) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+        let dst_ptr = dst.as_mut_ptr();
+        if !((dst_ptr as usize <= src && src < dst_ptr as usize + dst.len())
+            || (dst_ptr as usize <= src + dst.len()
+                && src + dst.len() < dst_ptr as usize + dst.len()))
+        {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            }
+        } else {
+            unsafe {
+                std::ptr::copy(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            }
         }
     }
 
     fn iget(&self, _pe: usize, src: usize, dst: &mut [u8]) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+        let dst_ptr = dst.as_mut_ptr();
+        if !((dst_ptr as usize <= src && src < dst_ptr as usize + dst.len())
+            || (dst_ptr as usize <= src + dst.len()
+                && src + dst.len() < dst_ptr as usize + dst.len()))
+        {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            }
+        } else {
+            unsafe {
+                std::ptr::copy(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            }
         }
     }
 

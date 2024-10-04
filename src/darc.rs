@@ -272,7 +272,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 ///     let my_pe = world.my_pe();
 ///     let num_pes = world.num_pes();
 ///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
-///     let weak = darc_counter.downgrade();
+///     let weak = Darc::downgrade(&darc_counter);
 ///     match weak.upgrade(){
 ///         Some(counter) => {
 ///             counter.fetch_add(my_pe, Ordering::SeqCst);

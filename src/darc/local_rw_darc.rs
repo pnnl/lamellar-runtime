@@ -154,7 +154,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let counter = self.counter.read(); //block until we get the write lock
+    ///         let counter = self.counter.read().await; //block until we get the write lock
     ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
     ///     }
     ///  }
@@ -260,8 +260,8 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// #[lamellar::am]
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
-    ///         let mut counter = self.counter.write(); //block until we get the write lock
-    ///         **counter += 1;
+    ///         let mut counter = self.counter.write().await; //block until we get the write lock
+    ///         *counter += 1;
     ///     }
     ///  }
     /// //-------------
@@ -270,7 +270,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let counter = LocalRwDarc::new(&world, 0).unwrap();
     /// world.exec_am_all(DarcAm {counter: counter.clone()});
     /// let mut guard = counter.blocking_write();
-    /// **guard += my_pe;
+    /// *guard += my_pe;
     ///```
     pub fn blocking_write(&self) -> RwLockWriteGuardArc<T> {
         if std::thread::current().id() != *crate::MAIN_THREAD {
@@ -320,17 +320,17 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// impl LamellarAm for DarcAm {
     ///     async fn exec(self) {
     ///         let mut counter = self.counter.write().await; //block until we get the write lock
-    ///         **counter += 1;
+    ///         *counter += 1;
     ///     }
     ///  }
     /// //-------------
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// world.clone()block_on(async move{
+    /// world.clone().block_on(async move{
     ///     let counter = LocalRwDarc::new(&world, 0).unwrap();
     ///     world.exec_am_all(DarcAm {counter: counter.clone()});
-    ///     let mut guard = counter.write();
-    ///     **guard += my_pe;
+    ///     let mut guard = counter.write().await;
+    ///     *guard += my_pe;
     /// })
     ///```
     pub async fn write(&self) -> RwLockWriteGuardArc<T> {
