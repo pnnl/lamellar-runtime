@@ -267,7 +267,7 @@
 //! The main change is that we need to explicitly tell the macro we are returning an active message and we provide the name of the active message we are returning
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! # #[AmData(Debug,Clone)]
+//! # #[lamellar::AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
@@ -278,13 +278,13 @@
 //! #         println!("initiated on PE {} visited PE {} finishing on PE {}",self.original_pe,self.remote_pe,lamellar::current_pe);
 //! #     }
 //! # }
-//! # #[AmData(Debug,Clone)]
+//! # #[lamellar::AmData(Debug,Clone)]
 //! # struct HelloWorld {
 //! #    original_pe: usize, //this will contain the ID of the PE this data originated from
 //! # }
 //! #[lamellar::am(return_am = "ReturnAm")] //we explicitly tell the macro we are returning an AM
 //! impl LamellarAM for HelloWorld {
-//!     async fn exec(self) -> usize { //specify we are returning a usize
+//!     async fn exec(self) -> ReturnAm { //we want to return an instance of an AM
 //!         println!(
 //!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
 //!             lamellar::current_pe,
@@ -332,7 +332,7 @@
 //! First we need to update `ReturnAm` to actually return some data
 //!```
 //! # use lamellar::active_messaging::prelude::*;
-//! # #[AmData(Debug,Clone)]
+//! # #[lamellar::AmData(Debug,Clone)]
 //! # struct ReturnAm{
 //! #     original_pe: usize,
 //! #     remote_pe: usize,
@@ -369,7 +369,7 @@
 //!
 //! #[lamellar::am(return_am = "ReturnAm -> (usize,usize)")] //we explicitly tell the macro we are returning an AM which itself returns data
 //! impl LamellarAM for HelloWorld {
-//!     async fn exec(self) -> usize { //specify we are returning a usize
+//!     async fn exec(self) -> ReturnAm { //returning an instance of an AM
 //!         println!(
 //!             "Hello World on PE {:?} of {:?}, I'm from PE {:?}",
 //!             lamellar::current_pe,
@@ -472,7 +472,7 @@
 //! Lamellar also supports active message groups, which is a collection of active messages that can be awaited together.
 //! Conceptually, an active message group can be represented as a meta active message that contains a list of the actual active messages we want to execute,
 //! as illustrated in the pseudocode below:
-//! ```no_run
+//! ```ignore
 //! #[AmData(Debug,Clone)]
 //! struct MetaAm{
 //!     ams: Vec<impl LamellarAm>
@@ -500,8 +500,8 @@
 //!    foo: usize,
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for RingAm{
-//!     async fn exec(self) -> Vec<usize>{
+//! impl LamellarAm for Am1{
+//!     async fn exec(self) {
 //!         println!("in am1 {:?} on PE{:?}",self.foo,  lamellar::current_pe);
 //!     }
 //! }
@@ -511,8 +511,8 @@
 //!    bar: String,
 //! }
 //! #[lamellar::am]
-//! impl LamellarAm for RingAm{
-//!     async fn exec(self) -> Vec<usize>{
+//! impl LamellarAm for Am2{
+//!     async fn exec(self) {
 //!         println!("in am2 {:?} on PE{:?}",self.bar,lamellar::current_pe);
 //!     }
 //! }
@@ -525,7 +525,7 @@
 //!     let am1 = Am1{foo: 1};
 //!     let am2 = Am2{bar: "hello".to_string()};
 //!     //create a new AMGroup
-//!     let am_group = AMGroup::new(&world);
+//!     let mut am_group = AmGroup::new(&world);
 //!     // add the AMs to the group
 //!     // we can specify individual PEs to execute on or all PEs
 //!     am_group.add_am_pe(0,am1.clone());
@@ -566,7 +566,7 @@
 //! #[lamellar::am]
 //! impl LamellarAm for ExampleAm{
 //!     async fn exec(self) -> usize{
-//!         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+//!         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
 //!     }
 //! }
 //!
@@ -574,10 +574,11 @@
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
+//!     let darc = Darc::new(&world,AtomicUsize::new(0)).expect("PE in world team");
 //!
 //!     if my_pe == 0 { // we only want to run this on PE0 for sake of illustration
-//!         let am_group = typed_am_group!{ExampleAm,&world};
-//!         let am = ExampleAm{cnt: 0};
+//!         let mut am_group = typed_am_group!{ExampleAm,&world};
+//!         let am = ExampleAm{cnt: darc.clone()};
 //!         // add the AMs to the group
 //!         // we can specify individual PEs to execute on or all PEs
 //!         am_group.add_am_pe(0,am.clone());
@@ -588,15 +589,15 @@
 //!         //execute and await the completion of all AMs in the group
 //!         let results = world.block_on(am_group.exec()); // we want to process the returned data
 //!         //we can index into the results
-//!         if let AmGroupResult::Pe((pe,val)) = results.at(2){
+//!         if let AmGroupResult::Pe(pe,val) = results.at(2){
 //!             assert_eq!(pe, 1); //the third add_am_* call in the group was to execute on PE1
-//!             assert_eq!(val, 1); // this was the second am to execute on PE1 so the fetched value is 1
+//!             assert_eq!(val, &1); // this was the second am to execute on PE1 so the fetched value is 1
 //!         }
 //!         //or we can iterate over the results
-//!         for res in results{
+//!         for res in results.iter(){
 //!             match res{
-//!                 AmGroupResult::Pe((pe,val)) => { println!("{} from PE{}",val,pe)},
-//!                 AmGroupResult::All(val) => { println!("{} on all PEs",val)},
+//!                 AmGroupResult::Pe(pe,val) => { println!("{:?} from PE{:?}",val,pe)},
+//!                 AmGroupResult::All(val) => { println!("{:?} on all PEs",val)},
 //!             }
 //!         }
 //!     }
@@ -626,7 +627,7 @@
 //! use std::sync::atomic::AtomicUsize;
 //! #[AmData(Debug,Clone)]
 //! struct ExampleAm {
-//!    #[AmData(static)]
+//!    #[AmGroup(static)]
 //!    cnt: Darc<AtomicUsize>,
 //! }
 //!```
@@ -973,13 +974,13 @@ pub trait ActiveMessaging {
     /// use lamellar::active_messaging::prelude::*;
     ///
     /// #[lamellar::AmData(Debug,Clone)]
-    /// struct Am{
+    /// struct MyAm{
     /// // can contain anything that impls Serialize, Deserialize, Sync, Send   
     ///     val: usize
     /// }
     ///
     /// #[lamellar::am]
-    /// impl LamellarAM for Am{
+    /// impl LamellarAM for MyAm{
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
     ///         println!("hello from PE{}",self.val);
@@ -989,7 +990,7 @@ pub trait ActiveMessaging {
     /// //----------------
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am on all pes
+    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am on all pes
     /// let results = world.block_on(request); //block until am has executed and retrieve the data
     /// for i in 0..world.num_pes(){
     ///     assert_eq!(i,results[i]);
@@ -1020,13 +1021,13 @@ pub trait ActiveMessaging {
     /// use lamellar::active_messaging::prelude::*;
     ///
     /// #[lamellar::AmData(Debug,Clone)]
-    /// struct Am{
+    /// struct MyAm{
     /// // can contain anything that impls Serialize, Deserialize, Sync, Send   
     ///     val: usize
     /// }
     ///
     /// #[lamellar::am]
-    /// impl LamellarAM for Am{
+    /// impl LamellarAM for MyAm{
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some remote computation
     ///         println!("hello from PE{}",self.val);
@@ -1036,7 +1037,7 @@ pub trait ActiveMessaging {
     /// //----------------
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_pe(world.num_pes()-1, Am{val: world.my_pe()}); //launch am on all pes
+    /// let request = world.exec_am_pe(world.num_pes()-1, MyAm{val: world.my_pe()}); //launch am on all pes
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
@@ -1067,13 +1068,13 @@ pub trait ActiveMessaging {
     /// use std::sync::Arc;
     ///
     /// #[lamellar::AmLocalData(Debug,Clone)]
-    /// struct Am{
+    /// struct MyAm{
     /// // can contain anything that impls Sync, Send  
     ///     val: Arc<Mutex<f32>>,
     /// }
     ///
     /// #[lamellar::local_am]
-    /// impl LamellarAM for Am{
+    /// impl LamellarAM for MyAm{
     ///     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     ///         //do some  computation
     ///         let mut val = self.val.lock();
@@ -1084,7 +1085,7 @@ pub trait ActiveMessaging {
     /// //----------------
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
-    /// let request = world.exec_am_local(Am{val: Arc::new(Mutex::new(0.0))}); //launch am locally
+    /// let request = world.exec_am_local(MyAm{val: Arc::new(Mutex::new(0.0))}); //launch am locally
     /// let result = world.block_on(request); //block until am has executed
     /// assert_eq!(world.my_pe(),result);
     ///```
@@ -1106,13 +1107,13 @@ pub trait ActiveMessaging {
     /// # use lamellar::active_messaging::prelude::*;
     /// #
     /// # #[lamellar::AmData(Debug,Clone)]
-    /// # struct Am{
+    /// # struct MyAm{
     /// # // can contain anything that impls Sync, Send  
     /// #     val: usize,
     /// # }
     ///
     /// # #[lamellar::am]
-    /// # impl LamellarAM for Am{
+    /// # impl LamellarAM for MyAm{
     /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     /// #         //do some remote computation
     /// #          println!("hello from PE{}",self.val);
@@ -1121,7 +1122,7 @@ pub trait ActiveMessaging {
     /// # }
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
-    /// world.exec_am_all(Am{val: world.my_pe()});
+    /// world.exec_am_all(MyAm{val: world.my_pe()});
     /// world.wait_all(); //block until the previous am has finished
     ///```
     fn wait_all(&self);
@@ -1140,13 +1141,13 @@ pub trait ActiveMessaging {
     /// # use lamellar::active_messaging::prelude::*;
     /// #
     /// # #[lamellar::AmData(Debug,Clone)]
-    /// # struct Am{
+    /// # struct MyAm{
     /// # // can contain anything that impls Sync, Send  
     /// #     val: usize,
     /// # }
     ///
     /// # #[lamellar::am]
-    /// # impl LamellarAM for Am{
+    /// # impl LamellarAM for MyAm{
     /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     /// #         //do some remote computation
     /// #          println!("hello from PE{}",self.val);
@@ -1157,7 +1158,7 @@ pub trait ActiveMessaging {
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// let world_clone = world.clone();
     /// world.block_on(async move {
-    ///     world_clone.exec_am_all(Am{val: world_clone.my_pe()});
+    ///     world_clone.exec_am_all(MyAm{val: world_clone.my_pe()});
     ///     world_clone.await_all().await; //block until the previous am has finished
     /// });
     ///```
@@ -1219,13 +1220,13 @@ pub trait ActiveMessaging {
     /// use async_std::fs::File;
     /// use async_std::prelude::*;
     /// # #[lamellar::AmData(Debug,Clone)]
-    /// # struct Am{
+    /// # struct MyAm{
     /// # // can contain anything that impls Sync, Send  
     /// #     val: usize,
     /// # }
     /// #
     /// # #[lamellar::am]
-    /// # impl LamellarAM for Am{
+    /// # impl LamellarAM for MyAm{
     /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     /// #         //do some remote computation
     /// #          println!("hello from PE{}",self.val);
@@ -1235,7 +1236,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally
+    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am locally
     /// let result = world.block_on(request); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
@@ -1244,9 +1245,9 @@ pub trait ActiveMessaging {
     ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
     ///         let data = file.read(&mut buf).await.unwrap();
-    ///         world_clone.exec_am_pe(pe,Am{val: data}).await;
+    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).await;
     ///     }
-    ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
+    ///     world_clone.exec_am_all(MyAm{val: buf[0] as usize}).await;
     /// });
     ///```
     fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
@@ -1270,13 +1271,13 @@ pub trait ActiveMessaging {
     /// use async_std::fs::File;
     /// use async_std::prelude::*;
     /// # #[lamellar::AmData(Debug,Clone)]
-    /// # struct Am{
+    /// # struct MyAm{
     /// # // can contain anything that impls Sync, Send  
     /// #     val: usize,
     /// # }
     /// #
     /// # #[lamellar::am]
-    /// # impl LamellarAM for Am{
+    /// # impl LamellarAM for MyAm{
     /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     /// #         //do some remote computation
     /// #          println!("hello from PE{}",self.val);
@@ -1286,7 +1287,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally
+    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am locally
     /// let result = world.block_on(request); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
@@ -1295,9 +1296,9 @@ pub trait ActiveMessaging {
     ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
     ///         let data = file.read(&mut buf).await.unwrap();
-    ///         world_clone.exec_am_pe(pe,Am{val: data}).await;
+    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).await;
     ///     }
-    ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
+    ///     world_clone.exec_am_all(MyAm{val: buf[0] as usize}).await;
     /// });
     ///```
     fn block_on<F: Future>(&self, f: F) -> F::Output;
@@ -1318,13 +1319,13 @@ pub trait ActiveMessaging {
     /// use async_std::fs::File;
     /// use async_std::prelude::*;
     /// # #[lamellar::AmData(Debug,Clone)]
-    /// # struct Am{
+    /// # struct MyAm{
     /// # // can contain anything that impls Sync, Send  
     /// #     val: usize,
     /// # }
     /// #
     /// # #[lamellar::am]
-    /// # impl LamellarAM for Am{
+    /// # impl LamellarAM for MyAm{
     /// #     async fn exec(self) -> usize { //can return nothing or any type that impls Serialize, Deserialize, Sync, Send
     /// #         //do some remote computation
     /// #          println!("hello from PE{}",self.val);
@@ -1334,7 +1335,7 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(Am{val: world.my_pe()}); //launch am locally
+    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am locally
     /// let result = world.block_on(request); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
@@ -1343,9 +1344,9 @@ pub trait ActiveMessaging {
     ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
     ///         let data = file.read(&mut buf).await.unwrap();
-    ///         world_clone.exec_am_pe(pe,Am{val: data}).await;
+    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).await;
     ///     }
-    ///     world_clone.exec_am_all(Am{val: buf[0] as usize}).await;
+    ///     world_clone.exec_am_all(MyAm{val: buf[0] as usize}).await;
     /// });
     ///```
     fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>

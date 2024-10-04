@@ -50,13 +50,13 @@ use std::marker::PhantomData;
 /// use lamellar::array::prelude::*;
 ///
 /// #[AmData(Debug,Clone)]
-/// struct Am{
+/// struct MyAm{
 ///     world_pe: usize,
 ///     team_pe: Option<usize>,
 /// }
 ///
 /// #[lamellar::am]
-/// impl LamellarAm for Am{
+/// impl LamellarAm for MyAm{
 ///     async fn exec(self) {
 ///         println!("Hello from world PE{:?}, team PE{:?}",self.world_pe, self.team_pe);
 ///     }
@@ -77,7 +77,7 @@ use std::marker::PhantomData;
 ///     Err(_) => None,
 /// };
 /// // we can launch and await the results of active messages on a given team
-/// let req = even_pes.exec_am_all(Am{world_pe,team_pe});
+/// let req = even_pes.exec_am_all(MyAm{world_pe,team_pe});
 /// let result = even_pes.block_on(req);
 /// // we can also create a distributed array so that its data only resides on the members of the team.
 /// let array: AtomicArray<usize> = AtomicArray::new(&even_pes, 100,Distribution::Block);

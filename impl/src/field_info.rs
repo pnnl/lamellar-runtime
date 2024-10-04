@@ -70,7 +70,7 @@ impl FieldInfo {
         if as_vecs && darc_iter {
             //both
             quote! {
-                for e in (&self.#field_name).iter(){
+                for e in (&(self.#field_name)).iter(){
                     for d in e.iter(){
                         d.ser(num_pes,darcs);
                     }
@@ -79,14 +79,14 @@ impl FieldInfo {
         } else if as_vecs ^ darc_iter {
             //either or
             quote! {
-                for e in (&self.#field_name).iter(){
+                for e in (&(self.#field_name)).iter(){
                     e.ser(num_pes,darcs);
                 }
             }
         } else {
             //neither
             quote! {
-                (&self.#field_name).ser(num_pes,darcs);
+                (&(self.#field_name)).ser(num_pes,darcs);
             }
         }
     }
@@ -109,12 +109,12 @@ impl FieldInfo {
                 ind += 1;
                 if !as_vecs {
                     ser.extend(quote_spanned! {field.span()=>
-                        ( &self.#field_name.#temp_ind).ser(num_pes,darcs);
+                        ( &(self.#field_name.#temp_ind)).ser(num_pes,darcs);
                     });
                 } else {
                     ser.extend(quote_spanned! {field.span()=>
-                        for e in (&self.#field_name).iter(){
-                            e.#temp_ind.ser(num_pes,darcs);
+                        for e in (&(self.#field_name)).iter(){
+                            (&(e.#temp_ind)).ser(num_pes,darcs);
                         }
                     })
                 }
@@ -178,7 +178,7 @@ impl FieldInfo {
         if as_vecs && darc_iter {
             //both
             quote! {
-                for e in (&self.#field_name).iter(){
+                for e in (&(self.#field_name)).iter(){
                     for d in e.iter(){
                         d.des(cur_pe);
                     }
@@ -187,14 +187,14 @@ impl FieldInfo {
         } else if as_vecs ^ darc_iter {
             //either or
             quote! {
-                for e in (&self.#field_name).iter(){
+                for e in (&(self.#field_name)).iter(){
                     e.des(cur_pe);
                 }
             }
         } else {
             //neither
             quote! {
-                (&self.#field_name).des(cur_pe);
+                (&(self.#field_name)).des(cur_pe);
             }
         }
     }
@@ -217,12 +217,12 @@ impl FieldInfo {
                 ind += 1;
                 if !as_vecs {
                     des.extend(quote_spanned! {field.span()=>
-                        ( &self.#field_name.#temp_ind).des(cur_pe);
+                        ( &(self.#field_name.#temp_ind)).des(cur_pe);
                     });
                 } else {
                     des.extend(quote_spanned! {field.span()=>
-                        for e in (&self.#field_name).iter(){
-                            e.#temp_ind.des(cur_pe);
+                        for e in (&(self.#field_name)).iter(){
+                            (&(e.#temp_ind)).des(cur_pe);
                         }
                     });
                 }

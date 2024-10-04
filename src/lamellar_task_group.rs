@@ -526,13 +526,13 @@ impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
 /// use lamellar::active_messaging::prelude::*;
 ///
 /// #[AmData(Debug,Clone)]
-/// struct Am{
+/// struct MyAm{
 ///     world_pe: usize,
 ///     team_pe: Option<usize>,
 /// }
 ///
 /// #[lamellar::am]
-/// impl LamellarAm for Am{
+/// impl LamellarAm for MyAm{
 ///     async fn exec(self) {
 ///         println!("Hello from world PE{:?}, team PE{:?}",self.world_pe, self.team_pe);
 ///     }
@@ -553,9 +553,9 @@ impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
 /// };
 /// let task_group_1 = LamellarTaskGroup::new(&world); //associate the task group with the world
 /// let task_group_2 = LamellarTaskGroup::new(&even_pes); //we can also associate the task group with a team/sub_team
-/// task_group_1.exec_am_all(Am{world_pe,team_pe});
+/// task_group_1.exec_am_all(MyAm{world_pe,team_pe});
 /// for pe in 0..even_pes.num_pes(){
-///    task_group_2.exec_am_pe(pe,Am{world_pe,team_pe});
+///    task_group_2.exec_am_pe(pe,MyAm{world_pe,team_pe});
 /// }
 /// task_group_1.wait_all(); //only need to wait for active messages launched with task_group_1 to finish
 /// //do interesting work
