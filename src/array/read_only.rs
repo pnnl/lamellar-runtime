@@ -456,12 +456,13 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().for_each(move |_| {
+    /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
+    /// }).block();
+    /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -488,12 +489,13 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().for_each(move |_| {
+    /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
+    /// }).block();
+    /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.block_on(array.sum());
+    /// let sum = array.block_on(array.sum()).expect("array len > 0");
     /// assert_eq!(array.len()*num_pes,sum);
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -517,12 +519,12 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
+    /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
-    /// });
+    /// }).block();
     /// array.wait_all();
-    /// array.barrier();
-    /// let prod =  array.block_on(array.prod());
+    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let prod =  array.block_on(array.prod()).expect("array len > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -547,9 +549,10 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
+    /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let max = array.block_on(array.max());
+    /// let max = array.block_on(array.max()).expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -573,9 +576,10 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
+    /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
+    /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let min = array.block_on(array.min());
+    /// let min = array.block_on(array.min()).expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

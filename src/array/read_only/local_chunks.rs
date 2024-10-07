@@ -100,9 +100,9 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    /// let _ = array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    /// });
+    /// }).spawn();
     /// array.wait_all();
     ///
     /// ```
