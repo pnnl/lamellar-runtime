@@ -188,7 +188,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// let init_iter = array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array
+    /// let init_iter = array.dist_iter_mut().for_each(move|e| *e = my_pe).spawn(); //initialize array
     /// let filter_iter = array.dist_iter()
     ///                        .enumerate() //we can call enumerate before the filter
     ///                        .filter(|(_,e)| *e%2 == 1).for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}"));
@@ -221,8 +221,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter_mut().for_each(move|e| *e = my_pe); //initialize array
-    /// array.wait_all();
+    /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block();
     /// let filter_iter = array.dist_iter()
     ///                        .enumerate() //we can call enumerate before the filter
     ///                        .filter_map(|(i,e)| {
@@ -256,8 +255,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().map(|elem| *elem as f64).enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.dist_iter().map(|elem| *elem as f64).monotonic().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -290,8 +288,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let array = LocalLockArray::<usize>::new(&world,16,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_iter_mut().for_each(move|e| *e = my_pe); //initialize array
-    /// array.wait_all();
+    /// array.local_iter_mut().for_each(move|e| *e = my_pe).block();
     /// let filter_iter = array.local_iter()
     ///                        .enumerate() //we can call enumerate before the filter
     ///                        .filter_map(|(i,e)| {
@@ -425,7 +422,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let iter = array.dist_iter().spawn_for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
+    /// let iter = array.dist_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
@@ -454,7 +451,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().reduce(|acc,elem| acc+elem);
+    /// let req = array.dist_iter().map(|elem| *elem).reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -480,7 +477,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
+    /// let req = array.dist_iter().map(|elem| *elem).reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -551,7 +548,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///
     /// let req = array.dist_iter()
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
-    ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
+    ///                .filter(|elem| * elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
@@ -651,7 +648,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     ///         move |elem|
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
-    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Scheduler::Dynamic, Distribution::Cyclic);
+    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -683,7 +680,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().filter(|elem|  elem < 10).count();
+    /// let req = array.dist_iter().filter(|elem|  **elem < 10).count();
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -705,7 +702,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().filter(|elem|  elem < 10).count_with_schedule(Schedule::Dynamic);
+    /// let req = array.dist_iter().filter(|elem|  **elem < 10).count_with_schedule(Schedule::Dynamic);
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
     ///```
     fn count_with_schedule(&self, sched: Schedule) -> DistIterCountHandle {
@@ -730,7 +727,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().sum();
+    /// let req = array.dist_iter().map(|elem| *elem).sum();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
@@ -759,7 +756,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
     ///
-    /// let req = array.dist_iter().sum_with_schedule(Schedule::Guided);
+    /// let req = array.dist_iter().map(|elem| *elem).sum_with_schedule(Schedule::Guided);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -783,8 +780,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + IterClone
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.dist_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -811,8 +807,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + IterClone
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.dist_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -836,8 +831,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + IterClone
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.dist_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -859,8 +853,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + IterClone
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.dist_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}"));
-    /// array.wait_all();
+    /// array.dist_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
