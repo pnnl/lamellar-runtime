@@ -228,9 +228,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     /// world.block_on(async move {
-    ///     array.read_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
+    ///     let _ = array.read_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
     ///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    ///     });
+    ///     }).spawn();
     ///     array.await_all().await;
     /// });
     /// ```
@@ -259,10 +259,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.blocking_read_local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    /// let _ = array.blocking_read_local_chunks(5).enumerate().for_each(move|(i,chunk)| {
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    /// });
-    /// array.wait_all();
+    /// }).block();
     ///
     /// ```
     pub fn blocking_read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunks<T> {
@@ -299,9 +298,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     /// world.block_on(async move {
-    ///     array.write_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
+    ///     let _ = array.write_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
     ///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    ///     });
+    ///     }).spawn();
     ///     array.await_all().await;
     /// });
     /// ```
@@ -330,9 +329,9 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.blocking_write_local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    /// let _ = array.blocking_write_local_chunks(5).enumerate().for_each(move|(i,chunk)| {
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    /// });
+    /// }).spawn();
     /// array.wait_all();
     ///
     /// ```

@@ -166,7 +166,7 @@ impl<'a, T: Dist> LocalLockLocalData<T> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let local_data = array.read_local_data();
+    /// let local_data = array.blocking_read_local_data();
     /// let sub_data = local_data.clone().into_sub_data(10,20); // clone() essentially increases the references to the read lock by 1.
     /// assert_eq!(local_data[10],sub_data[0]);
     ///```
@@ -653,7 +653,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.local_data();
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_unsafe" call
     /// // but array1 will not be dropped until after 'slice' is dropped.
@@ -701,7 +701,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -745,7 +745,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_global_lock" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -791,7 +791,7 @@ impl<T: Dist + 'static> LocalLockArray<T> {
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = unsafe {array1.local_data()};
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -1178,7 +1178,7 @@ impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block);
-    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.blocking_read_lock();
     /// let prod = array.block_on(read_guard.reduce("prod"));
     ///```
@@ -1213,7 +1213,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block);
-    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.blocking_read_lock();
     /// let sum = array.block_on(read_guard.sum());
     /// ```
@@ -1243,9 +1243,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block);
-    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1));
     /// let read_guard = array.blocking_read_lock();
-    /// let prod = array.block_on(read_guard.prod());
+    /// let prod = array.block_on(read_guard.prod()).expect("array len > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1275,9 +1275,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block);
-    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.blocking_read_lock();
-    /// let max = array.block_on(read_guard.max());
+    /// let max = array.block_on(read_guard.max()).expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1306,9 +1306,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block);
-    /// array.block_on(array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)));
+    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.blocking_read_lock();
-    /// let min = array.block_on(read_guard.min());
+    /// let min = array.block_on(read_guard.min()).expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

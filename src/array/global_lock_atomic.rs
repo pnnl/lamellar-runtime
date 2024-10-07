@@ -200,7 +200,7 @@ impl<T: Dist> GlobalLockLocalData<T> {
     /// let my_pe = world.my_pe();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let local_data = array.blocking_read_lock().local_data();
+    /// let local_data = array.blocking_read_local_data();
     /// let sub_data = local_data.clone().into_sub_data(10,20); // clone() essentially increases the references to the read lock by 1.
     /// assert_eq!(local_data[10],sub_data[0]);
     ///```
@@ -766,7 +766,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.blocking_read_lock().local_data();
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_unsafe" call
     /// // but array1 will not be dropped until after 'slice' is dropped.
@@ -814,7 +814,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.blocking_read_lock().local_data();
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -858,7 +858,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.blocking_read_lock().local_data();
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -904,7 +904,7 @@ impl<T: Dist + 'static> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.blocking_read_lock().local_data();
+    /// let slice = array1.blocking_read_local_data();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
