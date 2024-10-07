@@ -1301,11 +1301,13 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().for_each(move |_| {
+    /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
-    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// }).block();
+    /// world.wait_all();
+    /// world.barrier();
+    /// let sum = array.block_on(array.reduce("sum")).expect("array has length > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1348,11 +1350,13 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().for_each(move |_| {
+    /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
-    /// let sum = array.block_on(array.sum());
+    ///     array_clone.add(index,1); //randomly add one to an element in the array.
+    /// }).block();
+    /// world.wait_all();
+    /// world.barrier();
+    /// let sum = array.block_on(array.sum()).expect("array has length > 0");
     /// assert_eq!(array.len()*num_pes,sum);
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1393,10 +1397,10 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
-    /// });
+    /// }).spawn();
     /// array.wait_all();
     /// array.barrier();
-    /// let prod =  array.block_on(array.prod());
+    /// let prod =  array.block_on(array.prod()).expect("array has length > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1436,8 +1440,8 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
-    /// let max = array.block_on(array.max());
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
+    /// let max = array.block_on(array.max()).expect("array has length > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1478,8 +1482,8 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
-    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
-    /// let min = array.block_on(array.min());
+    /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();;
+    /// let min = array.block_on(array.min()).expect("array has length > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
