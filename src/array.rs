@@ -191,11 +191,11 @@ pub struct ReduceKey {
 crate::inventory::collect!(ReduceKey);
 
 // impl Dist for bool {}
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, isize);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
 // lamellar_impl::generate_reductions_for_type_rt!(false, u128);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 

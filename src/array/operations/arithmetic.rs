@@ -887,7 +887,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<isize>::new(&world,100,Distribution::Block);
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
@@ -1075,7 +1075,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<isize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -1111,7 +1111,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<isize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_sub(indices,10) };
@@ -1149,7 +1149,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<isize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -1188,7 +1188,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<isize>::new(&world,100,Distribution::Block);
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_sub(indices,10) };
