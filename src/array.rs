@@ -1078,7 +1078,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```no_run //assert is for 4 PEs
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<i8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<u8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
     ///
     /// assert_eq!(25,array.num_elems_local());
     ///```
@@ -1221,13 +1221,13 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
-    /// let index = block_array.first_global_index_for_pe(0).unwrap();
+    /// let index = cyclic_array.first_global_index_for_pe(0).unwrap();
     /// assert_eq!(index , 0);
-    /// let index = block_array.first_global_index_for_pe(1).unwrap();
+    /// let index = cyclic_array.first_global_index_for_pe(1).unwrap();
     /// assert_eq!(index , 1);
-    /// let index = block_array.first_global_index_for_pe(2).unwrap();
+    /// let index = cyclic_array.first_global_index_for_pe(2).unwrap();
     /// assert_eq!(index , 2);
-    /// let index = block_array.first_global_index_for_pe(3).unwrap();
+    /// let index = cyclic_array.first_global_index_for_pe(3).unwrap();
     /// assert_eq!(index , 3);
     ///```
     fn first_global_index_for_pe(&self, pe: usize) -> Option<usize>;
@@ -1265,13 +1265,13 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
-    /// let index = block_array.last_global_index_for_pe(0).unwrap();
+    /// let index = cyclic_array.last_global_index_for_pe(0).unwrap();
     /// assert_eq!(index , 12);
-    /// let index = block_array.last_global_index_for_pe(1).unwrap();
+    /// let index = cyclic_array.last_global_index_for_pe(1).unwrap();
     /// assert_eq!(index , 13);
-    /// let index = block_array.last_global_index_for_pe(2).unwrap();
+    /// let index = cyclic_array.last_global_index_for_pe(2).unwrap();
     /// assert_eq!(index , 14);
-    /// let index = block_array.last_global_index_for_pe(3).unwrap();
+    /// let index = cyclic_array.last_global_index_for_pe(3).unwrap();
     /// assert_eq!(index , 15);
     ///```
     fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>;
