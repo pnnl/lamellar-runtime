@@ -557,7 +557,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// world.clone().block_on(async move {
     ///     let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    ///     world.exec_am_all(DarcAm {counter: counter.clone()});
+    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     ///     let guard = counter.read().await;
     ///     println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///     drop(guard); //release the
@@ -630,7 +630,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// world.clone().block_on(async move {
     ///     let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    ///     world.exec_am_all(DarcAm {counter: counter.clone()});
+    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     ///     let mut guard = counter.write().await;
     ///     *guard += my_pe;
     ///     drop(guard); //release the
@@ -700,7 +700,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// world.clone().block_on(async move {
     ///     let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    ///     world.exec_am_all(DarcAm {counter: counter.clone()});
+    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     ///     let mut guard = counter.collective_write().await;
     ///     *guard += my_pe;
     ///     drop(guard); //release the lock
@@ -898,7 +898,7 @@ impl<T> GlobalRwDarc<T> {
     /// let my_pe = world.my_pe();
     ///
     /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let mut guard = counter.blocking_collective_write();
     /// *guard += my_pe;
     /// drop(guard); //release the lock

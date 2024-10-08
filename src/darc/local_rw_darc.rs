@@ -162,7 +162,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let counter = LocalRwDarc::new(&world, 0).unwrap();
-    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let guard = counter.blocking_read();
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
@@ -220,7 +220,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let my_pe = world.my_pe();
     /// world.clone().block_on(async move {
     ///     let counter = LocalRwDarc::new(&world, 0).unwrap();
-    ///     world.exec_am_all(DarcAm {counter: counter.clone()});
+    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     ///     let guard = counter.read().await;
     ///     println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     /// });
@@ -268,7 +268,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let counter = LocalRwDarc::new(&world, 0).unwrap();
-    /// world.exec_am_all(DarcAm {counter: counter.clone()});
+    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let mut guard = counter.blocking_write();
     /// *guard += my_pe;
     ///```
@@ -328,7 +328,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let my_pe = world.my_pe();
     /// world.clone().block_on(async move{
     ///     let counter = LocalRwDarc::new(&world, 0).unwrap();
-    ///     world.exec_am_all(DarcAm {counter: counter.clone()});
+    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     ///     let mut guard = counter.write().await;
     ///     *guard += my_pe;
     /// })

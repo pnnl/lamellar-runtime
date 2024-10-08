@@ -1122,7 +1122,7 @@ pub trait ActiveMessaging {
     /// # }
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
-    /// world.exec_am_all(MyAm{val: world.my_pe()});
+    /// let _ = world.exec_am_all(MyAm{val: world.my_pe()}).spawn();
     /// world.wait_all(); //block until the previous am has finished
     ///```
     fn wait_all(&self);
@@ -1158,7 +1158,7 @@ pub trait ActiveMessaging {
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// let world_clone = world.clone();
     /// world.block_on(async move {
-    ///     world_clone.exec_am_all(MyAm{val: world_clone.my_pe()});
+    ///     let _ = world_clone.exec_am_all(MyAm{val: world_clone.my_pe()}).spawn();
     ///     world_clone.await_all().await; //block until the previous am has finished
     /// });
     ///```

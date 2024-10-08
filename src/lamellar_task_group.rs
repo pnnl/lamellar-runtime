@@ -553,9 +553,9 @@ impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
 /// };
 /// let task_group_1 = LamellarTaskGroup::new(&world); //associate the task group with the world
 /// let task_group_2 = LamellarTaskGroup::new(&even_pes); //we can also associate the task group with a team/sub_team
-/// task_group_1.exec_am_all(MyAm{world_pe,team_pe});
+/// let _ = task_group_1.exec_am_all(MyAm{world_pe,team_pe}).spawn();
 /// for pe in 0..even_pes.num_pes(){
-///    task_group_2.exec_am_pe(pe,MyAm{world_pe,team_pe});
+///    let _ = task_group_2.exec_am_pe(pe,MyAm{world_pe,team_pe}).spawn();
 /// }
 /// task_group_1.wait_all(); //only need to wait for active messages launched with task_group_1 to finish
 /// //do interesting work

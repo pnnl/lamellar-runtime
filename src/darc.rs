@@ -37,7 +37,7 @@
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
 //!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
-//!     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+//!     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
 //!     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 //!     world.wait_all(); // wait for my active message to return
 //!     world.barrier(); //at this point all updates will have been performed
@@ -184,7 +184,7 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 ///     let my_pe = world.my_pe();
 ///     let num_pes = world.num_pes();
 ///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
-///     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+///     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
 ///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 ///     world.wait_all(); // wait for my active message to return
 ///     world.barrier(); //at this point all updates will have been performed

@@ -117,7 +117,7 @@
 //!     let num_pes = world.num_pes();
 //!     let am = HelloWorld { my_pe: my_pe };
 //!     for pe in 0..num_pes{
-//!         world.exec_am_pe(pe,am.clone()); // explicitly launch on each PE
+//!         let _ = world.exec_am_pe(pe,am.clone()).spawn(); // explicitly launch on each PE
 //!     }
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs
@@ -135,11 +135,10 @@
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
-//!     block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
-//!     block_array.wait_all();
+//!     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)).block(); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
 //!     block_array.barrier();
 //!     if my_pe == 0{
-//!         for (i,elem) in block_onesided_iter!($array,array).into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+//!         for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
 //!             println!("i: {} = {})",i,elem);
 //!         }
 //!     }
@@ -171,9 +170,9 @@
 //!     let num_pes = world.num_pes();
 //!     let cnt = Darc::new(&world, AtomicUsize::new(0)).expect("Current PE is in world team");
 //!     for pe in 0..num_pes{
-//!         world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}); // explicitly launch on each PE
+//!         let _ = world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
 //!     }
-//!     world.exec_am_all(DarcAm{cnt: cnt.clone()}); //also possible to execute on every PE with a single call
+//!     let _ = world.exec_am_all(DarcAm{cnt: cnt.clone()}).spawn(); //also possible to execute on every PE with a single call
 //!     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs

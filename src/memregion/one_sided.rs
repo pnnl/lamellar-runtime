@@ -443,7 +443,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).spawn();
     ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
@@ -503,7 +503,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion "){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).spawn();
     ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
@@ -571,7 +571,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
     pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
@@ -627,7 +627,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
     pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::blocking_get(self, self.pe, index, data);
@@ -689,7 +689,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
     pub fn data_local(&self) -> bool {
         if self.pe == self.mr.inner.my_id.1 {
