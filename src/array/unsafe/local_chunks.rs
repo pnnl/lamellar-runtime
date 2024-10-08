@@ -184,9 +184,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    /// let _ = unsafe{array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    /// });
+    /// })}.spawn();
     /// array.wait_all();
     ///
     /// ```
@@ -210,9 +210,11 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
     ///
-    /// array.local_chunks_mut(5).await.enumerate().for_each(move|(i,chunk)| {
-    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    /// });
+    /// unsafe{
+    ///     let _ = array.local_chunks_mut(5).enumerate().for_each(move|(i,chunk)| {
+    ///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    ///     }).spawn();
+    /// }
     /// array.wait_all();
     ///
     /// ```

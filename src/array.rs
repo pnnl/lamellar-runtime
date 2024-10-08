@@ -1392,7 +1392,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// let my_pe = world.my_pe();
     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
+    /// let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
     /// unsafe { // we just created buf and have not shared it so free to mutate safely
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
@@ -1454,10 +1454,9 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
-    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe); //we will used this val as completion detection
-    /// array.wait_all();
+    /// let _ = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe).block(); //we will used this val as completion detection
     /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",array.read_local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.blocking_read_local_data());
     /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
     /// let at_req = array.at(index);
     /// let val = array.block_on(at_req);
@@ -1533,7 +1532,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// let len = buf.len();
-    /// array.dist_iter_mut().for_each(move |elem| *elem = len); //we will used this val as completion detection
+    /// let _ = array.dist_iter_mut().for_each(move |elem| *elem = len).spawn(); //we will used this val as completion detection
     ///
     /// //Safe as we are this is the only reference to buf   
     /// unsafe {
@@ -1546,14 +1545,14 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.blocking_read_local_data());
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     array.block_on( unsafe {  array.put(0,&buf) } );
     ///     println!();
     /// }
     /// array.barrier(); //block other PEs until PE0 has finised "putting" the data
     ///    
-    /// println!("PE{my_pe} array data: {:?}",array.local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.blocking_read_local_data());
     ///     
     ///
     ///```
@@ -1603,10 +1602,13 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
-    /// block_array.dist_iter().zip(cyclic_array.dist_iter()).enumerate().for_each(move |i,(a,b)| {
-    ///     a.store(i);
-    ///     b.store(i);
-    /// });
+    /// let _ = block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i);
+    /// }).spawn();
+    /// let _ =cyclic_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i);
+    /// }).spawn();
+    /// world.wait_all();
     /// block_array.print();
     /// println!();
     /// cyclic_array.print();
@@ -1659,11 +1661,11 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// use rand::Rng;
 ///
 /// let array_clone = array.clone();
-/// array.local_iter().for_each(move |_| {
+/// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
-/// });
-/// let sum = array.block_on(array.sum()); // atomic updates still possibly happening, output non deterministic
+/// }).block();
+/// let sum = array.block_on(array.sum()).expect("array len > 0"); // atomic updates still possibly happening, output non deterministic
 /// println!("sum {sum}");
 ///```
 /// Waiting for local operations to finish not enough by itself
@@ -1679,7 +1681,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// });
 /// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
 /// array.wait_all();
-/// let sum = array.block_on(array.sum()); // atomic updates still possibly happening (on remote nodes), output non deterministic
+/// let sum = array.block_on(array.sum()).expect("array len > 0"); // atomic updates still possibly happening (on remote nodes), output non deterministic
 /// println!("sum {sum}");
 ///```
 /// Need to add a barrier after local operations on all PEs have finished
@@ -1697,7 +1699,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
 /// array.wait_all();
 /// array.barrier();
-/// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
+/// let sum = array.block_on(array.sum()).expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
 /// Alternatively we can convert our AtomicArray into a ReadOnlyArray before the reduction
@@ -1708,12 +1710,12 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let num_pes = world.num_pes();
 /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
 /// let array_clone = array.clone();
-/// let req = array.local_iter().for_each(move |_| {
+/// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
-/// });
+/// }).block();
 /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-/// let sum = array.block_on(array.sum()); // No updates occuring anywhere anymore so we have a deterministic result
+/// let sum = array.block_on(array.sum()).expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
 /// Finally we are inlcuding a `Arc<Vec<AtomicUsize>>` highlightin the same issue
@@ -1772,12 +1774,12 @@ where
     /// let num_pes = world.num_pes();
     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
     /// let array_clone = array.clone();
-    /// let req = array.local_iter().for_each(move |_| {
+    /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     array_clone.add(index,1); //randomly at one to an element in the array.
-    /// });
+    /// }).block();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     fn reduce(&self, reduction: &str) -> Self::Handle;
@@ -1915,18 +1917,18 @@ where
 /// register_reduction!(
 ///     my_sum, // the name of our new reduction
 ///     |acc,elem| acc+elem , //the reduction closure
-///     usize, // will be implementd for usize,f32, and i32
+///     usize, // will be implementd for usize,f32, and u8
 ///     f32,
-///     i32,
+///     u8,
 /// );
 /// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
 /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
 /// let array_clone = array.clone();
-/// let req = array.local_iter().for_each(move |_| {
+/// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     array_clone.add(index,1); //randomly at one to an element in the array.
-/// });
+/// }).block();
 /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
 /// let sum = array.block_on(array.sum());
 /// let my_sum = array.block_on(array.reduce("my_sum")); //pass a &str containing the reduction to use

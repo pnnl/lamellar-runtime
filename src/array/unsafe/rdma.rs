@@ -375,7 +375,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// let buf_len = buf.len();
     /// unsafe {
-    ///     array.dist_iter_mut().for_each(move |elem| *elem = buf_len); //we will used this val as completion detection
+    ///     let _ = array.dist_iter_mut().for_each(move |elem| *elem = buf_len).spawn(); //we will used this val as completion detection
     ///     for (i,elem) in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local")
     ///                          .iter_mut()
@@ -454,7 +454,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i);
+    ///     let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn();
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
     ///         *elem = buf.len(); //we will used this val as completion detection
@@ -530,7 +530,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
+    ///     let _ =array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
     ///         *elem = buf.len();
@@ -596,7 +596,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
-    ///     array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i); //we will used this val as completion detection
+    ///     let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
     ///     for elem in buf.as_mut_slice()
     ///                          .expect("we just created it so we know its local") { //initialize mem_region
     ///         *elem = buf.len();
@@ -669,7 +669,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block);
     /// unsafe {
-    ///     array.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = my_pe); //we will used this val as completion detection
+    ///     let _ = array.dist_iter_mut().enumerate().for_each(move|(i,elem)| *elem = my_pe).spawn(); //we will used this val as completion detection
     ///     array.wait_all();
     ///     array.barrier();
     ///     println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});

@@ -1280,10 +1280,15 @@ impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
     /// let block_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
     /// let cyclic_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
     ///
-    /// block_array.dist_iter().zip(cyclic_array.dist_iter()).enumerate().for_each(move |i,(a,b)| {
-    ///     a.store(i);
-    ///     b.store(i);
-    /// });
+    /// unsafe{
+    ///     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///         *elem = i;
+    ///     }).spawn();
+    ///     let _ = cyclic_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
+    ///         *elem = i;
+    ///     }).spawn();
+    /// }
+    /// world.wait_all();
     /// block_array.print();
     /// println!();
     /// cyclic_array.print();
@@ -1441,12 +1446,12 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// unsafe {
     ///     let req = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
     ///         *elem = i+1;
-    ///     });
+    ///     }).spawn();
     /// }
     /// array.print();
     /// array.wait_all();
     /// array.print();
-    /// let prod = unsafe{ array.block_on(array.prod())};
+    /// let prod = unsafe{ array.block_on(array.prod()).expect("array len > 0")};
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1475,11 +1480,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
     /// let array_clone = array.clone();
-    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
+    /// let _ = unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2).spawn()}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
     /// array.barrier();
     /// let max_req = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// let max = array.block_on(max_req);
+    /// let max = array.block_on(max_req).expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1508,11 +1513,11 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// let num_pes = world.num_pes();
     /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
     /// let array_clone = array.clone();
-    /// unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2)}; //safe as we are accessing in a data parallel fashion
+    /// let _ = unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2).spawn()}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
     /// array.barrier();
     /// let min_req = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// let min = array.block_on(min_req);
+    /// let min = array.block_on(min_req).expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
