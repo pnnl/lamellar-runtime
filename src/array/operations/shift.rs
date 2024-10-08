@@ -67,7 +67,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,4,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 2;
@@ -216,7 +216,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,4,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 2;
@@ -367,7 +367,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,4,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 2;
@@ -516,7 +516,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,4,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
     ///
     /// let idx = 53;
     /// let val = 2;
