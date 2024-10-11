@@ -78,6 +78,8 @@ pub(crate) mod global_rw_darc;
 use global_rw_darc::DistRwLock;
 pub use global_rw_darc::GlobalRwDarc;
 
+pub(crate) mod handle;
+
 static DARC_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[repr(u8)]

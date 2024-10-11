@@ -6,6 +6,7 @@ use crate::array::local_lock_atomic::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
+use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
 use crate::memregion::Dist;
 // use parking_lot::{
 //     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
@@ -23,7 +24,7 @@ impl<T> InnerArray for LocalLockArray<T> {
 #[derive(Clone)]
 pub struct LocalLockDistIter<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<RwLockReadGuardArc<()>>,
+    lock: Arc<LocalRwDarcReadGuard<()>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
@@ -57,7 +58,7 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIter<'a, T> {
 #[derive(Clone)]
 pub struct LocalLockLocalIter<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<RwLockReadGuardArc<()>>,
+    lock: Arc<LocalRwDarcReadGuard<()>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
@@ -184,7 +185,7 @@ impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalIter<'static, T> 
 
 pub struct LocalLockDistIterMut<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<RwLockWriteGuardArc<()>>,
+    lock: Arc<LocalRwDarcWriteGuard<()>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
@@ -216,7 +217,7 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIterMut<'a, T> {
 
 pub struct LocalLockLocalIterMut<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<RwLockWriteGuardArc<()>>,
+    lock: Arc<LocalRwDarcWriteGuard<()>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,

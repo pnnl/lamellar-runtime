@@ -3,6 +3,7 @@ use crate::array::iterator::private::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::LamellarArray;
 use crate::config;
+use crate::darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard};
 use crate::memregion::Dist;
 
 use std::sync::Arc;
@@ -15,8 +16,9 @@ pub struct LocalLockLocalChunks<T: Dist> {
     index: usize,     //global index within the array local data
     end_index: usize, //global index within the array local data
     array: LocalLockArray<T>,
-    lock: LocalRwDarc<()>,
-    lock_guard: Arc<RwLockReadGuardArc<()>>,
+    // lock: LocalRwDarc<()>,
+    // lock_guard: Arc<RwLockReadGuardArc<()>>,
+    lock_guard: Arc<LocalRwDarcReadGuard<()>>,
 }
 
 impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
@@ -26,7 +28,7 @@ impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
             index: self.index,
             end_index: self.end_index,
             array: self.array.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
@@ -40,8 +42,8 @@ pub struct LocalLockLocalChunksMut<T: Dist> {
     index: usize,     //global index within the array local data
     end_index: usize, //global index within the array local data
     array: LocalLockArray<T>,
-    lock: LocalRwDarc<()>,
-    lock_guard: Arc<RwLockWriteGuardArc<()>>,
+    // lock: LocalRwDarc<()>,
+    lock_guard: Arc<LocalRwDarcWriteGuard<()>>,
 }
 
 impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
@@ -51,7 +53,7 @@ impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
             index: self.index,
             end_index: self.end_index,
             array: self.array.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
@@ -61,7 +63,7 @@ impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
 pub struct LocalLockMutChunkLocalData<'a, T: Dist> {
     data: &'a mut [T],
     _index: usize,
-    _lock_guard: Arc<RwLockWriteGuardArc<()>>,
+    _lock_guard: Arc<LocalRwDarcWriteGuard<()>>,
 }
 
 impl<T: Dist> Deref for LocalLockMutChunkLocalData<'_, T> {
@@ -95,7 +97,7 @@ impl<T: Dist> LocalIterator for LocalLockLocalChunks<T> {
             index: new_start_i,
             end_index: end_i,
             array: self.array.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
@@ -160,7 +162,7 @@ impl<T: Dist + 'static> LocalIterator for LocalLockLocalChunksMut<T> {
             index: new_start_i,
             end_index: end_i,
             array: self.array.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: self.lock_guard.clone(),
         }
     }
@@ -241,7 +243,7 @@ impl<T: Dist> LocalLockArray<T> {
             index: 0,
             end_index: 0,
             array: self.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: lock,
         }
     }
@@ -281,7 +283,7 @@ impl<T: Dist> LocalLockArray<T> {
             index: 0,
             end_index: 0,
             array: self.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: lock,
         }
     }
@@ -311,7 +313,7 @@ impl<T: Dist> LocalLockArray<T> {
             index: 0,
             end_index: 0,
             array: self.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: lock,
         }
     }
@@ -352,7 +354,7 @@ impl<T: Dist> LocalLockArray<T> {
             index: 0,
             end_index: 0,
             array: self.clone(),
-            lock: self.lock.clone(),
+            // lock: self.lock.clone(),
             lock_guard: lock,
         }
     }

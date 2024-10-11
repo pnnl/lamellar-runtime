@@ -53,10 +53,6 @@ impl RofiComm {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn new(provider: &str, domain: &str) -> RofiComm {
         if let Some(size) = config().heap_size {
-            // if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
-            // let size = size
-            //     .parse::<usize>()
-            //     .expect("invalid memory size, please supply size in bytes");
             ROFI_MEM.store(size, Ordering::SeqCst);
         }
         rofi_init(provider, domain).expect("error in rofi init");
@@ -641,7 +637,7 @@ impl Drop for RofiComm {
             println!("dropping rofi -- memory in use {:?}", self.occupied());
         }
         if self.alloc.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
         }
         // let _lock = self.comm_mutex.write();
         rofi_barrier();

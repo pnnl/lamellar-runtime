@@ -1,3 +1,4 @@
+use async_lock::futures::ReadArc;
 // use parking_lot::{
 //     lock_api::{ArcRwLockReadGuard, RwLockWriteGuardArc},
 //     RawRwLock, RwLock,
@@ -5,9 +6,17 @@
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
+use std::marker::PhantomData;
 use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use std::{
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll, Waker},
+};
+
+use pin_project::pin_project;
 
 use crate::active_messaging::RemotePtr;
 use crate::config;
@@ -15,7 +24,74 @@ use crate::darc::global_rw_darc::{DistRwLock, GlobalRwDarc};
 use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
+use crate::scheduler::LamellarTask;
 use crate::{IdError, LamellarEnv, LamellarTeam};
+
+use super::handle::{LocalRwDarcReadHandle, LocalRwDarcWriteHandle};
+
+#[derive(Debug)]
+pub struct LocalRwDarcReadGuard<T: 'static> {
+    pub(crate) darc: LocalRwDarc<T>,
+    pub(crate) lock: RwLockReadGuardArc<T>,
+}
+
+impl<T: fmt::Display> fmt::Display for LocalRwDarcReadGuard<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.lock, f)
+    }
+}
+
+impl<T> std::ops::Deref for LocalRwDarcReadGuard<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.lock
+    }
+}
+
+// impl<T> RwDarcGuard<LocalRwDarc<T>> for LocalRwDarcReadGuard<T> {
+//     type Guard = RwLockReadGuardArc<T>;
+//     fn new(darc: LocalRwDarc<T>, lock_guard: Self::Guard) -> Self {
+//         LocalRwDarcReadGuard {
+//             darc,
+//             lock: lock_guard,
+//         }
+//     }
+// }
+
+#[derive(Debug)]
+pub struct LocalRwDarcWriteGuard<T: 'static> {
+    pub(crate) darc: LocalRwDarc<T>,
+    pub(crate) lock: RwLockWriteGuardArc<T>,
+}
+
+impl<T: fmt::Display> fmt::Display for LocalRwDarcWriteGuard<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.lock, f)
+    }
+}
+
+impl<T> std::ops::Deref for LocalRwDarcWriteGuard<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.lock
+    }
+}
+
+impl<T> std::ops::DerefMut for LocalRwDarcWriteGuard<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.lock
+    }
+}
+
+// impl<T> RwDarcGuard<LocalRwDarc<T>> for LocalRwDarcWriteGuard<T> {
+//     type Guard = RwLockWriteGuardArc<T>;
+//     fn new(darc: LocalRwDarc<T>, lock_guard: Self::Guard) -> Self {
+//         LocalRwDarcWriteGuard {
+//             darc,
+//             lock: lock_guard,
+//         }
+//     }
+// }
 
 /// A local read-write `Darc`
 ///
@@ -127,13 +203,11 @@ impl<T> LocalRwDarc<T> {
 
 impl<T: Sync + Send> LocalRwDarc<T> {
     #[doc(alias("One-sided", "onesided"))]
-    /// Aquires a reader lock of this LocalRwDarc local to this PE.
-    ///
-    /// The current THREAD will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while any writer currentl has access to the lock
-    ///
-    /// Returns an RAII guard which will drop the read access of the wrlock when dropped
+    /// Creates a handle for aquiring a reader lock of this LocalRwDarc local to this PE.
+    /// The returned handle must either be await'd `.read().await` within an async context
+    /// or it must be blocked on `.read().block()` in a non async context to actually acquire the lock
+    /// 
+    /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the read access of the wrlock when dropped
     ///
     /// # One-sided Operation
     /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
@@ -163,83 +237,19 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let my_pe = world.my_pe();
     /// let counter = LocalRwDarc::new(&world, 0).unwrap();
     /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
-    /// let guard = counter.blocking_read();
+    /// let guard = counter.read().block(); //we can also explicitly block on the lock in a non async context
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
-    pub fn blocking_read(&self) -> RwLockReadGuardArc<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_read` from within an async context which may lead to deadlock, it is recommended that you use `read().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
-        let self_clone: LocalRwDarc<T> = self.clone();
-        self.darc
-            .team()
-            .block_on(async move { self_clone.darc.read_arc().await })
+    pub fn read(&self) -> LocalRwDarcReadHandle<T> {
+        LocalRwDarcReadHandle::new(self.clone())
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Aquires a reader lock of this LocalRwDarc local to this PE.
-    ///
-    /// The current THREAD will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while any writer currentl has access to the lock
-    ///
-    /// Returns an RAII guard which will drop the read access of the wrlock when dropped
-    ///
-    /// # One-sided Operation
-    /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
-    ///
-    /// # Note
-    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
-    ///
-    /// # Examples
-    ///
-    ///```
-    /// use lamellar::darc::prelude::*;
-    /// use lamellar::active_messaging::prelude::*;
-    /// #[lamellar::AmData(Clone)]
-    /// struct DarcAm {
-    ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
-    /// }
-    ///
-    /// #[lamellar::am]
-    /// impl LamellarAm for DarcAm {
-    ///     async fn exec(self) {
-    ///         let counter = self.counter.read().await; //block until we get the write lock
-    ///         println!("the current counter value on pe {} = {}",lamellar::current_pe,counter);
-    ///     }
-    ///  }
-    /// //-------------
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// world.clone().block_on(async move {
-    ///     let counter = LocalRwDarc::new(&world, 0).unwrap();
-    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
-    ///     let guard = counter.read().await;
-    ///     println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
-    /// });
-    ///```
-    pub async fn read(&self) -> RwLockReadGuardArc<T> {
-        // println!("async trying to get read lock");
-        let lock = self.darc.read_arc().await;
-        // println!("got async read lock");
-        lock
-    }
-
-    #[doc(alias("One-sided", "onesided"))]
-    /// Aquires the writer lock of this LocalRwDarc local to this PE.
-    ///
-    /// The current THREAD will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while another writer or any readers currently have access to the lock
-    ///
-    /// Returns an RAII guard which will drop the write access of the wrlock when dropped
+    /// Creates a handle for aquiring a writer lock of this LocalRwDarc local to this PE.
+    /// The returned handle must either be await'd `.write().await` within an async context
+    /// or it must be blocked on `.write().block()` in a non async context to actually acquire the lock
+    /// 
+    /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the write access of the wrlock when dropped
     ///
     /// # One-sided Operation
     /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
@@ -269,75 +279,12 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let my_pe = world.my_pe();
     /// let counter = LocalRwDarc::new(&world, 0).unwrap();
     /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
-    /// let mut guard = counter.blocking_write();
+    /// let mut  guard = counter.write().block(); //we can also explicitly block on the lock in a non async context
     /// *guard += my_pe;
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
-    pub fn blocking_write(&self) -> RwLockWriteGuardArc<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_write` from within an async context which may lead to deadlock, it is recommended that you use `write().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
-        // println!("trying to get write lock");
-        let self_clone: LocalRwDarc<T> = self.clone();
-        self.darc
-            .team()
-            .block_on(async move { self_clone.darc.write_arc().await })
-    }
-
-    #[doc(alias("One-sided", "onesided"))]
-    ///
-    /// Aquires the writer lock of this LocalRwDarc local to this PE.
-    ///
-    /// The current THREAD will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while another writer or any readers currently have access to the lock
-    ///
-    /// Returns an RAII guard which will drop the write access of the wrlock when dropped
-    ///
-    /// # One-sided Operation
-    /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
-    ///
-    /// # Note
-    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
-    ///
-    /// # Examples
-    ///
-    ///```
-    /// use lamellar::darc::prelude::*;
-    /// use lamellar::active_messaging::prelude::*;
-    /// #[lamellar::AmData(Clone)]
-    /// struct DarcAm {
-    ///     counter: LocalRwDarc<usize>, //each pe has a local atomicusize
-    /// }
-    ///
-    /// #[lamellar::am]
-    /// impl LamellarAm for DarcAm {
-    ///     async fn exec(self) {
-    ///         let mut counter = self.counter.write().await; //block until we get the write lock
-    ///         *counter += 1;
-    ///     }
-    ///  }
-    /// //-------------
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// world.clone().block_on(async move{
-    ///     let counter = LocalRwDarc::new(&world, 0).unwrap();
-    ///     let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
-    ///     let mut guard = counter.write().await;
-    ///     *guard += my_pe;
-    /// })
-    ///```
-    pub async fn write(&self) -> RwLockWriteGuardArc<T> {
-        // println!("async trying to get write lock");
-        let lock = self.darc.write_arc().await;
-        // println!("got async write lock");
-        lock
+    pub fn write(&self) -> LocalRwDarcWriteHandle<T> {
+        LocalRwDarcWriteHandle::new(self.clone())
     }
 }
 
@@ -626,14 +573,7 @@ impl<T> Clone for LocalRwDarc<T> {
 impl<T: fmt::Display + Sync + Send> fmt::Display for LocalRwDarc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let lock: LocalRwDarc<T> = self.clone();
-        fmt::Display::fmt(
-            &self
-                .darc
-                .team()
-                .scheduler
-                .block_on(async move { lock.read().await }),
-            f,
-        )
+        fmt::Display::fmt(&lock.read().block(), f)
     }
 }
 

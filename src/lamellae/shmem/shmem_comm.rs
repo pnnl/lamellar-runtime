@@ -313,10 +313,6 @@ impl ShmemComm {
             Err(_e) => 0,
         };
         if let Some(size) = config().heap_size {
-            //std::env::var("LAMELLAR_MEM_SIZE") {
-            // let size = size
-            //     .parse::<usize>()
-            //     .expect("invalid memory size, please supply size in bytes");
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
 
@@ -431,7 +427,7 @@ impl CommOps for ShmemComm {
         // if let Some(addr) = self.alloc.try_malloc(size) {
         //     Some(addr)
         // } else {
-        //     println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
+        //     println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_HEAP_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
         //     None
         // }
     }
@@ -593,7 +589,7 @@ impl Drop for ShmemComm {
             println!("dropping rofi -- memory in use {:?}", self.occupied());
         }
         if self.alloc.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
         }
     }
 }
