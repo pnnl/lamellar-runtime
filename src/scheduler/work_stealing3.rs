@@ -1,5 +1,7 @@
 use crate::env_var::config;
-use crate::scheduler::{LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus};
+use crate::scheduler::{
+    Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus,
+};
 use crate::MAIN_THREAD;
 
 //use tracing::*;
@@ -142,7 +144,7 @@ pub(crate) struct WorkStealing3 {
 }
 
 impl LamellarExecutor for WorkStealing3 {
-    fn spawn_task<F>(&self, task: F) -> LamellarTask<F::Output>
+    fn spawn_task<F>(&self, task: F, executor: Arc<Executor>) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
@@ -163,6 +165,7 @@ impl LamellarExecutor for WorkStealing3 {
         runnable.schedule();
         LamellarTask {
             task: LamellarTaskInner::LamellarTask(Some(task)),
+            executor,
         }
         // });
     }

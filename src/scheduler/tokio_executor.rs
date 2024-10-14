@@ -1,4 +1,4 @@
-use crate::scheduler::{LamellarExecutor, LamellarTask, LamellarTaskInner};
+use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
 
 use tokio::runtime::Runtime;
 
@@ -11,7 +11,7 @@ pub(crate) struct TokioRt {
 }
 
 impl LamellarExecutor for TokioRt {
-    fn spawn_task<F>(&self, task: F) -> LamellarTask<F::Output>
+    fn spawn_task<F>(&self, task: F, executor: Arc<Executor>) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
@@ -20,6 +20,7 @@ impl LamellarExecutor for TokioRt {
         let task = self.rt.spawn(task);
         LamellarTask {
             task: LamellarTaskInner::TokioTask(task),
+            executor,
         }
         // })
     }

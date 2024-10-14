@@ -205,7 +205,7 @@ impl<T: Dist> GlobalLockLocalData<T> {
     /// let my_pe = world.my_pe();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let local_data = array.read_local_data.block();
+    /// let local_data = array.read_local_data().block();
     /// let sub_data = local_data.clone().into_sub_data(10,20); // clone() essentially increases the references to the read lock by 1.
     /// assert_eq!(local_data[10],sub_data[0]);
     ///```
@@ -358,52 +358,11 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return a global read lock guard on the calling PE
-    // ///
-    // /// this function will block the thread until the lock is acquired
-    // /// Calling within an asynchronous block may lead to deadlock, use [read_lock](self::GlobalLockArray::read_lock) instead.
-    // ///
-    // /// # One-sided Operation
-    // /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
-    // ///
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let read_lock = array.blocking_read_lock();
-    // /// //do interesting work
-    // ///
-    // ///```
-    // pub fn blocking_read_lock(&self) -> GlobalLockReadGuard<T> {
-    //     if std::thread::current().id() != *crate::MAIN_THREAD {
-    //         if let Some(val) = config().blocking_call_warning {
-    //             if val {
-    //                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead!
-    //                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //             }
-    //         } else {
-    //             println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_lock` from within an async context which may lead to deadlock, it is recommended that you use `read_lock().await;` instead!
-    //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //         }
-    //     }
-    //     let self_clone: GlobalLockArray<T> = self.clone();
-    //     self.block_on(async move {
-    //         GlobalLockReadGuard {
-    //             array: self_clone.clone(),
-    //             lock_guard: self_clone.lock.read().await,
-    //         }
-    //     })
-    // }
-
     #[doc(alias("One-sided", "onesided"))]
-    /// Return a global read lock guard on the calling PE
+    /// Return a handle for aquiring a global read lock guard on the calling PE
     ///
-    /// this function will block the calling task until the lock is acquired (but not the calling thread)
+    /// the returned handle must be await'd `.read_lock().await` within an async context or
+    /// it must be blocked on `.read_lock().block()` in a non async context to actually acquire the lock
     ///
     /// # One-sided Operation
     /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
@@ -414,62 +373,23 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// world.block_on(async move {
-    ///     let read_lock = array.read_lock().await;
+    /// let handle = array.read_lock();
+    /// let task = world.spawn(async move {
+    ///     let read_lock = handle.await;
     ///     //do interesting work
     /// });
+    /// array.read_lock().block();
+    /// task.block();
     ///```
     pub fn read_lock(&self) -> GlobalLockReadHandle<T> {
         GlobalLockReadHandle::new(self.clone())
     }
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return a global write lock guard on the calling PE
-    // ///
-    // /// this function will block the thread until the lock is acquired
-    // /// Calling within an asynchronous block may lead to deadlock, use [write_lock](self::GlobalLockArray::write_lock) instead.
-    // ///
-    // /// # One-sided Operation
-    // /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
-    // ///
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let write_lock = array.blocking_write_lock();
-    // /// //do interesting work
-    // ///
-    // ///```
-    // pub fn blocking_write_lock(&self) -> GlobalLockWriteGuard<T> {
-    //     if std::thread::current().id() != *crate::MAIN_THREAD {
-    //         if let Some(val) = config().blocking_call_warning {
-    //             if val {
-    //                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead!
-    //                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //             }
-    //         } else {
-    //             println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_lock` from within an async context which may lead to deadlock, it is recommended that you use `write_lock().await;` instead!
-    //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //         }
-    //     }
-    //     let self_clone: GlobalLockArray<T> = self.clone();
-    //     self.block_on(async move {
-    //         GlobalLockWriteGuard {
-    //             array: self_clone.clone(),
-    //             lock_guard: self_clone.lock.write().await,
-    //         }
-    //     })
-    // }
-
     #[doc(alias("One-sided", "onesided"))]
-    /// Return a global write lock guard on the calling PE
+    /// Return a handle for aquiring a global write lock guard on the calling PE
     ///
-    /// this function will block the calling task until the lock is acquired (but not the calling thread)
+    /// The returned handle must be await'd `.write_lock().await` within an async context or
+    /// it must be blocked on `.write_lock().block()` in a non async context to actually acquire the lock
     ///
     /// # One-sided Operation
     /// Only explictly requires the calling PE, although the global lock may be managed by other PEs
@@ -480,67 +400,23 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    ///
-    /// world.block_on(async move {
-    ///     let write_lock = array.write_lock().await;
+    /// let handle = array.write_lock();
+    /// let task = world.spawn(async move {
+    ///     let write_lock = handle.await;
     ///     //do interesting work
     /// });
+    /// array.write_lock().block();
+    /// task.block();
     ///```
     pub fn write_lock(&self) -> GlobalLockWriteHandle<T> {
         GlobalLockWriteHandle::new(self.clone())
     }
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.
-    // ///
-    // /// Calling this function will result in a local read lock being captured on the array
-    // ///
-    // /// This function is blocking and intended to be called from non asynchronous contexts.
-    // /// Calling within an asynchronous block may lead to deadlock.
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.read_local_data.block();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn blocking_read_local_data(&self) -> GlobalLockLocalData<T> {
-    //     if std::thread::current().id() != *crate::MAIN_THREAD {
-    //         if let Some(val) = config().blocking_call_warning {
-    //             if val {
-    //                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead!
-    //                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //             }
-    //         } else {
-    //             println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_read_local_data` from within an async context which may lead to deadlock, it is recommended that you use `read_local_data().await;` instead!
-    //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //         }
-    //     }
-    //     let self_clone: GlobalLockArray<T> = self.clone();
-    //     self.block_on(async move {
-    //         GlobalLockLocalData {
-    //             array: self_clone.clone(),
-    //             start_index: 0,
-    //             end_index: self_clone.array.num_elems_local(),
-    //             // lock: self_clone.lock.clone(),
-    //             lock_guard: self_clone.lock.read().await,
-    //         }
-    //     })
-    // }
-
     #[doc(alias("One-sided", "onesided"))]
-    /// Return the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.   
+    /// Return a handle for accessing the calling PE's local data as a [GlobalLockLocalData], which allows safe immutable access to local elements.   
     ///
-    /// Calling this function will result in a local read lock being captured on the array
-    ///
-    /// This version is intended to be used within asynchronous contexts to prevent blocking the worker threads
+    /// The returned handle must be await'd `.read_local_data().await` within an async context or
+    /// it must be blocked on `.read_local_data().block()` in a non async context to actually acquire the lock
     ///
     /// # One-sided Operation
     /// Only returns local data on the calling PE
@@ -550,12 +426,15 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// world.clone().block_on(async move {
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    /// let local_data = array.read_local_data().await;
-    /// println!("PE{my_pe} data: {local_data:?}");
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.read_local_data();
+    /// world.spawn(async move {
+    ///     let local_data = handle.await;
+    ///     println!("PE{my_pe} data: {local_data:?}");
     /// });
+    /// let local_data = array.read_local_data().block();
+    /// println!("PE{my_pe} data: {local_data:?}");
     ///```
     pub fn read_local_data(&self) -> GlobalLockLocalDataHandle<T> {
         GlobalLockLocalDataHandle {
@@ -567,59 +446,11 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the calling PE's local data as a [GlobalLockMutLocalData], which allows safe mutable access to local elements.
-    // ///
-    // /// Calling this function will result in the global write lock being captured on the array.
-    // ///.
-    // /// This function is blocking and intended to be called from non asynchronous contexts.
-    // /// Calling within an asynchronous block may lead to deadlock.
-    // ///
-    // /// # One-sided Operation
-    // /// Only returns (mutable) local data on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.blocking_write_local_data();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn blocking_write_local_data(&self) -> GlobalLockMutLocalData<T> {
-    //     if std::thread::current().id() != *crate::MAIN_THREAD {
-    //         if let Some(val) = config().blocking_call_warning {
-    //             if val {
-    //                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead!
-    //                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //             }
-    //         } else {
-    //             println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `write_local_data().await;` instead!
-    //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //         }
-    //     }
-    //     let self_clone: GlobalLockArray<T> = self.clone();
-    //     self.block_on(async move {
-    //         let lock = self_clone.lock.write().await;
-    //         let data = GlobalLockMutLocalData {
-    //             array: self_clone.clone(),
-    //             start_index: 0,
-    //             end_index: self_clone.array.num_elems_local(),
-    //             lock_guard: lock,
-    //         };
-    //         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-    //         data
-    //     })
-    // }
-
     #[doc(alias("One-sided", "onesided"))]
-    /// Return the calling PE's local data as a [GlobalLockMutLocalData], which allows safe mutable access to local elements.   
+    /// Return a handle for accessing the calling PE's local data as a  [GlobalLockMutLocalData], which allows safe mutable access to local elements.   
     ///
-    /// Calling this function will result in the global write lock being captured on the array
-    ///
-    /// This version is intended to be used within asynchronous contexts to prevent blocking the worker threads
+    /// The returned handle must be await'd `.write_local_data().await` within an async context or
+    /// it must be blocked on `.write_local_data().block()` in a non async context to actually acquire the lock
     ///
     /// # One-sided Operation
     /// Only returns (mutable) local data on the calling PE
@@ -629,12 +460,15 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// world.clone().block_on(async move {
-    ///     let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    ///     let local_data = array.write_local_data().await;
-    ///     println!("PE{my_pe} data: {local_data:?}");
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.write_local_data();
+    /// world.spawn(async move {
+    ///     let mut local_data = handle.await;
+    ///     local_data.iter_mut().for_each(|elem| *elem += my_pe);
     /// });
+    /// let mut local_data = array.write_local_data().block();
+    /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     pub fn write_local_data(&self) -> GlobalLockMutLocalDataHandle<T> {
         GlobalLockMutLocalDataHandle {
@@ -645,55 +479,12 @@ impl<T: Dist> GlobalLockArray<T> {
         }
     }
 
-    // /// Return the calling PE's local data as a [GlobalLockMutLocalData], which allows safe mutable access to local elements.
-    // ///
-    // /// Calling this function will result in the collective write lock being captured on the array
-    // ///
-    // /// # Collective Operation
-    // /// All PEs associated with this array must enter the call, otherwise deadlock will occur.
-    // /// Upon return every PE will hold a special collective write lock so that they can all access their local data simultaneous
-    // /// This lock prevents any other access from occuring on the array until it is dropped on all the PEs.
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
-    // ///
-    // /// let local_data = array.blocking_collective_write_local_data();
-    // /// println!("PE{my_pe} data: {local_data:?}");
-    // ///```
-    // pub fn blocking_collective_write_local_data(&self) -> GlobalLockCollectiveMutLocalData<T> {
-    //     if std::thread::current().id() != *crate::MAIN_THREAD {
-    //         if let Some(val) = config().blocking_call_warning {
-    //             if val {
-    //                 println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_collective_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `collective_write_local_data().await;` instead!
-    //                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //             }
-    //         } else {
-    //             println!("[LAMELLAR WARNING] You are calling `GlobalLockArray::blocking_collective_write_local_data` from within an async context which may lead to deadlock, it is recommended that you use `collective_write_local_data().await;` instead!
-    //             Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-    //         }
-    //     }
-    //     let self_clone: GlobalLockArray<T> = self.clone();
-    //     self.block_on(async move {
-    //         let lock = self_clone.lock.collective_write().await;
-    //         let data = GlobalLockCollectiveMutLocalData {
-    //             array: self_clone.clone(),
-    //             start_index: 0,
-    //             end_index: self_clone.array.num_elems_local(),
-    //             _lock_guard: lock,
-    //         };
-    //         // println!("got lock! {:?} {:?}",std::thread::current().id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH));
-    //         data
-    //     })
-    // }
-
     #[doc(alias("Collective"))]
-    /// Return the calling PE's local data as a [GlobalLockMutLocalData], which allows safe mutable access to local elements.   
+    /// Return a handle for accessing the calling PE's local data as a [GlobalLockMutLocalData], which allows safe mutable access to local elements.   
+    /// All PEs associated with the array must call this function in order to access their own local data simultaneously
     ///
-    /// Calling this function will result in the collective write lock being captured on the array
+    /// The returned handle must be await'd `.collective_write_local_data().await` within an async context or
+    /// it must be blocked on `.collective_write_local_data().block()` in a non async context to actually acquire the lock
     ///
     /// # Collective Operation
     /// All PEs associated with this array must enter the call, otherwise deadlock will occur.
@@ -705,12 +496,16 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// world.clone().block_on(async move {
-    ///    let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
-    ///    let local_data = array.collective_write_local_data().await;
-    ///    println!("PE{my_pe} data: {local_data:?}");
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.collective_write_local_data();
+    /// world.block_on(async move {
+    ///     let mut local_data = handle.await;
+    ///     local_data.iter_mut().for_each(|elem| *elem += my_pe);
     /// });
+    /// let mut local_data = array.collective_write_local_data().block();
+    /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
+    ///```
     ///```
     pub fn collective_write_local_data(&self) -> GlobalLockCollectiveMutLocalDataHandle<T> {
         GlobalLockCollectiveMutLocalDataHandle {
@@ -759,7 +554,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.read_local_data.block();
+    /// let slice = array1.read_local_data().block();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_unsafe" call
     /// // but array1 will not be dropped until after 'slice' is dropped.
@@ -807,7 +602,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.read_local_data.block();
+    /// let slice = array1.read_local_data().block();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -851,7 +646,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.read_local_data.block();
+    /// let slice = array1.read_local_data().block();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_read_only" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -897,7 +692,7 @@ impl<T: Dist + 'static> GlobalLockArray<T> {
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     ///
     /// let array1 = array.clone();
-    /// let slice = array1.read_local_data.block();
+    /// let slice = array1.read_local_data().block();
     ///
     /// // no borrows to this specific instance (array) so it can enter the "into_atomic" call
     /// // but array1 will not be dropped until after mut_slice is dropped.
@@ -1284,7 +1079,7 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
-    /// let read_guard = array.blocking_read_lock();
+    /// let read_guard = array.read_lock().block();
     /// let prod = array.block_on(read_guard.reduce("prod")).expect("array has > 0 elements");
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1317,7 +1112,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
-    /// let read_guard = array.blocking_read_lock();
+    /// let read_guard = array.read_lock().block();
     /// let sum = array.block_on(read_guard.sum()).expect("array has > 0 elements");
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1345,7 +1140,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1));
-    /// let read_guard = array.blocking_read_lock();
+    /// let read_guard = array.read_lock().block();
     /// let prod = array.block_on(read_guard.prod()).expect("array has > 0 elements");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
@@ -1375,7 +1170,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
-    /// let read_guard = array.blocking_read_lock();
+    /// let read_guard = array.read_lock().block();
     /// let max = array.block_on(read_guard.max()).expect("array has > 0 elements");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
@@ -1404,7 +1199,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
-    /// let read_guard = array.blocking_read_lock();
+    /// let read_guard = array.read_lock().block();
     /// let min = array.block_on(read_guard.min()).expect("array has > 0 elements");
     /// assert_eq!(0,min);
     ///```

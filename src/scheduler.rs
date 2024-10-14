@@ -98,6 +98,22 @@ pub enum ExecutorType {
 pub struct LamellarTask<T> {
     #[pin]
     task: LamellarTaskInner<T>,
+    executor: Arc<Executor>,
+}
+
+impl<T> LamellarTask<T> {
+    pub fn block(self) -> T {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            println!(
+                "[LAMELLAR WARNING] trying to call block on within a worker thread {:?} this may result in deadlock.
+                Typically this means you are running within an async context. If you have something like:
+                world.block_on(my_future) you can simply change to my_future.await. If this is not the case,
+                please file an issue on github.",
+                std::backtrace::Backtrace::capture()
+            )
+        }
+        self.executor.clone().block_on(self)
+    }
 }
 
 impl<T> Future for LamellarTask<T> {
@@ -156,7 +172,7 @@ impl<T> Future for LamellarTaskInner<T> {
 
 #[enum_dispatch]
 pub(crate) trait LamellarExecutor {
-    fn spawn_task<F>(&self, future: F) -> LamellarTask<F::Output>
+    fn spawn_task<F>(&self, future: F, executor: Arc<Executor>) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send;
@@ -384,7 +400,7 @@ impl Scheduler {
             num_tasks.fetch_sub(1, Ordering::Relaxed);
             result
         };
-        self.executor.spawn_task(future)
+        self.executor.spawn_task(future, self.executor.clone())
     }
 
     pub(crate) fn submit_task<F>(&self, task: F)

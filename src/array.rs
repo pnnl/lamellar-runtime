@@ -1456,7 +1456,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
     /// let _ = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe).block(); //we will used this val as completion detection
     /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",array.blocking_read_local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
     /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
     /// let at_req = array.at(index);
     /// let val = array.block_on(at_req);
@@ -1545,14 +1545,14 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",array.blocking_read_local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     array.block_on( unsafe {  array.put(0,&buf) } );
     ///     println!();
     /// }
     /// array.barrier(); //block other PEs until PE0 has finised "putting" the data
     ///    
-    /// println!("PE{my_pe} array data: {:?}",array.blocking_read_local_data());
+    /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
     ///     
     ///
     ///```
