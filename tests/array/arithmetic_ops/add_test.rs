@@ -64,7 +64,7 @@ macro_rules! check_val {
 
 macro_rules! onesided_iter {
     (GlobalLockArray,$array:ident) => {
-        $array.blocking_read_lock().onesided_iter()
+        $array.read_lock().block().onesided_iter()
     };
     ($arraytype:ident,$array:ident) => {
         $array.onesided_iter()
@@ -475,7 +475,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,"LocalLockArray<T>");
             // LocalLockArray<T>------------------------------
             #[allow(unused_unsafe)]
-            let _ =  unsafe{ array.batch_add(&input_array.blocking_read_local_data(),1).spawn()};
+            let _ =  unsafe{ array.batch_add(&input_array.read_local_data().block(),1).spawn()};
             check_results!($array,array,num_pes,"&LocalLockArray<T>");
             println!("passed &LocalLockArray<T>");
 
@@ -485,7 +485,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,"GlobalLockArray<T>");
             // GlobalLockArray<T>------------------------------
             #[allow(unused_unsafe)]
-            let _ =  unsafe{ array.batch_add(&input_array.blocking_read_local_data(),1).spawn()};
+            let _ =  unsafe{ array.batch_add(&input_array.read_local_data().block(),1).spawn()};
             check_results!($array,array,num_pes,"&GlobalLockArray<T>");
             println!("passed &GlobalLockArray<T>");
        }

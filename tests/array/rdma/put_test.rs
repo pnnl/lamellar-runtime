@@ -46,7 +46,7 @@ macro_rules! initialize_array {
 
 macro_rules! onesided_iter {
     (GlobalLockArray,$array:ident) => {
-        $array.blocking_read_lock().onesided_iter()
+        $array.read_lock().block().onesided_iter()
     };
     ($arraytype:ident,$array:ident) => {
         $array.onesided_iter()

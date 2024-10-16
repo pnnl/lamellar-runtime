@@ -3,6 +3,7 @@ use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInn
 use tokio::runtime::Runtime;
 
 use futures_util::Future;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct TokioRt {

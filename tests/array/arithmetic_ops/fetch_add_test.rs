@@ -92,7 +92,7 @@ macro_rules! max_updates {
 
 macro_rules! onesided_iter {
     (GlobalLockArray,$array:ident) => {
-        $array.blocking_read_lock().onesided_iter()
+        $array.read_lock().block().onesided_iter()
     };
     ($arraytype:ident,$array:ident) => {
         $array.onesided_iter()
@@ -102,7 +102,8 @@ macro_rules! onesided_iter {
 macro_rules! buffered_onesided_iter {
     (GlobalLockArray,$array:ident) => {
         $array
-            .blocking_read_lock()
+            .read_lock()
+            .block()
             .buffered_onesided_iter($array.len())
     };
     ($arraytype:ident,$array:ident) => {
@@ -586,7 +587,7 @@ macro_rules! input_test{
             //  check_results!($array,array,num_pes,reqs,"LocalLockArray<T>");
             // LocalLockArray<T>------------------------------
             let mut reqs = vec![];
-            let local_data = input_array.blocking_read_local_data();
+            let local_data = input_array.read_local_data().block();
             // println!("local lock array len: {:?}", local_data.deref());
             #[allow(unused_unsafe)]
             reqs.push(unsafe{array.batch_fetch_add(&local_data,1)});
@@ -602,7 +603,7 @@ macro_rules! input_test{
             // GlobalLockArray<T>------------------------------
             let mut reqs = vec![];
             #[allow(unused_unsafe)]
-            reqs.push(unsafe{array.batch_fetch_add(&input_array.blocking_read_local_data(),1)});
+            reqs.push(unsafe{array.batch_fetch_add(&input_array.read_local_data().block(),1)});
             check_results!($array,array,num_pes,reqs,"&GlobalLockArray<T>");
        }
     }

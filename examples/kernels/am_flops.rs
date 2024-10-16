@@ -150,7 +150,7 @@ fn main() {
         //     let cur_t = timer.elapsed().as_secs_f64();
         //     let tot_flop: usize = reqs
         //         .iter()
-        //         .map(|r| r.blocking_wait().iter().map(|r| r.unwrap()).sum::<usize>())
+        //         .map(|r| r.block().iter().map(|r| r.unwrap()).sum::<usize>())
         //         .sum();
         //     let task_granularity = ((cur_t * 24f64) / num_tasks as f64) * 1000.0f64;
         //     if my_pe == 0 {

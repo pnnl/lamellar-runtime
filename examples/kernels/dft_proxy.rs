@@ -786,7 +786,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().blocking_wait(),
+            //         full_spectrum_array.sum().block(),
             //         time
             //     );
             // }
@@ -807,7 +807,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().blocking_wait(),
+            //         full_spectrum_array.sum().block(),
             //         time
             //     );
             // }
@@ -857,7 +857,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().blocking_wait(),
+            //         full_spectrum_array.sum().block(),
             //         time
             //     );
             // }

@@ -67,7 +67,7 @@ fn main() {
         let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                let local_data = array.blocking_read_local_data();
+                let local_data = array.read_local_data().block();
                 while *(&local_data[(j + num_bytes as usize) - 1]) == 255 as u8 {
                     println!(
                         "this should not happen {:?}",

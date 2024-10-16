@@ -27,7 +27,9 @@ use crate::lamellar_team::IntoLamellarTeam;
 use crate::scheduler::LamellarTask;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
-use super::handle::{LocalRwDarcReadHandle, LocalRwDarcWriteHandle};
+use super::handle::{
+    IntoDarcHandle, IntoGlobalRwDarcHandle, LocalRwDarcReadHandle, LocalRwDarcWriteHandle,
+};
 
 #[derive(Debug)]
 pub struct LocalRwDarcReadGuard<T: 'static> {
@@ -160,7 +162,7 @@ impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
 }
 
 impl<T> LocalRwDarc<T> {
-    fn inner(&self) -> &DarcInner<Arc<RwLock<T>>> {
+    pub(crate) fn inner(&self) -> &DarcInner<Arc<RwLock<T>>> {
         self.darc.inner()
     }
 
@@ -206,7 +208,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// Creates a handle for aquiring a reader lock of this LocalRwDarc local to this PE.
     /// The returned handle must either be await'd `.read().await` within an async context
     /// or it must be blocked on `.read().block()` in a non async context to actually acquire the lock
-    /// 
+    ///
     /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the read access of the wrlock when dropped
     ///
     /// # One-sided Operation
@@ -248,7 +250,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// Creates a handle for aquiring a writer lock of this LocalRwDarc local to this PE.
     /// The returned handle must either be await'd `.write().await` within an async context
     /// or it must be blocked on `.write().block()` in a non async context to actually acquire the lock
-    /// 
+    ///
     /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the write access of the wrlock when dropped
     ///
     /// # One-sided Operation
@@ -327,13 +329,14 @@ impl<T> LocalRwDarc<T> {
     #[doc(alias = "Collective")]
     /// Converts this LocalRwDarc into a [GlobalRwDarc]
     ///
-    /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
+    /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
+    /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
+    /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -344,103 +347,21 @@ impl<T> LocalRwDarc<T> {
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_globaldarc = world.block_on(async move {five.into_globalrw().await});
     /// ```
-    pub async fn into_globalrw(self) -> GlobalRwDarc<T> {
-        let inner = self.inner();
-        // println!("into_darc");
-        // self.print();
-        DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                    .expect("invalid darc pointer"),
-            },
-            DarcMode::GlobalRw,
-            0,
-        )
-        .await;
-        // println!("after block on outstanding");
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-        let mut arc_item = unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<T>>)).clone() };
-        let item: T = loop {
-            arc_item = match Arc::try_unwrap(arc_item) {
-                Ok(item) => break item.into_inner(),
-                Err(arc_item) => arc_item,
-            };
+    pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {
+        let wrapped_inner = WrappedInner {
+            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                .expect("invalid darc pointer"),
         };
-        let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<DistRwLock<T>>,
-            src_pe: self.darc.src_pe,
-            // phantom: PhantomData,
-        };
-        d.inner_mut()
-            .update_item(Box::into_raw(Box::new(DistRwLock::new(
-                item,
-                self.inner().team(),
-            ))));
-        GlobalRwDarc { darc: d }
-    }
-
-    #[doc(alias = "Collective")]
-    /// Converts this LocalRwDarc into a [GlobalRwDarc]
-    ///
-    /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
-    ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
-    ///
-    /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
-    ///
-    /// # Examples
-    /// ```
-    /// use lamellar::darc::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    ///
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
-    /// let five_as_globaldarc = five.blocking_into_globalrw();
-    /// ```
-    pub fn blocking_into_globalrw(self) -> GlobalRwDarc<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_into_globalrw` from within an async context which may lead to deadlock, it is recommended that you use `into_globalrw().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
+        let team = self.darc.inner().team().clone();
+        IntoGlobalRwDarcHandle {
+            darc: self.into(),
+            team,
+            outstanding_future: Box::pin(DarcInner::block_on_outstanding(
+                wrapped_inner,
+                DarcMode::GlobalRw,
+                0,
+            )),
         }
-        let inner = self.inner();
-        // println!("into_darc");
-        // self.print();
-        inner.team().block_on(DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                    .expect("invalid darc pointer"),
-            },
-            DarcMode::GlobalRw,
-            0,
-        ));
-        // println!("after block on outstanding");
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-        let mut arc_item = unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<T>>)).clone() };
-        let item: T = loop {
-            arc_item = match Arc::try_unwrap(arc_item) {
-                Ok(item) => break item.into_inner(),
-                Err(arc_item) => arc_item,
-            };
-        };
-        let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<DistRwLock<T>>,
-            src_pe: self.darc.src_pe,
-            // phantom: PhantomData,
-        };
-        d.inner_mut()
-            .update_item(Box::into_raw(Box::new(DistRwLock::new(
-                item,
-                self.inner().team(),
-            ))));
-        GlobalRwDarc { darc: d }
     }
 }
 
@@ -448,13 +369,14 @@ impl<T: Send + Sync> LocalRwDarc<T> {
     #[doc(alias = "Collective")]
     /// Converts this LocalRwDarc into a regular [Darc]
     ///
-    /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
+    /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
+    /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -463,101 +385,21 @@ impl<T: Send + Sync> LocalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     ///
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
-    /// let five_as_darc = world.block_on(async move {five.into_darc()});
+    /// let five_as_darc = five.into_darc().block();
     /// ```
-    pub async fn into_darc(self) -> Darc<T> {
-        let inner = self.inner();
-        // println!("into_darc");
-        // self.print();
-        DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                    .expect("invalid darc pointer"),
-            },
-            DarcMode::Darc,
-            0,
-        )
-        .await;
-        // println!("after block on outstanding");
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-                                                        // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<T>>).into_inner() };
-        let mut arc_item = unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<T>>)).clone() };
-
-        let item: T = loop {
-            arc_item = match Arc::try_unwrap(arc_item) {
-                Ok(item) => break item.into_inner(),
-                Err(arc_item) => arc_item,
-            };
+    pub fn into_darc(self) -> IntoDarcHandle<T> {
+        let wrapped_inner = WrappedInner {
+            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                .expect("invalid darc pointer"),
         };
-        let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<T>,
-            src_pe: self.darc.src_pe,
-            // phantom: PhantomData,
-        };
-        d.inner_mut().update_item(Box::into_raw(Box::new(item))); //the darc will free this approriately
-        d
-    }
-
-    #[doc(alias = "Collective")]
-    /// Converts this LocalRwDarc into a regular [Darc]
-    ///
-    /// This is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
-    ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
-    ///
-    /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
-    ///
-    /// # Examples
-    /// ```
-    /// use lamellar::darc::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    ///
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
-    /// let five_as_darc = five.blocking_into_darc();
-    /// ```
-    pub fn blocking_into_darc(self) -> Darc<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalRwDarc::blocking_into_darc` from within an async context which may lead to deadlock, it is recommended that you use `into_darc().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
+        let team = self.darc.inner().team().clone();
+        IntoDarcHandle {
+            darc: self.into(),
+            team,
+            outstanding_future: Box::pin(async move {
+                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::Darc, 0).await;
+            }),
         }
-        let inner = self.inner();
-        // println!("into_darc");
-        // self.print();
-        inner.team().block_on(DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                    .expect("invalid darc pointer"),
-            },
-            DarcMode::Darc,
-            0,
-        ));
-        // println!("after block on outstanding");
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-                                                        // let item = unsafe { Box::from_raw(inner.item as *mut Arc<RwLock<T>>).into_inner() };
-        let mut arc_item = unsafe { (*Box::from_raw(inner.item as *mut Arc<RwLock<T>>)).clone() };
-
-        let item: T = loop {
-            arc_item = match Arc::try_unwrap(arc_item) {
-                Ok(item) => break item.into_inner(),
-                Err(arc_item) => arc_item,
-            };
-        };
-        let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<T>,
-            src_pe: self.darc.src_pe,
-            // phantom: PhantomData,
-        };
-        d.inner_mut().update_item(Box::into_raw(Box::new(item))); //the darc will free this approriately
-        d
     }
 }
 

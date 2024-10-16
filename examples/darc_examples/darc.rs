@@ -56,10 +56,10 @@ fn main() {
     ));
 
     let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
-    let read_lock = global_darc.blocking_read();
+    let read_lock = global_darc.read().block();
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
-    let write_lock = global_darc.blocking_write();
+    let write_lock = global_darc.write().block();
     println!("I have the write lock!!!! {:?}", my_pe);
     std::thread::sleep(std::time::Duration::from_secs(1));
     drop(write_lock);
@@ -100,7 +100,7 @@ fn main() {
             tg.add_am_all(darc_am);
             team.block_on(tg.exec());
         } else {
-            *local_darc.blocking_write() += 1;
+            *local_darc.write().block() += 1;
         }
     }
     // --------

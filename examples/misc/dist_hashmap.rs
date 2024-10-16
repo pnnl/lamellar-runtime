@@ -112,6 +112,6 @@ fn main() {
     world.barrier();
     println!(
         "[{my_pe}] local data: {:?}",
-        distributed_map.data.blocking_read()
+        distributed_map.data.read().block()
     );
 }
