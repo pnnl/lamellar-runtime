@@ -44,11 +44,11 @@ for toolchain in stable; do #nightly; do
         fi
       cd ..
       sleep 2
-      cur_tasks=`squeue -u frie869 | wc -l`
-      running_tasks=`squeue -u frie869 | grep " R " | wc -l`
+      cur_tasks=`squeue -u frie869 | grep frie869 |wc -l`
+      running_tasks=`squeue -u frie869 | grep frie869| grep " R " | wc -l`
       while [ $((cur_tasks+running_tasks)) -gt 6 ]; do
-        cur_tasks=`squeue -u frie869 | wc -l`
-        running_tasks=`squeue -u frie869 | grep " R " | wc -l`
+        cur_tasks=`squeue -u frie869 | grep frie869 | wc -l`
+        running_tasks=`squeue -u frie869 | grep frie869 | grep " R " | wc -l`
         sleep 5
       done   
       # fi   

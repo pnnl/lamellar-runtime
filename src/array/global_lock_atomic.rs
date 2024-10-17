@@ -996,15 +996,17 @@ impl<T: Dist + std::fmt::Debug> GlobalLockArray<T> {
     ///```
     pub fn print(&self) {
         self.barrier();
-        let _guard = self.read_local_data();
+        // println!("printing array");
+        let _guard = self.read_local_data().block();
         self.array.print();
+        // println!("done printing array");
     }
 }
 
 impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
     fn print(&self) {
         self.barrier();
-        let _guard = self.read_local_data();
+        let _guard = self.read_local_data().block();
         self.array.print()
     }
 }

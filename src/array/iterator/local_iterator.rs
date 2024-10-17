@@ -766,8 +766,8 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
     /// If the number of elements is not evenly divisible by `size`, the last chunk may be shorter than `size`
     ///
     /// # Note
-    /// If calling this on a LocalLockArray it may be possible to call [blocking_read_local_chunks](crate::array::LocalLockArray::blocking_read_local_chunks), [read_local_chunks](crate::array::LocalLockArray::read_local_chunks)
-    /// [blocking_write_local_chunks](crate::array::LocalLockArray::blocking_write_local_chunks), or [write_local_chunks](crate::array::LocalLockArray::blocking_write_local_chunks) for better performance
+    /// If calling this on a LocalLockArray it may be possible to call  [read_local_chunks](crate::array::LocalLockArray::read_local_chunks)
+    /// or [write_local_chunks](crate::array::LocalLockArray::write_local_chunks) for better performance
     ///
     /// If calling this on an UnsafeArray it may be possible to call [local_chunks](crate::array::UnsafeArray::local_chunks) or [local_chunks_mut](crate::array::UnsafeArray::local_chunks_mut)
     ///

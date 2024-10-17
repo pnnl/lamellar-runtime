@@ -109,7 +109,7 @@ fn main() {
     // drop(darc2);
     // drop(wrapped);
     println!("changing darc type");
-    let ro_darc = global_darc.blocking_into_localrw().blocking_into_darc(); // we can call into_darc directly on global_Darc, but string the operations for testing purposes
+    let ro_darc = global_darc.into_localrw().block().into_darc().block(); // we can call into_darc directly on global_Darc, but string the operations for testing purposes
     println!("read only darc");
     ro_darc.print();
     println!("done");

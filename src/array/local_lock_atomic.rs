@@ -3,8 +3,8 @@ pub(crate) mod local_chunks;
 pub use local_chunks::{LocalLockLocalChunks, LocalLockLocalChunksMut};
 mod handle;
 use handle::{
-    LocalLockLocalDataHandle, LocalLockMutLocalDataHandle, LocalLockReadHandle,
-    LocalLockWriteHandle,
+    LocalLockLocalChunksHandle, LocalLockLocalChunksMutHandle, LocalLockLocalDataHandle,
+    LocalLockMutLocalDataHandle, LocalLockReadHandle, LocalLockWriteHandle,
 };
 pub(crate) mod operations;
 mod rdma;

@@ -366,9 +366,9 @@ path="examples/array_examples/global_lock_array.rs"
 name="histo"
 path="examples/array_examples/histo.rs"
 
-[[example]]
-name="single_pe_array"
-path="examples/array_examples/single_pe_array.rs"
+#[[example]]
+#name="single_pe_array"
+#path="examples/array_examples/single_pe_array.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]

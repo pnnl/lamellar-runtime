@@ -10,7 +10,10 @@ use crate::LocalLockArray;
 use futures_util::Future;
 use pin_project::pin_project;
 
-use super::{LocalLockLocalData, LocalLockMutLocalData, LocalLockReadGuard, LocalLockWriteGuard};
+use super::{
+    LocalLockLocalChunks, LocalLockLocalChunksMut, LocalLockLocalData, LocalLockMutLocalData,
+    LocalLockReadGuard, LocalLockWriteGuard,
+};
 
 #[must_use]
 #[pin_project]
@@ -49,7 +52,7 @@ impl<T: Dist> LocalLockReadHandle<T> {
         }
     }
 
-    /// Handle used to retrieve the aquired read lock of a LocalLockArray within a non async context
+    /// Blocks the calling thread to retrieve the aquired read lock of a LocalLockArray within a non async context
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     /// # Examples
@@ -62,15 +65,16 @@ impl<T: Dist> LocalLockReadHandle<T> {
     /// let guard = handle.block();
     ///```
     pub fn block(self) -> LocalLockReadGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalLockReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
-
         self.array.lock.darc.team().scheduler.block_on(self)
     }
 }
@@ -122,7 +126,7 @@ pub struct LocalLockLocalDataHandle<T: Dist> {
 }
 
 impl<T: Dist> LocalLockLocalDataHandle<T> {
-    /// Handle used to retrieve the aquired local data [LocalLockLocalData] of a LocalLockArray within a non async context
+    /// Blocks the calling thread to retrieve the aquired local data [LocalLockLocalData] of a LocalLockArray within a non async context
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     /// # Examples
@@ -137,15 +141,16 @@ impl<T: Dist> LocalLockLocalDataHandle<T> {
     /// println!("local data: {:?}",local_data);
     ///```
     pub fn block(self) -> LocalLockLocalData<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalLockLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
-
         self.array.lock.darc.team().scheduler.block_on(self)
     }
 }
@@ -203,7 +208,7 @@ impl<T: Dist> LocalLockWriteHandle<T> {
             lock_handle: array.lock.write(),
         }
     }
-    /// Handle used to retrieve the aquired write lock of a LocalLockArray within a non async context
+    /// Blocks the calling thread to retrieve the aquired write lock of a LocalLockArray within a non async context
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     /// # Examples
@@ -216,13 +221,15 @@ impl<T: Dist> LocalLockWriteHandle<T> {
     /// handle.block();
     ///```
     pub fn block(self) -> LocalLockWriteGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalLockWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)
@@ -276,7 +283,7 @@ pub struct LocalLockMutLocalDataHandle<T: Dist> {
 }
 
 impl<T: Dist> LocalLockMutLocalDataHandle<T> {
-    /// Handle used to retrieve the aquired mutable local data [LocalLockMutLocalData] of a LocalLockArray within a non async context
+    /// Blocks the calling thread to retrieve the aquired mutable local data [LocalLockMutLocalData] of a LocalLockArray within a non async context
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     /// # Examples
@@ -291,13 +298,15 @@ impl<T: Dist> LocalLockMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     pub fn block(self) -> LocalLockMutLocalData<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalLockLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)
@@ -315,6 +324,178 @@ impl<T: Dist> Future for LocalLockMutLocalDataHandle<T> {
                 end_index: *this.end_index,
                 // lock: self.lock.clone(),
                 lock_guard: val,
+            }),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+#[must_use]
+#[pin_project]
+/// Constructs a handle for immutably iterating over fixed sized chunks(slices) of the local data of this array.
+/// This handle must be either await'd in an async context or block'd in an non-async context.
+/// Awaiting or blocking will not return until the read lock has been acquired.
+///
+/// the returned iterator is a lamellar [LocalIterator] and also captures a read lock on the local data.
+///
+/// # Examples
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+/// let my_pe = world.my_pe();
+/// //block in a non-async context
+/// let _ = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
+///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+/// }).block();
+///
+/// //await in an async context
+/// world.block_on(async move {
+///     let _ = array.read_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
+///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+///     }).await;
+/// });
+///
+/// ```
+pub struct LocalLockLocalChunksHandle<T> {
+    pub(crate) chunk_size: usize,
+    pub(crate) index: usize,     //global index within the array local data
+    pub(crate) end_index: usize, //global index within the array local data
+    pub(crate) array: LocalLockArray<T>,
+    #[pin]
+    pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
+}
+
+impl<T: Dist> LocalLockLocalChunksHandle<T> {
+    /// Blocks the calling thread to retrieve the aquired immutable local chunks iterator of a LocalLockArray within a non async context
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// //block in a non-async context
+    /// let _ = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
+    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    /// }).block();
+    ///```
+    pub fn block(self) -> LocalLockLocalChunks<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `LocalLockLocalChunksHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
+
+        self.array.lock.darc.team().scheduler.block_on(self)
+    }
+}
+
+impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
+    type Output = LocalLockLocalChunks<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.lock_handle.poll(cx) {
+            Poll::Ready(val) => Poll::Ready(LocalLockLocalChunks {
+                chunk_size: *this.chunk_size,
+                index: *this.index, //global index within the array local data
+                end_index: *this.end_index, //global index within the array local data
+                array: this.array.clone(),
+                lock_guard: Arc::new(val),
+            }),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+#[must_use]
+#[pin_project]
+/// A handle for mutably iterating over fixed sized chunks(slices) of the local data of this array.
+/// This handle must be either await'd in an async context or block'd in an non-async context.
+/// Awaiting or blocking will not return until the write lock has been acquired.
+///
+/// the returned iterator is a lamellar [LocalIterator] and also captures a write lock on the local data.
+///
+/// # Examples
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+/// let my_pe = world.my_pe();
+/// let _ = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {
+///         for elem in chunk.iter_mut() {
+///             *elem = i;
+///         }
+///     }).block();
+/// world.block_on(async move {
+///     let _ = array.write_local_chunks(5).await.enumerate().for_each(move|(i, mut chunk)| {
+///         for elem in chunk.iter_mut() {
+///             *elem = i;
+///         }
+///     }).await;
+/// });
+/// ```
+pub struct LocalLockLocalChunksMutHandle<T> {
+    pub(crate) chunk_size: usize,
+    pub(crate) index: usize,     //global index within the array local data
+    pub(crate) end_index: usize, //global index within the array local data
+    pub(crate) array: LocalLockArray<T>,
+    #[pin]
+    pub(crate) lock_handle: LocalRwDarcWriteHandle<()>,
+}
+
+impl<T: Dist> LocalLockLocalChunksMutHandle<T> {
+    /// Blocks the calling thread to retrieve the aquired mutable local chunks iterator of a LocalLockArray within a non async context
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let my_pe = world.my_pe();
+    /// //block in a non-async context
+    /// let _ = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {
+    ///         for elem in chunk.iter_mut() {
+    ///             *elem = i;
+    ///         }
+    ///     }).block();
+    ///```
+    pub fn block(self) -> LocalLockLocalChunksMut<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `LocalLockLocalChunksMutHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
+
+        self.array.lock.darc.team().scheduler.block_on(self)
+    }
+}
+
+impl<T: Dist> Future for LocalLockLocalChunksMutHandle<T> {
+    type Output = LocalLockLocalChunksMut<T>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.lock_handle.poll(cx) {
+            Poll::Ready(val) => Poll::Ready(LocalLockLocalChunksMut {
+                chunk_size: *this.chunk_size,
+                index: *this.index, //global index within the array local data
+                end_index: *this.end_index, //global index within the array local data
+                array: this.array.clone(),
+                lock_guard: Arc::new(val),
             }),
             Poll::Pending => Poll::Pending,
         }

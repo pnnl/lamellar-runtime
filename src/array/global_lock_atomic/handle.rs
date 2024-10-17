@@ -65,13 +65,15 @@ impl<T: Dist> GlobalLockReadHandle<T> {
     /// let guard = handle.block();
     ///```
     pub fn block(self) -> GlobalLockReadGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalLockReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)
@@ -140,13 +142,15 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
     /// println!("local data: {:?}",local_data);
     ///```
     pub fn block(self) -> GlobalLockLocalData<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalLockLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)
@@ -219,13 +223,15 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
     /// handle.block();
     ///```
     pub fn block(self) -> GlobalLockWriteGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalLockWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)
@@ -294,13 +300,15 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     pub fn block(self) -> GlobalLockMutLocalData<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalLockLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)
@@ -373,13 +381,15 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     pub fn block(self) -> GlobalLockCollectiveMutLocalData<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalLockCollectiveMutLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         self.array.lock.darc.team().scheduler.block_on(self)

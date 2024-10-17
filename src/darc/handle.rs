@@ -98,13 +98,15 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     ///
     ///```
     pub fn block(self) -> LocalRwDarcReadGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalRwDarcReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         let inner_darc = self.darc.darc.clone();
@@ -216,13 +218,15 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     /// *guard += my_pe;
     ///```
     pub fn block(self) -> LocalRwDarcWriteGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `LocalRwDarcWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         let inner_darc = self.darc.darc.clone();
@@ -329,13 +333,15 @@ impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn block(self) -> GlobalRwDarcReadGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalRwDarcReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         let _ = self.lock_am.blocking_wait();
@@ -425,13 +431,15 @@ impl<T: Sync + Send> GlobalRwDarcWriteHandle<T> {
     /// *guard += my_pe;
     ///```
     pub fn block(self) -> GlobalRwDarcWriteGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalRwDarcWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         let _ = self.lock_am.blocking_wait();
@@ -500,13 +508,15 @@ impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
     /// let mut guard = handle.block(); //block until we get the write lock
     /// *guard += my_pe;
     pub fn block(self) -> GlobalRwDarcCollectiveWriteGuard<T> {
-        let msg = format!("
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
                 [LAMELLAR WARNING] You are calling `GlobalRwDarcCollectiveWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
                 Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
             );
-        match config().blocking_call_warning {
-            Some(val) if val => println!("{msg}"),
-            _ => println!("{msg}"),
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
         }
 
         let _ = self.lock_am.blocking_wait();
@@ -699,7 +709,7 @@ pub struct IntoLocalRwDarcHandle<T: 'static> {
 }
 
 impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
-    /// Used to drive to conversion of a [Darc] or [GlobalRwDarc] into a [LocalRwDarc] 
+    /// Used to drive to conversion of a [Darc] or [GlobalRwDarc] into a [LocalRwDarc]
     /// # Examples
     ///
     ///```
@@ -709,6 +719,16 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
     /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_localrw = five.into_localrw().block();
     pub fn block(self) -> LocalRwDarc<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarcCollectiveWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         self.team.clone().block_on(self)
     }
 }
@@ -775,6 +795,16 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_globalrw = five.into_globalrw().block();
     pub fn block(self) -> GlobalRwDarc<T> {
+        if std::thread::current().id() != *crate::MAIN_THREAD {
+            let msg = format!("
+                [LAMELLAR WARNING] You are calling `GlobalRwDarcCollectiveWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
+                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
+            );
+            match config().blocking_call_warning {
+                Some(val) if val => println!("{msg}"),
+                _ => println!("{msg}"),
+            }
+        }
         self.team.clone().block_on(self)
     }
 }

@@ -73,13 +73,23 @@ impl<T> DistRwLock<T> {
             while self.writer.load(Ordering::SeqCst) != self.team.num_pes {
                 async_std::task::yield_now().await;
             }
-            // println!("\t{:?} inc read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+            // println!(
+            //     "\t{:?} inc read count {:?} {:?}",
+            //     _pe,
+            //     self.readers.load(Ordering::SeqCst),
+            //     self.writer.load(Ordering::SeqCst)
+            // );
             self.readers.fetch_add(1, Ordering::SeqCst);
             if self.writer.load(Ordering::SeqCst) == self.team.num_pes {
                 break;
             }
             self.readers.fetch_sub(1, Ordering::SeqCst);
-            // println!("\t{:?} writers exist dec read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+            // println!(
+            //     "\t{:?} writers exist dec read count {:?} {:?}",
+            //     _pe,
+            //     self.readers.load(Ordering::SeqCst),
+            //     self.writer.load(Ordering::SeqCst)
+            // );
         }
         // println!(
         //     "\t{:?} read locked {:?} {:?}",
@@ -95,7 +105,12 @@ impl<T> DistRwLock<T> {
         {
             async_std::task::yield_now().await;
         }
-        // println!("\t{:?} write lock checking for readers {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} write lock checking for readers {:?} {:?}",
+        //     pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
         while self.readers.load(Ordering::SeqCst) != 0 {
             async_std::task::yield_now().await;
         }
@@ -108,10 +123,17 @@ impl<T> DistRwLock<T> {
     }
 
     async fn async_collective_writer_lock(&self, pe: usize, collective_cnt: usize) {
+        println!("{:?} collective writer lock {:?}", pe, collective_cnt);
         // first lets set the normal writer lock, but will set it to a unique id all the PEs should have (it is initialized to num_pes+1 and is incremented by one after each lock)
         if pe == 0 {
             self.async_writer_lock(collective_cnt).await;
         } else {
+            // println!(
+            //     "\t{:?} write lock checking for readers {:?} {:?}",
+            //     pe,
+            //     self.readers.load(Ordering::SeqCst),
+            //     self.writer.load(Ordering::SeqCst)
+            // );
             while self.writer.load(Ordering::SeqCst) != collective_cnt {
                 async_std::task::yield_now().await;
             }
@@ -187,7 +209,6 @@ impl<T> DistRwLock<T> {
         let _temp = self.collective_writer.fetch_add(1, Ordering::SeqCst);
         // println!("collective unlock PE{:?} {:?} {:?} {:?}",pe,temp,self.collective_writer.load(Ordering::SeqCst),self.team.num_pes);
         while self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes {
-            //
             async_std::task::yield_now().await;
         }
         //we have all entered the unlock
@@ -217,7 +238,7 @@ struct LockAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for LockAm {
     async fn exec() {
-        // println!("In lock am {:?}",self);
+        // println!("In lock am {:?}", self);
         // let lock = {
         let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         match self.lock_type {
@@ -232,7 +253,7 @@ impl LamellarAM for LockAm {
             }
         }
         // };
-        // println!("finished lock am");
+        // println!("finished lock am {:?}", self);
     }
 }
 
@@ -256,6 +277,7 @@ impl LamellarAM for UnlockAm {
                 }
             }
         }
+        // println!("Finished in unlock am {:?}", self);
     }
 }
 

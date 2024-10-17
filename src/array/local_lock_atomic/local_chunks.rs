@@ -9,16 +9,14 @@ use crate::memregion::Dist;
 use std::sync::Arc;
 
 /// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of a [LocalLockArray]
-/// This struct is created by calling [LocalLockArray::read_local_chunks] or [LocalLockArray::blocking_read_local_chunks]
+/// This struct is created by awaiting or blocking on the handle returned by [LocalLockArray::read_local_chunks]
 #[derive(Clone)]
 pub struct LocalLockLocalChunks<T: Dist> {
-    chunk_size: usize,
-    index: usize,     //global index within the array local data
-    end_index: usize, //global index within the array local data
-    array: LocalLockArray<T>,
-    // lock: LocalRwDarc<()>,
-    // lock_guard: Arc<RwLockReadGuardArc<()>>,
-    lock_guard: Arc<LocalRwDarcReadGuard<()>>,
+    pub(crate) chunk_size: usize,
+    pub(crate) index: usize,     //global index within the array local data
+    pub(crate) end_index: usize, //global index within the array local data
+    pub(crate) array: LocalLockArray<T>,
+    pub(crate) lock_guard: Arc<LocalRwDarcReadGuard<()>>,
 }
 
 impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
@@ -35,15 +33,15 @@ impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
 }
 
 /// An iterator over mutable (nonoverlapping) local chunks (of size chunk_size) of a [LocalLockArray]
-/// This struct is created by calling [LocalLockArray""write_local_chunks] or [LocalLockArray::blocking_write_local_chunks]
+/// This struct is created by awaiting or blocking on the handle returned by [LocalLockArray::write_local_chunks]
 pub struct LocalLockLocalChunksMut<T: Dist> {
     // data: &'a mut [T],
-    chunk_size: usize,
-    index: usize,     //global index within the array local data
-    end_index: usize, //global index within the array local data
-    array: LocalLockArray<T>,
+    pub(crate) chunk_size: usize,
+    pub(crate) index: usize,     //global index within the array local data
+    pub(crate) end_index: usize, //global index within the array local data
+    pub(crate) array: LocalLockArray<T>,
     // lock: LocalRwDarc<()>,
-    lock_guard: Arc<LocalRwDarcWriteGuard<()>>,
+    pub(crate) lock_guard: Arc<LocalRwDarcWriteGuard<()>>,
 }
 
 impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
@@ -59,6 +57,12 @@ impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
     }
 }
 
+/// Provides mutable access to a chunk of a PEs local data to provide "local" indexing while maintaining safety guarantees of the array type.
+///
+/// This derefences down to a `&mut [T]`.
+///
+/// This struct is the item type returned when iterating over a [LocalLockLocalChunksMut] iterator created using [LocalLockArray::write_local_chunks].
+/// While the Local Chunk iterator is valid, each chunk is guaranteed to have exclusive access to the data it points to (allowing for the safe deref into `&mut [T]`), preventing any other local or remote access.
 #[derive(Debug)]
 pub struct LocalLockMutChunkLocalData<'a, T: Dist> {
     data: &'a mut [T],
@@ -218,9 +222,11 @@ impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalChunksMut<T> {
 }
 
 impl<T: Dist> LocalLockArray<T> {
-    /// mutably iterate over fixed sized chunks(slices) of the local data of this array.
+    /// Constructs a handle for immutably iterating over fixed sized chunks(slices) of the local data of this array.
+    /// This handle must be either await'd in an async context or block'd in an non-async context.
+    /// Awaiting or blocking will not return until the read lock has been acquired.
+    ///
     /// the returned iterator is a lamellar [LocalIterator] and also captures a read lock on the local data.
-    /// This call will block the calling task until a read lock is acquired.
     ///
     /// # Examples
     ///```
@@ -229,68 +235,34 @@ impl<T: Dist> LocalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
-    /// world.block_on(async move {
-    ///     let _ = array.read_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
-    ///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    ///     }).spawn();
-    ///     array.await_all().await;
-    /// });
-    /// ```
-    pub async fn read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunks<T> {
-        let lock = Arc::new(self.lock.read().await);
-        LocalLockLocalChunks {
-            chunk_size,
-            index: 0,
-            end_index: 0,
-            array: self.clone(),
-            // lock: self.lock.clone(),
-            lock_guard: lock,
-        }
-    }
-
-    /// immutably iterate over fixed sized chunks(slices) of the local data of this array.
-    /// the returned iterator is a lamellar [LocalIterator] and also captures a read lock on the local data.
-    /// This call will block the calling thread until a read lock is acquired.
-    /// Calling within an asynchronous block may lead to deadlock, use [read_lock](self::LocalLockArray::read_local_chunks) instead.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
-    /// let my_pe = world.my_pe();
-    ///
-    /// let _ = array.blocking_read_local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    /// //block in a non-async context
+    /// let _ = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
     ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
     /// }).block();
     ///
+    /// //await in an async context
+    /// world.block_on(async move {
+    ///     let _ = array.read_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
+    ///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    ///     }).await;
+    /// });
+    ///
     /// ```
-    pub fn blocking_read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunks<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalLockArray::blocking_read_local_chunks` from within an async context which may lead to deadlock, it is recommended that you use `read_local_chunks().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
-        let lock = Arc::new(self.array.block_on(self.lock.read()));
-        LocalLockLocalChunks {
+    pub fn read_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksHandle<T> {
+        let lock = self.lock.read();
+        LocalLockLocalChunksHandle {
             chunk_size,
             index: 0,
             end_index: 0,
             array: self.clone(),
-            // lock: self.lock.clone(),
-            lock_guard: lock,
+            lock_handle: lock,
         }
     }
-
-    /// mutably iterate over fixed sized chunks(slices) of the local data of this array.
-    /// the returned iterator is a lamellar [LocalIterator] and also captures the write lock on the local data.
-    /// This call will block the calling task until the write lock is acquired.
+    /// Constructs a handle for mutably iterating over fixed sized chunks(slices) of the local data of this array.
+    /// This handle must be either await'd in an async context or block'd in an non-async context.
+    /// Awaiting or blocking will not return until the write lock has been acquired.
+    ///
+    /// the returned iterator is a lamellar [LocalIterator] and also captures a write lock on the local data.
     ///
     /// # Examples
     ///```
@@ -299,63 +271,28 @@ impl<T: Dist> LocalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
     /// let my_pe = world.my_pe();
+    /// let _ = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {
+    ///         for elem in chunk.iter_mut() {
+    ///             *elem = i;
+    ///         }
+    ///     }).block();
     /// world.block_on(async move {
-    ///     let _ = array.write_local_chunks(5).await.enumerate().for_each(move|(i,chunk)| {
-    ///         println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    ///     }).spawn();
-    ///     array.await_all().await;
+    ///     let _ = array.write_local_chunks(5).await.enumerate().for_each(move|(i, mut chunk)| {
+    ///         for elem in chunk.iter_mut() {
+    ///             *elem = i;
+    ///         }
+    ///     }).await;
     /// });
     /// ```
-    pub async fn write_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksMut<T> {
-        let lock = Arc::new(self.lock.write().await);
-        LocalLockLocalChunksMut {
+    pub fn write_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksMutHandle<T> {
+        let lock = self.lock.write();
+        LocalLockLocalChunksMutHandle {
             chunk_size,
             index: 0,
             end_index: 0,
             array: self.clone(),
             // lock: self.lock.clone(),
-            lock_guard: lock,
-        }
-    }
-
-    /// mutably iterate over fixed sized chunks(slices) of the local data of this array.
-    /// the returned iterator is a lamellar [LocalIterator] and also captures the write lock on the local data.
-    /// This call will block the calling thread until the write lock is acquired.
-    /// Calling within an asynchronous block may lead to deadlock, use [write_lock](self::LocalLockArray::write_local_chunks) instead.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
-    /// let my_pe = world.my_pe();
-    ///
-    /// let _ = array.blocking_write_local_chunks(5).enumerate().for_each(move|(i,chunk)| {
-    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
-    /// }).spawn();
-    /// array.wait_all();
-    ///
-    /// ```
-    pub fn blocking_write_local_chunks(&self, chunk_size: usize) -> LocalLockLocalChunksMut<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalLockArray::blocking_write_local_chunks` from within an async context which may lead to deadlock, it is recommended that you use `write_local_chunks().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
-        let lock = Arc::new(self.array.block_on(self.lock.write()));
-        LocalLockLocalChunksMut {
-            chunk_size,
-            index: 0,
-            end_index: 0,
-            array: self.clone(),
-            // lock: self.lock.clone(),
-            lock_guard: lock,
+            lock_handle: lock,
         }
     }
 }
