@@ -1,8 +1,5 @@
 use crate::{
-    array::{AmDist, LamellarByteArray},
-    lamellar_request::LamellarRequest,
-    scheduler::LamellarTask,
-    AmHandle,
+    array::{AmDist, LamellarByteArray}, lamellar_request::LamellarRequest, scheduler::LamellarTask, warnings::RuntimeWarning, AmHandle
 };
 
 use std::{
@@ -15,6 +12,7 @@ use std::{
 use pin_project::pin_project;
 
 /// a task handle for a batched array operation that doesnt return any values
+#[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 pub struct ArrayBatchOpHandle {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<()>, Vec<usize>)>,
@@ -33,6 +31,11 @@ impl ArrayBatchOpHandle {
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(self) -> () {
+        RuntimeWarning::BlockingCall(
+            "ArrayBatchOpHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }
@@ -71,6 +74,7 @@ impl Future for ArrayBatchOpHandle {
 }
 
 /// a task handle for a single array operation that returns a value
+#[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 pub struct ArrayFetchOpHandle<R: AmDist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: AmHandle<Vec<R>>,
@@ -88,6 +92,11 @@ impl<R: AmDist> ArrayFetchOpHandle<R> {
 
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(self) -> R {
+        RuntimeWarning::BlockingCall(
+            "ArrayFetchOpHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }
@@ -119,6 +128,7 @@ impl<R: AmDist> Future for ArrayFetchOpHandle<R> {
 
 /// a task handle for a batched array operation that return values
 #[pin_project]
+#[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 pub struct ArrayFetchBatchOpHandle<R: AmDist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>,
@@ -137,6 +147,11 @@ impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
 
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(self) -> Vec<R> {
+        RuntimeWarning::BlockingCall(
+            "ArrayFetchBatchOpHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }
@@ -220,6 +235,7 @@ impl<R: AmDist> Future for ArrayFetchBatchOpHandle<R> {
 }
 
 /// a task handle for a single array operation that returns a result
+#[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 pub struct ArrayResultOpHandle<R: AmDist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) req: AmHandle<Vec<Result<R, R>>>,
@@ -237,6 +253,11 @@ impl<R: AmDist> ArrayResultOpHandle<R> {
 
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(self) -> Result<R, R> {
+        RuntimeWarning::BlockingCall(
+            "ArrayResultOpHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }
@@ -268,6 +289,7 @@ impl<R: AmDist> Future for ArrayResultOpHandle<R> {
 
 /// a task handle for a batched array operation that returns results
 #[pin_project]
+#[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 pub struct ArrayResultBatchOpHandle<R: AmDist> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) reqs: VecDeque<(AmHandle<Vec<Result<R, R>>>, Vec<usize>)>,
@@ -286,6 +308,11 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
 
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(self) -> Vec<Result<R, R>> {
+        RuntimeWarning::BlockingCall(
+            "ArrayResultBatchOpHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }

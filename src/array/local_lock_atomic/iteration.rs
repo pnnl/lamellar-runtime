@@ -8,11 +8,6 @@ use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
 use crate::memregion::Dist;
-// use parking_lot::{
-//     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
-//     RawRwLock,
-// };
-use async_lock::{RwLockReadGuardArc, RwLockWriteGuardArc};
 
 impl<T> InnerArray for LocalLockArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {

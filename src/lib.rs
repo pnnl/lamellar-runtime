@@ -272,6 +272,8 @@ mod utils;
 //#[doc(hidden)]
 pub use utils::*;
 
+pub(crate) mod warnings;
+
 pub mod env_var;
 pub use env_var::config;
 

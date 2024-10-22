@@ -11,7 +11,6 @@ use core::marker::PhantomData;
 use futures_util::Future;
 use paste::paste;
 use std::pin::Pin;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 impl<T> InnerArray for UnsafeArray<T> {
@@ -50,9 +49,9 @@ macro_rules! consumer_impl {
             {
                 let am = $($am)*;
                 // set req counters so that wait all works
-                self.data.team.team_counters.add_send_req(1);
-                self.data.team.world_counters.add_send_req(1);
-                self.data.task_group.counters.add_send_req(1);
+                self.data.team.team_counters.inc_send_req(1);
+                self.data.team.world_counters.inc_send_req(1);
+                self.data.task_group.counters.inc_send_req(1);
 
                 // self.data.team.scheduler.print_status();
                 let barrier = self.barrier_handle();
@@ -70,9 +69,14 @@ macro_rules! consumer_impl {
                         Schedule::WorkStealing => inner.sched_work_stealing(am),
                     };
                     // remove req counters after individual ams have been launched.
-                    inner.data.team.team_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
-                    inner.data.team.world_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
-                    inner.data.task_group.counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    // inner.data.team.team_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    // inner.data.team.world_counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+                    // inner.data.task_group.counters.outstanding_reqs.fetch_sub(1,Ordering::SeqCst);
+
+                    // increment launch counters to match req countersk
+                    inner.data.team.team_counters.inc_launched(1);
+                    inner.data.team.world_counters.inc_launched(1);
+                    inner.data.task_group.counters.inc_launched(1);
                     // println!("barrier id {:?} done with dist iter sched {:?} {:?} {:?}",barrier_id,inner.data.team.team_counters.outstanding_reqs.load(Ordering::SeqCst), inner.data.team.world_counters.outstanding_reqs.load(Ordering::SeqCst), inner.data.task_group.counters.outstanding_reqs.load(Ordering::SeqCst));
                     reqs
                 });

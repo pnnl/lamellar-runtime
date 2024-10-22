@@ -190,9 +190,9 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// impl Dist for bool {}
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, isize);
+impl Dist for bool {}
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, isize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(false, f32);
 // lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
@@ -201,20 +201,20 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 // //------------------------------------
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
-lamellar_impl::generate_ops_for_bool_rt!();
+// lamellar_impl::generate_ops_for_bool_rt!();
 
 impl<T: Dist + ArrayOps> Dist for Option<T> {}
 impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
@@ -1665,7 +1665,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let array_clone = array.clone();
 /// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-///     array_clone.add(index,1); //randomly at one to an element in the array.
+///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
 /// let sum = array.block_on(array.sum()).expect("array len > 0"); // atomic updates still possibly happening, output non deterministic
 /// println!("sum {sum}");
@@ -1679,7 +1679,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let array_clone = array.clone();
 /// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-///     array_clone.add(index,1); //randomly at one to an element in the array.
+///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// });
 /// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
 /// array.wait_all();
@@ -1696,7 +1696,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let array_clone = array.clone();
 /// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-///     array_clone.add(index,1); //randomly at one to an element in the array.
+///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// });
 /// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
 /// array.wait_all();
@@ -1714,7 +1714,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let array_clone = array.clone();
 /// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-///     array_clone.add(index,1); //randomly at one to an element in the array.
+///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
 /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
 /// let sum = array.block_on(array.sum()).expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
@@ -1778,7 +1778,7 @@ where
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
     /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
@@ -1929,7 +1929,7 @@ where
 /// let array_clone = array.clone();
 /// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-///     array_clone.add(index,1); //randomly at one to an element in the array.
+///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
 /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
 /// let sum = array.block_on(array.sum());

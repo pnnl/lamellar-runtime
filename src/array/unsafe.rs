@@ -18,6 +18,7 @@ use crate::lamellae::AllocationType;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 use crate::LamellarTaskGroup;
 
 use core::marker::PhantomData;
@@ -521,6 +522,24 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     pub(crate) async fn await_all(&self) {
+        if self
+            .inner
+            .data
+            .array_counters
+            .send_req_cnt
+            .load(Ordering::SeqCst)
+            != self
+                .inner
+                .data
+                .array_counters
+                .launched_req_cnt
+                .load(Ordering::SeqCst)
+        {
+            RuntimeWarning::UnspanedTask(
+                "`await_all` on an array before all operations, iterators, etc, created by the array have been spawned",
+            )
+            .print();
+        }
         let mut temp_now = Instant::now();
         // let mut first = true;
         while self
@@ -832,17 +851,6 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
 
 impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `Array::team_from` from within an async context which may lead to deadlock, this is unintended and likely a Runtime bug.
-                Please open a github issue at https://github.com/pnnl/lamellar-runtime/issues including a backtrace if possible.
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
         let (local_vals, distribution) = input;
         // println!("local_vals len: {:?}", local_vals.len());
         team.tasking_barrier();
@@ -1037,6 +1045,24 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             .exec_am_local_tg(am, Some(self.team_counters()))
     }
     fn wait_all(&self) {
+        if self
+            .inner
+            .data
+            .array_counters
+            .send_req_cnt
+            .load(Ordering::SeqCst)
+            != self
+                .inner
+                .data
+                .array_counters
+                .launched_req_cnt
+                .load(Ordering::SeqCst)
+        {
+            RuntimeWarning::UnspanedTask(
+                "`wait_all` on an array before all operations, iterators, etc, created by the array have been spawned",
+            )
+            .print();
+        }
         let mut temp_now = Instant::now();
         // let mut first = true;
         while self
@@ -1371,7 +1397,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///         let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     ///     });
     /// }
     /// array.wait_all();
@@ -1409,7 +1435,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///        array_clone.add(index,1); //randomly at one to an element in the array.
+    ///         let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     ///     });
     /// }
     /// array.wait_all();

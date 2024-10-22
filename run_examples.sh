@@ -6,7 +6,7 @@ target_dir=$PWD/target
 output_dir=/home/scratch/$USER
 
 root=$PWD
-. $root/../junction-prep.rc
+# . $root/../junction-prep.rc
 
 local_results_dir=async_backends
 results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}

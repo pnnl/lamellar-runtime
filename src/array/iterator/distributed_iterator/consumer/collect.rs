@@ -11,6 +11,7 @@ use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 
 use core::marker::PhantomData;
 use futures_util::{ready, Future};
@@ -294,6 +295,11 @@ where
 
     /// This method will block until the associated Collect operation completes and returns the result
     pub fn block(self) -> A {
+        RuntimeWarning::BlockingCall(
+            "DistIterCollectHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.team.clone().block_on(self)
     }
 

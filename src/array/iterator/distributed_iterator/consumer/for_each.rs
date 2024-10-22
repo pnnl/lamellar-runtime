@@ -8,6 +8,7 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 
 use futures_util::{ready, Future};
 use pin_project::pin_project;
@@ -218,6 +219,11 @@ impl DistIterForEachHandle {
 
     /// This method will block until the associated For Each operation completes and returns the result
     pub fn block(self) {
+        RuntimeWarning::BlockingCall(
+            "DistIterForEachHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.team.clone().block_on(self);
     }
     /// This method will spawn the associated  For Each Operation on the work queue,
@@ -226,14 +232,6 @@ impl DistIterForEachHandle {
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
-        // match self.state {
-        //     State::Barrier(ref barrier, _) => {
-        //         println!("spawning task barrier id {:?}", barrier.barrier_id);
-        //     }
-        //     State::Reqs(_, barrier_id) => {
-        //         println!("spawning task not sure I can be here {:?}", barrier_id);
-        //     }
-        // }
         self.team.clone().scheduler.spawn_task(self)
     }
 }

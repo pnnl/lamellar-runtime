@@ -44,7 +44,6 @@
 //!     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 //! }
 ///```
-use async_lock::RwLock;
 use core::marker::PhantomData;
 use futures_util::future::join_all;
 use serde::{Deserialize, Deserializer};
@@ -75,7 +74,6 @@ pub(crate) mod local_rw_darc;
 pub use local_rw_darc::LocalRwDarc;
 
 pub(crate) mod global_rw_darc;
-use global_rw_darc::DistRwLock;
 pub use global_rw_darc::GlobalRwDarc;
 
 use self::handle::{IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
@@ -1399,7 +1397,6 @@ impl<T> Darc<T> {
     /// let five_as_localdarc = world.block_on(async move {five.into_localrw().await});
     /// ```
     pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
-        
         let wrapped_inner = WrappedInner {
             inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
         };

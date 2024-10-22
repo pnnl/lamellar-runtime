@@ -6,6 +6,7 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 
 use futures_util::{ready, Future};
 use pin_project::pin_project;
@@ -141,6 +142,11 @@ impl LocalIterCountHandle {
 
     /// This method will block until the associated Count operation completes and returns the result
     pub fn block(self) -> usize {
+        RuntimeWarning::BlockingCall(
+            "LocalIterCountHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.team.clone().block_on(self)
     }
 

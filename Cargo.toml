@@ -75,6 +75,8 @@ enable-rofi-shared=["rofi","rofisys/shared","libc"]
 rofi=[]
 tokio-executor=["tokio"]
 slurm-test=[]
+disable-runtime-warnings=[]
+runtime-warnings-panic=[]
 default=[]
 
 

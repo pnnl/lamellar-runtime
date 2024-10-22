@@ -1,4 +1,3 @@
-use async_lock::RwLock;
 use core::marker::PhantomData;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -8,11 +7,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::active_messaging::RemotePtr;
-use crate::config;
-use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
-use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::{IdError, LamellarEnv, LamellarTeam};
 

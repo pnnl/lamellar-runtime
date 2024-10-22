@@ -458,7 +458,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
@@ -491,7 +491,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-    ///     array_clone.add(index,1); //randomly at one to an element in the array.
+    ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE

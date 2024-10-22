@@ -7,6 +7,7 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 
 use futures_util::{ready, Future};
 use pin_project::pin_project;
@@ -220,6 +221,11 @@ impl LocalIterForEachHandle {
 
     /// This method will block until the associated For Each operation completes and returns the result
     pub fn block(self) {
+        RuntimeWarning::BlockingCall(
+            "LocalIterForEachHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.team.clone().block_on(self);
     }
 

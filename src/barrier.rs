@@ -4,6 +4,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::MemoryRegion;
 use crate::scheduler::Scheduler;
+use crate::warnings::RuntimeWarning;
 
 use futures_util::Future;
 use pin_project::pin_project;
@@ -132,38 +133,28 @@ impl Barrier {
         recv_pe: usize,
         send_buf_slice: &[usize],
     ) {
-        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
-            println!("[LAMELLAR WARNING][{:?}] Potential deadlock detected.\n\
-            Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call.\n\
-            Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information\n\
-            Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration\n\
-            You may be seeing this message if you have called barrier within an async context (meaning it was executed on a worker thread).\n\
-            A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective\n\
-            The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
-            To view backtrace set RUST_LIB_BACKTRACE=1\n\
-        {}",
-        std::thread::current().id()
-        ,config().deadlock_timeout,std::backtrace::Backtrace::capture());
+        RuntimeWarning::BarrierTimeout(s.elapsed().as_secs_f64()).print();
 
-            println!(
-                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
-                std::thread::current().id(),
-                self.my_pe,
-                my_index,
-                round,
-                i,
-                (my_index + i * (self.n + 1).pow(round as u32))
-                    % self.num_pes,
-                team_recv_pe,
-                recv_pe,
-                send_buf_slice,
-                    unsafe {
-                        self.barrier_buf[i - 1]
-                            .as_mut_slice()
-                            .expect("Data should exist on PE")
-                    }
-            );
-            self.print_bar();
+        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+            // println!(
+            //     "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
+            //     std::thread::current().id(),
+            //     self.my_pe,
+            //     my_index,
+            //     round,
+            //     i,
+            //     (my_index + i * (self.n + 1).pow(round as u32))
+            //         % self.num_pes,
+            //     team_recv_pe,
+            //     recv_pe,
+            //     send_buf_slice,
+            //         unsafe {
+            //             self.barrier_buf[i - 1]
+            //                 .as_mut_slice()
+            //                 .expect("Data should exist on PE")
+            //         }
+            // );
+            // self.print_bar();
             *s = Instant::now();
         }
     }
@@ -290,15 +281,7 @@ impl Barrier {
                 self.scheduler.exec_task();
             });
         } else {
-            if let Some(val) = config().blocking_call_warning {
-                // std::env::var("LAMELLAR_BLOCKING_CALL_WARNING") {
-                // if val != "0" && val != "false" && val != "no" && val != "off" {
-                if val {
-                    println!("[LAMELLAR WARNING] You are calling barrier from within an async context, this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning");
-                }
-            } else {
-                println!("[LAMELLAR WARNING] You are calling barrier from within an async context), this is experimental and may result in deadlock! Using 'async_barrier().await;' is likely a better choice. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning");
-            }
+            RuntimeWarning::BlockingCall("barrier", "async_barrier().await").print();
             self.tasking_barrier()
         }
     }

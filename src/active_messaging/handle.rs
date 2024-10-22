@@ -18,25 +18,27 @@ use crate::{
     lamellar_request::{InternalResult, LamellarRequest, LamellarRequestAddResult},
     memregion::one_sided::MemRegionHandleInner,
     scheduler::{LamellarTask, Scheduler},
+    warnings::RuntimeWarning,
     Darc, LamellarArchRT,
 };
 
-use super::{AmDist, DarcSerde, RemotePtr};
+use super::{AMCounters, Am, AmDist, DarcSerde, RemotePtr};
 
 pub(crate) struct AmHandleInner {
     pub(crate) ready: AtomicBool,
     pub(crate) waker: Mutex<Option<Waker>>,
     pub(crate) data: Cell<Option<InternalResult>>, //we only issue a single request, which the runtime will update, but the user also has a handle so we need a way to mutate
-    pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) team_counters: Arc<AMCounters>,
+    pub(crate) world_counters: Arc<AMCounters>,
+    pub(crate) tg_counters: Option<Arc<AMCounters>>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) user_handle: AtomicU8,
 }
 
 impl std::fmt::Debug for AmHandleInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AmHandleInner {{ ready: {:?}, team_outstanding_reqs: {:?}  world_outstanding_reqs {:?} tg_outstanding_reqs {:?} user_handle{:?} }}", self.ready.load(Ordering::Relaxed),  self.team_outstanding_reqs.load(Ordering::Relaxed), self.world_outstanding_reqs.load(Ordering::Relaxed), self.tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)), self.user_handle.load(Ordering::Relaxed))
+        write!(f, "AmHandleInner {{ ready: {:?}, team_outstanding_reqs: {:?}  world_outstanding_reqs {:?} tg_outstanding_reqs {:?} user_handle{:?} }}", self.ready.load(Ordering::Relaxed),  
+        self.team_counters.outstanding_reqs.load(Ordering::Relaxed), self.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.tg_counters.as_ref().map(|x| x.outstanding_reqs.load(Ordering::Relaxed)), self.user_handle.load(Ordering::Relaxed))
     }
 }
 
@@ -56,26 +58,29 @@ impl LamellarRequestAddResult for AmHandleInner {
         }
     }
     fn update_counters(&self, _sub_id: usize) {
-        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
-            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.team_counters.dec_outstanding(1);
+        self.world_counters.dec_outstanding(1);
+        if let Some(tg_counters) = self.tg_counters.clone() {
+            tg_counters.dec_outstanding(1);
         }
     }
 }
-
 /// A handle to an active messaging request that executes on a singe PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
-#[must_use = "active messaging handles do nothing unless polled or awaited or 'spawn()' or 'block()' are called"]
+#[must_use = "active messaging handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 pub struct AmHandle<T> {
     pub(crate) inner: Arc<AmHandleInner>,
+    pub(crate) am: Option<(Am, usize)>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 #[pinned_drop]
 impl<T> PinnedDrop for AmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        if self.am.is_some() {
+            RuntimeWarning::DroppedHandle("an AmHandle").print();
+        }
         self.inner.user_handle.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -124,22 +129,40 @@ impl<T: AmDist> AmHandle<T> {
         }
     }
 
+    fn launch_am_if_needed(&mut self) {
+        if let Some((am, num_pes)) = self.am.take() {
+            self.inner.team_counters.inc_outstanding(num_pes);
+            self.inner.team_counters.inc_launched(num_pes);
+            self.inner.world_counters.inc_outstanding(num_pes);
+            self.inner.world_counters.inc_launched(num_pes);
+            if let Some(tg_counters) = self.inner.tg_counters.clone() {
+                tg_counters.inc_outstanding(num_pes);
+                tg_counters.inc_launched(num_pes);
+            }
+            self.inner.scheduler.submit_am(am);
+        }
+    }
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<T> {
+    pub fn spawn(mut self) -> LamellarTask<T> {
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self)
     }
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(self) -> T {
+    pub fn block(mut self) -> T {
+        RuntimeWarning::BlockingCall("AmHandle::block", "<handle>.spawn() or <handle>.await")
+            .print();
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().block_on(self)
     }
 }
 
 impl<T: AmDist> LamellarRequest for AmHandle<T> {
-    fn blocking_wait(self) -> T {
+    fn blocking_wait(mut self) -> T {
+        self.launch_am_if_needed();
         while !self.inner.ready.load(Ordering::SeqCst) {
             self.inner.scheduler.exec_task();
         }
@@ -147,6 +170,7 @@ impl<T: AmDist> LamellarRequest for AmHandle<T> {
     }
 
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
         if self.inner.ready.load(Ordering::SeqCst) {
             true
@@ -175,6 +199,7 @@ impl<T: AmDist> LamellarRequest for AmHandle<T> {
 impl<T: AmDist> Future for AmHandle<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launch_am_if_needed();
         let mut this = self.as_mut();
         if this.ready_or_set_waker(cx.waker()) {
             Poll::Ready(
@@ -189,15 +214,19 @@ impl<T: AmDist> Future for AmHandle<T> {
 /// A handle to an active messaging request that executes on the local (originating) PE
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
-#[must_use = "active messaging handles do nothing unless polled or awaited or 'spawn()' or 'block()' are called"]
+#[must_use = "active messaging handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 pub struct LocalAmHandle<T> {
     pub(crate) inner: Arc<AmHandleInner>,
+    pub(crate) am: Option<(Am, usize)>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 #[pinned_drop]
 impl<T> PinnedDrop for LocalAmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        if self.am.is_some() {
+            RuntimeWarning::DroppedHandle("a LocalAmHandle").print();
+        }
         self.inner.user_handle.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -224,6 +253,19 @@ impl<T: 'static> LocalAmHandle<T> {
             }
         }
     }
+    fn launch_am_if_needed(&mut self) {
+        if let Some((am, num_pes)) = self.am.take() {
+            self.inner.team_counters.inc_outstanding(num_pes);
+            self.inner.team_counters.inc_launched(num_pes);
+            self.inner.world_counters.inc_outstanding(num_pes);
+            self.inner.world_counters.inc_launched(num_pes);
+            if let Some(tg_counters) = self.inner.tg_counters.clone() {
+                tg_counters.inc_outstanding(num_pes);
+                tg_counters.inc_launched(num_pes);
+            }
+            self.inner.scheduler.submit_am(am);
+        }
+    }
 }
 
 impl<T: Send + 'static> LocalAmHandle<T> {
@@ -232,27 +274,33 @@ impl<T: Send + 'static> LocalAmHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<T> {
+    pub fn spawn(mut self) -> LamellarTask<T> {
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self)
     }
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(self) -> T {
+    pub fn block(mut self) -> T {
+        RuntimeWarning::BlockingCall("LocalAmHandle::block", "<handle>.spawn() or <handle>.await")
+            .print();
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().block_on(self)
     }
 }
 
 impl<T: AmDist> From<LocalAmHandle<T>> for AmHandle<T> {
-    fn from(x: LocalAmHandle<T>) -> Self {
+    fn from(mut x: LocalAmHandle<T>) -> Self {
         x.inner.user_handle.fetch_add(1, Ordering::SeqCst);
         Self {
             inner: x.inner.clone(),
+            am: x.am.take(),
             _phantom: std::marker::PhantomData,
         }
     }
 }
 
 impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
-    fn blocking_wait(self) -> T {
+    fn blocking_wait(mut self) -> T {
+        self.launch_am_if_needed();
         while !self.inner.ready.load(Ordering::SeqCst) {
             self.inner.scheduler.exec_task();
         }
@@ -261,6 +309,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
     }
 
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
         if self.inner.ready.load(Ordering::SeqCst) {
             true
@@ -290,6 +339,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
 impl<T: 'static> Future for LocalAmHandle<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launch_am_if_needed();
         let mut this = self.as_mut();
         if this.ready_or_set_waker(cx.waker()) {
             Poll::Ready(
@@ -307,9 +357,9 @@ pub(crate) struct MultiAmHandleInner {
     pub(crate) arch: Arc<LamellarArchRT>,
     pub(crate) data: Mutex<HashMap<usize, InternalResult>>,
     pub(crate) waker: Mutex<Option<Waker>>,
-    pub(crate) team_outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) world_outstanding_reqs: Arc<AtomicUsize>,
-    pub(crate) tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    pub(crate) team_counters: Arc<AMCounters>,
+    pub(crate) world_counters: Arc<AMCounters>,
+    pub(crate) tg_counters: Option<Arc<AMCounters>>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) user_handle: AtomicU8, //we can use this flag to optimize what happens when the request returns
 }
@@ -317,15 +367,19 @@ pub(crate) struct MultiAmHandleInner {
 /// A handle to an active messaging request that executes on multiple PEs, returned from a call to [exec_am_all][crate::ActiveMessaging::exec_am_all]
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
-#[must_use = "active messaging handles do nothing unless polled or awaited or 'spawn()' or 'block()' are called"]
+#[must_use = "active messaging handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 pub struct MultiAmHandle<T> {
     pub(crate) inner: Arc<MultiAmHandleInner>,
+    pub(crate) am: Option<(Am, usize)>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
 }
 
 #[pinned_drop]
 impl<T> PinnedDrop for MultiAmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        if self.am.is_some() {
+            RuntimeWarning::DroppedHandle("a MultiAmHandle").print();
+        }
         self.inner.user_handle.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -345,10 +399,10 @@ impl LamellarRequestAddResult for MultiAmHandleInner {
         }
     }
     fn update_counters(&self, _sub_id: usize) {
-        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
-            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.team_counters.dec_outstanding(1);
+        self.world_counters.dec_outstanding(1);
+        if let Some(tg_counters) = self.tg_counters.clone() {
+            tg_counters.dec_outstanding(1);
         }
     }
 }
@@ -395,22 +449,42 @@ impl<T: AmDist> MultiAmHandle<T> {
             }
         }
     }
+
+    fn launch_am_if_needed(&mut self) {
+        if let Some((am, num_pes)) = self.am.take() {
+            self.inner.team_counters.inc_outstanding(num_pes);
+            self.inner.team_counters.inc_launched(num_pes);
+            self.inner.world_counters.inc_outstanding(num_pes);
+            self.inner.world_counters.inc_launched(num_pes);
+            if let Some(tg_counters) = self.inner.tg_counters.clone() {
+                tg_counters.inc_outstanding(num_pes);
+                tg_counters.inc_launched(num_pes);
+            }
+            self.inner.scheduler.submit_am(am);
+        }
+    }
+
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self)
     }
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(self) -> Vec<T> {
+    pub fn block(mut self) -> Vec<T> {
+        RuntimeWarning::BlockingCall("MultiAmHandle::block", "<handle>.spawn() or <handle>.await")
+            .print();
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().block_on(self)
     }
 }
 
 impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
-    fn blocking_wait(self) -> Self::Output {
+    fn blocking_wait(mut self) -> Self::Output {
+        self.launch_am_if_needed();
         while self.inner.cnt.load(Ordering::SeqCst) > 0 {
             self.inner.scheduler.exec_task();
         }
@@ -424,6 +498,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
     }
 
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
         if self.inner.cnt.load(Ordering::SeqCst) == 0 {
             true
@@ -457,6 +532,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
 impl<T: AmDist> Future for MultiAmHandle<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launch_am_if_needed();
         let mut this = self.as_mut();
         if this.ready_or_set_waker(cx.waker()) {
             let mut res = vec![];

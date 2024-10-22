@@ -29,6 +29,7 @@ use crate::array::{ArrayRdmaHandle, LamellarArray, LamellarArrayInternalGet};
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion, SubRegion};
 
+use crate::warnings::RuntimeWarning;
 use crate::LamellarTeamRT;
 
 // use async_trait::async_trait;
@@ -263,13 +264,8 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     where
         Self: Sized + Send,
     {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            println!(
-                "[LAMELLAR WARNING] Trying to convert a lamellar one sided iterator into a standard iterator within a worker thread {:?} self may result in deadlock.
-                 Please use into_stream() instead",
-                std::backtrace::Backtrace::capture()
-            )
-        }
+        RuntimeWarning::BlockingCall("into_iter", "into_stream()").print();
+
         // println!("Into Iter");
         self.init();
         OneSidedIteratorIter { iter: self }

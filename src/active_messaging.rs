@@ -923,6 +923,7 @@ pub(crate) enum RetType {
 #[derive(Debug)]
 pub(crate) struct AMCounters {
     pub(crate) outstanding_reqs: Arc<AtomicUsize>,
+    pub(crate) launched_req_cnt: AtomicUsize,
     pub(crate) send_req_cnt: AtomicUsize,
 }
 
@@ -930,12 +931,21 @@ impl AMCounters {
     pub(crate) fn new() -> AMCounters {
         AMCounters {
             outstanding_reqs: Arc::new(AtomicUsize::new(0)),
+            launched_req_cnt: AtomicUsize::new(0),
             send_req_cnt: AtomicUsize::new(0),
         }
     }
-    pub(crate) fn add_send_req(&self, num: usize) {
-        let _num_reqs = self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
-        // println!("add_send_req {}",_num_reqs+1);
+
+    pub(crate) fn inc_launched(&self, num: usize) {
+        self.launched_req_cnt.fetch_add(num, Ordering::SeqCst);
+    }
+    pub(crate) fn inc_outstanding(&self, num: usize) {
+        self.outstanding_reqs.fetch_add(num, Ordering::SeqCst);
+    }
+    pub(crate) fn dec_outstanding(&self, num: usize) {
+        self.outstanding_reqs.fetch_sub(num, Ordering::SeqCst);
+    }
+    pub(crate) fn inc_send_req(&self, num: usize) {
         self.send_req_cnt.fetch_add(num, Ordering::SeqCst);
     }
 }

@@ -8,11 +8,7 @@ use std::{
 use pin_project::pin_project;
 
 use crate::{
-    active_messaging::{AmHandle, LocalAmHandle},
-    array::LamellarByteArray,
-    lamellar_request::LamellarRequest,
-    scheduler::LamellarTask,
-    Dist, OneSidedMemoryRegion, RegisteredMemoryRegion,
+    active_messaging::{AmHandle, LocalAmHandle}, array::LamellarByteArray, lamellar_request::LamellarRequest, scheduler::LamellarTask, warnings::RuntimeWarning, Dist, OneSidedMemoryRegion, RegisteredMemoryRegion
 };
 
 /// a task handle for an array rdma (put/get) operation
@@ -33,6 +29,11 @@ impl ArrayRdmaHandle {
 
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) -> () {
+        RuntimeWarning::BlockingCall(
+            "ArrayRdmaHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }
@@ -90,6 +91,11 @@ impl<T: Dist> ArrayRdmaAtHandle<T> {
 
     /// This method will block the calling thread until the associated Array RDMA at Operation completes
     pub fn block(self) -> T {
+        RuntimeWarning::BlockingCall(
+            "ArrayRdmaAtHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.array.team().block_on(self)
     }
 }

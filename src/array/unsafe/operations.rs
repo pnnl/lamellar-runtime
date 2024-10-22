@@ -502,8 +502,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
-            self.inner.data.array_counters.add_send_req(1);
-            self.inner.data.team.inc_counters(1);
+            self.inner.data.array_counters.inc_outstanding(1);
+            self.inner.data.team.inc_outstanding(1);
             let index_vec = index.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
             self.inner
@@ -573,13 +573,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     }
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
-                    the_array
-                        .inner
-                        .data
-                        .array_counters
-                        .outstanding_reqs
-                        .fetch_sub(1, Ordering::SeqCst);
-                    the_array.inner.data.team.dec_counters(1);
+                    the_array.inner.data.array_counters.dec_outstanding(1);
+                    the_array.inner.data.team.dec_outstanding(1);
                 });
             start_i += len;
         }
@@ -623,8 +618,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = val.len();
-            self.inner.data.array_counters.add_send_req(1);
-            self.inner.data.team.inc_counters(1);
+            self.inner.data.array_counters.inc_outstanding(1);
+            self.inner.data.team.inc_outstanding(1);
             let the_array: UnsafeArray<T> = self.clone();
             let val_chunks = val.into_vec_chunks(num_per_batch);
             scheduler.submit_immediate_task(async move {
@@ -651,13 +646,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 });
                 futures2.lock().extend(reqs);
                 cnt2.fetch_add(1, Ordering::SeqCst);
-                the_array
-                    .inner
-                    .data
-                    .array_counters
-                    .outstanding_reqs
-                    .fetch_sub(1, Ordering::SeqCst);
-                the_array.inner.data.team.dec_counters(1);
+                the_array.inner.data.array_counters.dec_outstanding(1);
+                the_array.inner.data.team.dec_outstanding(1);
             });
             start_i += len;
         }
@@ -703,8 +693,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
-            self.inner.data.array_counters.add_send_req(1);
-            self.inner.data.team.inc_counters(1);
+            self.inner.data.array_counters.inc_outstanding(1);
+            self.inner.data.team.inc_outstanding(1);
             let index_vec = index.to_vec();
             let vals_vec = val.to_vec();
             let the_array: UnsafeArray<T> = self.clone();
@@ -807,13 +797,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     }
                     futures2.lock().extend(reqs);
                     cnt2.fetch_add(1, Ordering::SeqCst);
-                    the_array
-                        .inner
-                        .data
-                        .array_counters
-                        .outstanding_reqs
-                        .fetch_sub(1, Ordering::SeqCst);
-                    the_array.inner.data.team.dec_counters(1);
+                    the_array.inner.data.array_counters.dec_outstanding(1);
+                    the_array.inner.data.team.dec_outstanding(1);
                 });
             start_i += len;
         }

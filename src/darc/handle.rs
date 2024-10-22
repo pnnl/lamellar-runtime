@@ -6,8 +6,10 @@ use std::task::{Context, Poll};
 
 use crate::darc::local_rw_darc::{LocalRwDarc, LocalRwDarcReadGuard};
 use crate::lamellar_request::LamellarRequest;
-use crate::{config, darc, GlobalRwDarc, LamellarTeamRT};
+use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 use crate::{AmHandle, Darc};
+use crate::{GlobalRwDarc, LamellarTeamRT};
 
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use futures_util::{ready, Future};
@@ -26,7 +28,7 @@ enum State<T> {
     TryingWrite(#[pin] Pin<Box<dyn Future<Output = RwLockWriteGuardArc<T>> + Send + 'static>>),
 }
 
-#[must_use]
+#[must_use = "LocalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired read lock from a LocalRwDarc
 ///
@@ -98,16 +100,11 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     ///
     ///```
     pub fn block(self) -> LocalRwDarcReadGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalRwDarcReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "LocalRwDarcReadHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         let inner_darc = self.darc.darc.clone();
 
@@ -121,6 +118,30 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
             darc: self.darc,
             lock: guard,
         }
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let handle = counter.read();
+    /// let task = handle.spawn(); //initiate the operation
+    /// // do other work
+    /// let guard = task.block(); //block until we get the read lock
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
+    ///
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<LocalRwDarcReadGuard<T>> {
+        self.darc.darc.team().spawn(self)
     }
 }
 
@@ -148,7 +169,7 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "LocalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired write lock from a LocalRwDarc
 ///
@@ -218,16 +239,11 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     /// *guard += my_pe;
     ///```
     pub fn block(self) -> LocalRwDarcWriteGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `LocalRwDarcWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "LocalRwDarcWriteHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         let inner_darc = self.darc.darc.clone();
 
@@ -241,6 +257,29 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
             darc: self.darc,
             lock: guard,
         }
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let handle = counter.write();
+    /// let task = handle.spawn(); //initiate the operation
+    /// // do other work
+    /// let mut guard = task.block(); //block until we get the write lock
+    /// *guard += my_pe;
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<LocalRwDarcWriteGuard<T>> {
+        self.darc.darc.team().spawn(self)
     }
 }
 
@@ -268,7 +307,7 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired read lock from a GlobalRwDarc
 ///
@@ -333,16 +372,11 @@ impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///```
     pub fn block(self) -> GlobalRwDarcReadGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalRwDarcReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalRwDarcReadHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         let _ = self.lock_am.blocking_wait();
         GlobalRwDarcReadGuard {
@@ -350,6 +384,29 @@ impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
             marker: PhantomData,
             local_cnt: Arc::new(AtomicUsize::new(1)),
         }
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let handle = counter.read();
+    /// let task = handle.spawn(); //initiate the operation
+    /// // do other work
+    /// let guard = task.block(); //block until we get the write lock
+    /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<GlobalRwDarcReadGuard<T>> {
+        self.darc.darc.team().spawn(self)
     }
 }
 
@@ -366,7 +423,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcReadHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired write lock from a GlobalRwDarc
 ///
@@ -431,22 +488,40 @@ impl<T: Sync + Send> GlobalRwDarcWriteHandle<T> {
     /// *guard += my_pe;
     ///```
     pub fn block(self) -> GlobalRwDarcWriteGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalRwDarcWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalRwDarcWriteHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         let _ = self.lock_am.blocking_wait();
         GlobalRwDarcWriteGuard {
             darc: self.darc.clone(),
             marker: PhantomData,
         }
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let handle = counter.write();
+    /// let task = handle.spawn(); //initiate the operation
+    /// // do other work
+    /// let mut guard = task.block(); //block until we get the write lock
+    /// *guard += my_pe;
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<GlobalRwDarcWriteGuard<T>> {
+        self.darc.darc.team().spawn(self)
     }
 }
 
@@ -462,7 +537,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcWriteHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired collective write lock from a GlobalRwDarc
 ///
@@ -508,16 +583,11 @@ impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
     /// let mut guard = handle.block(); //block until we get the write lock
     /// *guard += my_pe;
     pub fn block(self) -> GlobalRwDarcCollectiveWriteGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalRwDarcCollectiveWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalRwDarcCollectiveWriteHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         let _ = self.lock_am.blocking_wait();
         GlobalRwDarcCollectiveWriteGuard {
@@ -525,6 +595,28 @@ impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
             collective_cnt: self.collective_cnt,
             marker: PhantomData,
         }
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let handle = counter.collective_write();
+    /// let task = handle.spawn();//initiate the operation
+    /// // do other work
+    /// let mut guard = task.block(); //block until we get the write lock
+    /// *guard += my_pe;
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<GlobalRwDarcCollectiveWriteGuard<T>> {
+        self.darc.darc.team().spawn(self)
     }
 }
 
@@ -609,7 +701,7 @@ impl<T: 'static> OrigDarc<T> {
     }
 }
 
-#[must_use]
+#[must_use = " Darc 'into' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of changing from a [LocalRwDarc] or [GlobalRwDarc] into a regular [Darc].
@@ -654,7 +746,30 @@ impl<T: Sync + Send> IntoDarcHandle<T> {
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_darc = five.into_darc().block();
     pub fn block(self) -> Darc<T> {
+        RuntimeWarning::BlockingCall(
+            "IntoDarcHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    /// ```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five_as_darc_task = five.into_darc().spawn();
+    /// let five_as_darc = five_as_darc_task.block();
+    /// ```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<Darc<T>> {
+        self.team.clone().spawn(self)
     }
 }
 
@@ -674,7 +789,7 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = " Darc 'into' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of changing from a [Darc] or [GlobalRwDarc] into a [LocalRwDarc].
@@ -719,17 +834,31 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
     /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_localrw = five.into_localrw().block();
     pub fn block(self) -> LocalRwDarc<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalRwDarcCollectiveWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "IntoLocalRwDarcHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
+
         self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    /// ```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five_as_localrw_task = five.into_localrw().spawn();
+    /// let five_as_localrw = five_as_localrw_task.block();
+    /// ```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<LocalRwDarc<T>> {
+        self.team.clone().spawn(self)
     }
 }
 
@@ -750,7 +879,7 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = " Darc 'into' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of changing from a [Darc] or [LocalRwDarc] into a [GlobalRwDarc].
@@ -795,17 +924,30 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_globalrw = five.into_globalrw().block();
     pub fn block(self) -> GlobalRwDarc<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalRwDarcCollectiveWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "IntoGlobalRwDarcHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
         self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five_as_globalrw_task = five.into_globalrw().spawn();
+    /// let five_as_globalrw = five_as_globalrw_task.block();
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<GlobalRwDarc<T>> {
+        self.team.clone().spawn(self)
     }
 }
 

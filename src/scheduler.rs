@@ -5,6 +5,7 @@ use crate::active_messaging::registered_active_message::RegisteredActiveMessages
 use crate::active_messaging::*;
 use crate::env_var::config;
 use crate::lamellae::{Des, Lamellae, SerializedData};
+use crate::warnings::RuntimeWarning;
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
@@ -103,15 +104,7 @@ pub struct LamellarTask<T> {
 
 impl<T> LamellarTask<T> {
     pub fn block(self) -> T {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            println!(
-                "[LAMELLAR WARNING] trying to call block on within a worker thread {:?} this may result in deadlock.
-                Typically this means you are running within an async context. If you have something like:
-                world.block_on(my_future) you can simply change to my_future.await. If this is not the case,
-                please file an issue on github.",
-                std::backtrace::Backtrace::capture()
-            )
-        }
+        RuntimeWarning::BlockingCall("LamellarTask::block", "<task>.await").print();
         self.executor.clone().block_on(self)
     }
 }
@@ -509,15 +502,7 @@ impl Scheduler {
     }
 
     pub(crate) fn block_on<F: Future>(&self, task: F) -> F::Output {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            println!(
-                "[LAMELLAR WARNING] trying to call block on within a worker thread {:?} this may result in deadlock.
-                Typically this means you are running within an async context. If you have something like:
-                world.block_on(my_future) you can simply change to my_future.await. If this is not the case,
-                please file an issue on github.",
-                std::backtrace::Backtrace::capture()
-            )
-        }
+        RuntimeWarning::BlockOn.print();
         self.executor.block_on(task)
     }
 

@@ -2,7 +2,6 @@ use crate::array::iterator::local_iterator::{IndexedLocalIterator, LocalIterator
 use crate::array::iterator::private::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::LamellarArray;
-use crate::config;
 use crate::darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard};
 use crate::memregion::Dist;
 

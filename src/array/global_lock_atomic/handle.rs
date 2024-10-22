@@ -1,10 +1,11 @@
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use crate::config;
 use crate::darc::handle::{
     GlobalRwDarcCollectiveWriteHandle, GlobalRwDarcReadHandle, GlobalRwDarcWriteHandle,
 };
+use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 use crate::Dist;
 use crate::GlobalLockArray;
 
@@ -16,7 +17,7 @@ use super::{
     GlobalLockReadGuard, GlobalLockWriteGuard,
 };
 
-#[must_use]
+#[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired read lock of a GlobalLockArray
 ///
@@ -65,18 +66,33 @@ impl<T: Dist> GlobalLockReadHandle<T> {
     /// let guard = handle.block();
     ///```
     pub fn block(self) -> GlobalLockReadGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalLockReadHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalLockReadHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         self.array.lock.darc.team().scheduler.block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.read_lock();
+    /// let task = handle.spawn(); // initiate getting the read lock
+    /// // do other work
+    /// let guard = task.block();
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(self) -> LamellarTask<GlobalLockReadGuard<T>> {
+        self.array.lock.darc.team().spawn(self)
     }
 }
 
@@ -94,7 +110,7 @@ impl<T: Dist> Future for GlobalLockReadHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired local data [GlobalLockLocalData] of  a GlobalLockArray
 ///
@@ -142,18 +158,34 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
     /// println!("local data: {:?}",local_data);
     ///```
     pub fn block(self) -> GlobalLockLocalData<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalLockLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalLockLocalDataHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         self.array.lock.darc.team().scheduler.block_on(self)
+    }
+    /// This method will spawn the associated active message to capture the lock and data on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.read_local_data();
+    /// let task = handle.spawn(); // initiate getting the read lock
+    /// // do other work
+    /// let  local_data = task.block();
+    /// println!("local data: {:?}",local_data);
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<GlobalLockLocalData<T>> {
+        self.array.lock.darc.team().spawn(self)
     }
 }
 
@@ -174,7 +206,7 @@ impl<T: Dist> Future for GlobalLockLocalDataHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired write lock of a GlobalLockArray
 ///
@@ -220,21 +252,36 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
     /// let my_pe = world.my_pe();
     /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
     /// let handle = array.write_lock();
-    /// handle.block();
+    /// let guard = handle.block();
     ///```
     pub fn block(self) -> GlobalLockWriteGuard<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalLockWriteHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalLockWriteHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         self.array.lock.darc.team().scheduler.block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock  on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.write_lock();
+    /// let task = handle.spawn(); // initiate getting the read lock
+    /// // do other work
+    /// let guard = task.block();
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<GlobalLockWriteGuard<T>> {
+        self.array.lock.darc.team().spawn(self)
     }
 }
 
@@ -252,7 +299,7 @@ impl<T: Dist> Future for GlobalLockWriteHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired mutable local data [GlobalLockMutLocalData] of  a GlobalLockArray
 ///
@@ -300,18 +347,35 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     pub fn block(self) -> GlobalLockMutLocalData<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalLockLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalLockMutLocalDataHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         self.array.lock.darc.team().scheduler.block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock and data on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.write_local_data();
+    /// let task = handle.spawn(); // initiate getting the read lock
+    /// // do other work
+    /// let mut local_data = task.block();
+    /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<GlobalLockMutLocalData<T>> {
+        self.array.lock.darc.team().spawn(self)
     }
 }
 
@@ -332,7 +396,7 @@ impl<T: Dist> Future for GlobalLockMutLocalDataHandle<T> {
     }
 }
 
-#[must_use]
+#[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 /// Handle used to retrieve the aquired mutable local data [GlobalLockMutLocalData] of a GlobalLockArray with all PEs collectively accessing their local data
 ///
@@ -381,18 +445,35 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     pub fn block(self) -> GlobalLockCollectiveMutLocalData<T> {
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            let msg = format!("
-                [LAMELLAR WARNING] You are calling `GlobalLockCollectiveMutLocalDataHandle::block` from within an async context which may lead to deadlock, it is recommended that you use `.await;` instead!
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture()
-            );
-            match config().blocking_call_warning {
-                Some(val) if val => println!("{msg}"),
-                _ => println!("{msg}"),
-            }
-        }
+        RuntimeWarning::BlockingCall(
+            "GlobalLockCollectiveMutLocalData::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
 
         self.array.lock.darc.team().scheduler.block_on(self)
+    }
+
+    /// This method will spawn the associated active message to capture the lock and data on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let handle = array.collective_write_local_data();
+    /// let task = handle.spawn(); // initiate getting the read lock
+    /// // do other work
+    /// let mut local_data = task.block();
+    /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
+    ///```
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<GlobalLockCollectiveMutLocalData<T>> {
+        self.array.lock.darc.team().spawn(self)
     }
 }
 

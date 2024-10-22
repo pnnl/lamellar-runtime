@@ -982,7 +982,7 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
         self.lock_guard.array.clone().spawn(self)
     }
 
-    /// This method will block the caller until the associated Array Reduce Operation completes
+    /// This method will block the caller until the associated Array Reduce Operation completesRuntimeWarning::BlockingCall("LocalLockArrayReduceHandle::block", "<handle>.spawn() or <handle>.await").print();
     pub fn block(self) -> Option<T> {
         self.lock_guard.array.clone().block_on(self)
     }

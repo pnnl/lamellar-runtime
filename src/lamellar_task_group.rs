@@ -9,6 +9,7 @@ use crate::lamellar_request::*;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT};
 use crate::memregion::one_sided::MemRegionHandleInner;
 use crate::scheduler::{LamellarTask, ReqId, Scheduler};
+use crate::warnings::RuntimeWarning;
 use crate::Darc;
 
 // use crossbeam::utils::CachePadded;
@@ -32,9 +33,9 @@ pub(crate) struct TaskGroupAmHandleInner {
     cnt: Arc<AtomicUsize>,
     data: Mutex<HashMap<usize, InternalResult>>, //<sub_id, result>
     wakers: Mutex<HashMap<usize, Waker>>,
-    team_outstanding_reqs: Arc<AtomicUsize>,
-    world_outstanding_reqs: Arc<AtomicUsize>,
-    tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    team_counters: Arc<AMCounters>,
+    world_counters: Arc<AMCounters>,
+    tg_counters: Option<Arc<AMCounters>>,
     pub(crate) scheduler: Arc<Scheduler>,
     // pending_reqs: Arc<Mutex<HashSet<usize>>>,
 }
@@ -44,6 +45,7 @@ pub(crate) struct TaskGroupAmHandleInner {
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupAmHandle<T: AmDist> {
     inner: Arc<TaskGroupAmHandleInner>,
+    am: Option<(Am, usize)>,
     sub_id: usize,
     _phantom: std::marker::PhantomData<T>,
 }
@@ -67,13 +69,11 @@ impl LamellarRequestAddResult for TaskGroupAmHandleInner {
         }
     }
     fn update_counters(&self, _sub_id: usize) {
-        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
-        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
-            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.team_counters.dec_outstanding(1);
+        self.world_counters.dec_outstanding(1);
+        if let Some(tg_counters) = self.tg_counters.clone() {
+            tg_counters.dec_outstanding(1);
         }
-        // self.pending_reqs.lock().remove(&sub_id);
     }
 }
 
@@ -120,22 +120,45 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
         }
     }
 
+    fn launch_am_if_needed(&mut self) {
+        if let Some((am, num_pes)) = self.am.take() {
+            self.inner.team_counters.inc_outstanding(num_pes);
+            self.inner.team_counters.inc_launched(num_pes);
+            self.inner.world_counters.inc_outstanding(num_pes);
+            self.inner.world_counters.inc_launched(num_pes);
+            if let Some(tg_counters) = self.inner.tg_counters.clone() {
+                tg_counters.inc_outstanding(num_pes);
+                tg_counters.inc_launched(num_pes);
+            }
+
+            self.inner.scheduler.submit_am(am);
+        }
+    }
+
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
-    pub fn spawn(self) -> LamellarTask<T> {
+    pub fn spawn(mut self) -> LamellarTask<T> {
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self)
     }
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(self) -> T {
+    pub fn block(mut self) -> T {
+        RuntimeWarning::BlockingCall(
+            "TaskGroupAmHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().block_on(self)
     }
 }
 
 impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
-    fn blocking_wait(self) -> Self::Output {
+    fn blocking_wait(mut self) -> Self::Output {
+        self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
         while res.is_none() {
             self.inner.scheduler.exec_task();
@@ -145,6 +168,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
     }
 
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.launch_am_if_needed();
         let data = self.inner.data.lock();
         if data.contains_key(&self.sub_id) {
             true
@@ -180,6 +204,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
 impl<T: AmDist> Future for TaskGroupAmHandle<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launch_am_if_needed();
         let mut this = self.as_mut();
         if this.ready_or_set_waker(cx.waker()) {
             Poll::Ready(
@@ -203,9 +228,9 @@ pub(crate) struct TaskGroupMultiAmHandleInner {
     arch: Arc<LamellarArchRT>,
     data: Mutex<HashMap<usize, HashMap<usize, InternalResult>>>, //<sub_id, <pe, result>>
     wakers: Mutex<HashMap<usize, Waker>>,
-    team_outstanding_reqs: Arc<AtomicUsize>,
-    world_outstanding_reqs: Arc<AtomicUsize>,
-    tg_outstanding_reqs: Option<Arc<AtomicUsize>>,
+    team_counters: Arc<AMCounters>,
+    world_counters: Arc<AMCounters>,
+    tg_counters: Option<Arc<AMCounters>>,
     pub(crate) scheduler: Arc<Scheduler>,
     // pending_reqs: Arc<Mutex<HashSet<usize>>>,
 }
@@ -215,6 +240,7 @@ pub(crate) struct TaskGroupMultiAmHandleInner {
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupMultiAmHandle<T: AmDist> {
     inner: Arc<TaskGroupMultiAmHandleInner>,
+    am: Option<(Am, usize)>,
     sub_id: usize,
     _phantom: std::marker::PhantomData<T>,
 }
@@ -242,13 +268,11 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
         }
     }
     fn update_counters(&self, _sub_id: usize) {
-        let _team_reqs = self.team_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        let _world_req = self.world_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
-        // println!("tg update counter team {} world {}",_team_reqs-1,_world_req-1);
-        if let Some(tg_outstanding_reqs) = self.tg_outstanding_reqs.clone() {
-            tg_outstanding_reqs.fetch_sub(1, Ordering::SeqCst);
+        self.team_counters.dec_outstanding(1);
+        self.world_counters.dec_outstanding(1);
+        if let Some(tg_counters) = self.tg_counters.clone() {
+            tg_counters.dec_outstanding(1);
         }
-        // self.pending_reqs.lock().remove(&sub_id);
     }
 }
 
@@ -295,22 +319,44 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
         }
     }
 
+    fn launch_am_if_needed(&mut self) {
+        if let Some((am, num_pes)) = self.am.take() {
+            self.inner.team_counters.inc_outstanding(num_pes);
+            self.inner.team_counters.inc_launched(num_pes);
+            self.inner.world_counters.inc_outstanding(num_pes);
+            self.inner.world_counters.inc_launched(num_pes);
+            if let Some(tg_counters) = self.inner.tg_counters.clone() {
+                tg_counters.inc_outstanding(num_pes);
+                tg_counters.inc_launched(num_pes);
+            }
+            self.inner.scheduler.submit_am(am);
+        }
+    }
+
     /// This method will spawn the associated Active Message on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
-    pub fn spawn(self) -> LamellarTask<Vec<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self)
     }
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(self) -> Vec<T> {
+    pub fn block(mut self) -> Vec<T> {
+        RuntimeWarning::BlockingCall(
+            "TaskGroupMultiAmHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().block_on(self)
     }
 }
 
 impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
-    fn blocking_wait(self) -> Self::Output {
+    fn blocking_wait(mut self) -> Self::Output {
+        self.launch_am_if_needed();
         while !self.inner.data.lock().contains_key(&self.sub_id) {
             self.inner.scheduler.exec_task();
         }
@@ -341,6 +387,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
     }
 
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.launch_am_if_needed();
         let data = self.inner.data.lock();
         if let Some(req) = data.get(&self.sub_id) {
             req.len() == self.inner.arch.num_pes()
@@ -382,6 +429,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
 impl<T: AmDist> Future for TaskGroupMultiAmHandle<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launch_am_if_needed();
         let mut this = self.as_mut();
         if this.ready_or_set_waker(cx.waker()) {
             let mut sub_id_map = this
@@ -408,6 +456,7 @@ impl<T: AmDist> Future for TaskGroupMultiAmHandle<T> {
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupLocalAmHandle<T> {
     inner: Arc<TaskGroupAmHandleInner>,
+    am: Option<(Am, usize)>,
     sub_id: usize,
     _phantom: std::marker::PhantomData<T>,
 }
@@ -441,6 +490,20 @@ impl<T: 'static> TaskGroupLocalAmHandle<T> {
             }
         }
     }
+
+    fn launch_am_if_needed(&mut self) {
+        if let Some((am, num_pes)) = self.am.take() {
+            self.inner.team_counters.inc_outstanding(num_pes);
+            self.inner.team_counters.inc_launched(num_pes);
+            self.inner.world_counters.inc_outstanding(num_pes);
+            self.inner.world_counters.inc_launched(num_pes);
+            if let Some(tg_counters) = self.inner.tg_counters.clone() {
+                tg_counters.inc_outstanding(num_pes);
+                tg_counters.inc_launched(num_pes);
+            }
+            self.inner.scheduler.submit_am(am);
+        }
+    }
 }
 
 impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
@@ -449,17 +512,25 @@ impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
-    pub fn spawn(self) -> LamellarTask<T> {
+    pub fn spawn(mut self) -> LamellarTask<T> {
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().spawn_task(self)
     }
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(self) -> T {
+    pub fn block(mut self) -> T {
+        RuntimeWarning::BlockingCall(
+            "TaskGroupLocalAmHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
+        self.launch_am_if_needed();
         self.inner.scheduler.clone().block_on(self)
     }
 }
 
 impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
-    fn blocking_wait(self) -> Self::Output {
+    fn blocking_wait(mut self) -> Self::Output {
+        self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
         while res.is_none() {
             self.inner.scheduler.exec_task();
@@ -469,6 +540,7 @@ impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
     }
 
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+        self.launch_am_if_needed();
         let data = self.inner.data.lock();
         if data.contains_key(&self.sub_id) {
             // println!("request ready {:?}", self.sub_id);
@@ -496,6 +568,7 @@ impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
 impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launch_am_if_needed();
         let mut this = self.as_mut();
         if this.ready_or_set_waker(cx.waker()) {
             Poll::Ready(
@@ -569,7 +642,7 @@ pub struct LamellarTaskGroup {
     local_id: usize, //for exec_local requests -- is actually the pointer to the rt_local_req  (but *const are not sync so we use usize)
     sub_id_counter: AtomicUsize,
     cnt: Arc<AtomicUsize>, // handle reference count, so that we don't need to worry about storing results if all handles are dropped
-    pub(crate) counters: AMCounters,
+    pub(crate) counters: Arc<AMCounters>,
     //these are cloned and returned to user for each request
     req: Arc<TaskGroupAmHandleInner>,
     multi_req: Arc<TaskGroupMultiAmHandleInner>,
@@ -671,16 +744,16 @@ impl LamellarTaskGroup {
     ///```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> LamellarTaskGroup {
         let team = team.into().team.clone();
-        let counters = AMCounters::new();
+        let counters = Arc::new(AMCounters::new());
         let cnt = Arc::new(AtomicUsize::new(1)); //this lamellarTaskGroup instance represents 1 handle (even though we maintain a single and multi req handle)
                                                  // let pending_reqs = Arc::new(Mutex::new(HashSet::new()));
         let req = Arc::new(TaskGroupAmHandleInner {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
             wakers: Mutex::new(HashMap::new()),
-            team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
-            world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+            team_counters: team.team_counters.clone(),
+            world_counters: team.world_counters.clone(),
+            tg_counters: Some(counters.clone()),
             scheduler: team.scheduler.clone(),
             // pending_reqs: pending_reqs.clone(),
         });
@@ -690,9 +763,9 @@ impl LamellarTaskGroup {
             arch: team.arch.clone(),
             data: Mutex::new(HashMap::new()),
             wakers: Mutex::new(HashMap::new()),
-            team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
-            world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+            team_counters: team.team_counters.clone(),
+            world_counters: team.world_counters.clone(),
+            tg_counters: Some(counters.clone()),
             scheduler: team.scheduler.clone(),
             // pending_reqs: pending_reqs.clone(),
         });
@@ -701,9 +774,9 @@ impl LamellarTaskGroup {
             cnt: cnt.clone(),
             data: Mutex::new(HashMap::new()),
             wakers: Mutex::new(HashMap::new()),
-            team_outstanding_reqs: team.team_counters.outstanding_reqs.clone(),
-            world_outstanding_reqs: team.world_counters.outstanding_reqs.clone(),
-            tg_outstanding_reqs: Some(counters.outstanding_reqs.clone()),
+            team_counters: team.team_counters.clone(),
+            world_counters: team.world_counters.clone(),
+            tg_counters: Some(counters.clone()),
             scheduler: team.scheduler.clone(),
             // pending_reqs: pending_reqs.clone(),
         });
@@ -727,23 +800,22 @@ impl LamellarTaskGroup {
     }
 
     fn wait_all(&self) {
-        let mut exec_task = true;
-        if std::thread::current().id() != *crate::MAIN_THREAD {
-            if let Some(val) = config().blocking_call_warning {
-                if val {
-                    println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
-                    Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-                }
-            } else {
-                println!("[LAMELLAR WARNING] You are calling wait_all from within an async context, it is recommended that you use `await_all().await;` instead! 
-                Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning, Set RUST_LIB_BACKTRACE=1 to see where the call is occcuring: {}", std::backtrace::Backtrace::capture());
-            }
-            exec_task = false;
+        RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
+
+        if self.counters.send_req_cnt.load(Ordering::SeqCst)
+            != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+            || self.counters.send_req_cnt.load(Ordering::SeqCst)
+                != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+        {
+            RuntimeWarning::UnspanedTask(
+                        "`wait_all` on an active message group before all tasks/active messages create by the group have been spawned",
+                    )
+                    .print();
         }
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
-            if exec_task {
+            if std::thread::current().id() != *crate::MAIN_THREAD {
                 self.team.scheduler.exec_task();
             }
             if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
@@ -766,6 +838,16 @@ impl LamellarTaskGroup {
     }
 
     async fn await_all(&self) {
+        if self.counters.send_req_cnt.load(Ordering::SeqCst)
+            != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+            || self.counters.send_req_cnt.load(Ordering::SeqCst)
+                != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+        {
+            RuntimeWarning::UnspanedTask(
+                        "`await_all` on an active message group before all tasks/active messages created by the group have been spawned",
+                    )
+                    .print();
+        }
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
@@ -791,9 +873,9 @@ impl LamellarTaskGroup {
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         // println!("task group exec am all");
-        self.team.team_counters.add_send_req(self.team.num_pes);
-        self.team.world_counters.add_send_req(self.team.num_pes);
-        self.counters.add_send_req(self.team.num_pes);
+        self.team.team_counters.inc_send_req(self.team.num_pes);
+        self.team.world_counters.inc_send_req(self.team.num_pes);
+        self.counters.inc_send_req(self.team.num_pes);
         // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
@@ -823,9 +905,10 @@ impl LamellarTaskGroup {
             team_addr: self.team.remote_ptr_addr,
         };
         // println!("[{:?}] task group am all", std::thread::current().id());
-        self.team.scheduler.submit_am(Am::All(req_data, func));
+        // self.team.scheduler.submit_am();
         TaskGroupMultiAmHandle {
             inner: self.multi_req.clone(),
+            am: Some((Am::All(req_data, func), self.team.num_pes)),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         }
@@ -836,9 +919,9 @@ impl LamellarTaskGroup {
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         // println!("task group exec am pe");
-        self.team.team_counters.add_send_req(1);
-        self.team.world_counters.add_send_req(1);
-        self.counters.add_send_req(1);
+        self.team.team_counters.inc_send_req(1);
+        self.team.world_counters.inc_send_req(1);
+        self.counters.inc_send_req(1);
         // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
@@ -864,9 +947,10 @@ impl LamellarTaskGroup {
             team_addr: self.team.remote_ptr_addr,
         };
         // println!("[{:?}] task group am pe", std::thread::current().id());
-        self.team.scheduler.submit_am(Am::Remote(req_data, func));
+        // self.team.scheduler.submit_am(Am::Remote(req_data, func));
         TaskGroupAmHandle {
             inner: self.req.clone(),
+            am: Some((Am::Remote(req_data, func), 1)),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         }
@@ -884,9 +968,9 @@ impl LamellarTaskGroup {
         func: LamellarArcLocalAm,
     ) -> TaskGroupLocalAmHandle<O> {
         // println!("task group exec am local");
-        self.team.team_counters.add_send_req(1);
-        self.team.world_counters.add_send_req(1);
-        self.counters.add_send_req(1);
+        self.team.team_counters.inc_send_req(1);
+        self.team.world_counters.inc_send_req(1);
+        self.counters.inc_send_req(1);
         // println!("cnts: t: {} w: {} self: {:?}",self.team.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.team.world_counters.outstanding_reqs.load(Ordering::Relaxed), self.counters.outstanding_reqs.load(Ordering::Relaxed));
 
         self.cnt.fetch_add(1, Ordering::SeqCst);
@@ -911,7 +995,7 @@ impl LamellarTaskGroup {
             team_addr: self.team.remote_ptr_addr,
         };
         // println!("[{:?}] task group am local", std::thread::current().id());
-        self.team.scheduler.submit_am(Am::Local(req_data, func));
+        // self.team.scheduler.submit_am(Am::Local(req_data, func));
         // Box::new(TaskGroupLocalAmHandle {
         //     inner: self.local_req.clone(),
         //     sub_id: req_id.sub_id,
@@ -919,6 +1003,7 @@ impl LamellarTaskGroup {
         // })
         TaskGroupLocalAmHandle {
             inner: self.local_req.clone(),
+            am: Some((Am::Local(req_data, func), 1)),
             sub_id: req_id.sub_id,
             _phantom: PhantomData,
         }

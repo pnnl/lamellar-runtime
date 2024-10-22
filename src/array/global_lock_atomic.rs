@@ -11,7 +11,6 @@ use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::barrier::BarrierHandle;
-use crate::config;
 use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
@@ -20,6 +19,7 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 
 use pin_project::pin_project;
 
@@ -1030,6 +1030,11 @@ impl<T: Dist + AmDist> GlobalLockArrayReduceHandle<T> {
 
     /// This method will block the caller until the associated Array Reduce Operation completes
     pub fn block(self) -> Option<T> {
+        RuntimeWarning::BlockingCall(
+            "GlobalLockArrayReduceHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.lock_guard.array.clone().block_on(self)
     }
 }

@@ -98,15 +98,20 @@ fn main() {
         if my_pe == 0 {
             for _j in 0..num_tasks {
                 let sub_timer = Instant::now();
-                reqs.push(world.exec_am_all(FlopAM {
-                    iterations: num_iterations,
-                }));
+                reqs.push(
+                    world
+                        .exec_am_all(FlopAM {
+                            iterations: num_iterations,
+                        })
+                        .spawn(),
+                );
 
                 sub_time += sub_timer.elapsed().as_secs_f64();
             }
             println!("issue time: {:?}", timer.elapsed().as_secs_f64());
             world.wait_all();
         }
+
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let tot_flop: usize = reqs

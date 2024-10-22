@@ -27,9 +27,11 @@
 //!           This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime
 //!           will print a message at the end of execution with how many additional pools were allocated.
 //!              - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_HEAP_SIZE` to a larger value
-//! - `LAMELLAR_DEADLOCK_WARNING_TIMEOUT` - the timeout in seconds before a deadlock warning is printed. Defaults to 600. Note this does not cause your application to terminate
+//! - `LAMELLAR_DEADLOCK_WARNING_TIMEOUT` - the timeout in seconds before a deadlock warning is printed. Defaults to 600, set to 0 to disable. Note this does not cause your application to terminate
 //! - `LAMELLAR_AM_GROUP_BATCH_SIZE` - The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
 //! - `LAMELLAR_BLOCKING_CALL_WARNING` - flag used to print warnings when users call barriers on worker threads. Default: true
+//! - `LAMELLAR_DROPPED_UNUSED_HANDLE_WARNING` - flag used to print warnings when users drop active message handles without awaiting, spawning, or blocking on them. Default:
+//! - `LAMELLAR_UNSPAWNED_TASK_WARNING` - flag used to print warnings when users attempt to call wait_all while there are tasks that have not been spawned. Default: true
 //! - `LAMELLAR_BARRIER_DISSEMINATION_FACTOR` - (Experimental) The dissemination factor for the n-way barrier, default: 2
 //! - `LAMELLAR_BATCH_OP_THREADS` - the number of threads used to initiate batched operations, defaults to 1/4 LAMELLAR_THREADS
 //! - `LAMELLAR_ARRAY_INDEX_SIZE` - specify static or dynamic array index size
@@ -154,6 +156,12 @@ pub struct Config {
 
     /// flag used to print warnings when users call barriers on worker threads. Default: true
     pub blocking_call_warning: Option<bool>,
+
+    /// flag used to print warnings when users drop active message handles without awaiting, spawning, or blocking on them. Default: true
+    pub dropped_unused_handle_warning: Option<bool>,
+
+    /// flag used to print warnings when users attempt to call wait_all while there are tasks that have not been spawned. Default: true
+    pub unpspawned_task_warning: Option<bool>,
 
     /// The lamellae backend to use
     /// rofi -- multi pe distributed execution, default if rofi feature is turned on
