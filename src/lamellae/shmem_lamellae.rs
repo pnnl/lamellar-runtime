@@ -124,8 +124,8 @@ impl LamellaeComm for Shmem {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
-        self.shmem_comm.barrier()
+    async fn barrier(&self) {
+        self.shmem_comm.barrier().await
     }
     fn backend(&self) -> Backend {
         Backend::Shmem
@@ -210,21 +210,23 @@ impl Ser for Shmem {
     }
 }
 
+#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Shmem {
     fn flush(&self) {}
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.shmem_comm.put(pe, src, dst);
+    async fn put(&self, pe: usize, src: &[u8], dst: usize) {
+        self.shmem_comm.put(pe, src, dst).await;
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.shmem_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        self.shmem_comm.put_all(src, dst);
+    async fn put_all(&self, src: &[u8], dst: usize) {
+        self.shmem_comm.put_all(src, dst).await;
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.shmem_comm.get(pe, src, dst);
+    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.shmem_comm.get(pe, src, dst).await;
     }
+
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.shmem_comm.get(pe, src, dst);
     }
@@ -237,8 +239,8 @@ impl LamellaeRDMA for Shmem {
     fn rt_free(&self, addr: usize) {
         self.shmem_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
-        self.shmem_comm.alloc(size, alloc)
+    async fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
+        self.shmem_comm.alloc(size, alloc).await
     }
     fn free(&self, addr: usize) {
         self.shmem_comm.free(addr)

@@ -127,8 +127,8 @@ impl LamellaeComm for Rofi {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
-        self.rofi_comm.barrier()
+    async fn barrier(&self) {
+        self.rofi_comm.barrier().await
     }
     fn backend(&self) -> Backend {
         Backend::Rofi
@@ -218,6 +218,7 @@ impl Ser for Rofi {
     }
 }
 
+#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Rofi {
     fn flush(&self) {

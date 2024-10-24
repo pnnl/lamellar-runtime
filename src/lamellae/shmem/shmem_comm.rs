@@ -371,7 +371,7 @@ impl CommOps for ShmemComm {
     fn MB_sent(&self) -> f64 {
         0.0
     }
-    fn barrier(&self) {
+    async fn barrier(&self) {
         let alloc = self.alloc_lock.write();
         unsafe {
             alloc.1.alloc(1, 0..self.num_pes);
@@ -403,13 +403,13 @@ impl CommOps for ShmemComm {
             );
         }
     }
-    fn alloc_pool(&self, min_size: usize) {
+    async fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
         let size = std::cmp::max(
             min_size * 2 * self.num_pes,
             SHMEM_SIZE.load(Ordering::SeqCst),
         ) / self.num_pes;
-        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
+        if let Ok(addr) = self.alloc(size, AllocationType::Global).await {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("shmem".to_string());
             new_alloc.init(addr, size);
@@ -455,7 +455,7 @@ impl CommOps for ShmemComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
-    fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
+    async fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
         let (ret, index, remote_addrs) = match alloc_type {
@@ -525,7 +525,7 @@ impl CommOps for ShmemComm {
     }
 
     fn flush(&self) {}
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    async fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(dst_addr) {
@@ -548,12 +548,14 @@ impl CommOps for ShmemComm {
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         self.put(pe, src_addr, dst_addr);
     }
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
+
+    async fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         for pe in 0..self.num_pes {
             self.put(pe, src_addr, dst_addr);
         }
     }
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+
+    async fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(src_addr) {
@@ -573,6 +575,7 @@ impl CommOps for ShmemComm {
             }
         }
     }
+
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
         self.get(pe, src_addr, dst_addr);

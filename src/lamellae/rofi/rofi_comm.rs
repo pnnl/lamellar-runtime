@@ -216,7 +216,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn barrier(&self) {
+    async fn barrier(&self) {
         // let _lock = self.comm_mutex.write();
         rofi_barrier();
     }
@@ -249,10 +249,10 @@ impl CommOps for RofiComm {
         }
     }
     //#[tracing::instrument(skip_all)]
-    fn alloc_pool(&self, min_size: usize) {
+    async fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
         let size = std::cmp::max(min_size * 2 * self.num_pes, ROFI_MEM.load(Ordering::SeqCst));
-        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
+        if let Ok(addr) = self.alloc(size, AllocationType::Global).await {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("rofi_mem".to_string());
             new_alloc.init(addr, size);
@@ -300,7 +300,7 @@ impl CommOps for RofiComm {
         panic!("Error invalid free! {:?}", addr);
     }
     //#[tracing::instrument(skip_all)]
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+    async fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         //memory segments are aligned on page boundaries so no need to pass in alignment constraint
         // let size = size + size%8;
         // let _lock = self.comm_mutex.write();
@@ -341,7 +341,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    async fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // let mut req = RofiReq{
         //     txids: Vec::new(),
@@ -409,7 +409,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
+    async fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -445,7 +445,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    async fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         //-> RofiReq {
         // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{

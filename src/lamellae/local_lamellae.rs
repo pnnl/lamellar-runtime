@@ -100,7 +100,7 @@ impl LamellaeComm for Local {
     fn num_pes(&self) -> usize {
         1
     }
-    fn barrier(&self) {}
+    async fn barrier(&self) {}
     fn backend(&self) -> Backend {
         Backend::Local
     }
@@ -132,9 +132,10 @@ struct MyPtr {
 // unsafe impl Sync for MyPtr {}
 unsafe impl Send for MyPtr {}
 
+#[async_trait]
 impl LamellaeRDMA for Local {
     fn flush(&self) {}
-    fn put(&self, _pe: usize, src: &[u8], dst: usize) {
+    async fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
         }
@@ -144,12 +145,12 @@ impl LamellaeRDMA for Local {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
         }
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
+    async fn put_all(&self, src: &[u8], dst: usize) {
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
         }
     }
-    fn get(&self, _pe: usize, src: usize, dst: &mut [u8]) {
+    async fn get(&self, _pe: usize, src: usize, dst: &mut [u8]) {
         unsafe {
             std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
         }
@@ -190,7 +191,7 @@ impl LamellaeRDMA for Local {
             }; //it will free when dropping from scope
         }
     }
-    fn alloc(&self, size: usize, _alloc: AllocationType, align: usize) -> AllocResult<usize> {
+    async fn alloc(&self, size: usize, _alloc: AllocationType, align: usize) -> AllocResult<usize> {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         // let data = vec![0u8; size].into_boxed_slice();

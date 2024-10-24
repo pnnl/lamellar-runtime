@@ -25,14 +25,12 @@ impl RofiRustBuilder {
     pub(crate) fn new(provider: &str, domain: &str) -> RofiRustBuilder {
         let provider = if !provider.is_empty() {
             Some(provider)
-        }
-        else {
+        } else {
             None
         };
         let domain = if !domain.is_empty() {
             Some(domain)
-        }
-        else {
+        } else {
             None
         };
         let libfab: Arc<Comm> = Arc::new(RofiRustComm::new(provider, domain).unwrap().into());
@@ -139,8 +137,8 @@ impl LamellaeComm for RofiRust {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
-        self.libfab_comm.barrier()
+    async fn barrier(&self) {
+        self.libfab_comm.barrier().await
     }
     fn backend(&self) -> Backend {
         Backend::RofiRust
@@ -230,21 +228,22 @@ impl Ser for RofiRust {
     }
 }
 
+#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for RofiRust {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
+    async fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.put(pe, src, dst);
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
+    async fn put_all(&self, src: &[u8], dst: usize) {
         self.libfab_comm.put_all(src, dst);
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.libfab_comm.get(pe, src, dst);
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
@@ -259,7 +258,7 @@ impl LamellaeRDMA for RofiRust {
     fn rt_free(&self, addr: usize) {
         self.libfab_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
+    async fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
         self.libfab_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {

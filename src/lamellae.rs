@@ -1,16 +1,22 @@
-use crate::lamellae::libfab_lamellae::LibFab;
-use crate::lamellae::libfab_lamellae::LibFabBuilder;
-use crate::lamellae::libfabric::libfabric_comm::LibFabData;
 use crate::active_messaging::Msg;
 use crate::config;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfab_lamellae::LibFab;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfab_lamellae::LibFabBuilder;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabasync_lamellae::LibFabAsync;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabasync_lamellae::LibFabAsyncBuilder;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric::libfabric_comm::LibFabData;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric_async::libfabric_async_comm::LibFabAsyncData;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
-use std::sync::Arc;
-use crate::lamellae::libfabasync_lamellae::LibFabAsync;
-use crate::lamellae::libfabasync_lamellae::LibFabAsyncBuilder;
-use crate::lamellae::libfabric_async::libfabric_async_comm::LibFabAsyncData;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
+use std::sync::Arc;
 
 pub(crate) mod comm;
 pub(crate) mod command_queues;
@@ -26,22 +32,34 @@ pub(crate) mod rofi_lamellae;
 
 #[cfg(feature = "enable-rofi")]
 use rofi::rofi_comm::RofiData;
+#[cfg(feature = "enable-rofi-rust")]
 use rofi_rust::rofi_rust_comm::RofiRustData;
+#[cfg(feature = "enable-rofi-rust")]
 use rofi_rust_async::rofi_rust_async_comm::RofiRustAsyncData;
 
 #[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
-use rofi_rust_lamellae::{RofiRust, RofiRustBuilder};
+#[cfg(feature = "enable-rofi-rust")]
 use rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder};
+#[cfg(feature = "enable-rofi-rust")]
+use rofi_rust_lamellae::{RofiRust, RofiRustBuilder};
 
+#[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfab_lamellae;
+#[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabasync_lamellae;
-pub(crate) mod rofi_rust_lamellae;
+#[cfg(feature = "enable-rofi-rust")]
 pub(crate) mod rofi_rust_async_lamellae;
+#[cfg(feature = "enable-rofi-rust")]
+pub(crate) mod rofi_rust_lamellae;
 
+#[cfg(feature = "enable-libfabric")]
 mod libfabric;
+#[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabric_async;
+#[cfg(feature = "enable-rofi-rust")]
 mod rofi_rust;
+#[cfg(feature = "enable-rofi-rust")]
 mod rofi_rust_async;
 
 pub(crate) mod shmem_lamellae;
@@ -62,9 +80,13 @@ pub enum Backend {
     #[cfg(feature = "enable-rofi")]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRust,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync,
+    #[cfg(feature = "enable-libfabric")]
     LibFab,
+    #[cfg(feature = "enable-libfabric")]
     LibFabAsync,
     /// The Local backend -- intended for single process environments
     Local,
@@ -89,16 +111,29 @@ impl Default for Backend {
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
             }
             "rofi_rust" => {
+                #[cfg(feature = "enable-rofi-rust")]
                 return Backend::RofiRust;
+                #[cfg(not(feature = "enable-rofi-rust"))]
+                panic!("unable to set rofi-rust backend, recompile with 'enable-rofi-rust' feature")
             }
             "rofi_rust_async" => {
+                #[cfg(feature = "enable-rofi-rust")]
                 return Backend::RofiRustAsync;
+                #[cfg(not(feature = "enable-rofi-rust"))]
+                panic!("unable to set rofi-rust backend, recompile with 'enable-rofi-rust' feature")
             }
+
             "libfab" => {
+                #[cfg(feature = "enable-libfabric")]
                 return Backend::LibFab;
+                #[cfg(not(feature = "enable-libfabric"))]
+                panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
             }
             "libfabasync" => {
+                #[cfg(feature = "enable-libfabric")]
                 return Backend::LibFabAsync;
+                #[cfg(not(feature = "enable-libfabric"))]
+                panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
             }
             "shmem" => {
                 return Backend::Shmem;
@@ -144,9 +179,13 @@ pub(crate) struct SerializeHeader {
 pub(crate) enum SerializedData {
     #[cfg(feature = "enable-rofi")]
     RofiData,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustData,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsyncData,
+    #[cfg(feature = "enable-libfabric")]
     LibFabData,
+    #[cfg(feature = "enable-libfabric")]
     LibFabAsyncData,
     ShmemData,
     LocalData,
@@ -177,9 +216,13 @@ pub(crate) trait SubData {
 pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi")]
     RofiBuilder,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustBuilder,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsyncBuilder,
+    #[cfg(feature = "enable-libfabric")]
     LibFabBuilder,
+    #[cfg(feature = "enable-libfabric")]
     LibFabAsyncBuilder,
     ShmemBuilder,
     Local,
@@ -212,21 +255,25 @@ pub(crate) trait Ser {
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi")]
     Rofi,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRust,
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync,
+    #[cfg(feature = "enable-libfabric")]
     LibFab,
+    #[cfg(feature = "enable-libfabric")]
     LibFabAsync,
     Shmem,
     Local,
 }
 
-#[async_trait]
+// #[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
-    fn barrier(&self);
+    async fn barrier(&self);
     fn backend(&self) -> Backend;
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
@@ -246,19 +293,19 @@ pub(crate) trait LamellaeAM: Send {
         data: SerializedData,
     );
 }
-
+#[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn flush(&self);
-    fn put(&self, pe: usize, src: &[u8], dst: usize);
+    async fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
-    fn put_all(&self, src: &[u8], dst: usize);
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
+    async fn put_all(&self, src: &[u8], dst: usize);
+    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
+    async fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
@@ -278,26 +325,30 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::RofiBuilder(RofiBuilder::new(&provider, &domain))
         }
+        #[cfg(feature = "enable-rofi-rust")]
         Backend::RofiRust => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::RofiRustBuilder(RofiRustBuilder::new(&provider, &domain))
         }
+        #[cfg(feature = "enable-rofi-rust")]
         Backend::RofiRustAsync => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::RofiRustAsyncBuilder(RofiRustAsyncBuilder::new(&provider, &domain))
         }
+        #[cfg(feature = "enable-libfabric")]
         Backend::LibFab => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibFabBuilder(LibFabBuilder::new(&provider, &domain))
-        },
+        }
+        #[cfg(feature = "enable-libfabric")]
         Backend::LibFabAsync => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibFabAsyncBuilder(LibFabAsyncBuilder::new(&provider, &domain))
-        },
+        }
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }

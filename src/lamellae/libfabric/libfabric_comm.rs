@@ -1,15 +1,19 @@
-use parking_lot::{Mutex, RwLock};
-use std::collections::HashMap;
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::config;
+use crate::lamellae::comm::{AllocError, AllocResult, Comm, CommOps, Remote};
 use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::{AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData, SERIALIZE_HEADER_LEN};
+use crate::lamellae::{
+    AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+    SERIALIZE_HEADER_LEN,
+};
 use crate::lamellar_alloc::BTreeAlloc;
+use crate::lamellar_alloc::LamellarAlloc;
+use libfabric::*;
+use parking_lot::{Mutex, RwLock};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use libfabric::*;
-use crate::lamellar_alloc::LamellarAlloc;
-use crate::lamellae::comm::{AllocError, AllocResult, Comm, CommOps, Remote};
 
 use super::ofi::Ofi;
 
@@ -35,7 +39,7 @@ static LIBFAB_MAGIC_1: u8 = 0b10011001;
 
 pub(crate) static LIBFAB_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
-// #[derive(Debug)]
+                                         // #[derive(Debug)]
 pub(crate) struct LibFabComm {
     pub(crate) base_address: Arc<RwLock<usize>>,
     alloc: RwLock<Vec<BTreeAlloc>>,
@@ -50,30 +54,38 @@ pub(crate) struct LibFabComm {
 }
 
 impl std::fmt::Debug for LibFabComm {
-
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "my_pes: {}",self.my_pe)?; 
-        write!(f, "num_pes: {}",self.num_pes)?; 
-        write!(f, "put_amt: {}",self.put_amt.load(Ordering::SeqCst))?; 
-        write!(f, "put_cnt: {}",self.put_cnt.load(Ordering::SeqCst))?; 
-        write!(f, "get_amt: {}",self.get_amt.load(Ordering::SeqCst))?; 
-        write!(f, "get_cnt: {}",self.get_cnt.load(Ordering::SeqCst))
+        write!(f, "my_pes: {}", self.my_pe)?;
+        write!(f, "num_pes: {}", self.num_pes)?;
+        write!(f, "put_amt: {}", self.put_amt.load(Ordering::SeqCst))?;
+        write!(f, "put_cnt: {}", self.put_cnt.load(Ordering::SeqCst))?;
+        write!(f, "get_amt: {}", self.get_amt.load(Ordering::SeqCst))?;
+        write!(f, "get_cnt: {}", self.get_cnt.load(Ordering::SeqCst))
     }
 }
 
 impl LibFabComm {
-    pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> Result<Self, libfabric::error::Error> {
-
+    pub(crate) fn new(
+        provider: Option<&str>,
+        domain: Option<&str>,
+    ) -> Result<Self, libfabric::error::Error> {
+        if let Some(size) = config().heap_size {
+            // if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
+            // let size = size
+            //     .parse::<usize>()
+            //     .expect("invalid memory size, please supply size in bytes");
+            LIBFAB_MEM.store(size, Ordering::SeqCst);
+        }
 
         let ofi = Ofi::new(provider, domain)?;
-        
+
         let cmd_q_mem = CommandQueue::mem_per_pe() * ofi.num_pes;
-        
+
         let total_mem = cmd_q_mem + RT_MEM + LIBFAB_MEM.load(Ordering::SeqCst);
         // println!("rofi comm total_mem {:?}",total_mem);
         let all_pes: Vec<_> = (0..ofi.num_pes).collect();
         let addr = ofi.sub_alloc(&all_pes, total_mem)?;
-        
+
         let libfab = Self {
             base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: RwLock::new(vec![BTreeAlloc::new("libfab_mem".to_string())]),
@@ -177,7 +189,7 @@ impl LibFabComm {
     fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         // println!("iget_data {:?} {:x} {:?}", pe, src_addr, dst_addr.as_ptr());
         // let _lock = self.comm_mutex.write();
-        match unsafe{self.ofi.lock().get(pe, src_addr, dst_addr, true)} {
+        match unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) } {
             //.expect("error in rofi get")
             Err(ret) => {
                 println!(
@@ -199,8 +211,6 @@ impl LibFabComm {
     }
 }
 
-
-
 impl CommOps for LibFabComm {
     fn my_pe(&self) -> usize {
         self.my_pe
@@ -210,7 +220,7 @@ impl CommOps for LibFabComm {
         self.num_pes
     }
 
-    fn barrier(&self) {
+    async fn barrier(&self) {
         let all_pes: Vec<_> = (0..self.num_pes).collect();
         self.ofi.lock().sub_barrier(&all_pes).unwrap();
     }
@@ -242,10 +252,13 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn alloc_pool(&self,min_size:usize) {
+    async fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
-        let size = std::cmp::max(min_size * 2 * self.num_pes, LIBFAB_MEM.load(Ordering::SeqCst));
-        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
+        let size = std::cmp::max(
+            min_size * 2 * self.num_pes,
+            LIBFAB_MEM.load(Ordering::SeqCst),
+        );
+        if let Ok(addr) = self.alloc(size, AllocationType::Global).await {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("libfab_mem".to_string());
             new_alloc.init(addr, size);
@@ -255,7 +268,7 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn rt_alloc(&self, size:usize, align:usize) -> AllocResult<usize>  {
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         // println!("rt_alloc size {size} align {align}");
         // let size = size + size%8;
         let allocs = self.alloc.read();
@@ -270,7 +283,7 @@ impl CommOps for LibFabComm {
         Err(AllocError::OutOfMemoryError(size))
     }
 
-    fn rt_check_alloc(&self,size:usize,align:usize) -> bool {
+    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if alloc.fake_malloc(size, align) {
@@ -282,7 +295,7 @@ impl CommOps for LibFabComm {
         false
     }
 
-    fn rt_free(&self,addr:usize) {
+    fn rt_free(&self, addr: usize) {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Ok(_) = alloc.free(addr) {
@@ -292,16 +305,14 @@ impl CommOps for LibFabComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
-    fn alloc(&self, size:usize, alloc:AllocationType) -> AllocResult<usize>  {
+    async fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         match alloc {
             AllocationType::Local => todo!(),
             AllocationType::Global => {
                 let pes: Vec<_> = (0..self.num_pes).collect();
                 Ok(self.ofi.lock().sub_alloc(&pes, size).unwrap())
             }
-            AllocationType::Sub(pes) => {
-                Ok(self.ofi.lock().sub_alloc(&pes, size).unwrap())
-            }
+            AllocationType::Sub(pes) => Ok(self.ofi.lock().sub_alloc(&pes, size).unwrap()),
         }
     }
 
@@ -313,11 +324,11 @@ impl CommOps for LibFabComm {
         *self.base_address.read()
     }
 
-    fn local_addr(&self, remote_pe:usize, remote_addr:usize) -> usize {
+    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.ofi.lock().local_addr(&remote_pe, &remote_addr)
     }
 
-    fn remote_addr(&self, pe:usize, local_addr:usize) -> usize {
+    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
         self.ofi.lock().remote_addr(&pe, &local_addr)
     }
 
@@ -325,9 +336,9 @@ impl CommOps for LibFabComm {
         self.ofi.lock().progress().unwrap()
     }
 
-    fn put<T:Remote>(&self, pe:usize, src_addr: &[T], dst_addr:usize) {
+    async fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         if pe != self.my_pe {
-            unsafe {self.ofi.lock().put(pe, src_addr, dst_addr, false)}.unwrap();
+            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap();
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -346,9 +357,9 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn iput<T:Remote>(&self, pe:usize, src_addr: &[T],dst_addr:usize) {
+    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         if pe != self.my_pe {
-            unsafe {self.ofi.lock().put(pe, src_addr, dst_addr, true)}.unwrap();
+            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, true) }.unwrap();
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -359,13 +370,13 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn put_all<T:Remote>(&self, src_addr: &[T], dst_addr:usize) {
+    async fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         for pe in 0..self.my_pe {
-            unsafe {self.ofi.lock().put(pe, src_addr, dst_addr, false)}.unwrap()
+            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap()
         }
-        
+
         for pe in self.my_pe..self.num_pes {
-            unsafe {self.ofi.lock().put(pe, src_addr, dst_addr, false)}.unwrap()
+            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap()
         }
 
         unsafe {
@@ -379,9 +390,9 @@ impl CommOps for LibFabComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    fn get<T:Remote>(&self, pe:usize, src_addr:usize, dst_addr: &mut [T]) {
+    async fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
-            unsafe{self.ofi.lock().get(pe, src_addr, dst_addr, true)}.unwrap();
+            unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) }.unwrap();
             self.get_amt
                 .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -469,7 +480,7 @@ impl CommOps for LibFabComm {
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
-        / 1_000_000.0
+            / 1_000_000.0
     }
 
     fn force_shutdown(&self) {
@@ -526,7 +537,8 @@ impl LibFabData {
     pub(crate) fn new(libfab_comm: Arc<Comm>, size: usize) -> Result<LibFabData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
-        let relative_addr = libfab_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
+        let relative_addr =
+            libfab_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         let addr = relative_addr; // + libfab_comm.base_addr();
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;

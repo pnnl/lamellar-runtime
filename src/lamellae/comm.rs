@@ -1,14 +1,21 @@
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric::libfabric_comm::*;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric_async::libfabric_async_comm::*;
 #[cfg(feature = "enable-rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
+#[cfg(feature = "enable-rofi-rust")]
 use crate::lamellae::rofi_rust::rofi_rust_comm::*;
+#[cfg(feature = "enable-rofi-rust")]
 use crate::lamellae::rofi_rust_async::rofi_rust_async_comm::*;
-use crate::lamellae::libfabric::libfabric_comm::*;
-use crate::lamellae::libfabric_async::libfabric_async_comm::*;
 use crate::lamellae::shmem::shmem_comm::*;
-use crate::lamellae::{AllocationType, SerializedData};
+#[cfg(feature = "enable-libfabric")]
 use crate::lamellae::LibFabAsyncData;
-use crate::lamellae::RofiRustData;
+#[cfg(feature = "enable-rofi-rust")]
 use crate::lamellae::RofiRustAsyncData;
+#[cfg(feature = "enable-rofi-rust")]
+use crate::lamellae::RofiRustData;
+use crate::lamellae::{AllocationType, SerializedData};
 // use crate::lamellae::shmem::ShmemComm;
 
 use async_trait::async_trait;
@@ -85,9 +92,13 @@ impl<T: Copy> Remote for T {}
 pub(crate) enum Comm {
     #[cfg(feature = "enable-rofi")]
     Rofi(RofiComm),
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRust(RofiRustComm),
+    #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync(RofiRustAsyncComm),
+    #[cfg(feature = "enable-libfabric")]
     LibFab(LibFabComm),
+    #[cfg(feature = "enable-libfabric")]
     LibFabAsync(LibFabAsyncComm),
     Shmem(ShmemComm),
 }
@@ -100,40 +111,44 @@ impl Comm {
         match self.as_ref() {
             #[cfg(feature = "enable-rofi")]
             Comm::Rofi(_) => Ok(RofiData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-rofi-rust")]
             Comm::RofiRust(_) => Ok(RofiRustData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-rofi-rust")]
             Comm::RofiRustAsync(_) => Ok(RofiRustAsyncData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-libfabric")]
             Comm::LibFab(_) => Ok(LibFabData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-libfabric")]
             Comm::LibFabAsync(_) => Ok(LibFabAsyncData::new(self.clone(), size)?.into()),
             Comm::Shmem(_) => Ok(ShmemData::new(self.clone(), size)?.into()),
         }
     }
 }
 
-#[async_trait]
+// #[async_trait]
 #[enum_dispatch]
 pub(crate) trait CommOps {
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
-    fn barrier(&self);
+    async fn barrier(&self);
     fn occupied(&self) -> usize;
     fn num_pool_allocs(&self) -> usize;
     fn print_pools(&self);
-    fn alloc_pool(&self, min_size: usize);
+    async fn alloc_pool(&self, min_size: usize);
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
+    async fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
     fn flush(&self);
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
+    async fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    async fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
+    async fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    // fn iget_relative<T: Remote>(& self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
     fn force_shutdown(&self);

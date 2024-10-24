@@ -1,7 +1,9 @@
 use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::rofi_rust_async::rofi_rust_async_comm::{RofiRustAsyncComm, RofiRustAsyncData};
+use crate::lamellae::rofi_rust_async::rofi_rust_async_comm::{
+    RofiRustAsyncComm, RofiRustAsyncData,
+};
 use crate::lamellae::{
     AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
     Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
@@ -25,14 +27,12 @@ impl RofiRustAsyncBuilder {
     pub(crate) fn new(provider: &str, domain: &str) -> RofiRustAsyncBuilder {
         let provider = if !provider.is_empty() {
             Some(provider)
-        }
-        else {
+        } else {
             None
         };
         let domain = if !domain.is_empty() {
             Some(domain)
-        }
-        else {
+        } else {
             None
         };
         let libfab: Arc<Comm> = Arc::new(RofiRustAsyncComm::new(provider, domain).unwrap().into());
@@ -139,8 +139,8 @@ impl LamellaeComm for RofiRustAsync {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
-        self.libfab_comm.barrier()
+    async fn barrier(&self) {
+        self.libfab_comm.barrier().await
     }
     fn backend(&self) -> Backend {
         Backend::RofiRustAsync
@@ -223,29 +223,31 @@ impl Ser for RofiRustAsync {
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
-        let ser_data = RofiRustAsyncData::new(self.libfab_comm.clone(), header_size + serialized_size)?;
+        let ser_data =
+            RofiRustAsyncData::new(self.libfab_comm.clone(), header_size + serialized_size)?;
         // bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
         Ok(SerializedData::RofiRustAsyncData(ser_data))
     }
 }
 
+#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for RofiRustAsync {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.libfab_comm.put(pe, src, dst);
+    async fn put(&self, pe: usize, src: &[u8], dst: usize) {
+        self.libfab_comm.put(pe, src, dst).await;
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        self.libfab_comm.put_all(src, dst);
+    async fn put_all(&self, src: &[u8], dst: usize) {
+        self.libfab_comm.put_all(src, dst).await;
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.libfab_comm.get(pe, src, dst);
+    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.libfab_comm.get(pe, src, dst).await;
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.libfab_comm.iget(pe, src, dst);
@@ -259,8 +261,8 @@ impl LamellaeRDMA for RofiRustAsync {
     fn rt_free(&self, addr: usize) {
         self.libfab_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
-        self.libfab_comm.alloc(size, alloc)
+    async fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
+        self.libfab_comm.alloc(size, alloc).await
     }
     fn free(&self, addr: usize) {
         self.libfab_comm.free(addr)

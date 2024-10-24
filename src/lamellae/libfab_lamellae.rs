@@ -25,14 +25,12 @@ impl LibFabBuilder {
     pub(crate) fn new(provider: &str, domain: &str) -> LibFabBuilder {
         let provider = if !provider.is_empty() {
             Some(provider)
-        }
-        else {
+        } else {
             None
         };
         let domain = if !domain.is_empty() {
             Some(domain)
-        }
-        else {
+        } else {
             None
         };
         let libfab: Arc<Comm> = Arc::new(LibFabComm::new(provider, domain).unwrap().into());
@@ -139,8 +137,8 @@ impl LamellaeComm for LibFab {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
-        self.libfab_comm.barrier()
+    async fn barrier(&self) {
+        self.libfab_comm.barrier().await
     }
     fn backend(&self) -> Backend {
         Backend::LibFab
@@ -230,22 +228,23 @@ impl Ser for LibFab {
     }
 }
 
+#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for LibFab {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.libfab_comm.put(pe, src, dst);
+    async fn put(&self, pe: usize, src: &[u8], dst: usize) {
+        self.libfab_comm.put(pe, src, dst).await;
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        self.libfab_comm.put_all(src, dst);
+    async fn put_all(&self, src: &[u8], dst: usize) {
+        self.libfab_comm.put_all(src, dst).await;
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.libfab_comm.get(pe, src, dst);
+    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.libfab_comm.get(pe, src, dst).await;
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.libfab_comm.iget(pe, src, dst);
@@ -259,8 +258,8 @@ impl LamellaeRDMA for LibFab {
     fn rt_free(&self, addr: usize) {
         self.libfab_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
-        self.libfab_comm.alloc(size, alloc)
+    async fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
+        self.libfab_comm.alloc(size, alloc).await
     }
     fn free(&self, addr: usize) {
         self.libfab_comm.free(addr)
