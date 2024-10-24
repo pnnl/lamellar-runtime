@@ -1099,7 +1099,6 @@ impl LamellarTeamRT {
                     parent_alloc,
                     std::mem::align_of::<*const LamellarTeamRT>(),
                 )
-                .await
                 .unwrap();
             // ------------------------------------------------------------------------------------------------- //
             // println!("passed remote_ptr_addr");

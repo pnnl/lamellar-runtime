@@ -127,8 +127,8 @@ impl LamellaeComm for Rofi {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    async fn barrier(&self) {
-        self.rofi_comm.barrier().await
+    fn barrier(&self) {
+        self.rofi_comm.barrier()
     }
     fn backend(&self) -> Backend {
         Backend::Rofi

@@ -139,8 +139,8 @@ impl LamellaeComm for RofiRustAsync {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    async fn barrier(&self) {
-        self.libfab_comm.barrier().await
+    fn barrier(&self) {
+        self.libfab_comm.barrier()
     }
     fn backend(&self) -> Backend {
         Backend::RofiRustAsync
@@ -231,22 +231,21 @@ impl Ser for RofiRustAsync {
     }
 }
 
-#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for RofiRustAsync {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    async fn put(&self, pe: usize, src: &[u8], dst: usize) {
+    fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.put(pe, src, dst).await;
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.iput(pe, src, dst);
     }
-    async fn put_all(&self, src: &[u8], dst: usize) {
+    fn put_all(&self, src: &[u8], dst: usize) {
         self.libfab_comm.put_all(src, dst).await;
     }
-    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.libfab_comm.get(pe, src, dst).await;
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
@@ -261,7 +260,7 @@ impl LamellaeRDMA for RofiRustAsync {
     fn rt_free(&self, addr: usize) {
         self.libfab_comm.rt_free(addr)
     }
-    async fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
         self.libfab_comm.alloc(size, alloc).await
     }
     fn free(&self, addr: usize) {

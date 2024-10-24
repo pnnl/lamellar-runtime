@@ -222,7 +222,7 @@ impl CommOps for RofiRustComm {
         self.num_pes
     }
 
-    async fn barrier(&self) {
+    fn barrier(&self) {
         let all_pes: Vec<_> = (0..self.num_pes).collect();
         self.ofi.lock().sub_barrier(&all_pes).unwrap();
     }
@@ -254,7 +254,7 @@ impl CommOps for RofiRustComm {
         }
     }
 
-    async fn alloc_pool(&self, min_size: usize) {
+    fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
         let size = std::cmp::max(
             min_size * 2 * self.num_pes,
@@ -307,7 +307,7 @@ impl CommOps for RofiRustComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
-    async fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
         match alloc {
             AllocationType::Local => todo!(),
             AllocationType::Global => {
@@ -338,7 +338,7 @@ impl CommOps for RofiRustComm {
         self.ofi.lock().progress().unwrap()
     }
 
-    async fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         if pe != self.my_pe {
             unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap();
             self.put_amt
@@ -372,7 +372,7 @@ impl CommOps for RofiRustComm {
         }
     }
 
-    async fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         for pe in 0..self.my_pe {
             unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap()
         }
@@ -392,7 +392,7 @@ impl CommOps for RofiRustComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    async fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
             unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) }.unwrap();
             self.get_amt

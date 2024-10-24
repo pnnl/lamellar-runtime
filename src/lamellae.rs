@@ -273,7 +273,7 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
-    async fn barrier(&self);
+    fn barrier(&self);
     fn backend(&self) -> Backend;
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
@@ -293,19 +293,18 @@ pub(crate) trait LamellaeAM: Send {
         data: SerializedData,
     );
 }
-#[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn flush(&self);
-    async fn put(&self, pe: usize, src: &[u8], dst: usize);
+    fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
-    async fn put_all(&self, src: &[u8], dst: usize);
-    async fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
+    fn put_all(&self, src: &[u8], dst: usize);
+    fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    async fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
+    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
