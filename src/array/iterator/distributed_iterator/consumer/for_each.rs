@@ -11,11 +11,11 @@ use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 
 use futures_util::{ready, Future};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ForEach<I, F>
@@ -70,7 +70,10 @@ where
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        InnerDistIterForEachHandle { reqs }
+        InnerDistIterForEachHandle {
+            reqs,
+            spawned: false,
+        }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -135,7 +138,10 @@ where
         _team: Pin<Arc<LamellarTeamRT>>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
-        InnerDistIterForEachHandle { reqs }
+        InnerDistIterForEachHandle {
+            reqs,
+            spawned: false,
+        }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
@@ -158,11 +164,18 @@ where
 
 pub(crate) struct InnerDistIterForEachHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
+    spawned: bool,
 }
 
 impl Future for InnerDistIterForEachHandle {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            for req in self.reqs.iter_mut() {
+                req.ready_or_set_waker(cx.waker());
+            }
+            self.spawned = true;
+        }
         while let Some(mut req) = self.reqs.pop_front() {
             if !req.ready_or_set_waker(cx.waker()) {
                 self.reqs.push_front(req);
@@ -174,35 +187,25 @@ impl Future for InnerDistIterForEachHandle {
 }
 
 //#[doc(hidden)]
-impl LamellarRequest for InnerDistIterForEachHandle {
-    fn blocking_wait(mut self) -> Self::Output {
-        for req in self.reqs.drain(..) {
-            req.blocking_wait();
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        for req in self.reqs.iter_mut() {
-            if !req.ready_or_set_waker(waker) {
-                //only need to wait on the next unready req
-                return false;
-            }
-        }
-        true
-    }
-    fn val(&self) -> Self::Output {
-        for req in self.reqs.iter() {
-            req.val();
-        }
-    }
-}
-
-//#[doc(hidden)]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct DistIterForEachHandle {
-    // pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<()>>,
-    team: Pin<Arc<LamellarTeamRT>>,
+    array: UnsafeArrayInner,
+    launched: bool,
     #[pin]
     state: State,
+}
+
+#[pinned_drop]
+impl PinnedDrop for DistIterForEachHandle {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a DistIterForEachHandle").print();
+        }
+    }
 }
 
 impl DistIterForEachHandle {
@@ -212,27 +215,30 @@ impl DistIterForEachHandle {
         array: &UnsafeArrayInner,
     ) -> Self {
         DistIterForEachHandle {
-            team: array.data.team.clone(),
+            array: array.clone(),
+            launched: false,
             state: State::Barrier(barrier, reqs),
         }
     }
 
     /// This method will block until the associated For Each operation completes and returns the result
-    pub fn block(self) {
+    pub fn block(mut self) {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "DistIterForEachHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.team.clone().block_on(self);
+        self.array.clone().block_on(self);
     }
     /// This method will spawn the associated  For Each Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
-        self.team.clone().scheduler.spawn_task(self)
+    pub fn spawn(mut self) -> LamellarTask<()> {
+        self.launched = true;
+        self.array.clone().spawn(self)
     }
 }
 
@@ -243,11 +249,13 @@ enum State {
         Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
     ),
     Reqs(#[pin] InnerDistIterForEachHandle, usize),
+    Dropped,
 }
 
 impl Future for DistIterForEachHandle {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Barrier(barrier, inner) => {
@@ -288,41 +296,9 @@ impl Future for DistIterForEachHandle {
                     Poll::Pending => Poll::Pending,
                 }
             }
-        }
-    }
-}
-
-//#[doc(hidden)]
-impl LamellarRequest for DistIterForEachHandle {
-    fn blocking_wait(self) -> Self::Output {
-        match self.state {
-            State::Barrier(barrier, reqs) => {
-                barrier.blocking_wait();
-                self.team.block_on(reqs).blocking_wait();
+            StateProj::Dropped => {
+                panic!("called `Future::poll` on a dropped `DistIterForEachHandle`")
             }
-            State::Reqs(inner, _) => {
-                inner.blocking_wait();
-            }
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        match &mut self.state {
-            State::Barrier(barrier, _) => {
-                if !barrier.ready_or_set_waker(waker) {
-                    return false;
-                }
-                waker.wake_by_ref();
-                false
-            }
-            State::Reqs(inner, _) => inner.ready_or_set_waker(waker),
-        }
-    }
-    fn val(&self) -> Self::Output {
-        match &self.state {
-            State::Barrier(_barrier, _reqs) => {
-                unreachable!("should never be in barrier state when val is called");
-            }
-            State::Reqs(inner, _) => inner.val(),
         }
     }
 }

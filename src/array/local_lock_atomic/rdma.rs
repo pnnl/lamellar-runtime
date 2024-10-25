@@ -23,6 +23,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
             reqs: VecDeque::from([req.into()]),
+            spawned: false,
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
@@ -36,6 +37,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
             array: self.as_lamellar_byte_array(),
             req: Some(req),
             buf: buf,
+            spawned: false,
         }
     }
 }
@@ -51,6 +53,7 @@ impl<T: Dist> LamellarArrayGet<T> for LocalLockArray<T> {
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
+                spawned: false,
             },
         }
     }
@@ -73,6 +76,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockArray<T> {
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
             reqs: VecDeque::from([req.into()]),
+            spawned: false,
         }
     }
 }
@@ -88,6 +92,7 @@ impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
+                spawned: false,
             },
         }
     }
@@ -169,7 +174,7 @@ impl LamellarAm for LocalLockRemoteGetAm {
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
         // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
-        let _lock = self.array.lock.read();
+        let _lock = self.array.lock.read().await;
         unsafe {
             match self
                 .array

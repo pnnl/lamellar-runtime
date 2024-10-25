@@ -91,7 +91,13 @@ impl ActiveMessaging for LamellarWorld {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        self.team_rt.scheduler.spawn_task(f)
+        self.team_rt.scheduler.spawn_task(
+            f,
+            vec![
+                self.team_rt.world_counters.clone(),
+                self.team_rt.team_counters.clone(),
+            ],
+        )
     }
 
     fn block_on<F>(&self, f: F) -> F::Output
@@ -110,10 +116,17 @@ impl ActiveMessaging for LamellarWorld {
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
         // trace_span!("block_on_all").in_scope(||
-        self.team_rt.scheduler.block_on(join_all(
-            iter.into_iter()
-                .map(|task| self.team_rt.scheduler.spawn_task(task)),
-        ))
+        self.team_rt
+            .scheduler
+            .block_on(join_all(iter.into_iter().map(|task| {
+                self.team_rt.scheduler.spawn_task(
+                    task,
+                    vec![
+                        self.team_rt.world_counters.clone(),
+                        self.team_rt.team_counters.clone(),
+                    ],
+                )
+            })))
         // )
     }
 }
@@ -322,6 +335,7 @@ impl Drop for LamellarWorld {
                 //     self._counters.send_req_cnt.load(Ordering::SeqCst),
                 //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
                 // );
+                self.barrier();
                 self.wait_all();
                 // println!(
                 //     "in team destroy mype: {:?} cnt: {:?} {:?}",

@@ -20,6 +20,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
             reqs: VecDeque::from([req.into()]),
+            spawned: false,
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
@@ -33,6 +34,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
             array: self.as_lamellar_byte_array(),
             req: Some(req),
             buf: buf,
+            spawned: false,
         }
     }
 }
@@ -48,6 +50,7 @@ impl<T: Dist> LamellarArrayGet<T> for GenericAtomicArray<T> {
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
+                spawned: false,
             },
         }
     }
@@ -70,6 +73,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GenericAtomicArray<T> {
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
             reqs: VecDeque::from([req.into()]),
+            spawned: false,
         }
     }
 }
@@ -85,6 +89,7 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
+                spawned: false,
             },
         }
     }

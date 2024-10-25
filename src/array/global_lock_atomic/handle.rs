@@ -18,7 +18,7 @@ use super::{
 };
 
 #[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by GlobalRwDarcReadHandle
 /// Handle used to retrieve the aquired read lock of a GlobalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -111,7 +111,7 @@ impl<T: Dist> Future for GlobalLockReadHandle<T> {
 }
 
 #[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by GlobalRwDarcReadHandle
 /// Handle used to retrieve the aquired local data [GlobalLockLocalData] of  a GlobalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -184,7 +184,7 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
     /// println!("local data: {:?}",local_data);
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<GlobalLockLocalData<T>> {
+    pub fn spawn(self) -> LamellarTask<GlobalLockLocalData<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -207,7 +207,7 @@ impl<T: Dist> Future for GlobalLockLocalDataHandle<T> {
 }
 
 #[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by GlobalRwDarcWriteHandle
 /// Handle used to retrieve the aquired write lock of a GlobalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -280,7 +280,7 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
     /// let guard = task.block();
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<GlobalLockWriteGuard<T>> {
+    pub fn spawn(self) -> LamellarTask<GlobalLockWriteGuard<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -298,9 +298,8 @@ impl<T: Dist> Future for GlobalLockWriteHandle<T> {
         }
     }
 }
-
 #[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by GlobalRwDarcWriteHandle
 /// Handle used to retrieve the aquired mutable local data [GlobalLockMutLocalData] of  a GlobalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -374,7 +373,7 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<GlobalLockMutLocalData<T>> {
+    pub fn spawn(self) -> LamellarTask<GlobalLockMutLocalData<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -397,7 +396,7 @@ impl<T: Dist> Future for GlobalLockMutLocalDataHandle<T> {
 }
 
 #[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by GlobalRwDarcCollectiveWriteHandle
 /// Handle used to retrieve the aquired mutable local data [GlobalLockMutLocalData] of a GlobalLockArray with all PEs collectively accessing their local data
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -472,7 +471,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<GlobalLockCollectiveMutLocalData<T>> {
+    pub fn spawn(self) -> LamellarTask<GlobalLockCollectiveMutLocalData<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }

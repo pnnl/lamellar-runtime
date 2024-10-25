@@ -532,7 +532,13 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         F::Output: Send,
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
-        self.team.scheduler.spawn_task(task)
+        self.team.scheduler.spawn_task(
+            task,
+            vec![
+                self.team.world_counters.clone(),
+                self.team.team_counters.clone(),
+            ],
+        )
     }
 
     fn block_on<F: Future>(&self, f: F) -> F::Output {
@@ -550,10 +556,17 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
-        self.team.scheduler.block_on(join_all(
-            iter.into_iter()
-                .map(|task| self.team.scheduler.spawn_task(task)),
-        ))
+        self.team
+            .scheduler
+            .block_on(join_all(iter.into_iter().map(|task| {
+                self.team.scheduler.spawn_task(
+                    task,
+                    vec![
+                        self.team.world_counters.clone(),
+                        self.team.team_counters.clone(),
+                    ],
+                )
+            })))
     }
 }
 
@@ -1366,7 +1379,10 @@ impl LamellarTeamRT {
         F::Output: Send,
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
-        self.scheduler.spawn_task(task)
+        self.scheduler.spawn_task(
+            task,
+            vec![self.world_counters.clone(), self.team_counters.clone()],
+        )
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1374,24 +1390,11 @@ impl LamellarTeamRT {
         // println!("wait_all called on pe: {}", self.world_pe);
 
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
-        if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
-            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
-            || self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst)
-        {
-            RuntimeWarning::UnspanedTask(
-                "`wait_all` before all tasks/active messages have been spawned",
-            )
-            .print();
-            println!(
-                "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-                self.world_pe,
-                self.team_counters.send_req_cnt.load(Ordering::SeqCst),
-                self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
-                self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
-            );
-        }
+
         let mut temp_now = Instant::now();
+        let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
+        let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
+
 
         // println!(
         //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
@@ -1400,10 +1403,14 @@ impl LamellarTeamRT {
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
         while self.panic.load(Ordering::SeqCst) == 0
-            && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+            && ((self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 
+                || orig_reqs !=  self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                || orig_launched !=  self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
                 || (self.parent.is_none()
                     && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
         {
+            orig_reqs =  self.team_counters.send_req_cnt.load(Ordering::SeqCst);
+            orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
             // std::thread::yield_now();
             // self.flush();
             if std::thread::current().id() != *crate::MAIN_THREAD {
@@ -1418,6 +1425,24 @@ impl LamellarTeamRT {
                 );
                 temp_now = Instant::now();
             }
+            
+        }
+        if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
+            || (self.parent.is_none() && self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
+        {
+            println!(
+                "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                self.world_pe,
+                self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
+            );
+            RuntimeWarning::UnspawnedTask(
+                "`wait_all` before all tasks/active messages have been spawned",
+            )
+            .print();
         }
         // println!(
         //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
@@ -1427,16 +1452,7 @@ impl LamellarTeamRT {
         // );
     }
     pub(crate) async fn await_all(&self) {
-        if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
-            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
-            || self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst)
-        {
-            RuntimeWarning::UnspanedTask(
-                "`await_all` before all tasks/active messages have been spawned",
-            )
-            .print();
-        }
+        
         let mut temp_now = Instant::now();
         while self.panic.load(Ordering::SeqCst) == 0
             && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
@@ -1455,6 +1471,16 @@ impl LamellarTeamRT {
                 );
                 temp_now = Instant::now();
             }
+        }
+        if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
+            || (self.parent.is_none() && self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
+        {
+            RuntimeWarning::UnspawnedTask(
+                "`await_all` before all tasks/active messages have been spawned",
+            )
+            .print();
         }
     }
 
@@ -1478,9 +1504,13 @@ impl LamellarTeamRT {
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
-        self.scheduler.block_on(join_all(
-            iter.into_iter().map(|task| self.scheduler.spawn_task(task)),
-        ))
+        self.scheduler
+            .block_on(join_all(iter.into_iter().map(|task| {
+                self.scheduler.spawn_task(
+                    task,
+                    vec![self.world_counters.clone(), self.team_counters.clone()],
+                )
+            })))
     }
 
     //#[tracing::instrument(skip_all)]

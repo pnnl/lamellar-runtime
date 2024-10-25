@@ -17,7 +17,7 @@ use super::{
 };
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by LocalRwDarcReadHandle
 /// Handle used to retrieve the aquired read lock of a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -90,7 +90,7 @@ impl<T: Dist> LocalLockReadHandle<T> {
     /// let guard = task.block();
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<LocalLockReadGuard<T>> {
+    pub fn spawn(self) -> LamellarTask<LocalLockReadGuard<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -110,7 +110,7 @@ impl<T: Dist> Future for LocalLockReadHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by LocalRwDarcReadHandle
 /// Handle used to retrieve the aquired local data [LocalLockLocalData] of  a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -183,7 +183,7 @@ impl<T: Dist> LocalLockLocalDataHandle<T> {
     /// println!("local data: {:?}",local_data);
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<LocalLockLocalData<T>> {
+    pub fn spawn(self) -> LamellarTask<LocalLockLocalData<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -206,7 +206,7 @@ impl<T: Dist> Future for LocalLockLocalDataHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by LocalRwDarcWriteHandle
 /// Handle used to retrieve the aquired write lock of a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -279,7 +279,7 @@ impl<T: Dist> LocalLockWriteHandle<T> {
     /// task.block();
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<LocalLockWriteGuard<T>> {
+    pub fn spawn(self) -> LamellarTask<LocalLockWriteGuard<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -299,7 +299,7 @@ impl<T: Dist> Future for LocalLockWriteHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] // unused drop warning triggered by LocalRwDarcWriteHandle
 /// Handle used to retrieve the aquired mutable local data [LocalLockMutLocalData] of  a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -373,7 +373,7 @@ impl<T: Dist> LocalLockMutLocalDataHandle<T> {
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<LocalLockMutLocalData<T>> {
+    pub fn spawn(self) -> LamellarTask<LocalLockMutLocalData<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -396,7 +396,7 @@ impl<T: Dist> Future for LocalLockMutLocalDataHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by LocalRwDarcReadHandle
 /// Constructs a handle for immutably iterating over fixed sized chunks(slices) of the local data of this array.
 /// This handle must be either await'd in an async context or block'd in an non-async context.
 /// Awaiting or blocking will not return until the read lock has been acquired.
@@ -476,7 +476,7 @@ impl<T: Dist> LocalLockLocalChunksHandle<T> {
     /// iter_task.block();
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<LocalLockLocalChunks<T>> {
+    pub fn spawn(self) -> LamellarTask<LocalLockLocalChunks<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }
@@ -499,7 +499,7 @@ impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] // unused drop warning triggered by LocalRwDarcWriteHandle
 /// A handle for mutably iterating over fixed sized chunks(slices) of the local data of this array.
 /// This handle must be either await'd in an async context or block'd in an non-async context.
 /// Awaiting or blocking will not return until the write lock has been acquired.
@@ -583,7 +583,7 @@ impl<T: Dist> LocalLockLocalChunksMutHandle<T> {
     /// iter_task.block();
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<LocalLockLocalChunksMut<T>> {
+    pub fn spawn(self) -> LamellarTask<LocalLockLocalChunksMut<T>> {
         self.array.lock.darc.team().spawn(self)
     }
 }

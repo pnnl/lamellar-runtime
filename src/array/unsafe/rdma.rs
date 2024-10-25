@@ -633,6 +633,7 @@ impl<T: Dist> UnsafeArray<T> {
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
+                spawned: false,
             },
         }
     }
@@ -644,6 +645,7 @@ impl<T: Dist> UnsafeArray<T> {
             array: self.as_lamellar_byte_array(),
             req: None,
             buf: buf,
+            spawned: false,
         }
     }
 
@@ -736,6 +738,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
             reqs: reqs,
+            spawned: false,
         }
     }
 
@@ -757,6 +760,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
             reqs: reqs,
+            spawned: false,
         }
     }
 }
@@ -772,6 +776,7 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: VecDeque::new(),
+                spawned: false,
             },
         }
     }

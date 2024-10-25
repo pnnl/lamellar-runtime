@@ -10,11 +10,11 @@ use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 
 use futures_util::{ready, Future};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Reduce<I, F> {
@@ -66,6 +66,7 @@ where
             op: self.op,
             reqs,
             state: InnerState::ReqsPending(None),
+            spawned: false,
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -79,6 +80,7 @@ pub(crate) struct InnerLocalIterReduceHandle<T, F> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Option<T>>>,
     pub(crate) op: F,
     state: InnerState<T>,
+    spawned: bool,
 }
 
 enum InnerState<T> {
@@ -91,7 +93,13 @@ where
     F: Fn(T, T) -> T + SyncSend + 'static,
 {
     type Output = Option<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            for req in self.reqs.iter_mut() {
+                req.ready_or_set_waker(cx.waker());
+            }
+            self.spawned = true;
+        }
         let mut this = self.project();
         match &mut this.state {
             InnerState::ReqsPending(val) => {
@@ -115,41 +123,25 @@ where
     }
 }
 
-//#[doc(hidden)]
-impl<T, F> LamellarRequest for InnerLocalIterReduceHandle<T, F>
-where
-    T: SyncSend + Copy + 'static,
-    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
-{
-    fn blocking_wait(mut self) -> Self::Output {
-        self.reqs
-            .drain(..)
-            .filter_map(|req| req.blocking_wait())
-            .reduce(self.op)
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        for req in self.reqs.iter_mut() {
-            if !req.ready_or_set_waker(waker) {
-                //only need to wait on the next unready req
-                return false;
-            }
-        }
-        true
-    }
-
-    fn val(&self) -> Self::Output {
-        self.reqs
-            .iter()
-            .filter_map(|req| req.val())
-            .reduce(self.op.clone())
-    }
-}
-
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct LocalIterReduceHandle<T, F> {
-    team: Pin<Arc<LamellarTeamRT>>,
+    array: UnsafeArrayInner,
+    launched: bool,
     #[pin]
     state: State<T, F>,
+}
+
+#[pinned_drop]
+impl<T, F> PinnedDrop for LocalIterReduceHandle<T, F> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a LocalIterReduceHandle").print();
+        }
+    }
 }
 
 impl<T, F> LocalIterReduceHandle<T, F>
@@ -162,19 +154,22 @@ where
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
-            team: array.data.team.clone(),
+            array: array.clone(),
+            launched: false,
             state: State::Init(reqs),
         }
     }
 
     /// This method will block until the associated Reduce operation completes and returns the result
-    pub fn block(self) -> Option<T> {
+    pub fn block(mut self) -> Option<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "LocalIterReduceHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.team.clone().block_on(self)
+
+        self.array.clone().block_on(self)
     }
 
     /// This method will spawn the associated Reduce Operation on the work queue,
@@ -183,8 +178,9 @@ where
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
 
-    pub fn spawn(self) -> LamellarTask<Option<T>> {
-        self.team.clone().scheduler.spawn_task(self)
+    pub fn spawn(mut self) -> LamellarTask<Option<T>> {
+        self.launched = true;
+        self.array.clone().spawn(self)
     }
 }
 
@@ -192,6 +188,7 @@ where
 enum State<T, F> {
     Init(Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>),
     Reqs(#[pin] InnerLocalIterReduceHandle<T, F>),
+    Dropped,
 }
 impl<T, F> Future for LocalIterReduceHandle<T, F>
 where
@@ -199,7 +196,8 @@ where
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     type Output = Option<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Init(inner) => {
@@ -216,37 +214,7 @@ where
                 let val = ready!(inner.poll(cx));
                 Poll::Ready(val)
             }
-        }
-    }
-}
-
-//#[doc(hidden)]
-impl<T, F> LamellarRequest for LocalIterReduceHandle<T, F>
-where
-    T: SyncSend + Copy + 'static,
-    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
-{
-    fn blocking_wait(self) -> Self::Output {
-        match self.state {
-            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
-            State::Reqs(inner) => inner.blocking_wait(),
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        match &mut self.state {
-            State::Init(_) => {
-                waker.wake_by_ref();
-                false
-            }
-            State::Reqs(inner) => inner.ready_or_set_waker(waker),
-        }
-    }
-    fn val(&self) -> Self::Output {
-        match &self.state {
-            State::Init(_reqs) => {
-                unreachable!("should never be in init state when val is called");
-            }
-            State::Reqs(inner) => inner.val(),
+            StateProj::Dropped => panic!("called `Future::poll()` on a dropped future."),
         }
     }
 }

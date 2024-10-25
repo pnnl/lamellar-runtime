@@ -535,7 +535,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                 .launched_req_cnt
                 .load(Ordering::SeqCst)
         {
-            RuntimeWarning::UnspanedTask(
+            RuntimeWarning::UnspawnedTask(
                 "`await_all` on an array before all operations, iterators, etc, created by the array have been spawned",
             )
             .print();
@@ -1045,25 +1045,25 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             .exec_am_local_tg(am, Some(self.team_counters()))
     }
     fn wait_all(&self) {
-        if self
-            .inner
-            .data
-            .array_counters
-            .send_req_cnt
-            .load(Ordering::SeqCst)
-            != self
-                .inner
-                .data
-                .array_counters
-                .launched_req_cnt
-                .load(Ordering::SeqCst)
-        {
-            RuntimeWarning::UnspanedTask(
-                "`wait_all` on an array before all operations, iterators, etc, created by the array have been spawned",
-            )
-            .print();
-        }
         let mut temp_now = Instant::now();
+        // println!(
+        //     "in array wait_all  cnt: {:?} {:?} {:?}",
+        //     self.inner
+        //         .data
+        //         .array_counters
+        //         .send_req_cnt
+        //         .load(Ordering::SeqCst),
+        //     self.inner
+        //         .data
+        //         .array_counters
+        //         .outstanding_reqs
+        //         .load(Ordering::SeqCst),
+        //     self.inner
+        //         .data
+        //         .array_counters
+        //         .launched_req_cnt
+        //         .load(Ordering::SeqCst)
+        // );
         // let mut first = true;
         while self
             .inner
@@ -1098,6 +1098,42 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
                 // first = false;
             }
         }
+        if self
+            .inner
+            .data
+            .array_counters
+            .send_req_cnt
+            .load(Ordering::SeqCst)
+            != self
+                .inner
+                .data
+                .array_counters
+                .launched_req_cnt
+                .load(Ordering::SeqCst)
+        {
+            println!(
+                "in array wait_all  cnt: {:?} {:?} {:?}",
+                self.inner
+                    .data
+                    .array_counters
+                    .send_req_cnt
+                    .load(Ordering::SeqCst),
+                self.inner
+                    .data
+                    .array_counters
+                    .outstanding_reqs
+                    .load(Ordering::SeqCst),
+                self.inner
+                    .data
+                    .array_counters
+                    .launched_req_cnt
+                    .load(Ordering::SeqCst)
+            );
+            RuntimeWarning::UnspawnedTask(
+                "`wait_all` on an array before all operations, iterators, etc, created by the array have been spawned",
+            )
+            .print();
+        }
         self.inner.data.task_group.wait_all();
     }
     fn await_all(&self) -> impl Future<Output = ()> + Send {
@@ -1114,7 +1150,14 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        self.inner.data.team.scheduler.spawn_task(f)
+        self.inner.data.team.scheduler.spawn_task(
+            f,
+            vec![
+                self.inner.data.team.world_counters.clone(),
+                self.inner.data.team.team_counters.clone(),
+                self.inner.data.array_counters.clone(),
+            ],
+        )
     }
     fn block_on<F: Future>(&self, f: F) -> F::Output {
         self.inner.data.team.scheduler.block_on(f)
@@ -1572,6 +1615,23 @@ impl UnsafeArrayInnerWeak {
 }
 
 impl UnsafeArrayInner {
+    pub(crate) fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.data.team.scheduler.spawn_task(
+            f,
+            vec![
+                self.data.team.world_counters.clone(),
+                self.data.team.team_counters.clone(),
+                self.data.array_counters.clone(),
+            ],
+        )
+    }
+    pub(crate) fn block_on<F: Future>(&self, f: F) -> F::Output {
+        self.data.team.scheduler.block_on(f)
+    }
     pub(crate) fn downgrade(array: &UnsafeArrayInner) -> UnsafeArrayInnerWeak {
         UnsafeArrayInnerWeak {
             data: Darc::downgrade(&array.data),

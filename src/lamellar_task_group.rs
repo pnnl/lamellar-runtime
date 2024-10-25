@@ -53,6 +53,9 @@ pub struct TaskGroupAmHandle<T: AmDist> {
 #[pinned_drop]
 impl<T: AmDist> PinnedDrop for TaskGroupAmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        if self.am.is_some() {
+            RuntimeWarning::DroppedHandle("an TaskGroupAmHandle").print();
+        }
         self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -142,7 +145,7 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self)
+        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //counters managed by AM
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
@@ -248,6 +251,9 @@ pub struct TaskGroupMultiAmHandle<T: AmDist> {
 #[pinned_drop]
 impl<T: AmDist> PinnedDrop for TaskGroupMultiAmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        if self.am.is_some() {
+            RuntimeWarning::DroppedHandle("an TaskGroupMultiAmHandle").print();
+        }
         self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -340,7 +346,7 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
     pub fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self)
+        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //counters managed by AM
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> Vec<T> {
@@ -464,6 +470,9 @@ pub struct TaskGroupLocalAmHandle<T> {
 #[pinned_drop]
 impl<T> PinnedDrop for TaskGroupLocalAmHandle<T> {
     fn drop(self: Pin<&mut Self>) {
+        if self.am.is_some() {
+            RuntimeWarning::DroppedHandle("an TaskGroupLocalAmHandle").print();
+        }
         self.inner.cnt.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -514,7 +523,7 @@ impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. If ignored/dropped the only way to ensure completion is calling 'wait_all()' on the world or array"]
     pub fn spawn(mut self) -> LamellarTask<T> {
         self.launch_am_if_needed();
-        self.inner.scheduler.clone().spawn_task(self)
+        self.inner.scheduler.clone().spawn_task(self, Vec::new()) //counters managed by AM
     }
     /// This method will block the calling thread until the associated Array Operation completes
     pub fn block(mut self) -> T {
@@ -708,7 +717,14 @@ impl ActiveMessaging for LamellarTaskGroup {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        self.team.scheduler.spawn_task(task)
+        self.team.scheduler.spawn_task(
+            task,
+            vec![
+                self.team.world_counters.clone(),
+                self.team.team_counters.clone(),
+                self.counters.clone(),
+            ],
+        )
     }
     fn block_on<F>(&self, f: F) -> F::Output
     where
@@ -724,10 +740,18 @@ impl ActiveMessaging for LamellarTaskGroup {
         <I as IntoIterator>::Item: Future + Send + 'static,
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
-        self.team.scheduler.block_on(join_all(
-            iter.into_iter()
-                .map(|task| self.team.scheduler.spawn_task(task)),
-        ))
+        self.team
+            .scheduler
+            .block_on(join_all(iter.into_iter().map(|task| {
+                self.team.scheduler.spawn_task(
+                    task,
+                    vec![
+                        self.team.world_counters.clone(),
+                        self.team.team_counters.clone(),
+                        self.counters.clone(),
+                    ],
+                )
+            })))
     }
 }
 
@@ -801,17 +825,13 @@ impl LamellarTaskGroup {
 
     fn wait_all(&self) {
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
-
-        if self.counters.send_req_cnt.load(Ordering::SeqCst)
-            != self.counters.launched_req_cnt.load(Ordering::SeqCst)
-            || self.counters.send_req_cnt.load(Ordering::SeqCst)
-                != self.counters.launched_req_cnt.load(Ordering::SeqCst)
-        {
-            RuntimeWarning::UnspanedTask(
-                        "`wait_all` on an active message group before all tasks/active messages create by the group have been spawned",
-                    )
-                    .print();
-        }
+        // println!(
+        //     "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+        //     self.team.world_pe,
+        //     self.counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.counters.outstanding_reqs.load(Ordering::SeqCst),
+        //     self.counters.launched_req_cnt.load(Ordering::SeqCst)
+        // );
         let mut temp_now = Instant::now();
         while self.counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
             // self.team.flush();
@@ -835,6 +855,23 @@ impl LamellarTaskGroup {
                 temp_now = Instant::now();
             }
         }
+        if self.counters.send_req_cnt.load(Ordering::SeqCst)
+            != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+            || self.counters.send_req_cnt.load(Ordering::SeqCst)
+                != self.counters.launched_req_cnt.load(Ordering::SeqCst)
+        {
+            println!(
+                "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                self.team.world_pe,
+                self.counters.send_req_cnt.load(Ordering::SeqCst),
+                self.counters.outstanding_reqs.load(Ordering::SeqCst),
+                self.counters.launched_req_cnt.load(Ordering::SeqCst)
+            );
+            RuntimeWarning::UnspawnedTask(
+                        "`wait_all` on an active message group before all tasks/active messages create by the group have been spawned",
+                    )
+                    .print();
+        }
     }
 
     async fn await_all(&self) {
@@ -843,7 +880,7 @@ impl LamellarTaskGroup {
             || self.counters.send_req_cnt.load(Ordering::SeqCst)
                 != self.counters.launched_req_cnt.load(Ordering::SeqCst)
         {
-            RuntimeWarning::UnspanedTask(
+            RuntimeWarning::UnspawnedTask(
                         "`await_all` on an active message group before all tasks/active messages created by the group have been spawned",
                     )
                     .print();

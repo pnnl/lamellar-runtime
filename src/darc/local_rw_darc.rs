@@ -340,6 +340,7 @@ impl<T> LocalRwDarc<T> {
         IntoGlobalRwDarcHandle {
             darc: self.into(),
             team,
+            launched: false,
             outstanding_future: Box::pin(DarcInner::block_on_outstanding(
                 wrapped_inner,
                 DarcMode::GlobalRw,
@@ -380,6 +381,7 @@ impl<T: Send + Sync> LocalRwDarc<T> {
         IntoDarcHandle {
             darc: self.into(),
             team,
+            launched: false,
             outstanding_future: Box::pin(async move {
                 DarcInner::block_on_outstanding(wrapped_inner, DarcMode::Darc, 0).await;
             }),

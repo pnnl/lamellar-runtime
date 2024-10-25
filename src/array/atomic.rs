@@ -675,6 +675,17 @@ impl AtomicByteArray {
             AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.data.team(),
         }
     }
+
+    pub(crate) fn dec_outstanding(&self, num: usize) {
+        match self {
+            AtomicByteArray::NativeAtomicByteArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
+            AtomicByteArray::GenericAtomicByteArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
+        }
+    }
 }
 
 impl crate::active_messaging::DarcSerde for AtomicByteArray {

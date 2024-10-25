@@ -1012,6 +1012,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
 }
 
 //#[doc(hidden)]
+// Dropped Handle Warning triggered by AmHandle
 #[pin_project]
 pub struct GlobalLockArrayReduceHandle<T: Dist + AmDist> {
     req: AmHandle<Option<T>>,

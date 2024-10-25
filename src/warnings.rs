@@ -1,7 +1,11 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::config;
 
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
 pub(crate) enum RuntimeWarning<'a> {
-    UnspanedTask(&'a str),
+    UnspawnedTask(&'a str),
     DroppedHandle(&'a str),
     BlockingCall(&'a str, &'a str),
     BlockOn,
@@ -10,30 +14,40 @@ pub(crate) enum RuntimeWarning<'a> {
 }
 
 impl<'a> RuntimeWarning<'a> {
+    pub(crate) fn enable_warnings() {
+        ENABLED.store(true, Ordering::Relaxed);
+    }
+    pub(crate) fn disable_warnings() {
+        ENABLED.store(false, Ordering::Relaxed);
+    }
     fn print_warning(&self) -> bool {
-        match self {
-            RuntimeWarning::UnspanedTask(_) => match config().unpspawned_task_warning {
-                Some(true) => true,
-                Some(false) => false,
-                None => true,
-            },
-            RuntimeWarning::DroppedHandle(_) => match config().dropped_unused_handle_warning {
-                Some(true) => true,
-                Some(false) => false,
-                None => true,
-            },
-            RuntimeWarning::BlockingCall(_, _) | RuntimeWarning::BlockOn => {
-                if std::thread::current().id() != *crate::MAIN_THREAD {
-                    match config().blocking_call_warning {
-                        Some(true) => true,
-                        Some(false) => false,
-                        None => true,
+        if ENABLED.load(Ordering::Relaxed) {
+            match self {
+                RuntimeWarning::UnspawnedTask(_) => match config().unpspawned_task_warning {
+                    Some(true) => true,
+                    Some(false) => false,
+                    None => true,
+                },
+                RuntimeWarning::DroppedHandle(_) => match config().dropped_unused_handle_warning {
+                    Some(true) => true,
+                    Some(false) => false,
+                    None => true,
+                },
+                RuntimeWarning::BlockingCall(_, _) | RuntimeWarning::BlockOn => {
+                    if std::thread::current().id() != *crate::MAIN_THREAD {
+                        match config().blocking_call_warning {
+                            Some(true) => true,
+                            Some(false) => false,
+                            None => true,
+                        }
+                    } else {
+                        false
                     }
-                } else {
-                    false
                 }
+                RuntimeWarning::BarrierTimeout(elapsed) => elapsed > &config().deadlock_timeout,
             }
-            RuntimeWarning::BarrierTimeout(elapsed) => elapsed > &config().deadlock_timeout,
+        } else {
+            false
         }
     }
 
@@ -54,7 +68,7 @@ impl<'a> RuntimeWarning<'a> {
         #[cfg(not(feature = "disable-runtime-warnings"))]
         if self.print_warning() {
             let msg = match self {
-                RuntimeWarning::UnspanedTask(msg) => {
+                RuntimeWarning::UnspawnedTask(msg) => {
                     format!("[LAMELLAR WARNING] you have called {msg}. 
                     This typically means you forgot to call spawn() on the handle returned from calls such as exec_am_* or various array operations.
                     If this is your intended behavior, set LAMELLAR_UNSPAWNED_TASK_WARNING=0 to disable this warning.")

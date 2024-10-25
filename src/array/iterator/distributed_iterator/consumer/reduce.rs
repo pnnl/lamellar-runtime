@@ -14,11 +14,11 @@ use crate::warnings::RuntimeWarning;
 use crate::Dist;
 
 use futures_util::{ready, Future, StreamExt};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Reduce<I, F> {
@@ -71,100 +71,13 @@ where
             reqs,
             team,
             state: InnerState::ReqsPending(None),
+            spawned: false,
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
         self.iter.elems(in_elems)
     }
 }
-
-// #[derive(Debug)]
-// pub(crate) struct ReduceAsync<I, T, F>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + Send + 'static,
-//     T: Dist + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     pub(crate) iter: I,
-//     pub(crate) op: F,
-//     // pub(crate) _phantom: PhantomData<T>,
-// }
-
-// impl<I, T, F> IterClone for ReduceAsync<I, T, F>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + SyncSend + 'static,
-//     T: Dist + Send + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     fn iter_clone(&self, _: Sealed) -> Self {
-//         ReduceAsync {
-//             iter: self.iter.iter_clone(Sealed),
-//             op: self.op.clone(),
-//         }
-//     }
-// }
-
-// impl<I, T, F> IterConsumer for ReduceAsync<I, T, F>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + Send + 'static,
-//     T: Dist + Send + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     type AmOutput = Option<T>;
-//     type Output = Option<T>;
-//     type Item = I::Item;
-//     type Handle = InnerDistIterReduceHandle<I::Item, F>;
-//     fn init(&self, start: usize, cnt: usize) -> Self {
-//         ReduceAsync {
-//             iter: self.iter.init(start, cnt),
-//             op: self.op.clone(),
-//         }
-//     }
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.iter.next()
-//     }
-//     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
-//         Arc::new(ReduceAsyncAm {
-//             iter: self.iter_clone(Sealed),
-//             op: self.op.clone(),
-//             schedule,
-//         })
-//     }
-//     fn create_handle(
-//         self,
-//         team: Pin<Arc<LamellarTeamRT>>,
-//         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
-//     ) -> Self::Handle {
-//         InnerDistIterReduceHandle {
-//             op: self.op,
-//             reqs,
-//             team,
-//             state: InnerState::ReqsPending(None),
-//         }
-//     }
-//     fn max_elems(&self, in_elems: usize) -> usize {
-//         self.iter.elems(in_elems)
-//     }
-// }
-
-// impl<I, T, F> Clone for ReduceAsync<I, T, F>
-// where
-//     I: DistributedIterator + Clone,
-//     I::Item: Future<Output = T> + Send + 'static,
-//     T: Dist + Send + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     fn clone(&self) -> Self {
-//         ReduceAsync {
-//             iter: self.iter.clone(),
-//             op: self.op.clone(),
-//         }
-//     }
-// }
-
 //#[doc(hidden)]
 #[pin_project]
 pub(crate) struct InnerDistIterReduceHandle<T, F> {
@@ -172,6 +85,7 @@ pub(crate) struct InnerDistIterReduceHandle<T, F> {
     pub(crate) op: F,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     state: InnerState<T>,
+    spawned: bool,
 }
 
 enum InnerState<T> {
@@ -230,7 +144,13 @@ where
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     type Output = Option<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            for req in self.reqs.iter_mut() {
+                req.ready_or_set_waker(cx.waker());
+            }
+            self.spawned = true;
+        }
         let mut this = self.project();
         match &mut this.state {
             InnerState::ReqsPending(mut val) => {
@@ -273,53 +193,25 @@ where
     }
 }
 
-//#[doc(hidden)]
-impl<T, F> LamellarRequest for InnerDistIterReduceHandle<T, F>
-where
-    T: Dist + ArrayOps,
-    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
-{
-    fn blocking_wait(mut self) -> Self::Output {
-        let local_val = self
-            .reqs
-            .drain(..)
-            .filter_map(|req| req.blocking_wait())
-            .reduce(self.op.clone());
-        if let Some(val) = local_val {
-            self.reduce_remote_vals(val)
-        } else {
-            None
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        for req in self.reqs.iter_mut() {
-            if !req.ready_or_set_waker(waker) {
-                //only need to wait on the next unready req
-                return false;
-            }
-        }
-        true
-    }
-
-    fn val(&self) -> Self::Output {
-        let local_val = self
-            .reqs
-            .iter()
-            .filter_map(|req| req.val())
-            .reduce(self.op.clone());
-        if let Some(val) = local_val {
-            self.reduce_remote_vals(val)
-        } else {
-            None
-        }
-    }
-}
-
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct DistIterReduceHandle<T, F> {
-    team: Pin<Arc<LamellarTeamRT>>,
+    array: UnsafeArrayInner,
+    launched: bool,
     #[pin]
     state: State<T, F>,
+}
+
+#[pinned_drop]
+impl<T, F> PinnedDrop for DistIterReduceHandle<T, F> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a DistIterReduceHandle").print();
+        }
+    }
 }
 
 impl<T, F> DistIterReduceHandle<T, F>
@@ -333,19 +225,21 @@ where
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
-            team: array.data.team.clone(),
+            array: array.clone(),
+            launched: false,
             state: State::Barrier(barrier, reqs),
         }
     }
 
     /// This method will block until the associated Reduce operation completes and returns the result
-    pub fn block(self) -> Option<T> {
+    pub fn block(mut self) -> Option<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "DistIterReduceHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.team.clone().block_on(self)
+        self.array.clone().block_on(self)
     }
 
     /// This method will spawn the associated Reduce Operation on the work queue,
@@ -353,8 +247,9 @@ where
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Option<T>> {
-        self.team.clone().scheduler.spawn_task(self)
+    pub fn spawn(mut self) -> LamellarTask<Option<T>> {
+        self.launched = true;
+        self.array.clone().spawn(self)
     }
 }
 
@@ -365,6 +260,7 @@ enum State<T, F> {
         Pin<Box<dyn Future<Output = InnerDistIterReduceHandle<T, F>> + Send>>,
     ),
     Reqs(#[pin] InnerDistIterReduceHandle<T, F>),
+    Dropped,
 }
 impl<T, F> Future for DistIterReduceHandle<T, F>
 where
@@ -372,7 +268,8 @@ where
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     type Output = Option<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Barrier(barrier, inner) => {
@@ -390,43 +287,7 @@ where
                 let val = ready!(inner.poll(cx));
                 Poll::Ready(val)
             }
-        }
-    }
-}
-
-//#[doc(hidden)]
-impl<T, F> LamellarRequest for DistIterReduceHandle<T, F>
-where
-    T: Dist + ArrayOps,
-    F: Fn(T, T) -> T + SyncSend + Clone + 'static,
-{
-    fn blocking_wait(self) -> Self::Output {
-        match self.state {
-            State::Barrier(barrier, reqs) => {
-                barrier.blocking_wait();
-                self.team.block_on(reqs).blocking_wait()
-            }
-            State::Reqs(inner) => inner.blocking_wait(),
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        match &mut self.state {
-            State::Barrier(barrier, _) => {
-                if !barrier.ready_or_set_waker(waker) {
-                    return false;
-                }
-                waker.wake_by_ref();
-                false
-            }
-            State::Reqs(inner) => inner.ready_or_set_waker(waker),
-        }
-    }
-    fn val(&self) -> Self::Output {
-        match &self.state {
-            State::Barrier(_barrier, _reqs) => {
-                unreachable!("should never be in barrier state when val is called");
-            }
-            State::Reqs(inner) => inner.val(),
+            StateProj::Dropped => panic!("called `Future::poll()` on a dropped future."),
         }
     }
 }
@@ -468,54 +329,3 @@ where
         }
     }
 }
-
-// #[lamellar_impl::AmLocalDataRT(Clone)]
-// pub(crate) struct ReduceAsyncAm<I, T, F>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + Send + 'static,
-//     T: Dist + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     pub(crate) op: F,
-//     pub(crate) iter: ReduceAsync<I, T, F>,
-//     pub(crate) schedule: IterSchedule,
-// }
-
-// impl<I: IterClone, T, F: Clone> IterClone for ReduceAsyncAm<I, T, F>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + Send + 'static,
-//     T: Dist + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     fn iter_clone(&self, _: Sealed) -> Self {
-//         ReduceAsyncAm {
-//             op: self.op.clone(),
-//             iter: self.iter.iter_clone(Sealed),
-//             schedule: self.schedule.clone(),
-//         }
-//     }
-// }
-
-// #[lamellar_impl::rt_am_local]
-// impl<I, T, F> LamellarAm for ReduceAsyncAm<I, T, F>
-// where
-//     I: DistributedIterator + 'static,
-//     I::Item: Future<Output = T> + Send + 'static,
-//     T: Dist + Send + ArrayOps,
-//     F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-// {
-//     async fn exec(&self) -> Option<T> {
-//         let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
-//         match iter.next() {
-//             Some(mut accum) => {
-//                 while let Some(elem) = iter.next() {
-//                     accum = (self.op)(accum, elem);
-//                 }
-//                 Some(accum)
-//             }
-//             None => None,
-//         }
-//     }
-// }

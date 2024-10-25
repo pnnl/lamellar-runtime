@@ -13,7 +13,7 @@ use crate::{GlobalRwDarc, LamellarTeamRT};
 
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use futures_util::{ready, Future};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 
 use super::global_rw_darc::{
     DistRwLock, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
@@ -26,10 +26,11 @@ enum State<T> {
     Init,
     TryingRead(#[pin] Pin<Box<dyn Future<Output = RwLockReadGuardArc<T>> + Send + 'static>>),
     TryingWrite(#[pin] Pin<Box<dyn Future<Output = RwLockWriteGuardArc<T>> + Send + 'static>>),
+    Dropped,
 }
 
 #[must_use = "LocalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 /// Handle used to retrieve the aquired read lock from a LocalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -72,14 +73,29 @@ enum State<T> {
 ///```
 pub struct LocalRwDarcReadHandle<T: 'static> {
     darc: LocalRwDarc<T>,
+    pub(crate) launched: bool,
     #[pin]
     state: State<T>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for LocalRwDarcReadHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a LocalRwDarcReadHandle").print();
+        }
+    }
 }
 
 impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     pub(crate) fn new(darc: LocalRwDarc<T>) -> Self {
         Self {
             darc,
+            launched: false,
             state: State::Init,
         }
     }
@@ -99,7 +115,8 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
     ///
     ///```
-    pub fn block(self) -> LocalRwDarcReadGuard<T> {
+    pub fn block(mut self) -> LocalRwDarcReadGuard<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "LocalRwDarcReadHandle::block",
             "<handle>.spawn() or<handle>.await",
@@ -115,7 +132,7 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
             .clone()
             .block_on(async move { inner_darc.read_arc().await });
         LocalRwDarcReadGuard {
-            darc: self.darc,
+            darc: self.darc.clone(),
             lock: guard,
         }
     }
@@ -140,14 +157,16 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     ///
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(self) -> LamellarTask<LocalRwDarcReadGuard<T>> {
+    pub fn spawn(mut self) -> LamellarTask<LocalRwDarcReadGuard<T>> {
+        self.launched = true;
         self.darc.darc.team().spawn(self)
     }
 }
 
 impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
     type Output = LocalRwDarcReadGuard<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let inner_darc = self.darc.darc.clone();
         let mut this = self.project();
         match this.state.as_mut().project() {
@@ -170,7 +189,7 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
 }
 
 #[must_use = "LocalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 /// Handle used to retrieve the aquired write lock from a LocalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -212,14 +231,29 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
 ///```
 pub struct LocalRwDarcWriteHandle<T: 'static> {
     darc: LocalRwDarc<T>,
+    pub(crate) launched: bool,
     #[pin]
     state: State<T>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for LocalRwDarcWriteHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a LocalRwDarcWriteHandle").print();
+        }
+    }
 }
 
 impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     pub(crate) fn new(darc: LocalRwDarc<T>) -> Self {
         Self {
             darc,
+            launched: false,
             state: State::Init,
         }
     }
@@ -238,7 +272,8 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     /// let mut guard = handle.block(); //block until we get the write lock
     /// *guard += my_pe;
     ///```
-    pub fn block(self) -> LocalRwDarcWriteGuard<T> {
+    pub fn block(mut self) -> LocalRwDarcWriteGuard<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "LocalRwDarcWriteHandle::block",
             "<handle>.spawn() or<handle>.await",
@@ -254,7 +289,7 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
             .clone()
             .block_on(async move { inner_darc.write_arc().await });
         LocalRwDarcWriteGuard {
-            darc: self.darc,
+            darc: self.darc.clone(),
             lock: guard,
         }
     }
@@ -278,14 +313,16 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     /// *guard += my_pe;
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(self) -> LamellarTask<LocalRwDarcWriteGuard<T>> {
+    pub fn spawn(mut self) -> LamellarTask<LocalRwDarcWriteGuard<T>> {
+        self.launched = true;
         self.darc.darc.team().spawn(self)
     }
 }
 
 impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
     type Output = LocalRwDarcWriteGuard<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let inner_darc = self.darc.darc.clone();
         let mut this = self.project();
         match this.state.as_mut().project() {
@@ -308,7 +345,7 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
 }
 
 #[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by AmHandle
 /// Handle used to retrieve the aquired read lock from a GlobalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -424,7 +461,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcReadHandle<T> {
 }
 
 #[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by AmHandle
 /// Handle used to retrieve the aquired write lock from a GlobalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -538,7 +575,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcWriteHandle<T> {
 }
 
 #[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project] //unused drop warning triggered by AmHandle
 /// Handle used to retrieve the aquired collective write lock from a GlobalRwDarc
 ///
 /// This handle must be awaited or blocked on to actually acquire the lock
@@ -702,7 +739,7 @@ impl<T: 'static> OrigDarc<T> {
 }
 
 #[must_use = " Darc 'into' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of changing from a [LocalRwDarc] or [GlobalRwDarc] into a regular [Darc].
 /// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
@@ -731,8 +768,18 @@ impl<T: 'static> OrigDarc<T> {
 pub struct IntoDarcHandle<T: 'static> {
     pub(crate) darc: OrigDarc<T>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ()> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for IntoDarcHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a IntoDarcHandle").print();
+        }
+    }
 }
 
 impl<T: Sync + Send> IntoDarcHandle<T> {
@@ -745,7 +792,8 @@ impl<T: Sync + Send> IntoDarcHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_darc = five.into_darc().block();
-    pub fn block(self) -> Darc<T> {
+    pub fn block(mut self) -> Darc<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "IntoDarcHandle::block",
             "<handle>.spawn() or <handle>.await",
@@ -768,14 +816,16 @@ impl<T: Sync + Send> IntoDarcHandle<T> {
     /// let five_as_darc = five_as_darc_task.block();
     /// ```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(self) -> LamellarTask<Darc<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Darc<T>> {
+        self.launched = true;
         self.team.clone().spawn(self)
     }
 }
 
 impl<T: Sync + Send> Future for IntoDarcHandle<T> {
     type Output = Darc<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
         this.darc.inc_local_cnt();
@@ -790,7 +840,7 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
 }
 
 #[must_use = " Darc 'into' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of changing from a [Darc] or [GlobalRwDarc] into a [LocalRwDarc].
 /// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
@@ -819,8 +869,18 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
 pub struct IntoLocalRwDarcHandle<T: 'static> {
     pub(crate) darc: OrigDarc<T>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ()> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for IntoLocalRwDarcHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a IntoLocalRwDarcHandle").print();
+        }
+    }
 }
 
 impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
@@ -833,7 +893,8 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_localrw = five.into_localrw().block();
-    pub fn block(self) -> LocalRwDarc<T> {
+    pub fn block(mut self) -> LocalRwDarc<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "IntoLocalRwDarcHandle::block",
             "<handle>.spawn() or<handle>.await",
@@ -857,14 +918,16 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
     /// let five_as_localrw = five_as_localrw_task.block();
     /// ```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(self) -> LamellarTask<LocalRwDarc<T>> {
+    pub fn spawn(mut self) -> LamellarTask<LocalRwDarc<T>> {
+        self.launched = true;
         self.team.clone().spawn(self)
     }
 }
 
 impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
     type Output = LocalRwDarc<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
         this.darc.inc_local_cnt();
@@ -880,7 +943,7 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
 }
 
 #[must_use = " Darc 'into' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project]
+#[pin_project(PinnedDrop)]
 #[doc(alias = "Collective")]
 /// This is a handle representing the operation of changing from a [Darc] or [LocalRwDarc] into a [GlobalRwDarc].
 /// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
@@ -909,8 +972,18 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
 pub struct IntoGlobalRwDarcHandle<T: 'static> {
     pub(crate) darc: OrigDarc<T>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ()> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for IntoGlobalRwDarcHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a IntoGlobalRwDarcHandle").print();
+        }
+    }
 }
 
 impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
@@ -923,7 +996,8 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
     /// let five_as_globalrw = five.into_globalrw().block();
-    pub fn block(self) -> GlobalRwDarc<T> {
+    pub fn block(mut self) -> GlobalRwDarc<T> {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "IntoGlobalRwDarcHandle::block",
             "<handle>.spawn() or<handle>.await",
@@ -946,14 +1020,16 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
     /// let five_as_globalrw_task = five.into_globalrw().spawn();
     /// let five_as_globalrw = five_as_globalrw_task.block();
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(self) -> LamellarTask<GlobalRwDarc<T>> {
+    pub fn spawn(mut self) -> LamellarTask<GlobalRwDarc<T>> {
+        self.launched = true;
         self.team.clone().spawn(self)
     }
 }
 
 impl<T: Sync + Send> Future for IntoGlobalRwDarcHandle<T> {
     type Output = GlobalRwDarc<T>;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
         this.darc.inc_local_cnt();

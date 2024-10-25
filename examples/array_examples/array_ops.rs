@@ -100,7 +100,7 @@ fn test_add<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_add(i, add_val));
+        reqs.push(array.fetch_add(i, add_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!(
@@ -137,7 +137,7 @@ fn test_sub<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_sub(i, sub_val));
+        reqs.push(array.fetch_sub(i, sub_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -168,7 +168,7 @@ fn test_mul<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_mul(i, mul_val));
+        reqs.push(array.fetch_mul(i, mul_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -200,7 +200,7 @@ fn test_div<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_div(i, div_val));
+        reqs.push(array.fetch_div(i, div_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -232,7 +232,7 @@ fn test_rem<T: std::fmt::Debug + ElementArithmeticOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_rem(i, rem_val));
+        reqs.push(array.fetch_rem(i, rem_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -270,7 +270,7 @@ fn test_and<T: std::fmt::Debug + ElementArithmeticOps + ElementBitWiseOps + 'sta
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_bit_and(i, and_val));
+        reqs.push(array.fetch_bit_and(i, and_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -308,7 +308,7 @@ fn test_or<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_bit_or(i, or_val));
+        reqs.push(array.fetch_bit_or(i, or_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -346,7 +346,7 @@ fn test_xor<T: std::fmt::Debug + ElementBitWiseOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_bit_xor(i, xor_val));
+        reqs.push(array.fetch_bit_xor(i, xor_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -381,7 +381,7 @@ fn test_store_load<T: std::fmt::Debug + ElementOps + 'static>(
 
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.load(i));
+        reqs.push(array.load(i).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -413,7 +413,7 @@ fn test_shl<T: std::fmt::Debug + ElementShiftOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_shl(i, shl_val));
+        reqs.push(array.fetch_shl(i, shl_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));
@@ -445,7 +445,7 @@ fn test_shr<T: std::fmt::Debug + ElementShiftOps + 'static>(
     array.barrier();
     let mut reqs = vec![];
     for i in 0..array.len() {
-        reqs.push(array.fetch_shr(i, shr_val));
+        reqs.push(array.fetch_shr(i, shr_val).spawn());
     }
     for (i, req) in reqs.drain(0..).enumerate() {
         println!("i: {:?} {:?}", i, array.block_on(req));

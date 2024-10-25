@@ -20,6 +20,7 @@ use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 
 // use parking_lot::{
 //     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
@@ -966,6 +967,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for LocalLockArray<T> {
 }
 
 //#[doc(hidden)]
+// Dropped Handle Warning triggered by AmHandle
 #[pin_project]
 pub struct LocalLockArrayReduceHandle<T: Dist + AmDist> {
     req: AmHandle<Option<T>>,
@@ -984,6 +986,11 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
 
     /// This method will block the caller until the associated Array Reduce Operation completesRuntimeWarning::BlockingCall("LocalLockArrayReduceHandle::block", "<handle>.spawn() or <handle>.await").print();
     pub fn block(self) -> Option<T> {
+        RuntimeWarning::BlockingCall(
+            "LocalLockArrayReduceHandle::block",
+            "<handle>.spawn() or <handle>.await",
+        )
+        .print();
         self.lock_guard.array.clone().block_on(self)
     }
 }

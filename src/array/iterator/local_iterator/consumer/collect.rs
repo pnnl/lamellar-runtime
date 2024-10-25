@@ -14,11 +14,11 @@ use crate::warnings::RuntimeWarning;
 
 use core::marker::PhantomData;
 use futures_util::{ready, Future};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Collect<I, A> {
@@ -74,6 +74,7 @@ where
             distribution: self.distribution,
             team,
             state: InnerState::ReqsPending(Vec::new()),
+            spawned: false,
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -135,6 +136,7 @@ where
             distribution: self.distribution,
             team,
             state: InnerState::ReqsPending(Vec::new()),
+            spawned: false,
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -164,6 +166,7 @@ pub(crate) struct InnerLocalIterCollectHandle<T, A> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,
     pub(crate) distribution: Distribution,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    spawned: bool,
     state: InnerState<T, A>,
 }
 
@@ -193,7 +196,13 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
     for InnerLocalIterCollectHandle<T, A>
 {
     type Output = A;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            for req in self.reqs.iter_mut() {
+                req.ready_or_set_waker(cx.waker());
+            }
+            self.spawned = true;
+        }
         let mut this = self.project();
         match &mut this.state {
             InnerState::ReqsPending(vals) => {
@@ -230,46 +239,25 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
     }
 }
 
-impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static>
-    LamellarRequest for InnerLocalIterCollectHandle<T, A>
-{
-    fn blocking_wait(mut self) -> Self::Output {
-        // let mut num_local_vals = 0;
-        let mut temp_vals = vec![];
-        for req in self.reqs.drain(0..) {
-            let v = req.blocking_wait();
-            temp_vals.extend(v);
-        }
-        temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
-        let local_vals = temp_vals.into_iter().map(|v| v.1).collect();
-        self.create_array(local_vals)
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        for req in self.reqs.iter_mut() {
-            if !req.ready_or_set_waker(waker) {
-                //only need to wait on the next unready req
-                return false;
-            }
-        }
-        true
-    }
-    fn val(&self) -> Self::Output {
-        // let mut num_local_vals = 0;
-        let mut temp_vals = vec![];
-        for req in self.reqs.iter() {
-            let v = req.val();
-            temp_vals.extend(v);
-        }
-        temp_vals.sort_by(|a, b| a.0.cmp(&b.0));
-        let local_vals = temp_vals.into_iter().map(|v| v.1).collect();
-        self.create_array(local_vals)
-    }
-}
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct LocalIterCollectHandle<T, A> {
-    team: Pin<Arc<LamellarTeamRT>>,
+    array: UnsafeArrayInner,
+    launched: bool,
     #[pin]
     state: State<T, A>,
+}
+
+#[pinned_drop]
+impl<T, A> PinnedDrop for LocalIterCollectHandle<T, A> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a DistIterSumHandle").print();
+        }
+    }
 }
 
 impl<T, A> LocalIterCollectHandle<T, A>
@@ -282,19 +270,21 @@ where
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
-            team: array.data.team.clone(),
+            array: array.clone(),
+            launched: false,
             state: State::Init(inner),
         }
     }
 
     /// This method will block until the associated Collect operation completes and returns the result
-    pub fn block(self) -> A {
+    pub fn block(mut self) -> A {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "LocalIterCollectHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.team.clone().block_on(self)
+        self.array.clone().block_on(self)
     }
 
     /// This method will spawn the associated Collect Operation on the work queue,
@@ -302,8 +292,9 @@ where
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<A> {
-        self.team.clone().scheduler.spawn_task(self)
+    pub fn spawn(mut self) -> LamellarTask<A> {
+        self.launched = true;
+        self.array.clone().spawn(self)
     }
 }
 
@@ -311,6 +302,7 @@ where
 enum State<T, A> {
     Init(Pin<Box<dyn Future<Output = InnerLocalIterCollectHandle<T, A>> + Send>>),
     Reqs(#[pin] InnerLocalIterCollectHandle<T, A>),
+    Dropped,
 }
 impl<T, A> Future for LocalIterCollectHandle<T, A>
 where
@@ -318,7 +310,8 @@ where
     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
 {
     type Output = A;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Init(inner) => {
@@ -335,37 +328,7 @@ where
                 let val = ready!(inner.poll(cx));
                 Poll::Ready(val)
             }
-        }
-    }
-}
-
-//#[doc(hidden)]
-impl<T, A> LamellarRequest for LocalIterCollectHandle<T, A>
-where
-    T: Dist + ArrayOps,
-    A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
-{
-    fn blocking_wait(self) -> Self::Output {
-        match self.state {
-            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
-            State::Reqs(inner) => inner.blocking_wait(),
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        match &mut self.state {
-            State::Init(_) => {
-                waker.wake_by_ref();
-                false
-            }
-            State::Reqs(inner) => inner.ready_or_set_waker(waker),
-        }
-    }
-    fn val(&self) -> Self::Output {
-        match &self.state {
-            State::Init(_reqs) => {
-                unreachable!("should never be in init state when val is called");
-            }
-            State::Reqs(inner) => inner.val(),
+            StateProj::Dropped => panic!("called `Future::poll()` on a dropped future."),
         }
     }
 }

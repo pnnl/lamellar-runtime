@@ -13,16 +13,15 @@ use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::Darc;
 
-use async_trait::async_trait;
 use futures_util::{ready, Future};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Count<I> {
@@ -68,6 +67,7 @@ where
             reqs,
             team,
             state: InnerState::ReqsPending(0),
+            spawned: false,
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -81,6 +81,7 @@ pub(crate) struct InnerDistIterCountHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<usize>>,
     team: Pin<Arc<LamellarTeamRT>>,
     state: InnerState,
+    spawned: bool,
 }
 
 enum InnerState {
@@ -131,7 +132,13 @@ impl InnerDistIterCountHandle {
 
 impl Future for InnerDistIterCountHandle {
     type Output = usize;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            for req in self.reqs.iter_mut() {
+                req.ready_or_set_waker(cx.waker());
+            }
+            self.spawned = true;
+        }
         let mut this = self.project();
         match &mut this.state {
             InnerState::ReqsPending(cnt) => {
@@ -162,47 +169,25 @@ impl Future for InnerDistIterCountHandle {
     }
 }
 
-//#[doc(hidden)]
-#[async_trait]
-impl LamellarRequest for InnerDistIterCountHandle {
-    fn blocking_wait(mut self) -> Self::Output {
-        self.team.tasking_barrier();
-        let cnt = Darc::new(&self.team, AtomicUsize::new(0)).unwrap();
-        let count = self
-            .reqs
-            .drain(..)
-            .map(|req| req.blocking_wait())
-            .into_iter()
-            .sum::<usize>();
-        self.reduce_remote_counts(count, cnt)
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        for req in self.reqs.iter_mut() {
-            if !req.ready_or_set_waker(waker) {
-                //only need to wait on the next unready req
-                return false;
-            }
-        }
-        true
-    }
-    fn val(&self) -> Self::Output {
-        self.team.tasking_barrier();
-        let cnt = Darc::new(&self.team, AtomicUsize::new(0)).unwrap();
-        let count = self
-            .reqs
-            .iter()
-            .map(|req| req.val())
-            .into_iter()
-            .sum::<usize>();
-        self.reduce_remote_counts(count, cnt)
-    }
-}
-
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct DistIterCountHandle {
-    team: Pin<Arc<LamellarTeamRT>>,
+    array: UnsafeArrayInner,
+    launched: bool,
     #[pin]
     state: State,
+}
+
+#[pinned_drop]
+impl PinnedDrop for DistIterCountHandle {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a DistIterCountHandle").print();
+        }
+    }
 }
 
 impl DistIterCountHandle {
@@ -212,19 +197,21 @@ impl DistIterCountHandle {
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
-            team: array.data.team.clone(),
+            array: array.clone(),
+            launched: false,
             state: State::Barrier(barrier_handle, inner),
         }
     }
 
     /// This method will block until the associated Count operation completes and returns the result
-    pub fn block(self) -> usize {
+    pub fn block(mut self) -> usize {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "DistIterCountHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.team.clone().block_on(self)
+        self.array.clone().block_on(self)
     }
 
     /// This method will spawn the associated Count Operation on the work queue,
@@ -232,8 +219,9 @@ impl DistIterCountHandle {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<usize> {
-        self.team.clone().scheduler.spawn_task(self)
+    pub fn spawn(mut self) -> LamellarTask<usize> {
+        self.launched = true;
+        self.array.clone().spawn(self)
     }
 }
 
@@ -244,10 +232,12 @@ enum State {
         Pin<Box<dyn Future<Output = InnerDistIterCountHandle> + Send>>,
     ),
     Reqs(#[pin] InnerDistIterCountHandle),
+    Dropped,
 }
 impl Future for DistIterCountHandle {
     type Output = usize;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Barrier(barrier, inner) => {
@@ -265,39 +255,7 @@ impl Future for DistIterCountHandle {
                 let val = ready!(inner.poll(cx));
                 Poll::Ready(val)
             }
-        }
-    }
-}
-
-//#[doc(hidden)]
-impl LamellarRequest for DistIterCountHandle {
-    fn blocking_wait(self) -> Self::Output {
-        match self.state {
-            State::Barrier(barrier, reqs) => {
-                barrier.blocking_wait();
-                self.team.block_on(reqs).blocking_wait()
-            }
-            State::Reqs(inner) => inner.blocking_wait(),
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        match &mut self.state {
-            State::Barrier(barrier, _) => {
-                if !barrier.ready_or_set_waker(waker) {
-                    return false;
-                }
-                waker.wake_by_ref();
-                false
-            }
-            State::Reqs(inner) => inner.ready_or_set_waker(waker),
-        }
-    }
-    fn val(&self) -> Self::Output {
-        match &self.state {
-            State::Barrier(_barrier, _reqs) => {
-                unreachable!("should never be in barrier state when val is called");
-            }
-            State::Reqs(inner) => inner.val(),
+            StateProj::Dropped => panic!("should never be in dropped state"),
         }
     }
 }

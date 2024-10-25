@@ -190,31 +190,31 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-impl Dist for bool {}
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, isize);
+// impl Dist for bool {}
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(false, f32);
 // lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
 
 // lamellar_impl::generate_reductions_for_type_rt!(false, u128);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
-// //------------------------------------
+// // //------------------------------------
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
-// lamellar_impl::generate_ops_for_bool_rt!();
+lamellar_impl::generate_ops_for_bool_rt!();
 
 impl<T: Dist + ArrayOps> Dist for Option<T> {}
 impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
@@ -654,6 +654,29 @@ impl LamellarByteArray {
             LamellarByteArray::GenericAtomicArray(array) => array.array.inner.data.team(),
             LamellarByteArray::LocalLockArray(array) => array.array.inner.data.team(),
             LamellarByteArray::GlobalLockArray(array) => array.array.inner.data.team(),
+        }
+    }
+    pub(crate) fn dec_outstanding(&self, num: usize) {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => {
+                array.inner.data.array_counters.dec_outstanding(num)
+            }
+            LamellarByteArray::ReadOnlyArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
+            LamellarByteArray::AtomicArray(array) => array.dec_outstanding(num),
+            LamellarByteArray::NativeAtomicArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
+            LamellarByteArray::GenericAtomicArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
+            LamellarByteArray::LocalLockArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
+            LamellarByteArray::GlobalLockArray(array) => {
+                array.array.inner.data.array_counters.dec_outstanding(num)
+            }
         }
     }
 }

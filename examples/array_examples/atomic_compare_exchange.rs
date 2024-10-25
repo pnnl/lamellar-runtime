@@ -25,7 +25,6 @@ fn main() {
 
     let array = AtomicArray::<usize>::new(world.team(), num_pes * 2, Distribution::Block);
     array.dist_iter_mut().for_each(|x| x.store(0)).block(); //initialize array -- use atomic store
-    array.wait_all();
     array.barrier();
 
     // array.print();
@@ -55,7 +54,9 @@ fn main() {
     let old = 0.0;
     let new = (my_pe + 1) as f32;
     let epsilon = 0.00001;
+    println!("here 1");
     let res = world.block_on(array_2.batch_compare_exchange_epsilon(indices, old, new, epsilon)); //should not fail
+    println!("here 2");
     array_2.barrier();
 
     let (num_failed, num_ok) = res.iter().fold((0, 0), |acc, x| {

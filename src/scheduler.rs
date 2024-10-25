@@ -255,7 +255,13 @@ impl Scheduler {
         let am_future = async move {
             // let start_tid = thread::current().id();
 
-            // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
+            // println!(
+            //     "[{:?}] submit work exec req {:?} {:?} TaskId: {:?}",
+            //     std::thread::current().id(),
+            //     num_ams.load(Ordering::Relaxed),
+            //     max_ams.load(Ordering::Relaxed),
+            //     _am_id
+            // );
             // println!("[{:?}] submit_am {:?}", std::thread::current().id(), am_id);
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
@@ -269,7 +275,14 @@ impl Scheduler {
             //     std::thread::current().id(),
             //     am_id
             // );
-            // println!("[{:?}] submit work done req {:?} {:?} TaskId: {:?} {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task,reqs);
+            // println!(
+            //     "[{:?}] submit work done req {:?} {:?} TaskId: {:?} ",
+            //     std::thread::current().id(),
+            //     num_ams.load(Ordering::Relaxed),
+            //     max_ams.load(Ordering::Relaxed),
+            //     _am_id,
+            //     // reqs
+            // );
         };
         self.executor.submit_task(am_future);
     }
@@ -379,7 +392,11 @@ impl Scheduler {
         self.executor.submit_task(am_future);
     }
 
-    pub(crate) fn spawn_task<F>(&self, task: F) -> LamellarTask<F::Output>
+    pub(crate) fn spawn_task<F>(
+        &self,
+        task: F,
+        outstanding_reqs: Vec<Arc<AMCounters>>,
+    ) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
@@ -387,10 +404,16 @@ impl Scheduler {
         let num_tasks = self.num_tasks.clone();
         let max_tasks = self.max_tasks.clone();
         num_tasks.fetch_add(1, Ordering::Relaxed);
+        for cntr in outstanding_reqs.iter() {
+            cntr.inc_outstanding(1);
+        }
         let _task_id = max_tasks.fetch_add(1, Ordering::Relaxed);
         let future = async move {
             let result = task.await;
             num_tasks.fetch_sub(1, Ordering::Relaxed);
+            for cntr in outstanding_reqs.iter() {
+                cntr.dec_outstanding(1);
+            }
             result
         };
         self.executor.spawn_task(future, self.executor.clone())

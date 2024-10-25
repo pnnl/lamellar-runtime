@@ -861,6 +861,7 @@ fn create_buf_ops(
             #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
+                    // println!("in multi val multi idx exec");
                     #slice
                     match self.index_size{
                         1 => {
@@ -926,6 +927,7 @@ fn create_buf_ops(
             #[#am(AmGroup(false))]
             impl LamellarAM for #single_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
+                    // println!("in single val multi idx exec");
                     #slice
                     let val = self.val;
                     match self.index_size{
@@ -995,6 +997,7 @@ fn create_buf_ops(
             #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_single_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
+                    // println!("in multi val single idx exec");
                     #slice
                     let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                     let index = self.index;
@@ -1036,6 +1039,7 @@ fn create_buf_ops(
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                        // println!("in multi val multi idx result exec");
                         #slice
                         let mut res = Vec::new();
                         match self.index_size{
@@ -1103,6 +1107,7 @@ fn create_buf_ops(
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                        // println!("in single val multi idx result exec");
                         #slice
                         let val = self.val;
                         let mut res = Vec::new();
@@ -1138,6 +1143,7 @@ fn create_buf_ops(
                                 }
                             }
                         }
+                        // println!("done in in single val multi idx result exec");
                         res
                     }
                 }
@@ -1173,6 +1179,7 @@ fn create_buf_ops(
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>>  {
+                        // println!("in multi val single idx result exec");
                         #slice
                         let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                         let index = self.index;
@@ -1217,6 +1224,7 @@ fn create_buf_ops(
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident> {
+                // println!("in multi val multi idx fetch exec");
                 #slice
                 let mut res = Vec::new();
                 match self.index_size{
@@ -1287,7 +1295,7 @@ fn create_buf_ops(
         #[#am(AmGroup(false))]
         impl LamellarAM for #single_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident>{
-                // println!("in single val multi idx exec");
+                // println!("in single val multi idx fetch exec");
                 #slice
                 let val = self.val;
                 let mut res;
@@ -1329,6 +1337,7 @@ fn create_buf_ops(
                         }
                     }
                 }
+                // println!("done with exec");
                 res
             }
         }
@@ -1367,6 +1376,7 @@ fn create_buf_ops(
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_single_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident> {
+                // println!("in multi val single idx fetch exec");
                 #slice
                 let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                 let index = self.index;

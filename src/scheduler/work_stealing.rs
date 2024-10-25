@@ -142,7 +142,13 @@ impl LamellarExecutor for WorkStealing {
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(
+                move |_task_id| async move {
+                    let res = task.await;
+                    res
+                },
+                schedule,
+            );
 
         runnable.schedule();
         LamellarTask {
@@ -210,7 +216,13 @@ impl LamellarExecutor for WorkStealing {
         let (runnable, mut task) = unsafe {
             Builder::new()
                 .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-                .spawn_unchecked(move |_task_id| async move { fut.await }, schedule)
+                .spawn_unchecked(
+                    move |_task_id| async move {
+                        let res = fut.await;
+                        res
+                    },
+                    schedule,
+                )
         };
         let waker = runnable.waker();
         runnable.run(); //try to run immediately

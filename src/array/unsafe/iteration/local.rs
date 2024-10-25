@@ -38,13 +38,15 @@ macro_rules! consumer_impl {
             {
                 let am = $($am)*;
                 let inner = self.clone();
-                let reqs_future = Box::pin(async move{match sched {
+                let reqs_future = Box::pin(async move{
+                    match sched {
                     Schedule::Static => inner.sched_static(am),
                     Schedule::Dynamic => inner.sched_dynamic(am),
                     Schedule::Chunk(size) => inner.sched_chunk(am,size),
                     Schedule::Guided => inner.sched_guided(am),
                     Schedule::WorkStealing => inner.sched_work_stealing(am),
-                }});
+                }
+            });
                 $return_type::new(reqs_future,self)
             }
         }

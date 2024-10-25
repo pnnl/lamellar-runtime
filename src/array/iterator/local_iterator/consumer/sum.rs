@@ -10,11 +10,11 @@ use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 
 use futures_util::{ready, Future};
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Sum<I> {
@@ -60,6 +60,7 @@ where
         InnerLocalIterSumHandle {
             reqs,
             state: InnerState::ReqsPending(None),
+            spawned: false,
         }
     }
     fn max_elems(&self, in_elems: usize) -> usize {
@@ -72,6 +73,7 @@ where
 pub(crate) struct InnerLocalIterSumHandle<T> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
     state: InnerState<T>,
+    spawned: bool,
 }
 
 enum InnerState<T> {
@@ -83,7 +85,13 @@ where
     T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     type Output = T;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            for req in self.reqs.iter_mut() {
+                req.ready_or_set_waker(cx.waker());
+            }
+            self.spawned = true;
+        }
         let mut this = self.project();
         match &mut this.state {
             InnerState::ReqsPending(local_sum) => {
@@ -109,37 +117,51 @@ where
 }
 
 //#[doc(hidden)]
-impl<T> LamellarRequest for InnerLocalIterSumHandle<T>
-where
-    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
-{
-    fn blocking_wait(mut self) -> Self::Output {
-        self.reqs
-            .drain(..)
-            .map(|req| req.blocking_wait())
-            .sum::<Self::Output>()
-    }
+// impl<T> LamellarRequest for InnerLocalIterSumHandle<T>
+// where
+//     T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
+// {
+//     fn blocking_wait(mut self) -> Self::Output {
+//         self.reqs
+//             .drain(..)
+//             .map(|req| req.blocking_wait())
+//             .sum::<Self::Output>()
+//     }
 
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        for req in self.reqs.iter_mut() {
-            if !req.ready_or_set_waker(waker) {
-                //only need to wait on the next unready req
-                return false;
-            }
-        }
-        true
-    }
+//     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+//         for req in self.reqs.iter_mut() {
+//             if !req.ready_or_set_waker(waker) {
+//                 //only need to wait on the next unready req
+//                 return false;
+//             }
+//         }
+//         true
+//     }
 
-    fn val(&self) -> Self::Output {
-        self.reqs.iter().map(|req| req.val()).sum::<Self::Output>()
-    }
-}
+//     fn val(&self) -> Self::Output {
+//         self.reqs.iter().map(|req| req.val()).sum::<Self::Output>()
+//     }
+// }
 
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct LocalIterSumHandle<T> {
-    team: Pin<Arc<LamellarTeamRT>>,
+    array: UnsafeArrayInner,
+    launched: bool,
     #[pin]
     state: State<T>,
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LocalIterSumHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            let mut this = self.project();
+            RuntimeWarning::disable_warnings();
+            *this.state = State::Dropped;
+            RuntimeWarning::enable_warnings();
+            RuntimeWarning::DroppedHandle("a LocalIterSumHandle").print();
+        }
+    }
 }
 
 impl<T> LocalIterSumHandle<T>
@@ -151,27 +173,31 @@ where
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
-            team: array.data.team.clone(),
+            array: array.clone(),
+            launched: false,
             state: State::Init(inner),
         }
     }
 
     /// This method will block until the associated Sumoperation completes and returns the result
-    pub fn block(self) -> T {
+    pub fn block(mut self) -> T {
+        self.launched = true;
         RuntimeWarning::BlockingCall(
             "LocalIterSumHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.team.clone().block_on(self)
+        self.array.clone().block_on(self)
     }
     /// This method will spawn the associated Sum Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<T> {
-        self.team.clone().scheduler.spawn_task(self)
+    pub fn spawn(mut self) -> LamellarTask<T> {
+        self.launched = true;
+
+        self.array.clone().spawn(self)
     }
 }
 
@@ -179,13 +205,15 @@ where
 enum State<T> {
     Init(Pin<Box<dyn Future<Output = InnerLocalIterSumHandle<T>> + Send>>),
     Reqs(#[pin] InnerLocalIterSumHandle<T>),
+    Dropped,
 }
 impl<T> Future for LocalIterSumHandle<T>
 where
     T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
 {
     type Output = T;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Init(inner) => {
@@ -202,39 +230,46 @@ where
                 let val = ready!(inner.poll(cx));
                 Poll::Ready(val)
             }
+            StateProj::Dropped => panic!("called `Future::poll()` on a dropped future."),
         }
     }
 }
 
 //#[doc(hidden)]
-impl<T> LamellarRequest for LocalIterSumHandle<T>
-where
-    T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
-{
-    fn blocking_wait(self) -> Self::Output {
-        match self.state {
-            State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
-            State::Reqs(inner) => inner.blocking_wait(),
-        }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        match &mut self.state {
-            State::Init(_) => {
-                waker.wake_by_ref();
-                false
-            }
-            State::Reqs(inner) => inner.ready_or_set_waker(waker),
-        }
-    }
-    fn val(&self) -> Self::Output {
-        match &self.state {
-            State::Init(_reqs) => {
-                unreachable!("should never be in init state when val is called");
-            }
-            State::Reqs(inner) => inner.val(),
-        }
-    }
-}
+// impl<T> LamellarRequest for LocalIterSumHandle<T>
+// where
+//     T: SyncSend + for<'a> std::iter::Sum<&'a T> + std::iter::Sum<T> + 'static,
+// {
+//     fn blocking_wait(mut self) -> Self::Output {
+//         self.launched = true;
+//         let state = std::mem::replace(&mut self.state, State::Dropped);
+//         match state {
+//             State::Init(reqs) => self.team.block_on(reqs).blocking_wait(),
+//             State::Reqs(inner) => inner.blocking_wait(),
+//             State::Dropped => panic!("called `blocking_wait` on a future that was dropped"),
+//         }
+//     }
+//     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+//         self.launched = true;
+//         match &mut self.state {
+//             State::Init(_) => {
+//                 waker.wake_by_ref();
+//                 false
+//             }
+//             State::Reqs(inner) => inner.ready_or_set_waker(waker),
+//             State::Dropped => panic!("called `ready_or_set_waker` on a future that was dropped"),
+//         }
+//     }
+//     fn val(&self) -> Self::Output {
+//         match &self.state {
+//             State::Init(_reqs) => {
+//                 unreachable!("should never be in init state when val is called");
+//             }
+//             State::Reqs(inner) => inner.val(),
+//             State::Dropped => panic!("called `val` on a future that was dropped"),
+//         }
+//     }
+// }
 
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct SumAm<I> {

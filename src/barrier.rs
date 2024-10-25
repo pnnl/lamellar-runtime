@@ -7,7 +7,7 @@ use crate::scheduler::Scheduler;
 use crate::warnings::RuntimeWarning;
 
 use futures_util::Future;
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -308,6 +308,7 @@ impl Barrier {
             num_rounds: self.num_rounds,
             n: self.n,
             state: State::RoundInit(self.num_rounds),
+            launched: false,
         };
         // println!("in barrier handle");
         // self.print_bar();
@@ -348,73 +349,6 @@ impl Barrier {
     pub(crate) async fn async_barrier(&self) {
         self.barrier_handle().await;
     }
-
-    //     pub(crate) async fn async_barrier(&self) {
-    //         let mut s = Instant::now();
-    //         if self.panic.load(Ordering::SeqCst) == 0 {
-    //             if let Some(send_buf) = &self.send_buf {
-    //                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-    //                     let send_buf_slice = unsafe {
-    //                         // im the only thread (remote or local) that can write to this buff
-    //                         send_buf.as_mut_slice().expect("Data should exist on PE")
-    //                     };
-
-    //                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-    //                     send_buf_slice[0] = barrier_id;
-    //                     let barrier_slice = &[barrier_id];
-
-    //                     for round in 0..self.num_rounds {
-    //                         for i in 1..=self.n {
-    //                             let team_send_pe =
-    //                                 (my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
-    //                             if team_send_pe != my_index {
-    //                                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-    //                                 unsafe {
-    //                                     self.barrier_buf[i - 1].put_slice(
-    //                                         send_pe,
-    //                                         round,
-    //                                         barrier_slice,
-    //                                     );
-    //                                     //safe as we are the only ones writing to our index
-    //                                 }
-    //                             }
-    //                         }
-    //                         for i in 1..=self.n {
-    //                             let team_recv_pe = ((my_index as isize
-    //                                 - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
-    //                                 as isize)
-    //                                 .rem_euclid(self.num_pes as isize)
-    //                                 as isize;
-    //                             let recv_pe =
-    //                                 self.arch.single_iter(team_recv_pe as usize).next().unwrap();
-    //                             if team_recv_pe as usize != my_index {
-    //                                 unsafe {
-    //                                     //safe as  each pe is only capable of writing to its own index
-    //                                     while self.barrier_buf[i - 1]
-    //                                         .as_mut_slice()
-    //                                         .expect("Data should exist on PE")[round]
-    //                                         < barrier_id
-    //                                     {
-    //                                         self.barrier_timeout(
-    //                                             &mut s,
-    //                                             my_index,
-    //                                             round,
-    //                                             i,
-    //                                             team_recv_pe,
-    //                                             recv_pe,
-    //                                             send_buf_slice,
-    //                                         );
-    //                                         self.lamellae.flush();
-    //                                         async_std::task::yield_now().await;
-    //                                     }
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
 }
 
 // impl Drop for Barrier {
@@ -426,7 +360,7 @@ impl Barrier {
 //     }
 // }
 
-#[pin_project]
+#[pin_project(PinnedDrop)]
 pub struct BarrierHandle {
     barrier_buf: Arc<Vec<MemoryRegion<usize>>>,
     arch: Arc<LamellarArchRT>,
@@ -438,6 +372,16 @@ pub struct BarrierHandle {
     num_rounds: usize,
     n: usize,
     state: State,
+    launched: bool,
+}
+
+#[pinned_drop]
+impl PinnedDrop for BarrierHandle {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a BarrierHandle").print();
+        }
+    }
 }
 
 enum State {
@@ -490,8 +434,9 @@ impl BarrierHandle {
 
 impl Future for BarrierHandle {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // let mut this = self.project();
+        self.launched = true;
         match self.state {
             State::Waiting => {
                 if self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
@@ -553,7 +498,8 @@ impl Future for BarrierHandle {
 }
 
 impl LamellarRequest for BarrierHandle {
-    fn blocking_wait(self) -> Self::Output {
+    fn blocking_wait(mut self) -> Self::Output {
+        self.launched = true;
         match self.state {
             State::Waiting => {
                 while self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
@@ -612,6 +558,7 @@ impl LamellarRequest for BarrierHandle {
     }
 
     fn ready_or_set_waker(&mut self, _waker: &Waker) -> bool {
+        self.launched = true;
         match self.state {
             State::Waiting => false,
             State::RoundInit(round) => {
