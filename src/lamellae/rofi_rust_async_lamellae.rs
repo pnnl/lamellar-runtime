@@ -237,16 +237,16 @@ impl LamellaeRDMA for RofiRustAsync {
         self.libfab_comm.flush();
     }
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.libfab_comm.put(pe, src, dst).await;
+        self.libfab_comm.put(pe, src, dst);
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.iput(pe, src, dst);
     }
     fn put_all(&self, src: &[u8], dst: usize) {
-        self.libfab_comm.put_all(src, dst).await;
+        self.libfab_comm.put_all(src, dst);
     }
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.libfab_comm.get(pe, src, dst).await;
+        self.libfab_comm.get(pe, src, dst);
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.libfab_comm.iget(pe, src, dst);
@@ -261,7 +261,7 @@ impl LamellaeRDMA for RofiRustAsync {
         self.libfab_comm.rt_free(addr)
     }
     fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
-        self.libfab_comm.alloc(size, alloc).await
+        self.libfab_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {
         self.libfab_comm.free(addr)

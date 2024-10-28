@@ -260,7 +260,7 @@ impl CommOps for RofiRustComm {
             min_size * 2 * self.num_pes,
             ROFIRUST_MEM.load(Ordering::SeqCst),
         );
-        if let Ok(addr) = self.alloc(size, AllocationType::Global).await {
+        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("libfab_mem".to_string());
             new_alloc.init(addr, size);

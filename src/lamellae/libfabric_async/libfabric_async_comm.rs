@@ -226,7 +226,7 @@ impl CommOps for LibFabAsyncComm {
 
     fn barrier(&self) {
         let all_pes: Vec<_> = (0..self.num_pes).collect();
-        self.ofi.lock().sub_barrier(&all_pes).await.unwrap();
+        async_std::task::block_on(async move {self.ofi.lock().sub_barrier(&all_pes).await.unwrap()});
     }
 
     fn occupied(&self) -> usize {
@@ -262,7 +262,7 @@ impl CommOps for LibFabAsyncComm {
             min_size * 2 * self.num_pes,
             LIBFABASYNC_MEM.load(Ordering::SeqCst),
         );
-        if let Ok(addr) = self.alloc(size, AllocationType::Global).await {
+        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("libfab_mem".to_string());
             new_alloc.init(addr, size);
@@ -314,9 +314,9 @@ impl CommOps for LibFabAsyncComm {
             AllocationType::Local => todo!(),
             AllocationType::Global => {
                 let pes: Vec<_> = (0..self.num_pes).collect();
-                Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())
+                async_std::task::block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())})
             }
-            AllocationType::Sub(pes) => Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap()),
+            AllocationType::Sub(pes) => async_std::task::block_on(async move { Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())}),
         }
     }
 
@@ -342,9 +342,7 @@ impl CommOps for LibFabAsyncComm {
 
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         if pe != self.my_pe {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }
-                .await
-                .unwrap();
+            async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.await.unwrap()});
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -382,15 +380,11 @@ impl CommOps for LibFabAsyncComm {
 
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         for pe in 0..self.my_pe {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }
-                .await
-                .unwrap()
+            async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.await.unwrap()})
         }
 
         for pe in self.my_pe..self.num_pes {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }
-                .await
-                .unwrap()
+            async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.await.unwrap()})
         }
 
         unsafe {
@@ -406,9 +400,7 @@ impl CommOps for LibFabAsyncComm {
 
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
-            unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) }
-                .await
-                .unwrap();
+            async_std::task::block_on(async {unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) }.await.unwrap()});
             self.get_amt
                 .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
