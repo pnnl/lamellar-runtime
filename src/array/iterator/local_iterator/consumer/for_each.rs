@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -26,12 +26,15 @@ where
     pub(crate) op: F,
 }
 
-impl<I, F> IterClone for ForEach<I, F>
+impl<I, F> InnerIter for ForEach<I, F>
 where
     I: LocalIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ForEach {
             iter: self.iter.iter_clone(Sealed),
             op: self.op.clone(),
@@ -51,7 +54,7 @@ where
     fn init(&self, start: usize, cnt: usize) -> Self {
         // println!("ForEach before init start {:?} cnt {:?}", start,cnt);
         let iter = ForEach {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             op: self.op.clone(),
         };
         // println!("ForEach after init start {:?} cnt {:?}", start,cnt);
@@ -94,13 +97,16 @@ where
     // pub(crate) _phantom: PhantomData<Fut>,
 }
 
-impl<I, F, Fut> IterClone for ForEachAsync<I, F, Fut>
+impl<I, F, Fut> InnerIter for ForEachAsync<I, F, Fut>
 where
     I: LocalIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ForEachAsync {
             iter: self.iter.iter_clone(Sealed),
             op: self.op.clone(),
@@ -120,7 +126,7 @@ where
     type Handle = InnerLocalIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         ForEachAsync {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             op: self.op.clone(),
         }
     }
@@ -213,13 +219,14 @@ impl PinnedDrop for LocalIterForEachHandle {
 
 impl LocalIterForEachHandle {
     pub(crate) fn new(
+        lock: Option<IterLockFuture>,
         reqs: Pin<Box<dyn Future<Output = InnerLocalIterForEachHandle> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
         LocalIterForEachHandle {
             array: array.clone(),
             launched: false,
-            state: State::Init(reqs),
+            state: State::Init(lock, reqs),
         }
     }
 
@@ -247,7 +254,10 @@ impl LocalIterForEachHandle {
 
 #[pin_project(project = StateProj)]
 enum State {
-    Init(Pin<Box<dyn Future<Output = InnerLocalIterForEachHandle> + Send>>),
+    Init(
+        Option<IterLockFuture>,
+        Pin<Box<dyn Future<Output = InnerLocalIterForEachHandle> + Send>>,
+    ),
     Reqs(#[pin] InnerLocalIterForEachHandle),
     Dropped,
 }
@@ -257,7 +267,10 @@ impl Future for LocalIterForEachHandle {
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
-            StateProj::Init(inner) => {
+            StateProj::Init(lock, inner) => {
+                if let Some(lock) = lock {
+                    ready!(lock.as_mut().poll(cx));
+                }
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
                 match Pin::new(&mut inner).poll(cx) {
                     Poll::Ready(()) => Poll::Ready(()),

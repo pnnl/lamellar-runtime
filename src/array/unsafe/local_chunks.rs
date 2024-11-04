@@ -4,6 +4,8 @@ use crate::array::r#unsafe::*;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 
+use self::iterator::IterLockFuture;
+
 /// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [UnsafeArray]
 /// This struct is created by calling [UnsafeArray::local_chunks]
 #[derive(Clone)]
@@ -14,8 +16,11 @@ pub struct UnsafeLocalChunks<T: Dist> {
     array: UnsafeArray<T>,
 }
 
-impl<T: Dist> IterClone for UnsafeLocalChunks<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for UnsafeLocalChunks<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         UnsafeLocalChunks {
             chunk_size: self.chunk_size,
             index: self.index,
@@ -35,8 +40,11 @@ pub struct UnsafeLocalChunksMut<T: Dist> {
     array: UnsafeArray<T>,
 }
 
-impl<T: Dist> IterClone for UnsafeLocalChunksMut<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for UnsafeLocalChunksMut<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         UnsafeLocalChunksMut {
             chunk_size: self.chunk_size,
             index: self.index,
@@ -49,7 +57,7 @@ impl<T: Dist> IterClone for UnsafeLocalChunksMut<T> {
 impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunks<T> {
     type Item = &'static [T];
     type Array = UnsafeArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
         let end_i = std::cmp::min(
             (start_i + cnt) * self.chunk_size,
@@ -112,7 +120,7 @@ impl<T: Dist + 'static> IndexedLocalIterator for UnsafeLocalChunks<T> {
 impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunksMut<T> {
     type Item = &'static mut [T];
     type Array = UnsafeArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
         let end_i = std::cmp::min(
             (start_i + cnt) * self.chunk_size,

@@ -498,6 +498,9 @@ impl Future for BarrierHandle {
 }
 
 impl LamellarRequest for BarrierHandle {
+    fn launch(&mut self) {
+        self.launched = true;
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.launched = true;
         match self.state {

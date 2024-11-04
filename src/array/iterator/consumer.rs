@@ -14,9 +14,11 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use super::private::Sealed;
+
 // trait Consumer{
 //     type Item;
-//     fn init(&self, start: usize, cnt: usize) -> Self;
+//     fn init(&self, start: usize, cnt: usize, _s: Sealed) -> Self;
 //     fn monotonic(&self) -> Self;
 //     fn next(&self) -> Self::Item;
 // }

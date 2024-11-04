@@ -1,4 +1,4 @@
-use crate::array::iterator::distributed_iterator::*;
+use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
 #[derive(Clone, Debug)]
 pub struct Filter<I, F> {
@@ -6,8 +6,11 @@ pub struct Filter<I, F> {
     f: F,
 }
 
-impl<I: IterClone, F: Clone> IterClone for Filter<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for Filter<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Filter {
             iter: self.iter.iter_clone(Sealed),
             f: self.f.clone(),
@@ -32,8 +35,8 @@ where
 {
     type Item = I::Item;
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Filter<I, F> {
-        let val = Filter::new(self.iter.init(start_i, cnt), self.f.clone());
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Filter<I, F> {
+        let val = Filter::new(self.iter.init(start_i, cnt, _s), self.f.clone());
         // println!("{:?} Filter init {start_i} {cnt}",std::thread::current().id());
         val
     }

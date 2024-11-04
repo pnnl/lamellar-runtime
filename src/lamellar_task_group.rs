@@ -160,6 +160,9 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
 }
 
 impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
+    fn launch(&mut self) {
+        self.launch_am_if_needed();
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
@@ -361,6 +364,9 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
 }
 
 impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
+    fn launch(&mut self) {
+        self.launch_am_if_needed();
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         while !self.inner.data.lock().contains_key(&self.sub_id) {
@@ -538,6 +544,9 @@ impl<T: Send + 'static> TaskGroupLocalAmHandle<T> {
 }
 
 impl<T: 'static> LamellarRequest for TaskGroupLocalAmHandle<T> {
+    fn launch(&mut self) {
+        self.launch_am_if_needed();
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);

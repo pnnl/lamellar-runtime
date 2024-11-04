@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
@@ -27,12 +27,15 @@ where
     pub(crate) op: F,
 }
 
-impl<I, F> IterClone for ForEach<I, F>
+impl<I, F> InnerIter for ForEach<I, F>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ForEach {
             iter: self.iter.iter_clone(Sealed),
             op: self.op.clone(),
@@ -51,7 +54,7 @@ where
     type Handle = InnerDistIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         ForEach {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             op: self.op.clone(),
         }
     }
@@ -92,13 +95,16 @@ where
     // pub(crate) _phantom: PhantomData<Fut>,
 }
 
-impl<I, F, Fut> IterClone for ForEachAsync<I, F, Fut>
+impl<I, F, Fut> InnerIter for ForEachAsync<I, F, Fut>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ForEachAsync {
             iter: self.iter.iter_clone(Sealed),
             op: self.op.clone(),
@@ -118,7 +124,7 @@ where
     type Handle = InnerDistIterForEachHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         ForEachAsync {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             op: self.op.clone(),
         }
     }
@@ -210,14 +216,18 @@ impl PinnedDrop for DistIterForEachHandle {
 
 impl DistIterForEachHandle {
     pub(crate) fn new(
-        barrier: BarrierHandle,
+        lock: Option<IterLockFuture>,
         reqs: Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
+        let state = match lock {
+            Some(inner_lock) => State::Lock(inner_lock, Some(reqs)),
+            None => State::Barrier(array.barrier_handle(), reqs),
+        };
         DistIterForEachHandle {
             array: array.clone(),
             launched: false,
-            state: State::Barrier(barrier, reqs),
+            state,
         }
     }
 
@@ -244,6 +254,10 @@ impl DistIterForEachHandle {
 
 #[pin_project(project = StateProj)]
 enum State {
+    Lock(
+        #[pin] IterLockFuture,
+        Option<Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>>,
+    ),
     Barrier(
         #[pin] BarrierHandle,
         Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
@@ -258,6 +272,16 @@ impl Future for DistIterForEachHandle {
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
+            StateProj::Lock(lock, inner) => {
+                ready!(lock.poll(cx));
+                let barrier = this.array.barrier_handle();
+                *this.state = State::Barrier(
+                    barrier,
+                    inner.take().expect("reqs should still be in this state"),
+                );
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
             StateProj::Barrier(barrier, inner) => {
                 let barrier_id = barrier.barrier_id;
                 // println!("in task barrier {:?}", barrier_id);
@@ -314,12 +338,15 @@ where
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I, F> IterClone for ForEachAm<I, F>
+impl<I, F> InnerIter for ForEachAm<I, F>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) + SyncSend + Clone + 'static,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ForEachAm {
             op: self.op.clone(),
             iter: self.iter.iter_clone(Sealed),
@@ -356,13 +383,16 @@ where
     // pub(crate) _phantom: PhantomData<Fut>
 }
 
-impl<I, F, Fut> IterClone for ForEachAsyncAm<I, F, Fut>
+impl<I, F, Fut> InnerIter for ForEachAsyncAm<I, F, Fut>
 where
     I: DistributedIterator + 'static,
     F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
     Fut: Future<Output = ()> + Send + 'static,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ForEachAsyncAm {
             op: self.op.clone(),
             iter: self.iter.iter_clone(Sealed),

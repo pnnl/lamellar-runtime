@@ -1,8 +1,8 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::one_sided_iterator::OneSidedIterator;
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{ArrayOps, Distribution, UnsafeArray};
 use crate::barrier::BarrierHandle;
@@ -26,8 +26,11 @@ pub(crate) struct Reduce<I, F> {
     pub(crate) op: F,
 }
 
-impl<I: IterClone, F: Clone> IterClone for Reduce<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for Reduce<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Reduce {
             iter: self.iter.iter_clone(Sealed),
             op: self.op.clone(),
@@ -47,7 +50,7 @@ where
     type Handle = InnerDistIterReduceHandle<I::Item, F>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Reduce {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             op: self.op.clone(),
         }
     }
@@ -220,14 +223,18 @@ where
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     pub(crate) fn new(
-        barrier: BarrierHandle,
+        lock: Option<IterLockFuture>,
         reqs: Pin<Box<dyn Future<Output = InnerDistIterReduceHandle<T, F>> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
+        let state = match lock {
+            Some(inner_lock) => State::Lock(inner_lock, Some(reqs)),
+            None => State::Barrier(array.barrier_handle(), reqs),
+        };
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Barrier(barrier, reqs),
+            state,
         }
     }
 
@@ -255,6 +262,10 @@ where
 
 #[pin_project(project = StateProj)]
 enum State<T, F> {
+    Lock(
+        #[pin] IterLockFuture,
+        Option<Pin<Box<dyn Future<Output = InnerDistIterReduceHandle<T, F>> + Send>>>,
+    ),
     Barrier(
         #[pin] BarrierHandle,
         Pin<Box<dyn Future<Output = InnerDistIterReduceHandle<T, F>> + Send>>,
@@ -272,6 +283,16 @@ where
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
+            StateProj::Lock(lock, inner) => {
+                ready!(lock.poll(cx));
+                let barrier = this.array.barrier_handle();
+                *this.state = State::Barrier(
+                    barrier,
+                    inner.take().expect("reqs should still be in this state"),
+                );
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
             StateProj::Barrier(barrier, inner) => {
                 ready!(barrier.poll(cx));
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
@@ -299,8 +320,11 @@ pub(crate) struct ReduceAm<I, F> {
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I: IterClone, F: Clone> IterClone for ReduceAm<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for ReduceAm<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ReduceAm {
             op: self.op.clone(),
             iter: self.iter.iter_clone(Sealed),

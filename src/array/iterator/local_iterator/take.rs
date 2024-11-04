@@ -1,4 +1,4 @@
-use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
 //skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
 #[derive(Clone, Debug)]
@@ -7,8 +7,11 @@ pub struct Take<I> {
     take_count: usize,
 }
 
-impl<I: IterClone> IterClone for Take<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Take<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Take {
             iter: self.iter.iter_clone(Sealed),
             take_count: self.take_count,
@@ -31,11 +34,11 @@ where
 {
     type Item = <I as LocalIterator>::Item;
     type Array = <I as LocalIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Take<I> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Take<I> {
         let start_i = std::cmp::min(start_i, self.take_count);
         let end_i = std::cmp::min(start_i + cnt, self.take_count);
         let len = end_i - start_i;
-        Take::new(self.iter.init(start_i, len), self.take_count)
+        Take::new(self.iter.init(start_i, len, _s), self.take_count)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()

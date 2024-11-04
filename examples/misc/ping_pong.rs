@@ -409,13 +409,17 @@ fn main() {
     // if my_pe == 0 {
     for _thread in 0..1 {
         //world.num_threads_per_pe() {
-        reqs.push(world.exec_am_local(MyAm {
-            indices: indices.clone(),
-            buffers: buffers.clone(),
-            buffer_size,
-            table_size_per_pe: table_size_per_pe,
-            comm_lock: comm_lock.clone(),
-        }));
+        reqs.push(
+            world
+                .exec_am_local(MyAm {
+                    indices: indices.clone(),
+                    buffers: buffers.clone(),
+                    buffer_size,
+                    table_size_per_pe: table_size_per_pe,
+                    comm_lock: comm_lock.clone(),
+                })
+                .spawn(),
+        );
     }
     world.block_on_all(reqs);
     // }

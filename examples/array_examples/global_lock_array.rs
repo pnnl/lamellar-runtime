@@ -61,6 +61,7 @@ fn main() {
         })
         .block();
     world.barrier();
+    println!("6. PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 
     let task = array
         .dist_iter_mut()
@@ -68,6 +69,9 @@ fn main() {
         .for_each(|(i, elem)| *elem += i);
     world.block_on(task);
     world.barrier();
+    println!("7. PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 
     array.print();
+
+    println!("8. PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 }

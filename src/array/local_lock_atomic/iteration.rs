@@ -1,3 +1,5 @@
+use parking_lot::Mutex;
+
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
@@ -6,8 +8,10 @@ use crate::array::local_lock_atomic::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
-use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
+use crate::darc::local_rw_darc::{LocalRwDarcReadHandle, LocalRwDarcWriteGuard};
 use crate::memregion::Dist;
+
+use self::iterator::IterLockFuture;
 
 impl<T> InnerArray for LocalLockArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
@@ -19,15 +23,33 @@ impl<T> InnerArray for LocalLockArray<T> {
 #[derive(Clone)]
 pub struct LocalLockDistIter<'a, T: Dist> {
     data: LocalLockArray<T>,
-    // lock: Arc<LocalRwDarcReadGuard<()>>,
-    lock: Arc<LocalRwDarcReadGuard<()>>,
+    lock: Arc<Mutex<Option<LocalRwDarcReadGuard<()>>>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist> IterClone for LocalLockDistIter<'a, T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist> InnerIter for LocalLockDistIter<'a, T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        // println!(
+        //     " LocalLockDistIter lock_if_needed: {:?}",
+        //     std::thread::current().id()
+        // );
+        if self.lock.lock().is_none() {
+            // println!("LocalLockDistIter need to get read handle");
+            let lock_handle = self.data.lock.read();
+            let lock = self.lock.clone();
+
+            Some(Box::pin(async move {
+                // println!("LocalLockDistIter trying to get read handle");
+                *lock.lock() = Some(lock_handle.await);
+                // println!("LocalLockDistIter got the read lock");
+            }))
+        } else {
+            None
+        }
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalLockDistIter {
             data: self.data.clone(),
             lock: self.lock.clone(),
@@ -54,14 +76,33 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIter<'a, T> {
 #[derive(Clone)]
 pub struct LocalLockLocalIter<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<LocalRwDarcReadGuard<()>>,
+    lock: Arc<Mutex<Option<LocalRwDarcReadGuard<()>>>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist> IterClone for LocalLockLocalIter<'a, T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist> InnerIter for LocalLockLocalIter<'a, T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        // println!(
+        //     " LocalLockLocalIter lock_if_needed: {:?}",
+        //     std::thread::current().id()
+        // );
+        if self.lock.lock().is_none() {
+            // println!("LocalLockLocalIter need to get read handle");
+            let lock_handle = self.data.lock.read();
+            let lock = self.lock.clone();
+
+            Some(Box::pin(async move {
+                // println!("LocalLockLocalIter trying to get read handle");
+                *lock.lock() = Some(lock_handle.await);
+                // println!("LocalLockLocalIter got the read lock");
+            }))
+        } else {
+            None
+        }
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalLockLocalIter {
             data: self.data.clone(),
             lock: self.lock.clone(),
@@ -87,7 +128,7 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockLocalIter<'a, T> {
 impl<T: Dist + 'static> DistributedIterator for LocalLockDistIter<'static, T> {
     type Item = &'static T;
     type Array = LocalLockArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         LocalLockDistIter {
@@ -132,7 +173,7 @@ impl<T: Dist + 'static> IndexedDistributedIterator for LocalLockDistIter<'static
 impl<T: Dist + 'static> LocalIterator for LocalLockLocalIter<'static, T> {
     type Item = &'static T;
     type Array = LocalLockArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         LocalLockLocalIter {
@@ -181,14 +222,33 @@ impl<T: Dist + 'static> IndexedLocalIterator for LocalLockLocalIter<'static, T> 
 
 pub struct LocalLockDistIterMut<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<LocalRwDarcWriteGuard<()>>,
+    lock: Arc<Mutex<Option<LocalRwDarcWriteGuard<()>>>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist> IterClone for LocalLockDistIterMut<'a, T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist> InnerIter for LocalLockDistIterMut<'a, T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        // println!(
+        //     " LocalLockDistIterMut lock_if_needed: {:?}",
+        //     std::thread::current().id()
+        // );
+        if self.lock.lock().is_none() {
+            // println!("LocalLockDistIterMut need to get write handle");
+            let lock_handle = self.data.lock.write();
+            let lock = self.lock.clone();
+
+            Some(Box::pin(async move {
+                // println!("LocalLockDistIterMut trying to get write handle");
+                *lock.lock() = Some(lock_handle.await);
+                // println!("LocalLockDistIterMut got the write lock");
+            }))
+        } else {
+            None
+        }
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalLockDistIterMut {
             data: self.data.clone(),
             lock: self.lock.clone(),
@@ -213,14 +273,33 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockDistIterMut<'a, T> {
 
 pub struct LocalLockLocalIterMut<'a, T: Dist> {
     data: LocalLockArray<T>,
-    lock: Arc<LocalRwDarcWriteGuard<()>>,
+    lock: Arc<Mutex<Option<LocalRwDarcWriteGuard<()>>>>,
     cur_i: usize,
     end_i: usize,
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist> IterClone for LocalLockLocalIterMut<'a, T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist> InnerIter for LocalLockLocalIterMut<'a, T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        // println!(
+        //     " LocalLockLocalIterMut lock_if_needed: {:?}",
+        //     std::thread::current().id()
+        // );
+        if self.lock.lock().is_none() {
+            // println!("LocalLockLocalIterMut need to get write handle");
+            let lock_handle = self.data.lock.write();
+            let lock = self.lock.clone();
+
+            Some(Box::pin(async move {
+                // println!("LocalLockLocalIterMut trying to get write handle");
+                *lock.lock() = Some(lock_handle.await);
+                // println!("LocalLockLocalIterMut got the write lock");
+            }))
+        } else {
+            None
+        }
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalLockLocalIterMut {
             data: self.data.clone(),
             lock: self.lock.clone(),
@@ -246,7 +325,7 @@ impl<'a, T: Dist> std::fmt::Debug for LocalLockLocalIterMut<'a, T> {
 impl<T: Dist + 'static> DistributedIterator for LocalLockDistIterMut<'static, T> {
     type Item = &'static mut T;
     type Array = LocalLockArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         LocalLockDistIterMut {
@@ -295,7 +374,7 @@ impl<T: Dist + 'static> IndexedDistributedIterator for LocalLockDistIterMut<'sta
 impl<T: Dist + 'static> LocalIterator for LocalLockLocalIterMut<'static, T> {
     type Item = &'static mut T;
     type Array = LocalLockArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         LocalLockLocalIterMut {
@@ -354,11 +433,11 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
         // let the_array: LocalLockArray<T> = self.clone();
         // let lock: LocalRwDarc<()> = self.lock.clone();
         // let lock = Arc::new(self.array.block_on(async move { lock.read().await }));
-        let lock = Arc::new(self.lock.read().block());
-        self.barrier();
+        // let lock = Arc::new(self.lock.read().block());
+        // self.barrier();
         LocalLockDistIter {
             data: self.clone(),
-            lock: lock,
+            lock: Arc::new(Mutex::new(None)),
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,
@@ -368,10 +447,10 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
     fn local_iter(&self) -> Self::LocalIter {
         // let lock: LocalRwDarc<()> = self.lock.clone();
         // let lock = Arc::new(self.array.block_on(async move { lock.read().await }));
-        let lock = Arc::new(self.lock.read().block());
+        // let lock = Arc::new(self.lock.read().block());
         LocalLockLocalIter {
             data: self.clone(),
-            lock: lock,
+            lock: Arc::new(Mutex::new(None)),
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,
@@ -398,12 +477,12 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     fn dist_iter_mut(&self) -> Self::DistIter {
         // let lock: LocalRwDarc<()> = self.lock.clone();
         // let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
-        let lock = Arc::new(self.lock.write().block());
+        // let lock = Arc::new(self.lock.write().block());
         // self.barrier();
         // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         LocalLockDistIterMut {
             data: self.clone(),
-            lock: lock,
+            lock: Arc::new(Mutex::new(None)),
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,
@@ -413,12 +492,13 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     fn local_iter_mut(&self) -> Self::LocalIter {
         // println!("trying to get write lock for iter");
         // let lock: LocalRwDarc<()> = self.lock.clone();
-        // let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
-        let lock = Arc::new(self.lock.write().block());
+        // // let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
+        // let lock = Arc::new(self.lock.write().block());
+
         // println!("got write lock for iter");
         LocalLockLocalIterMut {
             data: self.clone(),
-            lock: lock,
+            lock: Arc::new(Mutex::new(None)),
             cur_i: 0,
             end_i: 0,
             _marker: PhantomData,

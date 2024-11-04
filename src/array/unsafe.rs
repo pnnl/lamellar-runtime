@@ -1441,7 +1441,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///         let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
-    ///     });
+    ///     }).spawn();
     /// }
     /// array.wait_all();
     /// array.barrier();
@@ -1479,7 +1479,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///     let req = array.local_iter().for_each(move |_| {
     ///         let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///         let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
-    ///     });
+    ///     }).spawn();
     /// }
     /// array.wait_all();
     /// array.barrier();
@@ -2146,7 +2146,7 @@ impl UnsafeArrayInner {
         }
     }
 
-    fn barrier_handle(&self) -> BarrierHandle {
+    pub(crate) fn barrier_handle(&self) -> BarrierHandle {
         self.data.team.barrier.barrier_handle()
     }
 }

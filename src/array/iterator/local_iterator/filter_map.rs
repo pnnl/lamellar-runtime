@@ -1,4 +1,4 @@
-use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
 #[derive(Clone, Debug)]
 pub struct FilterMap<I, F> {
@@ -6,8 +6,11 @@ pub struct FilterMap<I, F> {
     f: F,
 }
 
-impl<I: IterClone, F: Clone> IterClone for FilterMap<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for FilterMap<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         FilterMap {
             iter: self.iter.iter_clone(Sealed),
             f: self.f.clone(),
@@ -54,9 +57,9 @@ where
 {
     type Item = B;
     type Array = <I as LocalIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> FilterMap<I, F> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> FilterMap<I, F> {
         // println!("init enumerate start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
-        FilterMap::new(self.iter.init(start_i, cnt), self.f.clone())
+        FilterMap::new(self.iter.init(start_i, cnt, _s), self.f.clone())
     }
     fn array(&self) -> Self::Array {
         self.iter.array()

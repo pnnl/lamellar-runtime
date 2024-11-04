@@ -54,6 +54,7 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 // use std::time::Instant;
 
 // //use tracing::*;
@@ -62,10 +63,12 @@ use crate::active_messaging::{AMCounters, RemotePtr};
 use crate::barrier::Barrier;
 use crate::env_var::config;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
+use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::scheduler::LamellarTask;
-use crate::{IdError, LamellarEnv, LamellarTeam};
+use crate::warnings::RuntimeWarning;
+use crate::{IdError, LamellarEnv, LamellarTeam, TypedAmGroupResult};
 
 /// prelude for the darc module
 pub mod prelude;
@@ -139,7 +142,7 @@ pub struct DarcInner<T> {
     am_counters: *const AMCounters,
     team: *const LamellarTeamRT,
     item: *const T,
-    drop: Option<fn(&mut T)>,
+    drop: Option<fn(&mut T) -> bool>,
     valid: AtomicBool,
 }
 unsafe impl<T> Send for DarcInner<T> {} //we cant create DarcInners without going through the Darc interface which enforces  Sync+Send
@@ -429,7 +432,7 @@ impl<T: 'static> DarcInner<T> {
                 // );
                 // println!("[{:?}] {:?}", std::thread::current().id(), self);
                 reqs.push(
-                    team.exec_am_pe_tg(
+                    team.spawn_am_pe_tg(
                         pe,
                         FinishedAm {
                             cnt: cnt,
@@ -545,6 +548,7 @@ impl<T: 'static> DarcInner<T> {
         let mode_refs =
             unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
         let orig_state = mode_refs[inner.my_pe];
+        inner.await_all().await;
         if team.num_pes() == 1 {
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                 async_std::task::yield_now().await;
@@ -884,30 +888,101 @@ impl<T: 'static> DarcInner<T> {
         // self.debug_print();
     }
 
-    // fn wait_all(&self) {
-    //     let mut temp_now = Instant::now();
-    //     // let mut first = true;
-    //     let team = self.team();
-    //     // team.flush();
-    //     let am_counters = self.am_counters();
-    //     while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
-    //         // std::thread::yield_now();
-    //         team.scheduler.exec_task(); //mmight as well do useful work while we wait
-    //         if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
-    //             //|| first{
-    //             // println!(
-    //             //     "[{:?}] in darc wait_all mype: {:?} cnt: {:?} {:?}",
-    //             //     std::thread::current().id(),
-    //             //     team.world_pe,
-    //             //     am_counters.send_req_cnt.load(Ordering::SeqCst),
-    //             //     am_counters.outstanding_reqs.load(Ordering::SeqCst),
-    //             // );
-    //             temp_now = Instant::now();
-    //             // first = false;
-    //         }
-    //     }
-    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
-    // }
+    pub(crate) fn wait_all(&self) {
+        // println!("wait_all called on pe: {}", self.world_pe);
+
+        RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
+        let am_counters = self.am_counters();
+
+        let mut temp_now = Instant::now();
+        let mut orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
+        let mut orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
+
+        // println!(
+        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.am_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.am_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
+        while self.team().panic.load(Ordering::SeqCst) == 0
+            && (am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                || orig_reqs != am_counters.send_req_cnt.load(Ordering::SeqCst)
+                || orig_launched != am_counters.launched_req_cnt.load(Ordering::SeqCst))
+        {
+            orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
+            orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
+            // std::thread::yield_now();
+            // self.flush();
+            if std::thread::current().id() != *crate::MAIN_THREAD {
+                self.team().scheduler.exec_task()
+            }; //mmight as well do useful work while we wait }
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                println!(
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    self.team().world_pe,
+                    am_counters.send_req_cnt.load(Ordering::SeqCst),
+                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+            }
+        }
+        if am_counters.send_req_cnt.load(Ordering::SeqCst)
+            != am_counters.launched_req_cnt.load(Ordering::SeqCst)
+        {
+            println!(
+                "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                self.team().world_pe,
+                am_counters.send_req_cnt.load(Ordering::SeqCst),
+                am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                am_counters.launched_req_cnt.load(Ordering::SeqCst)
+            );
+            RuntimeWarning::UnspawnedTask(
+                "`wait_all` before all tasks/active messages have been spawned",
+            )
+            .print();
+        }
+        // println!(
+        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.am_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.am_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
+    }
+    pub(crate) async fn await_all(&self) {
+        let mut temp_now = Instant::now();
+        let am_counters = self.am_counters();
+        while self.team().panic.load(Ordering::SeqCst) == 0
+            && (am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
+        {
+            // std::thread::yield_now();
+            // self.flush();
+            async_std::task::yield_now().await;
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                println!(
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    self.team().world_pe,
+                    am_counters.send_req_cnt.load(Ordering::SeqCst),
+                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+            }
+        }
+        if am_counters.send_req_cnt.load(Ordering::SeqCst)
+            != am_counters.launched_req_cnt.load(Ordering::SeqCst)
+        {
+            println!(
+                "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                self.team().world_pe,
+                am_counters.send_req_cnt.load(Ordering::SeqCst),
+                am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                am_counters.launched_req_cnt.load(Ordering::SeqCst)
+            );
+            RuntimeWarning::UnspawnedTask(
+                "`await_all` before all tasks/active messages have been spawned",
+            )
+            .print();
+        }
+    }
 }
 
 impl<T: 'static> fmt::Debug for DarcInner<T> {
@@ -1089,7 +1164,7 @@ impl<T> Darc<T> {
         team: U,
         item: T,
         state: DarcMode,
-        drop: Option<fn(&mut T)>,
+        drop: Option<fn(&mut T) -> bool>,
     ) -> Result<Darc<T>, IdError> {
         let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
@@ -1231,7 +1306,7 @@ impl<T> Darc<T> {
         team: U,
         item: T,
         state: DarcMode,
-        drop: Option<fn(&mut T)>,
+        drop: Option<fn(&mut T) -> bool>,
     ) -> Result<Darc<T>, IdError> {
         let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
@@ -1529,16 +1604,15 @@ macro_rules! launch_drop {
             );
         }
         // team.print_cnt();
-        let _ = team
-            .exec_am_local(DroppedWaitAM {
-                inner_addr: $inner_addr as *const u8 as usize,
-                mode_addr: $inner.mode_addr,
-                my_pe: $inner.my_pe,
-                num_pes: $inner.num_pes,
-                team: team.clone(),
-                phantom: PhantomData::<T>,
-            })
-            .spawn();
+        let mut am = team.exec_am_local(DroppedWaitAM {
+            inner_addr: $inner_addr as *const u8 as usize,
+            mode_addr: $inner.mode_addr,
+            my_pe: $inner.my_pe,
+            num_pes: $inner.num_pes,
+            team: team.clone(),
+            phantom: PhantomData::<T>,
+        });
+        am.launch();
     };
 }
 
@@ -1751,15 +1825,19 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 }
                 async_std::task::yield_now().await;
             }
-            {
-                let mut _item = Box::from_raw(wrapped.item as *mut T);
-                if let Some(my_drop) = wrapped.drop {
-                    // println!("Dropping darc {:x}", self.inner_addr);
-                    my_drop(&mut _item);
-                } else {
-                    // println!("no drop function for item {:x}", self.inner_addr);
+
+            // println!("going to drop object");
+
+            if let Some(my_drop) = wrapped.drop {
+                let mut dropped_done = false;
+                while !dropped_done {
+                    dropped_done = my_drop(&mut *(wrapped.item as *mut T));
+                    async_std::task::yield_now().await;
                 }
             }
+            let _ = Box::from_raw(wrapped.item as *mut T);
+            // println!("afterdrop object");
+
             while wrapped.weak_local_cnt.load(Ordering::SeqCst) != 0 {
                 //we can't actually free the darc memory until all weak pointers are gone too
                 async_std::task::yield_now().await;
@@ -1771,8 +1849,9 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             let _barrier = Box::from_raw(wrapped.barrier);
             self.team.lamellae.free(self.inner_addr);
             // println!(
-            //     "[{:?}]leaving DroppedWaitAM {:x}",
+            //     "[{:?}]leaving DroppedWaitAM {:?} {:x}",
             //     std::thread::current().id(),
+            //     self,
             //     self.inner_addr
             // );
         }

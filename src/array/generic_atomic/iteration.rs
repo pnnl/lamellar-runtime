@@ -7,6 +7,8 @@ use crate::array::iterator::{private::*, LamellarArrayIterators, LamellarArrayMu
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
+
+use self::iterator::IterLockFuture;
 // use parking_lot::{
 //     lock_api::{RwLockReadGuardArc, RwLockWriteGuardArc},
 //     RawRwLock,
@@ -26,8 +28,11 @@ pub struct GenericAtomicDistIter<T: Dist> {
     end_i: usize,
 }
 
-impl<T: Dist> IterClone for GenericAtomicDistIter<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for GenericAtomicDistIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         GenericAtomicDistIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -56,8 +61,11 @@ pub struct GenericAtomicLocalIter<T: Dist> {
     end_i: usize,
 }
 
-impl<T: Dist> IterClone for GenericAtomicLocalIter<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for GenericAtomicLocalIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         GenericAtomicLocalIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -81,7 +89,7 @@ impl<T: Dist> std::fmt::Debug for GenericAtomicLocalIter<T> {
 impl<T: Dist> DistributedIterator for GenericAtomicDistIter<T> {
     type Item = GenericAtomicElement<T>;
     type Array = GenericAtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         GenericAtomicDistIter {
@@ -129,7 +137,7 @@ impl<T: Dist> IndexedDistributedIterator for GenericAtomicDistIter<T> {
 impl<T: Dist> LocalIterator for GenericAtomicLocalIter<T> {
     type Item = GenericAtomicElement<T>;
     type Array = GenericAtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init generic_atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
         GenericAtomicLocalIter {

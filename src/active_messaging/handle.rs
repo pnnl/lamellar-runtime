@@ -162,6 +162,9 @@ impl<T: AmDist> AmHandle<T> {
 }
 
 impl<T: AmDist> LamellarRequest for AmHandle<T> {
+    fn launch(&mut self) {
+        self.launch_am_if_needed();
+    }
     fn blocking_wait(mut self) -> T {
         self.launch_am_if_needed();
         while !self.inner.ready.load(Ordering::SeqCst) {
@@ -301,6 +304,9 @@ impl<T: AmDist> From<LocalAmHandle<T>> for AmHandle<T> {
 }
 
 impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
+    fn launch(&mut self) {
+        self.launch_am_if_needed();
+    }
     fn blocking_wait(mut self) -> T {
         self.launch_am_if_needed();
         while !self.inner.ready.load(Ordering::SeqCst) {
@@ -485,6 +491,9 @@ impl<T: AmDist> MultiAmHandle<T> {
 }
 
 impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
+    fn launch(&mut self) {
+        self.launch_am_if_needed();
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         while self.inner.cnt.load(Ordering::SeqCst) > 0 {

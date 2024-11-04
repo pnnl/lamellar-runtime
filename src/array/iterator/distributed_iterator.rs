@@ -48,6 +48,8 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use super::IterLockFuture;
+
 macro_rules! consumer_impl {
     ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ) => {
         fn $name<$($generics),*>(&self, $($arg : $arg_ty),*) -> $($return_type)*
@@ -148,7 +150,7 @@ pub trait DistIteratorLauncher: InnerArray {
 /// The functions in this trait are available on all distributed iterators.
 /// Additonaly functionality can be found in the [IndexedDistributedIterator] trait:
 /// these methods are only available for distributed iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-pub trait DistributedIterator: SyncSend + IterClone + 'static {
+pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// The type of item this distributed iterator produces
     type Item: Send;
 
@@ -156,7 +158,8 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
     type Array: DistIteratorLauncher;
 
     /// Internal method used to initalize this distributed iterator to the correct element and correct length.
-    fn init(&self, start_i: usize, cnt: usize) -> Self;
+    #[doc(hidden)]
+    fn init(&self, start_i: usize, cnt: usize, sealed: Sealed) -> Self;
 
     /// Return the original array this distributed iterator belongs too
     fn array(&self) -> Self::Array;
@@ -769,7 +772,7 @@ pub trait DistributedIterator: SyncSend + IterClone + 'static {
 }
 
 /// An interface for dealing with distributed iterators which are indexable, meaning it returns an iterator of known length
-pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + IterClone + 'static {
+pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter + 'static {
     /// yields the global array index along with each element
     ///
     /// # Examples
@@ -894,8 +897,11 @@ pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist, A: LamellarArray<T>> IterClone for DistIter<'a, T, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist, A: LamellarArray<T>> InnerIter for DistIter<'a, T, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         DistIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -936,7 +942,7 @@ impl<
 {
     type Item = &'static T;
     type Array = A;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("{:?} DistIter init {start_i} {cnt} {} {}",std::thread::current().id(), start_i+cnt,max_i);
         DistIter {
@@ -1006,8 +1012,11 @@ pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist, A: LamellarArray<T>> IterClone for DistIterMut<'a, T, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist, A: LamellarArray<T>> InnerIter for DistIterMut<'a, T, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         DistIterMut {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -1047,7 +1056,7 @@ impl<
 {
     type Item = &'static mut T;
     type Array = A;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("dist iter init {:?} {:?} {:?}",start_i,cnt,max_i);
         DistIterMut {

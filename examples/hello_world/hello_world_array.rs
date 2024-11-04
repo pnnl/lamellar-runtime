@@ -9,7 +9,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();
     let _my_pe = world.my_pe();
-    let local_length = 1_000_000_000; //if you want to ensure each thread processes data make this >= LAMELLAR_THREADS environment variable
+    let local_length = 1_000_000; //if you want to ensure each thread processes data make this >= LAMELLAR_THREADS environment variable
     let global_length = num_pes * local_length;
     let init_time = timer.elapsed();
     println!("init_time: {:?}", init_time);

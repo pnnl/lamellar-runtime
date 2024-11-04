@@ -1,7 +1,7 @@
 use crate::active_messaging::LamellarArcLocalAm;
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{ArrayOps, Distribution, UnsafeArray};
 use crate::barrier::BarrierHandle;
@@ -23,8 +23,11 @@ pub(crate) struct Sum<I> {
     pub(crate) iter: I,
 }
 
-impl<I: IterClone> IterClone for Sum<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Sum<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Sum {
             iter: self.iter.iter_clone(Sealed),
         }
@@ -42,7 +45,7 @@ where
     type Handle = InnerDistIterSumHandle<I::Item>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Sum {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
         }
     }
     fn next(&mut self) -> Option<Self::Item> {
@@ -170,38 +173,6 @@ where
         }
     }
 }
-//#[doc(hidden)]
-// impl<T> LamellarRequest for InnerDistIterSumHandle<T>
-// where
-//     T: Dist + ArrayOps + std::iter::Sum,
-// {
-//     fn blocking_wait(mut self) -> Self::Output {
-//         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
-//         let local_sum = self
-//             .reqs
-//             .drain(..)
-//             .map(|req| req.blocking_wait())
-//             .into_iter()
-//             .sum();
-//         self.reduce_remote_vals(local_sum, local_sums)
-//     }
-
-//     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-//         for req in self.reqs.iter_mut() {
-//             if !req.ready_or_set_waker(waker) {
-//                 //only need to wait on the next unready req
-//                 return false;
-//             }
-//         }
-//         true
-//     }
-
-//     fn val(&self) -> Self::Output {
-//         let local_sums = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
-//         let local_sum = self.reqs.iter().map(|req| req.val()).into_iter().sum();
-//         self.reduce_remote_vals(local_sum, local_sums)
-//     }
-// }
 
 #[pin_project(PinnedDrop)]
 pub struct DistIterSumHandle<T> {
@@ -229,14 +200,18 @@ where
     T: Dist + ArrayOps + std::iter::Sum,
 {
     pub(crate) fn new(
-        barrier_handle: BarrierHandle,
+        lock: Option<IterLockFuture>,
         inner: Pin<Box<dyn Future<Output = InnerDistIterSumHandle<T>> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
+        let state = match lock {
+            Some(inner_lock) => State::Lock(inner_lock, Some(inner)),
+            None => State::Barrier(array.barrier_handle(), inner),
+        };
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Barrier(barrier_handle, inner),
+            state,
         }
     }
 
@@ -264,6 +239,10 @@ where
 
 #[pin_project(project = StateProj)]
 enum State<T> {
+    Lock(
+        #[pin] IterLockFuture,
+        Option<Pin<Box<dyn Future<Output = InnerDistIterSumHandle<T>> + Send>>>,
+    ),
     Barrier(
         #[pin] BarrierHandle,
         Pin<Box<dyn Future<Output = InnerDistIterSumHandle<T>> + Send>>,
@@ -279,7 +258,18 @@ where
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.launched = true;
         let mut this = self.project();
+
         match this.state.as_mut().project() {
+            StateProj::Lock(lock, inner) => {
+                ready!(lock.poll(cx));
+                let barrier = this.array.barrier_handle();
+                *this.state = State::Barrier(
+                    barrier,
+                    inner.take().expect("reqs should still be in this state"),
+                );
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
             StateProj::Barrier(barrier, inner) => {
                 ready!(barrier.poll(cx));
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
@@ -300,56 +290,17 @@ where
     }
 }
 
-//#[doc(hidden)]
-// impl<T> LamellarRequest for DistIterSumHandle<T>
-// where
-//     T: Dist + ArrayOps + std::iter::Sum,
-// {
-//     fn blocking_wait(mut self) -> Self::Output {
-//         self.launched = true;
-//         let state = std::mem::replace(&mut self.state, State::Dropped);
-//         match state {
-//             State::Barrier(barrier, reqs) => {
-//                 barrier.blocking_wait();
-//                 self.team.block_on(reqs).blocking_wait()
-//             }
-//             State::Reqs(inner) => inner.blocking_wait(),
-//             State::Dropped => panic!("called `blocking_wait` on a future that was dropped"),
-//         }
-//     }
-//     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-//         self.launched = true;
-//         match &mut self.state {
-//             State::Barrier(barrier, _) => {
-//                 if !barrier.ready_or_set_waker(waker) {
-//                     return false;
-//                 }
-//                 waker.wake_by_ref();
-//                 false
-//             }
-//             State::Reqs(inner) => inner.ready_or_set_waker(waker),
-//             State::Dropped => panic!("called `ready_or_set_waker` on a future that was dropped"),
-//         }
-//     }
-//     fn val(&self) -> Self::Output {
-//         match &self.state {
-//             State::Barrier(_barrier, _reqs) => {
-//                 unreachable!("should never be in barrier state when val is called");
-//             }
-//             State::Reqs(inner) => inner.val(),
-//             State::Dropped => panic!("called `val` on a future that was dropped"),
-//         }
-//     }
-// }
-
 #[lamellar_impl::AmLocalDataRT(Clone)]
 pub(crate) struct SumAm<I> {
     pub(crate) iter: Sum<I>,
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I: IterClone> IterClone for SumAm<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for SumAm<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         SumAm {
             iter: self.iter.iter_clone(Sealed),
             schedule: self.schedule.clone(),

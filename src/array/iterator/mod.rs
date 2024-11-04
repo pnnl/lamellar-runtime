@@ -1,5 +1,7 @@
 //! Provides various iterator types for LamellarArrays
 pub mod distributed_iterator;
+use std::pin::Pin;
+
 use distributed_iterator::DistributedIterator;
 pub mod local_iterator;
 use local_iterator::LocalIterator;
@@ -17,10 +19,16 @@ use crate::memregion::Dist;
 //     fn wait(self: Box<Self>) -> Self::Output;
 // }
 
+pub(crate) type IterLockFuture = Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
 pub(crate) mod private {
+    use super::IterLockFuture;
+
+    #[derive(Debug, Clone, Copy)]
     pub struct Sealed;
-    pub trait IterClone: Sized {
-        fn iter_clone(&self, _: Sealed) -> Self;
+
+    pub trait InnerIter: Sized {
+        fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture>;
+        fn iter_clone(&self, _s: Sealed) -> Self;
     }
 }
 

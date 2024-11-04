@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::{DistributedIterator, Monotonic};
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::operations::ArrayOps;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamInto};
@@ -28,8 +28,11 @@ pub(crate) struct Collect<I, A> {
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<I: IterClone, A> IterClone for Collect<I, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, A> InnerIter for Collect<I, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Collect {
             iter: self.iter.iter_clone(Sealed),
             distribution: self.distribution.clone(),
@@ -50,7 +53,7 @@ where
     type Handle = InnerDistIterCollectHandle<I::Item, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Collect {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             distribution: self.distribution.clone(),
             _phantom: self._phantom.clone(),
         }
@@ -89,8 +92,11 @@ pub(crate) struct CollectAsync<I, A, B> {
     pub(crate) _phantom: PhantomData<(A, B)>,
 }
 
-impl<I: IterClone, A, B> IterClone for CollectAsync<I, A, B> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, A, B> InnerIter for CollectAsync<I, A, B> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         CollectAsync {
             iter: self.iter.iter_clone(Sealed),
             distribution: self.distribution.clone(),
@@ -112,7 +118,7 @@ where
     type Handle = InnerDistIterCollectHandle<B, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         CollectAsync {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             distribution: self.distribution.clone(),
             _phantom: self._phantom.clone(),
         }
@@ -270,14 +276,18 @@ where
     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
 {
     pub(crate) fn new(
-        barrier_handle: BarrierHandle,
+        lock: Option<IterLockFuture>,
         inner: Pin<Box<dyn Future<Output = InnerDistIterCollectHandle<T, A>> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
+        let state = match lock {
+            Some(inner_lock) => State::Lock(inner_lock, Some(inner)),
+            None => State::Barrier(array.barrier_handle(), inner),
+        };
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Barrier(barrier_handle, inner),
+            state,
         }
     }
 
@@ -305,6 +315,10 @@ where
 
 #[pin_project(project = StateProj)]
 enum State<T, A> {
+    Lock(
+        #[pin] IterLockFuture,
+        Option<Pin<Box<dyn Future<Output = InnerDistIterCollectHandle<T, A>> + Send>>>,
+    ),
     Barrier(
         #[pin] BarrierHandle,
         Pin<Box<dyn Future<Output = InnerDistIterCollectHandle<T, A>> + Send>>,
@@ -322,6 +336,16 @@ where
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
+            StateProj::Lock(lock, inner) => {
+                ready!(lock.poll(cx));
+                let barrier = this.array.barrier_handle();
+                *this.state = State::Barrier(
+                    barrier,
+                    inner.take().expect("reqs should still be in this state"),
+                );
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
             StateProj::Barrier(barrier, inner) => {
                 ready!(barrier.poll(cx));
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));

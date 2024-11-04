@@ -7,6 +7,8 @@ use crate::memregion::Dist;
 
 use std::sync::Arc;
 
+use self::iterator::IterLockFuture;
+
 /// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of a [LocalLockArray]
 /// This struct is created by awaiting or blocking on the handle returned by [LocalLockArray::read_local_chunks]
 #[derive(Clone)]
@@ -18,8 +20,11 @@ pub struct LocalLockLocalChunks<T: Dist> {
     pub(crate) lock_guard: Arc<LocalRwDarcReadGuard<()>>,
 }
 
-impl<T: Dist> IterClone for LocalLockLocalChunks<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for LocalLockLocalChunks<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalLockLocalChunks {
             chunk_size: self.chunk_size,
             index: self.index,
@@ -43,8 +48,11 @@ pub struct LocalLockLocalChunksMut<T: Dist> {
     pub(crate) lock_guard: Arc<LocalRwDarcWriteGuard<()>>,
 }
 
-impl<T: Dist> IterClone for LocalLockLocalChunksMut<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for LocalLockLocalChunksMut<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalLockLocalChunksMut {
             chunk_size: self.chunk_size,
             index: self.index,
@@ -84,7 +92,7 @@ impl<T: Dist> DerefMut for LocalLockMutChunkLocalData<'_, T> {
 impl<T: Dist> LocalIterator for LocalLockLocalChunks<T> {
     type Item = LocalLockLocalData<T>;
     type Array = LocalLockArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
         let end_i = std::cmp::min(
             (start_i + cnt) * self.chunk_size,
@@ -150,7 +158,7 @@ impl<T: Dist> IndexedLocalIterator for LocalLockLocalChunks<T> {
 impl<T: Dist + 'static> LocalIterator for LocalLockLocalChunksMut<T> {
     type Item = LocalLockMutChunkLocalData<'static, T>;
     type Array = LocalLockArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let end_i = std::cmp::min(
             (start_i + cnt) * self.chunk_size,
             self.array.num_elems_local(),

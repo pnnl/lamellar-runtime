@@ -1,7 +1,7 @@
 use crate::active_messaging::LamellarArcLocalAm;
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::distributed_iterator::DistributedIterator;
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::barrier::BarrierHandle;
@@ -28,8 +28,11 @@ pub(crate) struct Count<I> {
     pub(crate) iter: I,
 }
 
-impl<I: IterClone> IterClone for Count<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Count<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Count {
             iter: self.iter.iter_clone(Sealed),
         }
@@ -46,7 +49,7 @@ where
     type Handle = InnerDistIterCountHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Count {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
         }
     }
     fn next(&mut self) -> Option<Self::Item> {
@@ -192,14 +195,18 @@ impl PinnedDrop for DistIterCountHandle {
 
 impl DistIterCountHandle {
     pub(crate) fn new(
-        barrier_handle: BarrierHandle,
+        lock: Option<IterLockFuture>,
         inner: Pin<Box<dyn Future<Output = InnerDistIterCountHandle> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
+        let state = match lock {
+            Some(inner_lock) => State::Lock(inner_lock, Some(inner)),
+            None => State::Barrier(array.barrier_handle(), inner),
+        };
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Barrier(barrier_handle, inner),
+            state,
         }
     }
 
@@ -227,6 +234,10 @@ impl DistIterCountHandle {
 
 #[pin_project(project = StateProj)]
 enum State {
+    Lock(
+        #[pin] IterLockFuture,
+        Option<Pin<Box<dyn Future<Output = InnerDistIterCountHandle> + Send>>>,
+    ),
     Barrier(
         #[pin] BarrierHandle,
         Pin<Box<dyn Future<Output = InnerDistIterCountHandle> + Send>>,
@@ -240,6 +251,16 @@ impl Future for DistIterCountHandle {
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
+            StateProj::Lock(lock, inner) => {
+                ready!(lock.poll(cx));
+                let mut barrier = this.array.barrier_handle();
+                *this.state = State::Barrier(
+                    barrier,
+                    inner.take().expect("reqs should still be in this state"),
+                );
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
             StateProj::Barrier(barrier, inner) => {
                 ready!(barrier.poll(cx));
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
@@ -266,11 +287,14 @@ pub(crate) struct CountAm<I> {
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I> IterClone for CountAm<I>
+impl<I> InnerIter for CountAm<I>
 where
-    I: IterClone,
+    I: InnerIter,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         CountAm {
             iter: self.iter.iter_clone(Sealed),
             schedule: self.schedule.clone(),

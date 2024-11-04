@@ -24,7 +24,7 @@ use crate::warnings::RuntimeWarning;
 use pin_project::pin_project;
 
 use std::ops::{Deref, DerefMut};
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 
 /// A safe abstraction of a distributed array, providing read/write access protected by locks.
 ///
@@ -1025,7 +1025,8 @@ impl<T: Dist + AmDist> GlobalLockArrayReduceHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Option<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Option<T>> {
+        self.req.launch();
         self.lock_guard.array.clone().spawn(self)
     }
 
@@ -1040,17 +1041,20 @@ impl<T: Dist + AmDist> GlobalLockArrayReduceHandle<T> {
     }
 }
 
-impl<T: Dist + AmDist> LamellarRequest for GlobalLockArrayReduceHandle<T> {
-    fn blocking_wait(self) -> Self::Output {
-        self.req.blocking_wait()
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        self.req.ready_or_set_waker(waker)
-    }
-    fn val(&self) -> Self::Output {
-        self.req.val()
-    }
-}
+// impl<T: Dist + AmDist> LamellarRequest for GlobalLockArrayReduceHandle<T> {
+//     fn launch(&mut self) {
+//         self.req.launch();
+//     }
+//     fn blocking_wait(self) -> Self::Output {
+//         self.req.blocking_wait()
+//     }
+//     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+//         self.req.ready_or_set_waker(waker)
+//     }
+//     fn val(&self) -> Self::Output {
+//         self.req.val()
+//     }
+// }
 
 impl<T: Dist + AmDist> Future for GlobalLockArrayReduceHandle<T> {
     type Output = Option<T>;

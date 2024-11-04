@@ -5,7 +5,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
-    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let block_array = LocalLockArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
     let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
 
     // We expose multiple ways to iterate over a lamellar array
@@ -14,6 +14,7 @@ fn main() {
     // local to that pe, thus instantiating a distributed iterator introduces a synchronoization point.
     // distributed iterators are created by calling dist_iter() or dist_iter_mut() on a LamellarArray;
 
+    let lock = block_array.write_lock().block();
     let block_dist_iter = block_array.dist_iter_mut();
     let cyclic_dist_iter = cyclic_array.dist_iter_mut();
 
@@ -21,10 +22,13 @@ fn main() {
     // we currently provide the "for_each" driver which will execute a closure on every element in the distributed array (concurrently)
 
     //for example lets initialize our arrays, where we store the value of my_pe to each local element a pe owns
-    block_dist_iter
+    let iter = block_dist_iter
         .enumerate()
-        .for_each(move |(i, elem)| elem.store(i))
-        .block();
+        .for_each(move |(i, elem)| *elem = i)
+        .spawn();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    drop(lock);
+    iter.block();
     cyclic_dist_iter
         .for_each(move |elem| elem.store(my_pe))
         .block();
@@ -35,7 +39,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block sum");
-    let sum = block_array.block_on(block_array.dist_iter().map(|e| e.load()).sum());
+    let sum = block_array.block_on(block_array.dist_iter().map(|e| *e).sum());
     println!("result: {sum}");
     world.barrier();
     println!("--------------------------------------------------------");
@@ -140,7 +144,7 @@ fn main() {
     block_array
         .dist_iter()
         .enumerate()
-        .filter(|(_, elem)| elem.load() % 4 == 0)
+        .filter(|(_, elem)| *elem % 4 == 0)
         .for_each(move |(i, elem)| {
             println!(
                 "[pe({:?})-{:?}] i: {:?} {:?}",
@@ -158,8 +162,8 @@ fn main() {
         .dist_iter()
         .enumerate()
         .filter_map(|(i, elem)| {
-            if elem.load() % 4 == 0 {
-                Some((i, elem.load() as f32))
+            if *elem % 4 == 0 {
+                Some((i, *elem as f32))
             } else {
                 None
             }
@@ -180,15 +184,15 @@ fn main() {
         block_array
             .dist_iter()
             .filter_map(|elem| {
-                let e = elem.load();
+                let e = *elem;
                 if e % 8 == 0 {
                     println!("e: {:?}", e);
-                    Some(e as f32)
+                    Some(e as u8)
                 } else {
                     None
                 }
             })
-            .collect::<ReadOnlyArray<f32>>(Distribution::Block),
+            .collect::<ReadOnlyArray<u8>>(Distribution::Block),
     );
 
     new_block_array.print();
@@ -267,11 +271,6 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block filter count");
-    let count = block_array.block_on(
-        block_array
-            .dist_iter()
-            .filter(|e| e.load() % 2 == 0)
-            .count(),
-    );
+    let count = block_array.block_on(block_array.dist_iter().filter(|e| *e % 2 == 0).count());
     println!("result: {count}");
 }

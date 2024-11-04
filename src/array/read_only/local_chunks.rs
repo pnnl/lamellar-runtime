@@ -4,6 +4,8 @@ use crate::array::read_only::*;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 
+use self::iterator::IterLockFuture;
+
 /// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [ReadOnlyArray]
 /// This struct is created by calling [ReadOnlyArray::local_chunks]
 #[derive(Clone)]
@@ -14,8 +16,11 @@ pub struct ReadOnlyLocalChunks<T: Dist> {
     array: ReadOnlyArray<T>,
 }
 
-impl<T: Dist> IterClone for ReadOnlyLocalChunks<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for ReadOnlyLocalChunks<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ReadOnlyLocalChunks {
             chunk_size: self.chunk_size,
             index: self.index,
@@ -28,7 +33,7 @@ impl<T: Dist> IterClone for ReadOnlyLocalChunks<T> {
 impl<T: Dist + 'static> LocalIterator for ReadOnlyLocalChunks<T> {
     type Item = &'static [T];
     type Array = ReadOnlyArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
         let end_i = std::cmp::min(
             (start_i + cnt) * self.chunk_size,

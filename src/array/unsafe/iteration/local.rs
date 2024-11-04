@@ -17,7 +17,7 @@ use std::sync::Arc;
 impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {}
 
 macro_rules! consumer_impl {
-    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$return_type:ident$(<$($ret_gen:ty),*>)?]; [$($bounds:tt)+]; [$($am:tt)*] ) => {
+    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$return_type:ident$(<$($ret_gen:ty),*>)?]; [$($bounds:tt)+]; [$($am:tt)*]; [$($lock:tt)*] ) => {
         paste! {
             fn $name<$($generics),*>(&self, $($arg : $arg_ty),*) -> $return_type$(<$($ret_gen),*>)?
             where
@@ -37,17 +37,25 @@ macro_rules! consumer_impl {
                 $($bounds)+
             {
                 let am = $($am)*;
+                self.data.team.team_counters.inc_send_req(1);
+                self.data.team.world_counters.inc_send_req(1);
+                self.data.task_group.counters.inc_send_req(1);
+                let lock =  $($lock)*;
                 let inner = self.clone();
                 let reqs_future = Box::pin(async move{
-                    match sched {
-                    Schedule::Static => inner.sched_static(am),
-                    Schedule::Dynamic => inner.sched_dynamic(am),
-                    Schedule::Chunk(size) => inner.sched_chunk(am,size),
-                    Schedule::Guided => inner.sched_guided(am),
-                    Schedule::WorkStealing => inner.sched_work_stealing(am),
-                }
-            });
-                $return_type::new(reqs_future,self)
+                    let reqs = match sched {
+                        Schedule::Static => inner.sched_static(am),
+                        Schedule::Dynamic => inner.sched_dynamic(am),
+                        Schedule::Chunk(size) => inner.sched_chunk(am,size),
+                        Schedule::Guided => inner.sched_guided(am),
+                        Schedule::WorkStealing => inner.sched_work_stealing(am),
+                    };
+                    inner.data.team.team_counters.inc_launched(1);
+                    inner.data.team.world_counters.inc_launched(1);
+                    inner.data.task_group.counters.inc_launched(1);
+                    reqs
+                });
+                $return_type::new(lock,reqs_future,self)
             }
         }
     };
@@ -80,7 +88,8 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
                 iter: iter.iter_clone(Sealed),
                 op,
             }
-        ]
+        ];
+        [iter.lock_if_needed(Sealed)]
     );
 
     consumer_impl!(
@@ -92,7 +101,8 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
                 iter: iter.iter_clone(Sealed),
                 op,
             }
-        ]
+        ];
+        [iter.lock_if_needed(Sealed)]
     );
 
     consumer_impl!(
@@ -104,7 +114,8 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
                 iter: iter.iter_clone(Sealed),
                 op,
             }
-        ]
+        ];
+        [iter.lock_if_needed(Sealed)]
     );
 
     consumer_impl!(
@@ -117,7 +128,8 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
                 distribution: d,
                 _phantom: PhantomData,
             }
-        ]
+        ];
+        [iter.lock_if_needed(Sealed)]
     );
 
     consumer_impl!(
@@ -130,7 +142,8 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
                 distribution: d,
                 _phantom: PhantomData,
             }
-        ]
+        ];
+        [iter.lock_if_needed(Sealed)]
     );
 
     consumer_impl!(
@@ -141,18 +154,21 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
             Count {
                 iter: iter.iter_clone(Sealed),
             }
-        ]
+        ];
+        [iter.lock_if_needed(Sealed)]
     );
 
     consumer_impl!(
-    sum<I>(iter: &I);
-    [LocalIterSumHandle<I::Item>];
-    [I: LocalIterator + 'static, I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>  , ];
-    [
-        Sum {
-            iter: iter.iter_clone(Sealed),
-        }
-    ]);
+        sum<I>(iter: &I);
+        [LocalIterSumHandle<I::Item>];
+        [I: LocalIterator + 'static, I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>  , ];
+        [
+            Sum {
+                iter: iter.iter_clone(Sealed),
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.data.team.clone()

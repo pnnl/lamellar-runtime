@@ -11,7 +11,7 @@ use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
-use super::handle::{
+pub(crate) use super::handle::{
     IntoDarcHandle, IntoGlobalRwDarcHandle, LocalRwDarcReadHandle, LocalRwDarcWriteHandle,
 };
 

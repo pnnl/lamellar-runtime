@@ -53,7 +53,8 @@ where
             array.team_rt().alloc_one_sided_mem_region(size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the mem_region as this is the only reference
-        let req = unsafe { array.internal_get(index, &mem_region) };
+        let mut req = unsafe { array.internal_get(index, &mem_region) };
+        req.launch();
         (mem_region, req)
     }
 }

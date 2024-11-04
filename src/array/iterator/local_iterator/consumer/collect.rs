@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::{LocalIterator, Monotonic};
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::operations::ArrayOps;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamInto};
@@ -27,8 +27,11 @@ pub(crate) struct Collect<I, A> {
     pub(crate) _phantom: PhantomData<A>,
 }
 
-impl<I: IterClone, A> IterClone for Collect<I, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, A> InnerIter for Collect<I, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Collect {
             iter: self.iter.iter_clone(Sealed),
             distribution: self.distribution.clone(),
@@ -49,7 +52,7 @@ where
     type Handle = InnerLocalIterCollectHandle<I::Item, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Collect {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             distribution: self.distribution.clone(),
             _phantom: self._phantom.clone(),
         }
@@ -89,8 +92,11 @@ pub(crate) struct CollectAsync<I, A, B> {
     pub(crate) _phantom: PhantomData<(A, B)>,
 }
 
-impl<I: IterClone, A, B> IterClone for CollectAsync<I, A, B> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, A, B> InnerIter for CollectAsync<I, A, B> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         CollectAsync {
             iter: self.iter.iter_clone(Sealed),
             distribution: self.distribution.clone(),
@@ -112,7 +118,7 @@ where
     type Handle = InnerLocalIterCollectHandle<B, A>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         CollectAsync {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             distribution: self.distribution.clone(),
             _phantom: self._phantom.clone(),
         }
@@ -266,13 +272,14 @@ where
     A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static,
 {
     pub(crate) fn new(
+        lock: Option<IterLockFuture>,
         inner: Pin<Box<dyn Future<Output = InnerLocalIterCollectHandle<T, A>> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Init(inner),
+            state: State::Init(lock, inner),
         }
     }
 
@@ -300,7 +307,10 @@ where
 
 #[pin_project(project = StateProj)]
 enum State<T, A> {
-    Init(Pin<Box<dyn Future<Output = InnerLocalIterCollectHandle<T, A>> + Send>>),
+    Init(
+        Option<IterLockFuture>,
+        Pin<Box<dyn Future<Output = InnerLocalIterCollectHandle<T, A>> + Send>>,
+    ),
     Reqs(#[pin] InnerLocalIterCollectHandle<T, A>),
     Dropped,
 }
@@ -314,7 +324,10 @@ where
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
-            StateProj::Init(inner) => {
+            StateProj::Init(lock, inner) => {
+                if let Some(lock) = lock {
+                    ready!(lock.as_mut().poll(cx));
+                }
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
                 match Pin::new(&mut inner).poll(cx) {
                     Poll::Ready(val) => Poll::Ready(val),
@@ -339,8 +352,11 @@ pub(crate) struct CollectAm<I, A> {
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I: IterClone, A> IterClone for CollectAm<I, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, A> InnerIter for CollectAm<I, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         CollectAm {
             iter: self.iter.iter_clone(Sealed),
             schedule: self.schedule.clone(),

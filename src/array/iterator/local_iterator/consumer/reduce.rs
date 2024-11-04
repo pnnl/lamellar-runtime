@@ -1,7 +1,7 @@
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::consumer::*;
 use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::private::*;
+use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -22,8 +22,11 @@ pub(crate) struct Reduce<I, F> {
     pub(crate) op: F,
 }
 
-impl<I: IterClone, F: Clone> IterClone for Reduce<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for Reduce<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Reduce {
             iter: self.iter.iter_clone(Sealed),
             op: self.op.clone(),
@@ -43,7 +46,7 @@ where
     type Handle = InnerLocalIterReduceHandle<I::Item, F>;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Reduce {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
             op: self.op.clone(),
         }
     }
@@ -150,13 +153,14 @@ where
     F: Fn(T, T) -> T + SyncSend + Clone + 'static,
 {
     pub(crate) fn new(
+        lock: Option<IterLockFuture>,
         reqs: Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Init(reqs),
+            state: State::Init(lock, reqs),
         }
     }
 
@@ -186,7 +190,10 @@ where
 
 #[pin_project(project = StateProj)]
 enum State<T, F> {
-    Init(Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>),
+    Init(
+        Option<IterLockFuture>,
+        Pin<Box<dyn Future<Output = InnerLocalIterReduceHandle<T, F>> + Send>>,
+    ),
     Reqs(#[pin] InnerLocalIterReduceHandle<T, F>),
     Dropped,
 }
@@ -200,7 +207,10 @@ where
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
-            StateProj::Init(inner) => {
+            StateProj::Init(lock, inner) => {
+                if let Some(lock) = lock {
+                    ready!(lock.as_mut().poll(cx));
+                }
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
                 match Pin::new(&mut inner).poll(cx) {
                     Poll::Ready(val) => Poll::Ready(val),
@@ -226,8 +236,11 @@ pub(crate) struct ReduceAm<I, F> {
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I: IterClone, F: Clone> IterClone for ReduceAm<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for ReduceAm<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ReduceAm {
             op: self.op.clone(),
             iter: self.iter.iter_clone(Sealed),

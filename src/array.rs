@@ -1008,6 +1008,13 @@ pub(crate) mod private {
             self.team()
                 .exec_am_pe_tg(pe, am, Some(self.team_counters()))
         }
+        fn spawn_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
+        where
+            F: RemoteActiveMessage + LamellarAM + AmDist,
+        {
+            self.team()
+                .spawn_am_pe_tg(pe, am, Some(self.team_counters()))
+        }
         // fn exec_arc_am_pe<F>(&self, pe: usize, am: LamellarArcAm) -> AmHandle<F>
         // where
         //     F: AmDist,

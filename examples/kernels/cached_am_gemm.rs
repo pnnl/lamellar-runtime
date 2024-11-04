@@ -251,7 +251,7 @@ fn main() {
                     c: c_block.clone(),
                     a_pe_rows: a_pe_rows,
                     block_size: block_size,
-                }));
+                }).spawn());
                 tasks += 1;
             }
             // for req in reqs {

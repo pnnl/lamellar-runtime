@@ -1,4 +1,4 @@
-use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
 #[derive(Clone, Debug)]
 pub struct Chunks<I> {
@@ -8,8 +8,11 @@ pub struct Chunks<I> {
     chunk_size: usize,
 }
 
-impl<I: IterClone> IterClone for Chunks<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Chunks<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Chunks {
             iter: self.iter.iter_clone(Sealed),
             cur_i: self.cur_i,
@@ -39,10 +42,13 @@ where
 {
     type Item = Chunk<I>;
     type Array = <I as LocalIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Chunks<I> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Chunks<I> {
         Chunks::new(
-            self.iter
-                .init(start_i * self.chunk_size, (start_i + cnt) * self.chunk_size),
+            self.iter.init(
+                start_i * self.chunk_size,
+                (start_i + cnt) * self.chunk_size,
+                _s,
+            ),
             start_i,
             cnt,
             self.chunk_size,
@@ -54,7 +60,10 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur_i < self.end_i {
             let start_i = self.cur_i * self.chunk_size;
-            let iter = self.iter.iter_clone(Sealed).init(start_i, self.chunk_size);
+            let iter = self
+                .iter
+                .iter_clone(Sealed)
+                .init(start_i, self.chunk_size, Sealed);
             let chunk = Chunk { iter: iter };
             self.cur_i += 1;
             Some(chunk)

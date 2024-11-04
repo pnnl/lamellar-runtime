@@ -48,6 +48,8 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use super::IterLockFuture;
+
 macro_rules! consumer_impl {
     ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$($return_type: tt)*]; [$($bounds:tt)+] ) => {
         fn $name<$($generics),*>(&self, $($arg : $arg_ty),*) -> $($return_type)*
@@ -147,7 +149,7 @@ pub trait LocalIteratorLauncher: InnerArray {
 /// The functions in this trait are available on all local iterators.
 /// Additonaly functionality can be found in the [IndexedLocalIterator] trait:
 /// these methods are only available for local iterators where the number of elements is known in advance (e.g. after invoking `filter` these methods would be unavailable)
-pub trait LocalIterator: SyncSend + IterClone + 'static {
+pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// The type of item this local iterator produces
     type Item: Send;
 
@@ -157,7 +159,8 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
     /// Internal method used to initalize this local iterator to the correct element and correct length.
     ///
     /// Because we know the number of elements of the array on each PE we can specify the index to start from.
-    fn init(&self, start_i: usize, cnt: usize) -> Self;
+    #[doc(hidden)]
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self;
 
     /// Return the original array this local iterator belongs too
     fn array(&self) -> Self::Array;
@@ -732,7 +735,7 @@ pub trait LocalIterator: SyncSend + IterClone + 'static {
 }
 
 /// An interface for dealing with local iterators which are indexable, meaning it returns an iterator of known length
-pub trait IndexedLocalIterator: LocalIterator + SyncSend + IterClone + 'static {
+pub trait IndexedLocalIterator: LocalIterator + SyncSend + InnerIter + 'static {
     /// yields the local (to the calling PE) index along with each element
     ///
     /// # Examples
@@ -979,8 +982,11 @@ pub struct LocalIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist, A: LamellarArray<T>> IterClone for LocalIter<'a, T, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist, A: LamellarArray<T>> InnerIter for LocalIter<'a, T, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -1021,7 +1027,7 @@ impl<
 {
     type Item = &'static T;
     type Array = A;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init local_iterator start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
 
@@ -1095,8 +1101,11 @@ pub struct LocalIterMut<'a, T: Dist, A: LamellarArray<T>> {
     _marker: PhantomData<&'a T>,
 }
 
-impl<'a, T: Dist, A: LamellarArray<T>> IterClone for LocalIterMut<'a, T, A> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<'a, T: Dist, A: LamellarArray<T>> InnerIter for LocalIterMut<'a, T, A> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         LocalIterMut {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -1136,7 +1145,7 @@ impl<
 {
     type Item = &'static mut T;
     type Array = A;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("{:?} LocalIter init {start_i} {cnt} {} {}",std::thread::current().id(), start_i+cnt,max_i);
         LocalIterMut {

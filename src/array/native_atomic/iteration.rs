@@ -2,13 +2,15 @@ use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::{
-    private::{IterClone, Sealed},
+    private::{InnerIter, Sealed},
     LamellarArrayIterators, LamellarArrayMutIterators,
 };
 use crate::array::native_atomic::*;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
+
+use self::iterator::IterLockFuture;
 // use parking_lot::{
 //     lock_api::{RwLockReadGuardArc, RwLockWriteGuardArc},
 //     RawRwLock,
@@ -28,8 +30,11 @@ pub struct NativeAtomicDistIter<T: Dist> {
     end_i: usize,
 }
 
-impl<T: Dist> IterClone for NativeAtomicDistIter<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for NativeAtomicDistIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         NativeAtomicDistIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -58,8 +63,11 @@ pub struct NativeAtomicLocalIter<T: Dist> {
     end_i: usize,
 }
 
-impl<T: Dist> IterClone for NativeAtomicLocalIter<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for NativeAtomicLocalIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         NativeAtomicLocalIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -83,7 +91,7 @@ impl<T: Dist> std::fmt::Debug for NativeAtomicLocalIter<T> {
 impl<T: Dist> DistributedIterator for NativeAtomicDistIter<T> {
     type Item = NativeAtomicElement<T>;
     type Array = NativeAtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         // println!("num_elems_local: {:?}",self.data.num_elems_local());
@@ -132,7 +140,7 @@ impl<T: Dist> IndexedDistributedIterator for NativeAtomicDistIter<T> {
 impl<T: Dist> LocalIterator for NativeAtomicLocalIter<T> {
     type Item = NativeAtomicElement<T>;
     type Array = NativeAtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init native_atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
         NativeAtomicLocalIter {

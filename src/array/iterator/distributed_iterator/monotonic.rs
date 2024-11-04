@@ -1,4 +1,4 @@
-use crate::array::iterator::distributed_iterator::*;
+use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
 #[derive(Clone, Debug)]
 pub struct Monotonic<I> {
@@ -6,8 +6,11 @@ pub struct Monotonic<I> {
     cur_index: usize,
 }
 
-impl<I: IterClone> IterClone for Monotonic<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Monotonic<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Monotonic {
             iter: self.iter.iter_clone(Sealed),
             cur_index: self.cur_index,
@@ -31,8 +34,8 @@ where
 {
     type Item = (usize, <I as DistributedIterator>::Item);
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Monotonic<I> {
-        let val = Monotonic::new(self.iter.init(start_i, cnt), start_i);
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Monotonic<I> {
+        let val = Monotonic::new(self.iter.init(start_i, cnt, _s), start_i);
         // println!("{:?} Monotonic init {start_i} {cnt} {start_i}",std::thread::current().id());
         val
     }

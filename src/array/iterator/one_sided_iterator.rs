@@ -474,7 +474,8 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
         //     self.buf_0.len(),
         //     self.array.len()
         // );
-        let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+        let mut req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+        req.launch();
         self.state = State::Pending(req);
     }
 
@@ -761,14 +762,16 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T> + Clone + Send>
             if self.index + self.buf_0.len() < self.array.len() {
                 // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                 // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
-                let req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+                let mut req = unsafe { self.array.internal_get(self.index, &self.buf_0) };
+                req.launch();
                 self.state = State::Pending(req);
             } else {
                 let sub_region = self.buf_0.sub_region(0..(self.array.len() - self.index));
                 // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                 // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
                 // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
-                let req = unsafe { self.array.internal_get(self.index, sub_region) };
+                let mut req = unsafe { self.array.internal_get(self.index, sub_region) };
+                req.launch();
                 self.state = State::Pending(req);
             }
         }

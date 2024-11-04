@@ -1,6 +1,6 @@
 use crate::active_messaging::LamellarArcLocalAm;
 use crate::array::iterator::local_iterator::LocalIterator;
-use crate::array::iterator::{consumer::*, private::*};
+use crate::array::iterator::{consumer::*, private::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -20,8 +20,11 @@ pub(crate) struct Count<I> {
     pub(crate) iter: I,
 }
 
-impl<I: IterClone> IterClone for Count<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Count<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Count {
             iter: self.iter.iter_clone(Sealed),
         }
@@ -38,7 +41,7 @@ where
     type Handle = InnerLocalIterCountHandle;
     fn init(&self, start: usize, cnt: usize) -> Self {
         Count {
-            iter: self.iter.init(start, cnt),
+            iter: self.iter.init(start, cnt, Sealed),
         }
     }
     fn next(&mut self) -> Option<Self::Item> {
@@ -126,13 +129,14 @@ impl PinnedDrop for LocalIterCountHandle {
 
 impl LocalIterCountHandle {
     pub(crate) fn new(
+        lock: Option<IterLockFuture>,
         inner: Pin<Box<dyn Future<Output = InnerLocalIterCountHandle> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
         Self {
             array: array.clone(),
             launched: false,
-            state: State::Init(inner),
+            state: State::Init(lock, inner),
         }
     }
 
@@ -160,7 +164,10 @@ impl LocalIterCountHandle {
 
 #[pin_project(project = StateProj)]
 enum State {
-    Init(Pin<Box<dyn Future<Output = InnerLocalIterCountHandle> + Send>>),
+    Init(
+        Option<IterLockFuture>,
+        Pin<Box<dyn Future<Output = InnerLocalIterCountHandle> + Send>>,
+    ),
     Reqs(#[pin] InnerLocalIterCountHandle),
     Dropped,
 }
@@ -170,7 +177,10 @@ impl Future for LocalIterCountHandle {
         self.launched = true;
         let mut this = self.project();
         match this.state.as_mut().project() {
-            StateProj::Init(inner) => {
+            StateProj::Init(lock, inner) => {
+                if let Some(lock) = lock {
+                    ready!(lock.as_mut().poll(cx));
+                }
                 let mut inner = ready!(Future::poll(inner.as_mut(), cx));
                 match Pin::new(&mut inner).poll(cx) {
                     Poll::Ready(val) => Poll::Ready(val),
@@ -195,11 +205,14 @@ pub(crate) struct CountAm<I> {
     pub(crate) schedule: IterSchedule,
 }
 
-impl<I> IterClone for CountAm<I>
+impl<I> InnerIter for CountAm<I>
 where
-    I: IterClone,
+    I: InnerIter,
 {
-    fn iter_clone(&self, _: Sealed) -> Self {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         CountAm {
             iter: self.iter.iter_clone(Sealed),
             schedule: self.schedule.clone(),

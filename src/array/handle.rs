@@ -40,7 +40,11 @@ impl ArrayRdmaHandle {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<()> {
+    pub fn spawn(mut self) -> LamellarTask<()> {
+        for req in self.reqs.iter_mut() {
+            req.launch();
+        }
+        self.spawned = true;
         self.array.team().spawn(self)
     }
 
@@ -56,6 +60,12 @@ impl ArrayRdmaHandle {
 }
 
 impl LamellarRequest for ArrayRdmaHandle {
+    fn launch(&mut self) -> Self::Output {
+        for req in self.reqs.iter_mut() {
+            req.launch();
+        }
+        self.spawned = true;
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.spawned = true;
         for req in self.reqs.drain(0..) {
@@ -124,6 +134,9 @@ impl<T: Dist> ArrayRdmaAtHandle<T> {
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<T> {
+        if let Some(req) = &mut self.req {
+            req.launch();
+        }
         self.spawned = true;
         self.array.team().spawn(self)
     }
@@ -141,6 +154,12 @@ impl<T: Dist> ArrayRdmaAtHandle<T> {
 }
 
 impl<T: Dist> LamellarRequest for ArrayRdmaAtHandle<T> {
+    fn launch(&mut self) {
+        if let Some(req) = &mut self.req {
+            req.launch();
+        }
+        self.spawned = true;
+    }
     fn blocking_wait(mut self) -> Self::Output {
         self.spawned = true;
         if let Some(req) = self.req.take() {
@@ -167,7 +186,8 @@ impl<T: Dist> LamellarRequest for ArrayRdmaAtHandle<T> {
 
 impl<T: Dist> Future for ArrayRdmaAtHandle<T> {
     type Output = T;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.spawned = true;
         let mut this = self.project();
         match &mut this.req {
             Some(req) => {

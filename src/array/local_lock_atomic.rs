@@ -980,7 +980,8 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(self) -> LamellarTask<Option<T>> {
+    pub fn spawn(mut self) -> LamellarTask<Option<T>> {
+        self.req.launch();
         self.lock_guard.array.clone().spawn(self)
     }
 
@@ -996,6 +997,9 @@ impl<T: Dist + AmDist> LocalLockArrayReduceHandle<T> {
 }
 
 impl<T: Dist + AmDist> LamellarRequest for LocalLockArrayReduceHandle<T> {
+    fn launch(&mut self) {
+        self.req.launch();
+    }
     fn blocking_wait(self) -> Self::Output {
         self.req.blocking_wait()
     }

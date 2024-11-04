@@ -835,6 +835,7 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
             src_pe: this.darc.src_pe(),
         };
         darc.inner_mut().update_item(Box::into_raw(Box::new(item)));
+        darc.inner_mut().drop = None;
         Poll::Ready(darc)
     }
 }
@@ -938,6 +939,7 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
         };
         darc.inner_mut()
             .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
+        darc.inner_mut().drop = None;
         Poll::Ready(LocalRwDarc { darc })
     }
 }
@@ -1043,6 +1045,7 @@ impl<T: Sync + Send> Future for IntoGlobalRwDarcHandle<T> {
                 item,
                 this.team.clone(),
             ))));
+        darc.inner_mut().drop = Some(GlobalRwDarc::drop);
         Poll::Ready(GlobalRwDarc { darc })
     }
 }

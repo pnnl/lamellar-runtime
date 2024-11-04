@@ -4,12 +4,14 @@ use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::iterator::{
-    private::{IterClone, Sealed},
+    private::{InnerIter, Sealed},
     LamellarArrayIterators, LamellarArrayMutIterators,
 };
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
+
+use self::iterator::IterLockFuture;
 
 impl<T: Dist> InnerArray for AtomicArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
@@ -28,8 +30,11 @@ pub struct AtomicDistIter<T: Dist> {
     end_i: usize,
 }
 
-impl<T: Dist> IterClone for AtomicDistIter<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for AtomicDistIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         AtomicDistIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -69,8 +74,11 @@ pub struct AtomicLocalIter<T: Dist> {
     end_i: usize,
 }
 
-impl<T: Dist> IterClone for AtomicLocalIter<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for AtomicLocalIter<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         AtomicLocalIter {
             data: self.data.clone(),
             cur_i: self.cur_i,
@@ -105,7 +113,7 @@ impl<T: Dist> AtomicLocalIter<T> {
 impl<T: Dist> DistributedIterator for AtomicDistIter<T> {
     type Item = AtomicElement<T>;
     type Array = AtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init dist iter start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?}",start_i,cnt, start_i+cnt,max_i);
         // println!("num_elems_local: {:?}",self.data.num_elems_local());
@@ -144,7 +152,7 @@ impl<T: Dist> IndexedDistributedIterator for AtomicDistIter<T> {
 impl<T: Dist> LocalIterator for AtomicLocalIter<T> {
     type Item = AtomicElement<T>;
     type Array = AtomicArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         let max_i = self.data.num_elems_local();
         // println!("init atomic start_i: {:?} cnt {:?} end_i: {:?} max_i: {:?} {:?}",start_i,cnt, start_i+cnt,max_i,std::thread::current().id());
 
