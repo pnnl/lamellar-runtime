@@ -7,6 +7,7 @@ use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, 
 use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_request::*;
 use crate::lamellar_world::LamellarWorld;
+use crate::memregion::handle::SharedMemoryRegionHandle;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
     MemoryRegion, RemoteMemoryRegion,
@@ -82,7 +83,7 @@ use std::marker::PhantomData;
 /// let req = even_pes.exec_am_all(MyAm{world_pe,team_pe});
 /// let result = even_pes.block_on(req);
 /// // we can also create a distributed array so that its data only resides on the members of the team.
-/// let array: AtomicArray<usize> = AtomicArray::new(&even_pes, 100,Distribution::Block);
+/// let array: AtomicArray<usize> = AtomicArray::new(&even_pes, 100,Distribution::Block).block();
 /// ```
 pub struct LamellarTeam {
     pub(crate) world: Option<Arc<LamellarTeam>>,
@@ -572,41 +573,45 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
     //#[tracing::instrument(skip_all)]
-    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
+    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        self.team.barrier.barrier();
-        let mr: SharedMemoryRegion<T> = if self.team.num_world_pes == self.team.num_pes {
-            SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
+        // self.team.barrier.barrier();
+        let mr = if self.team.num_world_pes == self.team.num_pes {
+            SharedMemoryRegion::try_new(size, self.team.clone(), AllocationType::Global)
         } else {
-            SharedMemoryRegion::new(
+            SharedMemoryRegion::try_new(
                 size,
                 self.team.clone(),
                 AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
         };
-        self.team.barrier.barrier();
+        // self.team.barrier.barrier();
         mr
     }
 
     //#[tracing::instrument(skip_all)]
-    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+    fn alloc_one_sided_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
-        while let Err(_err) = lmr {
-            std::thread::yield_now();
-            // println!(
-            //     "out of Lamellar mem trying to alloc new pool {:?} {:?}",
-            //     size,
-            //     std::mem::size_of::<T>()
-            // );
-            self.team
-                .lamellae
-                .alloc_pool(size * std::mem::size_of::<T>());
-            lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
-        }
-        lmr.expect("out of memory")
+        let lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
+        // while let Err(_err) = lmr {
+        //     std::thread::yield_now();
+        //     // println!(
+        //     //     "out of Lamellar mem trying to alloc new pool {:?} {:?}",
+        //     //     size,
+        //     //     std::mem::size_of::<T>()
+        //     // );
+        //     self.team
+        //         .lamellae
+        //         .alloc_pool(size * std::mem::size_of::<T>());
+        //     lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
+        // }
+        // lmr.expect("out of memory")
+        lmr
     }
 }
 
@@ -2187,7 +2192,36 @@ impl LamellarTeamRT {
     pub fn alloc_one_sided_mem_region<T: Dist>(
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
-    ) -> OneSidedMemoryRegion<T> {
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
+        // let lmr: OneSidedMemoryRegion<T> =
+        //     OneSidedMemoryRegion::new(size, self, self.lamellae.clone()).into();
+        // lmr
+        let  lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
+        // while let Err(_err) = lmr {
+        //     std::thread::yield_now();
+        //     // println!(
+        //     //     "out of Lamellar mem trying to alloc new pool {:?} {:?}",
+        //     //     size,
+        //     //     std::mem::size_of::<T>()
+        //     // );
+        //     self.lamellae.alloc_pool(size * std::mem::size_of::<T>());
+        //     lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
+        // }
+        // lmr.expect("out of memory")
+        lmr
+    }
+
+     /// allocate a local memory region from the asymmetric heap
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    ///
+    //#[tracing::instrument(skip_all)]
+    pub(crate) fn alloc_one_sided_mem_region_or_panic<T: Dist>(
+        self: &Pin<Arc<LamellarTeamRT>>,
+        size: usize,
+    ) -> OneSidedMemoryRegion<T>{
         // let lmr: OneSidedMemoryRegion<T> =
         //     OneSidedMemoryRegion::new(size, self, self.lamellae.clone()).into();
         // lmr

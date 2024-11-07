@@ -2,6 +2,9 @@ mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
 
+pub(crate) mod handle;
+pub use handle::AtomicArrayHandle;
+
 use crate::active_messaging::ActiveMessaging;
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
 use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
@@ -61,12 +64,12 @@ impl<T: Dist> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} elem: {:?}",local_data.at(10).load());
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # println!("PE{my_pe} elem: {:?}",local_data.at(10).load());
     ///```
@@ -87,12 +90,12 @@ impl<T: Dist> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// local_data.at(10).store(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # local_data.at(10).store(19.0);
     ///```
@@ -113,12 +116,12 @@ impl<T: Dist> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).swap(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).swap(19.0);
     ///```
@@ -141,12 +144,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_add(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_add(19.0);
     ///```
@@ -166,12 +169,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_sub(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_sub(19.0);
     ///```
@@ -192,12 +195,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_mul(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_mul(19.0);
     ///```
@@ -218,12 +221,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_div(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_div(19.0);
     ///```
@@ -249,7 +252,7 @@ impl<T: Dist + std::cmp::Eq> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let result = local_data.at(10).compare_exchange(19,10);
@@ -280,12 +283,12 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let result = local_data.at(10).compare_exchange_epsilon(19,10,1);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let result = local_data.at(10).compare_exchange_epsilon(19.0,10.0,0.1);
     ///```
@@ -314,7 +317,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_and(0b0011);
@@ -335,7 +338,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_or(0b0011);
@@ -359,7 +362,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_shl(2);
@@ -380,7 +383,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_shr(2);
@@ -752,7 +755,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -776,7 +779,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -795,7 +798,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -814,7 +817,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -867,12 +870,12 @@ impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<f32> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<f32> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> AtomicArray<T> {
+    ) -> AtomicArrayHandle<T> {
         // println!("new atomic array");
         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
             NativeAtomicArray::new_internal(team, array_size, distribution).into()
@@ -901,9 +904,9 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
     ///```
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         match self {
@@ -925,7 +928,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} local_data[0]: {:?}",local_data.at(0).load());
@@ -949,7 +952,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} local_data[0]: {:?}",local_data.at(0).load());
@@ -994,7 +997,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let unsafe_array = array.into_unsafe();
     ///```
@@ -1005,7 +1008,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.local_data();
@@ -1049,7 +1052,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let read_only_array = array.into_read_only();
     ///```
@@ -1059,7 +1062,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -1096,7 +1099,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_lock_array = array.into_local_lock();
     ///```
@@ -1106,7 +1109,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -1143,7 +1146,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let global_lock_array = array.into_global_lock();
     ///```
@@ -1153,7 +1156,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -1310,7 +1313,7 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1359,7 +1362,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1405,7 +1408,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
     /// }).spawn();
@@ -1450,7 +1453,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// let max = array.block_on(array.max()).expect("array has length > 0");
     /// assert_eq!((array.len()-1)*2,max);
@@ -1492,7 +1495,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();;
     /// let min = array.block_on(array.min()).expect("array has length > 0");
     /// assert_eq!(0,min);
@@ -1520,8 +1523,8 @@ impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// block_array.print();
     /// println!();

@@ -64,7 +64,7 @@ macro_rules! swap{
             let array_total_len = $len;
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let init_val =(num_pes as $t);
             initialize_array!($array, array, init_val);

@@ -295,7 +295,7 @@ fn main() {
     let _my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let block_array =
-        AtomicArray::<usize>::new(world.team(), ARRAY_LEN * num_pes, Distribution::Block);
+        AtomicArray::<usize>::new(world.team(), ARRAY_LEN * num_pes, Distribution::Block).block();
     println!("array created");
     block_array.print();
     let _ = block_array

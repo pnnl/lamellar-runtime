@@ -1,6 +1,6 @@
-mod handle;
+pub(crate) mod handle;
 use handle::{
-    GlobalLockCollectiveMutLocalDataHandle, GlobalLockLocalDataHandle,
+    GlobalLockArrayHandle, GlobalLockCollectiveMutLocalDataHandle, GlobalLockLocalDataHandle,
     GlobalLockMutLocalDataHandle, GlobalLockReadHandle, GlobalLockWriteHandle,
 };
 mod iteration;
@@ -203,7 +203,7 @@ impl<T: Dist> GlobalLockLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.read_local_data().block();
     /// let sub_data = local_data.clone().into_sub_data(10,20); // clone() essentially increases the references to the read lock by 1.
@@ -320,18 +320,29 @@ impl<T: Dist + ArrayOps + std::default::Default> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> GlobalLockArray<T> {
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        let lock = GlobalRwDarc::new(team, ()).unwrap();
-
-        GlobalLockArray {
-            lock: lock,
-            array: array,
+    ) -> GlobalLockArrayHandle<T> {
+        let team = team.into().team.clone();
+        GlobalLockArrayHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                let lock_task = GlobalRwDarc::new(team.clone(), ()).spawn();
+                GlobalLockArray {
+                    lock: lock_task.await.expect("pe exists in team"),
+                    array: UnsafeArray::async_new(
+                        team.clone(),
+                        array_size,
+                        distribution,
+                        DarcMode::GlobalLockArray,
+                    )
+                    .await,
+                }
+            }),
         }
     }
 }
@@ -347,9 +358,9 @@ impl<T: Dist> GlobalLockArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
     ///```
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GlobalLockArray {
@@ -372,7 +383,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_lock();
     /// let task = world.spawn(async move {
     ///     let read_lock = handle.await;
@@ -399,7 +410,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_lock();
     /// let task = world.spawn(async move {
     ///     let write_lock = handle.await;
@@ -427,7 +438,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_local_data();
     /// world.spawn(async move {
     ///     let local_data = handle.await;
@@ -461,7 +472,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_local_data();
     /// world.spawn(async move {
     ///     let mut local_data = handle.await;
@@ -497,7 +508,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.collective_write_local_data();
     /// world.block_on(async move {
     ///     let mut local_data = handle.await;
@@ -540,7 +551,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let unsafe_array = array.into_unsafe();
     ///```
@@ -551,7 +562,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.read_local_data().block();
@@ -589,7 +600,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let read_only_array = array.into_read_only();
     ///```
@@ -599,7 +610,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.read_local_data().block();
@@ -633,7 +644,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let read_only_array = array.into_read_only();
     ///```
@@ -643,7 +654,7 @@ impl<T: Dist> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.read_local_data().block();
@@ -679,7 +690,7 @@ impl<T: Dist + 'static> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let atomic_array = array.into_atomic();
     ///```
@@ -689,7 +700,7 @@ impl<T: Dist + 'static> GlobalLockArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.read_local_data().block();
@@ -729,7 +740,7 @@ impl<T: Dist> From<UnsafeArray<T>> for GlobalLockArray<T> {
     fn from(array: UnsafeArray<T>) -> Self {
         // println!("GlobalLock from unsafe");
         array.block_on_outstanding(DarcMode::GlobalLockArray);
-        let lock = GlobalRwDarc::new(array.team_rt(), ()).unwrap();
+        let lock = GlobalRwDarc::new(array.team_rt(), ()).block().unwrap();
 
         GlobalLockArray {
             lock: lock,
@@ -743,7 +754,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GlobalLockArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("GlobalLock from unsafe");
         array.await_on_outstanding(DarcMode::GlobalLockArray).await;
-        let lock = GlobalRwDarc::new(array.team_rt(), ()).unwrap();
+        let lock = GlobalRwDarc::new(array.team_rt(), ()).block().unwrap();
 
         GlobalLockArray {
             lock: lock,
@@ -987,8 +998,8 @@ impl<T: Dist + std::fmt::Debug> GlobalLockArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = GlobalLockArray::<usize>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = GlobalLockArray::<usize>::new(&world,100,Distribution::Block);
+    /// let block_array = GlobalLockArray::<usize>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = GlobalLockArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// block_array.print();
     /// println!();
@@ -1089,7 +1100,7 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.read_lock().block();
     /// let prod = array.block_on(read_guard.reduce("prod")).expect("array has > 0 elements");
@@ -1122,7 +1133,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.read_lock().block();
     /// let sum = array.block_on(read_guard.sum()).expect("array has > 0 elements");
@@ -1150,7 +1161,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1));
     /// let read_guard = array.read_lock().block();
     /// let prod = array.block_on(read_guard.prod()).expect("array has > 0 elements");
@@ -1180,7 +1191,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.read_lock().block();
     /// let max = array.block_on(read_guard.max()).expect("array has > 0 elements");
@@ -1209,7 +1220,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
     /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
     /// let read_guard = array.read_lock().block();
     /// let min = array.block_on(read_guard.min()).expect("array has > 0 elements");

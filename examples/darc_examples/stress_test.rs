@@ -50,7 +50,7 @@ fn main() {
 
     let mut rng = rand::thread_rng();
     let pes = Uniform::from(0..num_pes);
-    let darc = Darc::new(&world, AtomicUsize::new(0)).unwrap();
+    let darc = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
     let width = 10;
     let s = Instant::now();
     let mut tg = typed_am_group!(DataAM, &world);

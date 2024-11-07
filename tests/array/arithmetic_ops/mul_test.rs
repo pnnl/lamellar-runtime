@@ -92,7 +92,7 @@ macro_rules! mul_test{
             let array_total_len = $len;
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let max_updates = max_updates!($t,num_pes);
             let max_val =  2u128.pow((max_updates*num_pes) as u32) as $t;

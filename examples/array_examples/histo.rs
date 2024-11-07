@@ -9,7 +9,7 @@ const NUM_UPDATES_PER_PE: usize = 100000;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
-    let array = AtomicArray::<usize>::new(&world, ARRAY_SIZE, lamellar::Distribution::Block);
+    let array = AtomicArray::<usize>::new(&world, ARRAY_SIZE, lamellar::Distribution::Block).block();
     let mut rng: StdRng = SeedableRng::seed_from_u64(world.my_pe() as u64);
     let range = rand::distributions::Uniform::new(0, ARRAY_SIZE);
 

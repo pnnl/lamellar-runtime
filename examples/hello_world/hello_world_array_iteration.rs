@@ -11,7 +11,7 @@ fn main() {
     let local_length = 10; //if you want to ensure each thread processes data make this >= LAMELLAR_THREADS environment variable
     let global_length = num_pes * local_length;
 
-    let array = AtomicArray::<usize>::new(world.team(), global_length, Distribution::Block); //Compare with Distribution::Cyclic
+    let array = AtomicArray::<usize>::new(world.team(), global_length, Distribution::Block).block(); //Compare with Distribution::Cyclic
 
     //examine array before initialization
     if my_pe == 0 {

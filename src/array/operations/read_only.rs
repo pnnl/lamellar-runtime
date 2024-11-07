@@ -32,7 +32,7 @@ use super::handle::{ArrayFetchBatchOpHandle, ArrayFetchOpHandle};
 /// use futures_util::future::join_all;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let reqs = indices.iter().map(|i| array.load(*i)).collect::<Vec<_>>();
@@ -64,7 +64,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.load(53);
     /// let val = array.block_on(req);
@@ -104,7 +104,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_load(indices.clone());
@@ -153,7 +153,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 /// use futures_util::future::join_all;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let reqs = indices.iter().map(|i| unsafe{array.load(*i)}).collect::<Vec<_>>();
@@ -185,7 +185,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let req = unsafe{ array.load(53)};
     /// let val = array.block_on(req);
@@ -225,7 +225,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_load(indices.clone())};

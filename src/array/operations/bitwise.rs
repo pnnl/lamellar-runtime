@@ -51,7 +51,7 @@ pub trait ElementBitWiseOps:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 0b100101001;
@@ -63,7 +63,7 @@ pub trait ElementBitWiseOps:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let vals = vec![0x3,0x54,0b11101,88,29,0x68];
 /// let index = 10;
@@ -77,7 +77,7 @@ pub trait ElementBitWiseOps:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![0x12,2,1,0b10000,12,0x13];
@@ -100,7 +100,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -136,7 +136,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_and(indices,10);
@@ -174,7 +174,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -213,7 +213,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_and(indices,10);
@@ -249,7 +249,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -285,7 +285,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_or(indices,10);
@@ -323,7 +323,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -362,7 +362,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_or(indices,10);
@@ -398,7 +398,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -434,7 +434,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_xor(indices,10);
@@ -472,7 +472,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -511,7 +511,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_xor(indices,10);
@@ -564,7 +564,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 0b100101001;
@@ -576,7 +576,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let vals = vec![0x3,0x54,0b11101,88,29,0x68];
 /// let index = 10;
@@ -590,7 +590,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![0x12,2,1,0b10000,12,0x13];
@@ -613,7 +613,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -649,7 +649,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_bit_and(indices,10)};
@@ -687,7 +687,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -726,7 +726,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_bit_and(indices,10)};
@@ -762,7 +762,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -798,7 +798,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_bit_or(indices,10)};
@@ -836,7 +836,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -875,7 +875,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_bit_or(indices,10)};
@@ -911,7 +911,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 0b100101001;
@@ -947,7 +947,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_bit_xor(indices,10)};
@@ -985,7 +985,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -1024,7 +1024,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_bit_xor(indices,10)};

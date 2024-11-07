@@ -57,7 +57,7 @@ pub trait ElementComparePartialEqOps:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let current = 0;
@@ -70,7 +70,7 @@ pub trait ElementComparePartialEqOps:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let new_vals = vec![3,54,11101,88,29,68];
 /// let current = 0;
@@ -85,7 +85,7 @@ pub trait ElementComparePartialEqOps:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12,2,1,10000,12,13];
@@ -112,7 +112,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -153,7 +153,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0;
@@ -214,7 +214,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,11,88,29,68];
 /// let current = 0.0;
@@ -228,7 +228,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
 ///
 /// let new_vals = vec![3.0,54.8,12.9,88.1,29.2,68.9];
 /// let current = 0.0;
@@ -244,7 +244,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12.1,2.321,1.7,10000.0,12.4,13.7];
@@ -276,7 +276,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10.3;
@@ -324,7 +324,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+    /// let array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0.0;
@@ -384,7 +384,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let current = 0;
@@ -397,7 +397,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let new_vals = vec![3,54,11101,88,29,68];
 /// let current = 0;
@@ -412,7 +412,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12,2,1,10000,12,13];
@@ -441,7 +441,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10;
@@ -487,7 +487,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0;
@@ -548,7 +548,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,11,88,29,68];
 /// let current = 0.0;
@@ -562,7 +562,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block).block();
 ///
 /// let new_vals = vec![3.0,54.8,12.9,88.1,29.2,68.9];
 /// let current = 0.0;
@@ -578,7 +578,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block);
+/// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12.1,2.321,1.7,10000.0,12.4,13.7];
@@ -610,7 +610,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block).block();
     ///
     /// let idx = 53;
     /// let val = 10.3;
@@ -658,7 +658,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block);
+    /// let array = UnsafeArray::<f32>::new(&world,100,Distribution::Block).block();
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0.0;

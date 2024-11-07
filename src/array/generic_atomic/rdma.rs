@@ -24,7 +24,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region_or_panic(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,

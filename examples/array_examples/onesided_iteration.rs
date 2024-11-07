@@ -7,8 +7,10 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let block_array =
+        AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
+    let cyclic_array =
+        AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
 
     //we are going to initialize the data on each PE by directly accessing its local data
 
@@ -105,7 +107,7 @@ fn main() {
 
     println!("--------------------------------------------------------");
 
-    // let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    // let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
     // for elem in block_onesided_iter!($array,array).into_iter().step_by(4) {...}
     // for elem in block_array.buffered_onesided_iter(10) {...}
 
@@ -122,7 +124,7 @@ fn main() {
 
     // fn main() {
     //     let world = LamellarWorldBuilder::new().build();
-    //     let array = LocalLockArray::<usize>::new(&world, 8, Distribution::Block);
+    //     let array = LocalLockArray::<usize>::new(&world, 8, Distribution::Block).block();
     //     let my_pe = world.my_pe();
     //     let num_pes = world.num_pes();
     let block_array = block_array.into_local_lock();

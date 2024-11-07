@@ -574,7 +574,7 @@
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
-//!     let darc = Darc::new(&world,AtomicUsize::new(0)).expect("PE in world team");
+//!     let darc = Darc::new(&world,AtomicUsize::new(0)).block().expect("PE in world team");
 //!
 //!     if my_pe == 0 { // we only want to run this on PE0 for sake of illustration
 //!         let mut am_group = typed_am_group!{ExampleAm,&world};

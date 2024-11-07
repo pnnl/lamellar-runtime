@@ -19,7 +19,7 @@ impl DistHashMap {
         DistHashMap {
             num_pes,
             team: team.clone(),
-            data: LocalRwDarc::new(team, HashMap::new()).unwrap(),
+            data: LocalRwDarc::new(team, HashMap::new()).block().unwrap(),
         }
     }
 

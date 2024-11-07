@@ -1,3 +1,6 @@
+pub(crate) mod handle;
+pub use handle::ReadOnlyArrayHandle;
+
 mod iteration;
 pub(crate) mod local_chunks;
 pub use local_chunks::ReadOnlyLocalChunks;
@@ -69,16 +72,23 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> ReadOnlyArray<T> {
-        let array = UnsafeArray::new(team, array_size, distribution);
-        array.block_on_outstanding(DarcMode::ReadOnlyArray);
-
-        ReadOnlyArray { array: array }
+    ) -> ReadOnlyArrayHandle<T> {
+        let team = team.into().team.clone();
+        ReadOnlyArrayHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(UnsafeArray::async_new(
+                team,
+                array_size,
+                distribution,
+                DarcMode::ReadOnlyArray,
+            )),
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -91,9 +101,9 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
     ///```
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         ReadOnlyArray {
@@ -114,7 +124,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let slice = array.local_as_slice();
     /// println!("PE{my_pe} data: {slice:?}");
@@ -136,7 +146,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let slice = array.local_as_slice();
     /// println!("PE{my_pe} data: {slice:?}");
@@ -164,7 +174,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let unsafe_array = array.into_unsafe();
     ///```
@@ -175,7 +185,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.local_data();
@@ -214,7 +224,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_lock_array = array.into_local_lock();
     ///```
@@ -224,7 +234,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -258,7 +268,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let global_lock_array = array.into_global_lock();
     ///```
@@ -268,7 +278,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -304,7 +314,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let atomic_array = array.into_local_lock();
     ///```
@@ -314,7 +324,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.local_data();
@@ -454,7 +464,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -487,7 +497,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -518,7 +528,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i+1);
     /// }).block();
@@ -548,7 +558,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
@@ -575,7 +585,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// array.wait_all();
     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
@@ -758,8 +768,8 @@ impl<T: Dist + std::fmt::Debug> ReadOnlyArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block);
+    /// let block_array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// block_array.print();
     /// println!();

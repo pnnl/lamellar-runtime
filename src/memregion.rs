@@ -27,6 +27,9 @@ pub use shared::SharedMemoryRegion;
 pub(crate) mod one_sided;
 pub use one_sided::OneSidedMemoryRegion;
 
+pub(crate) mod handle;
+use handle::SharedMemoryRegionHandle;
+
 use enum_dispatch::enum_dispatch;
 
 /// This error occurs when you are trying to directly access data locally on a PE through a memregion handle,
@@ -1218,7 +1221,7 @@ pub trait RemoteMemoryRegion {
     fn alloc_shared_mem_region<T: Dist + std::marker::Sized>(
         &self,
         size: usize,
-    ) -> SharedMemoryRegion<T>;
+    ) -> SharedMemoryRegionHandle<T>;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Allocate a one-sided memory region from the internal lamellar heap.
@@ -1232,7 +1235,7 @@ pub trait RemoteMemoryRegion {
     fn alloc_one_sided_mem_region<T: Dist + std::marker::Sized>(
         &self,
         size: usize,
-    ) -> OneSidedMemoryRegion<T>;
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error>;
 }
 
 impl<T: Dist> Drop for MemoryRegion<T> {

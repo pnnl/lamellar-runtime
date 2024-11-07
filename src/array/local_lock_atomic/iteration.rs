@@ -8,7 +8,7 @@ use crate::array::local_lock_atomic::*;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
-use crate::darc::local_rw_darc::{LocalRwDarcReadHandle, LocalRwDarcWriteGuard};
+use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
 use crate::memregion::Dist;
 
 use self::iterator::IterLockFuture;

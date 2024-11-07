@@ -107,7 +107,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,24,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,24,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
@@ -140,7 +140,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
@@ -171,7 +171,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
@@ -201,8 +201,8 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array_A = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
-    /// let array_B: LocalLockArray<usize> = LocalLockArray::new(&world,12,Distribution::Block);
+    /// let array_A = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
+    /// let array_B: LocalLockArray<usize> = LocalLockArray::new(&world,12,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// //initialize arrays using a distributed iterator
     /// let _ = array_A.dist_iter_mut().for_each(move|e| *e = my_pe).spawn();
@@ -248,7 +248,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block(); //initialize array using a distributed iterator
     /// if my_pe == 0 {
@@ -279,7 +279,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
     /// use futures_util::stream::{StreamExt};
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     /// let _ =array.dist_iter_mut().for_each(move|e| *e = my_pe).spawn(); //initialize array using a distributed iterator
@@ -313,7 +313,7 @@ pub trait OneSidedIterator: private::OneSidedIteratorInner {
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let std_iter = array.onesided_iter().into_iter();
 /// for e in std_iter {
@@ -346,7 +346,7 @@ where
 /// use futures_util::stream::StreamExt;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 /// world.block_on(async move {
 ///     let mut stream = array.onesided_iter().into_stream();
 ///     while let Some(e) = stream.next().await {
@@ -402,7 +402,7 @@ unsafe impl<T: Dist + 'static> Send for SendNonNull<T> {}
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let one_sided_iter = array.onesided_iter();
 ///```
@@ -430,7 +430,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
         team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
     ) -> OneSidedIter<'a, T, A> {
-        let buf_0 = team.alloc_one_sided_mem_region(buf_size);
+        let buf_0 = team.alloc_one_sided_mem_region_or_panic(buf_size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the buf_0 as self is the only reference
 

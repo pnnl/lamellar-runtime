@@ -134,7 +134,7 @@
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
-//!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
+//!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block).block(); //we also support Cyclic distribution.
 //!     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)).block(); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
 //!     block_array.barrier();
 //!     if my_pe == 0{
@@ -168,7 +168,7 @@
 //!     let mut world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
-//!     let cnt = Darc::new(&world, AtomicUsize::new(0)).expect("Current PE is in world team");
+//!     let cnt = Darc::new(&world, AtomicUsize::new(0)).block().expect("Current PE is in world team");
 //!     for pe in 0..num_pes{
 //!         let _ = world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
 //!     }

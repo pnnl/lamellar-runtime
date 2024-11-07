@@ -1,4 +1,5 @@
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::darc::handle::{
@@ -6,16 +7,97 @@ use crate::darc::handle::{
 };
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::Dist;
 use crate::GlobalLockArray;
+use crate::{Dist, LamellarTeamRT};
 
 use futures_util::Future;
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 
 use super::{
-    GlobalLockCollectiveMutLocalData, GlobalLockLocalData, GlobalLockMutLocalData,
+    ArrayOps, GlobalLockCollectiveMutLocalData, GlobalLockLocalData, GlobalLockMutLocalData,
     GlobalLockReadGuard, GlobalLockWriteGuard,
 };
+
+#[must_use = " GlobalLockArray 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project(PinnedDrop)]
+#[doc(alias = "Collective")]
+/// This is a handle representing the operation of creating a new [GlobalLockArray].
+/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the GlobalLockArray's team, only returning once every PE in the team has completed the call.
+///
+/// # Collective Operation
+/// Requires all PEs associated with the `GlobalLockArray` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
+///
+/// # Examples
+/// ```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+///
+/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
+/// ```
+pub struct GlobalLockArrayHandle<T: Dist + ArrayOps + 'static> {
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
+    #[pin]
+    pub(crate) creation_future: Pin<Box<dyn Future<Output = GlobalLockArray<T>> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: Dist + ArrayOps + 'static> PinnedDrop for GlobalLockArrayHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a GlobalLockArrayHandle").print();
+        }
+    }
+}
+
+impl<T: Dist + ArrayOps + 'static> GlobalLockArrayHandle<T> {
+    /// Used to drive creation of a new GlobalLockArray
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
+    pub fn block(mut self) -> GlobalLockArray<T> {
+        self.launched = true;
+        RuntimeWarning::BlockingCall(
+            "GlobalLockArrayHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
+        self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the creation of the GlobalLockArray on the work queue
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array_task: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).spawn();
+    /// // do some other work
+    /// let array = array_task.block();
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<GlobalLockArray<T>> {
+        self.launched = true;
+        self.team.clone().spawn(self)
+    }
+}
+
+impl<T: Dist + ArrayOps + 'static> Future for GlobalLockArrayHandle<T> {
+    type Output = GlobalLockArray<T>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
+        let mut this = self.project();
+        this.creation_future.as_mut().poll(cx)
+    }
+}
 
 #[must_use = "GlobalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project] //unused drop warning triggered by GlobalRwDarcReadHandle
@@ -31,7 +113,7 @@ use super::{
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.read_lock();
 /// let task = world.spawn(async move {
 ///     let read_lock = handle.await;
@@ -61,7 +143,7 @@ impl<T: Dist> GlobalLockReadHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_lock();
     /// let guard = handle.block();
     ///```
@@ -84,7 +166,7 @@ impl<T: Dist> GlobalLockReadHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_lock();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work
@@ -125,7 +207,7 @@ impl<T: Dist> Future for GlobalLockReadHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 ///
-/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.read_local_data();
 /// world.spawn(async move {
 ///     let  local_data = handle.await;
@@ -152,7 +234,7 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_local_data();
     /// let  local_data = handle.block();
     /// println!("local data: {:?}",local_data);
@@ -176,7 +258,7 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_local_data();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work
@@ -220,7 +302,7 @@ impl<T: Dist> Future for GlobalLockLocalDataHandle<T> {
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.write_lock();
 /// let task = world.spawn(async move {
 ///     let write_lock = handle.await;
@@ -250,7 +332,7 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_lock();
     /// let guard = handle.block();
     ///```
@@ -273,7 +355,7 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_lock();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work
@@ -313,7 +395,7 @@ impl<T: Dist> Future for GlobalLockWriteHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 ///
-/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.write_local_data();
 /// world.spawn(async move {
 ///     let mut local_data = handle.await;
@@ -340,7 +422,7 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_local_data();
     /// let mut local_data = handle.block();
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
@@ -365,7 +447,7 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_local_data();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work
@@ -410,7 +492,7 @@ impl<T: Dist> Future for GlobalLockMutLocalDataHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 ///
-/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.collective_write_local_data();
 /// world.block_on(async move {
 ///     let mut local_data = handle.await;
@@ -438,7 +520,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.collective_write_local_data();
     /// let mut local_data = handle.block();
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
@@ -463,7 +545,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.collective_write_local_data();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work

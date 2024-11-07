@@ -36,7 +36,7 @@
 //!     let world = LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
-//!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
+//!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
 //!     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
 //!     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 //!     world.wait_all(); // wait for my active message to return
@@ -68,7 +68,7 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::{IdError, LamellarEnv, LamellarTeam, TypedAmGroupResult};
+use crate::{IdError, LamellarEnv, LamellarTeam};
 
 /// prelude for the darc module
 pub mod prelude;
@@ -79,7 +79,7 @@ pub use local_rw_darc::LocalRwDarc;
 pub(crate) mod global_rw_darc;
 pub use global_rw_darc::GlobalRwDarc;
 
-use self::handle::{IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
+use self::handle::{DarcHandle, IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
 
 pub(crate) mod handle;
 
@@ -188,7 +188,7 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 ///     let world = LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
+///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
 ///     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
 ///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 ///     world.wait_all(); // wait for my active message to return
@@ -276,7 +276,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 ///     let world = LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
+///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
 ///     let weak = Darc::downgrade(&darc_counter);
 ///     match weak.upgrade(){
 ///         Some(counter) => {
@@ -1120,7 +1120,7 @@ fn calc_padding(addr: usize, align: usize) -> usize {
     }
 }
 
-impl<T> Darc<T> {
+impl<T: Send + Sync> Darc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `Darc<T>` on the PEs specified by team.
     ///
@@ -1138,27 +1138,40 @@ impl<T> Darc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = Darc::new(&world,5).expect("PE in world team");
+    /// let five = Darc::new(&world,5).block().expect("PE in world team");
     /// ```
-    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
-        Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> DarcHandle<T> {
+        let team = team.into().team.clone();
+        DarcHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(Darc::async_try_new_with_drop(
+                team,
+                item,
+                DarcMode::Darc,
+                None,
+            )),
+        }
     }
+    // pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
+    //     Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
+    // }
 
-    pub(crate) async fn async_try_new<U: Into<IntoLamellarTeam>>(
-        team: U,
-        item: T,
-        state: DarcMode,
-    ) -> Result<Darc<T>, IdError> {
-        Darc::async_try_new_with_drop(team, item, state, None).await
-    }
+    // pub(crate) async fn async_try_new<U: Into<IntoLamellarTeam>>(
+    //     team: U,
+    //     item: T,
+    //     state: DarcMode,
+    // ) -> Result<Darc<T>, IdError> {
+    //     Darc::async_try_new_with_drop(team, item, state, None).await
+    // }
 
-    pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(
-        team: U,
-        item: T,
-        state: DarcMode,
-    ) -> Result<Darc<T>, IdError> {
-        Darc::try_new_with_drop(team, item, state, None)
-    }
+    // pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(
+    //     team: U,
+    //     item: T,
+    //     state: DarcMode,
+    // ) -> Result<Darc<T>, IdError> {
+    //     Darc::try_new_with_drop(team, item, state, None)
+    // }
 
     pub(crate) async fn async_try_new_with_drop<U: Into<IntoLamellarTeam>>(
         team: U,
@@ -1302,146 +1315,146 @@ impl<T> Darc<T> {
         Ok(d)
     }
 
-    pub(crate) fn try_new_with_drop<U: Into<IntoLamellarTeam>>(
-        team: U,
-        item: T,
-        state: DarcMode,
-        drop: Option<fn(&mut T) -> bool>,
-    ) -> Result<Darc<T>, IdError> {
-        let team_rt = team.into().team.clone();
-        let my_pe = team_rt.team_pe?;
+    // pub(crate) fn try_new_with_drop<U: Into<IntoLamellarTeam>>(
+    //     team: U,
+    //     item: T,
+    //     state: DarcMode,
+    //     drop: Option<fn(&mut T) -> bool>,
+    // ) -> Result<Darc<T>, IdError> {
+    //     let team_rt = team.into().team.clone();
+    //     let my_pe = team_rt.team_pe?;
 
-        let alloc = if team_rt.num_pes == team_rt.num_world_pes {
-            AllocationType::Global
-        } else {
-            AllocationType::Sub(team_rt.get_pes())
-        };
+    //     let alloc = if team_rt.num_pes == team_rt.num_world_pes {
+    //         AllocationType::Global
+    //     } else {
+    //         AllocationType::Sub(team_rt.get_pes())
+    //     };
 
-        //The DarcInner data structure
-        let mut size = std::mem::size_of::<DarcInner<T>>();
+    //     //The DarcInner data structure
+    //     let mut size = std::mem::size_of::<DarcInner<T>>();
 
-        // Ref Cnt Array
-        let padding = calc_padding(size, std::mem::align_of::<usize>());
-        let ref_cnt_offset = size + padding;
-        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+    //     // Ref Cnt Array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let ref_cnt_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
 
-        // total ref cnt array
-        let padding = calc_padding(size, std::mem::align_of::<usize>());
-        let total_ref_cnt_offset = size + padding;
-        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+    //     // total ref cnt array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let total_ref_cnt_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
 
-        // mode array
-        let padding = calc_padding(size, std::mem::align_of::<DarcMode>());
-        let mode_offset = size + padding;
-        size += padding + team_rt.num_pes * std::mem::size_of::<DarcMode>();
+    //     // mode array
+    //     let padding = calc_padding(size, std::mem::align_of::<DarcMode>());
+    //     let mode_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<DarcMode>();
 
-        //mode ref cnt array
-        let padding = calc_padding(size, std::mem::align_of::<usize>());
-        let mode_ref_cnt_offset = size + padding;
-        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+    //     //mode ref cnt array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let mode_ref_cnt_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
 
-        //mode_barrier array
-        let padding = calc_padding(size, std::mem::align_of::<usize>());
-        let mode_barrier_offset = size + padding;
-        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
-        // println!("creating new darc");
+    //     //mode_barrier array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let mode_barrier_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+    //     // println!("creating new darc");
 
-        team_rt.tasking_barrier();
-        // println!("creating new darc after barrier");
-        let addr = team_rt
-            .lamellae
-            .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
-            .expect("out of memory");
-        // let temp_team = team_rt.clone();
-        // team_rt.print_cnt();
-        let team_ptr = unsafe {
-            let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
-            Arc::into_raw(pinned_team)
-        };
-        // team_rt.print_cnt();
-        let am_counters = Arc::new(AMCounters::new());
-        let am_counters_ptr = Arc::into_raw(am_counters);
-        let barrier = Box::new(Barrier::new(
-            team_rt.world_pe,
-            team_rt.num_world_pes,
-            team_rt.lamellae.clone(),
-            team_rt.arch.clone(),
-            team_rt.scheduler.clone(),
-            team_rt.panic.clone(),
-        ));
-        let barrier_ptr = Box::into_raw(barrier);
-        let darc_temp = DarcInner {
-            id: DARC_ID.fetch_add(1, Ordering::Relaxed),
-            my_pe: my_pe,
-            num_pes: team_rt.num_pes,
-            local_cnt: AtomicUsize::new(1),
-            total_local_cnt: AtomicUsize::new(1),
-            weak_local_cnt: AtomicUsize::new(0),
-            dist_cnt: AtomicUsize::new(0),
-            total_dist_cnt: AtomicUsize::new(0),
-            // ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
-            // total_ref_cnt_addr: addr
-            //     + std::mem::size_of::<DarcInner<T>>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
-            // mode_addr: addr
-            //     + std::mem::size_of::<DarcInner<T>>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
-            // mode_ref_cnt_addr: addr
-            //     + std::mem::size_of::<DarcInner<T>>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>()
-            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
-            // mode_barrier_addr: addr
-            //     + std::mem::size_of::<DarcInner<T>>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>()
-            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
-            ref_cnt_addr: addr + ref_cnt_offset,
-            total_ref_cnt_addr: addr + total_ref_cnt_offset,
-            mode_addr: addr + mode_offset,
-            mode_ref_cnt_addr: addr + mode_ref_cnt_offset,
-            mode_barrier_addr: addr + mode_barrier_offset,
-            barrier: barrier_ptr,
-            // mode_barrier_rounds: num_rounds,
-            am_counters: am_counters_ptr,
-            team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
-            item: Box::into_raw(Box::new(item)),
-            drop: drop,
-            valid: AtomicBool::new(true),
-        };
-        unsafe {
-            std::ptr::copy_nonoverlapping(&darc_temp, addr as *mut DarcInner<T>, 1);
-        }
-        // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
+    //     team_rt.tasking_barrier();
+    //     // println!("creating new darc after barrier");
+    //     let addr = team_rt
+    //         .lamellae
+    //         .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
+    //         .expect("out of memory");
+    //     // let temp_team = team_rt.clone();
+    //     // team_rt.print_cnt();
+    //     let team_ptr = unsafe {
+    //         let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
+    //         Arc::into_raw(pinned_team)
+    //     };
+    //     // team_rt.print_cnt();
+    //     let am_counters = Arc::new(AMCounters::new());
+    //     let am_counters_ptr = Arc::into_raw(am_counters);
+    //     let barrier = Box::new(Barrier::new(
+    //         team_rt.world_pe,
+    //         team_rt.num_world_pes,
+    //         team_rt.lamellae.clone(),
+    //         team_rt.arch.clone(),
+    //         team_rt.scheduler.clone(),
+    //         team_rt.panic.clone(),
+    //     ));
+    //     let barrier_ptr = Box::into_raw(barrier);
+    //     let darc_temp = DarcInner {
+    //         id: DARC_ID.fetch_add(1, Ordering::Relaxed),
+    //         my_pe: my_pe,
+    //         num_pes: team_rt.num_pes,
+    //         local_cnt: AtomicUsize::new(1),
+    //         total_local_cnt: AtomicUsize::new(1),
+    //         weak_local_cnt: AtomicUsize::new(0),
+    //         dist_cnt: AtomicUsize::new(0),
+    //         total_dist_cnt: AtomicUsize::new(0),
+    //         // ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
+    //         // total_ref_cnt_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+    //         // mode_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+    //         // mode_ref_cnt_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
+    //         // mode_barrier_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<DarcMode>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+    //         ref_cnt_addr: addr + ref_cnt_offset,
+    //         total_ref_cnt_addr: addr + total_ref_cnt_offset,
+    //         mode_addr: addr + mode_offset,
+    //         mode_ref_cnt_addr: addr + mode_ref_cnt_offset,
+    //         mode_barrier_addr: addr + mode_barrier_offset,
+    //         barrier: barrier_ptr,
+    //         // mode_barrier_rounds: num_rounds,
+    //         am_counters: am_counters_ptr,
+    //         team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
+    //         item: Box::into_raw(Box::new(item)),
+    //         drop: drop,
+    //         valid: AtomicBool::new(true),
+    //     };
+    //     unsafe {
+    //         std::ptr::copy_nonoverlapping(&darc_temp, addr as *mut DarcInner<T>, 1);
+    //     }
+    //     // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
 
-        let d = Darc {
-            inner: addr as *mut DarcInner<T>,
-            src_pe: my_pe,
-        };
-        for elem in d.ref_cnts_as_mut_slice() {
-            *elem = 0;
-        }
-        for elem in d.mode_as_mut_slice() {
-            *elem = state;
-        }
-        for elem in d.mode_barrier_as_mut_slice() {
-            *elem = 0;
-        }
-        for elem in d.mode_ref_cnt_as_mut_slice() {
-            *elem = 0;
-        }
-        // println!(
-        //     " [{:?}] created new darc , next_id: {:?}",
-        //     std::thread::current().id(),
-        //     DARC_ID.load(Ordering::Relaxed)
-        // );
-        // d.print();
-        team_rt.tasking_barrier();
-        // team_rt.print_cnt();
-        Ok(d)
-    }
+    //     let d = Darc {
+    //         inner: addr as *mut DarcInner<T>,
+    //         src_pe: my_pe,
+    //     };
+    //     for elem in d.ref_cnts_as_mut_slice() {
+    //         *elem = 0;
+    //     }
+    //     for elem in d.mode_as_mut_slice() {
+    //         *elem = state;
+    //     }
+    //     for elem in d.mode_barrier_as_mut_slice() {
+    //         *elem = 0;
+    //     }
+    //     for elem in d.mode_ref_cnt_as_mut_slice() {
+    //         *elem = 0;
+    //     }
+    //     // println!(
+    //     //     " [{:?}] created new darc , next_id: {:?}",
+    //     //     std::thread::current().id(),
+    //     //     DARC_ID.load(Ordering::Relaxed)
+    //     // );
+    //     // d.print();
+    //     team_rt.tasking_barrier();
+    //     // team_rt.print_cnt();
+    //     Ok(d)
+    // }
 
     pub(crate) async fn block_on_outstanding(self, state: DarcMode, extra_cnt: usize) {
         let wrapped = WrappedInner {
@@ -1468,8 +1481,11 @@ impl<T> Darc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = Darc::new(&world,5).expect("PE in world team");
-    /// let five_as_localdarc = world.block_on(async move {five.into_localrw().await});
+    /// let five_handle = Darc::new(&world,5);
+    /// let five_as_localdarc = world.block_on(async move {
+    ///     let five = five_handle.await;
+    ///     five.into_localrw().await
+    /// });
     /// ```
     pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
         let wrapped_inner = WrappedInner {
@@ -1504,7 +1520,7 @@ impl<T> Darc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = Darc::new(&world,5).expect("PE in world team");
+    /// let five = Darc::new(&world,5).block().expect("PE in world team");
     /// let five_as_globaldarc = five.into_globalrw().block();
     /// ```
     pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {

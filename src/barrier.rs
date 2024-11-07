@@ -136,25 +136,25 @@ impl Barrier {
         RuntimeWarning::BarrierTimeout(s.elapsed().as_secs_f64()).print();
 
         if s.elapsed().as_secs_f64() > config().deadlock_timeout {
-            // println!(
-            //     "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
-            //     std::thread::current().id(),
-            //     self.my_pe,
-            //     my_index,
-            //     round,
-            //     i,
-            //     (my_index + i * (self.n + 1).pow(round as u32))
-            //         % self.num_pes,
-            //     team_recv_pe,
-            //     recv_pe,
-            //     send_buf_slice,
-            //         unsafe {
-            //             self.barrier_buf[i - 1]
-            //                 .as_mut_slice()
-            //                 .expect("Data should exist on PE")
-            //         }
-            // );
-            // self.print_bar();
+            println!(
+                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
+                std::thread::current().id(),
+                self.my_pe,
+                my_index,
+                round,
+                i,
+                (my_index + i * (self.n + 1).pow(round as u32))
+                    % self.num_pes,
+                team_recv_pe,
+                recv_pe,
+                send_buf_slice,
+                    unsafe {
+                        self.barrier_buf[i - 1]
+                            .as_mut_slice()
+                            .expect("Data should exist on PE")
+                    }
+            );
+            self.print_bar();
             *s = Instant::now();
         }
     }

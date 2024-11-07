@@ -20,8 +20,9 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     world.clone().block_on(async move {
-        let string_data =
-            LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe)).unwrap();
+        let string_data = LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe))
+            .await
+            .unwrap();
 
         println!("[PE: {}] {}", my_pe, string_data.read().await);
 

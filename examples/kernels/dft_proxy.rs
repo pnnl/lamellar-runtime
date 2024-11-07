@@ -143,7 +143,10 @@ fn dft_lamellar(
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
     let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
-    let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
+    let add_spec = world
+        .alloc_shared_mem_region::<f64>(spectrum_slice.len())
+        .block()
+        .unwrap();
 
     let timer = Instant::now();
     for pe in 0..num_pes {
@@ -634,17 +637,26 @@ fn main() {
         let global_len = num_pes * array_len;
 
         println!("my_pe {:?} num_pes {:?}", my_pe, num_pes);
-        let partial_sum = world.alloc_shared_mem_region::<f64>(num_pes);
-        let partial_spectrum = world.alloc_shared_mem_region::<f64>(array_len);
-        let partial_signal = world.alloc_shared_mem_region::<f64>(array_len);
-        let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len);
-        let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len);
-        let magic = world.alloc_one_sided_mem_region::<f64>(num_pes);
+        let partial_sum = world
+            .alloc_shared_mem_region::<f64>(num_pes)
+            .block()
+            .expect("Enough memory should exist");
+        let partial_spectrum = world
+            .alloc_shared_mem_region::<f64>(array_len)
+            .block()
+            .expect("Enough memory should exist");
+        let partial_signal = world
+            .alloc_shared_mem_region::<f64>(array_len)
+            .block()
+            .expect("Enough memory should exist");
+        let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len).expect("Enough memory should exist");
+        let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len).expect("Enough memory should exist");
+        let magic = world.alloc_one_sided_mem_region::<f64>(num_pes).expect("Enough memory should exist");
 
         let full_spectrum_array =
-            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
+            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
         let full_signal_array =
-            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
+            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
 
         unsafe {
             for i in full_signal.as_mut_slice().unwrap() {

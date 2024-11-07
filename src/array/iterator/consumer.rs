@@ -14,7 +14,6 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use super::private::Sealed;
 
 // trait Consumer{
 //     type Item;

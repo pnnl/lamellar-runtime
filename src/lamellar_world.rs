@@ -3,8 +3,9 @@ use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, Lamellae
 use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
+use crate::memregion::handle::SharedMemoryRegionHandle;
 use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
+    one_sided::OneSidedMemoryRegion,  Dist, RemoteMemoryRegion,
 };
 use crate::scheduler::{create_scheduler, ExecutorType, LamellarTask};
 use crate::{active_messaging::*, config};
@@ -133,13 +134,16 @@ impl ActiveMessaging for LamellarWorld {
 
 impl RemoteMemoryRegion for LamellarWorld {
     //#[tracing::instrument(skip_all)]
-    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
+    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         self.barrier();
         self.team.alloc_shared_mem_region::<T>(size)
     }
 
     //#[tracing::instrument(skip_all)]
-    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+    fn alloc_one_sided_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
         self.team.alloc_one_sided_mem_region::<T>(size)
     }
 }

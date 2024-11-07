@@ -8,7 +8,7 @@ use crate::darc::local_rw_darc::{LocalRwDarc, LocalRwDarcReadGuard};
 use crate::lamellar_request::LamellarRequest;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::{AmHandle, Darc};
+use crate::{AmHandle, Darc, IdError};
 use crate::{GlobalRwDarc, LamellarTeamRT};
 
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
@@ -61,7 +61,7 @@ enum State<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let counter = LocalRwDarc::new(&world, 0).unwrap();
+/// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
 /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
 /// let handle = counter.read();
 /// let guard = handle.block(); //block until we get the read lock
@@ -109,7 +109,7 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.read();
     /// let guard = handle.block(); //block until we get the read lock
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
@@ -132,7 +132,7 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
             .clone()
             .block_on(async move { inner_darc.read_arc().await });
         LocalRwDarcReadGuard {
-            darc: self.darc.clone(),
+            _darc: self.darc.clone(),
             lock: guard,
         }
     }
@@ -148,7 +148,7 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.read();
     /// let task = handle.spawn(); //initiate the operation
     /// // do other work
@@ -179,7 +179,7 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
             StateProj::TryingRead(lock) => {
                 let guard = ready!(lock.poll(cx));
                 Poll::Ready(LocalRwDarcReadGuard {
-                    darc: this.darc.clone(),
+                    _darc: this.darc.clone(),
                     lock: guard,
                 })
             }
@@ -220,7 +220,7 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let counter = LocalRwDarc::new(&world, 0).unwrap();
+/// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
 /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
 /// let handle = counter.write();
 /// let mut guard = handle.block(); //block until we get the write lock
@@ -267,7 +267,7 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.write();
     /// let mut guard = handle.block(); //block until we get the write lock
     /// *guard += my_pe;
@@ -289,7 +289,7 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
             .clone()
             .block_on(async move { inner_darc.write_arc().await });
         LocalRwDarcWriteGuard {
-            darc: self.darc.clone(),
+            _darc: self.darc.clone(),
             lock: guard,
         }
     }
@@ -305,7 +305,7 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.write();
     /// let task = handle.spawn(); //initiate the operation
     /// // do other work
@@ -335,7 +335,7 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
             StateProj::TryingWrite(lock) => {
                 let guard = ready!(lock.poll(cx));
                 Poll::Ready(LocalRwDarcWriteGuard {
-                    darc: this.darc.clone(),
+                    _darc: this.darc.clone(),
                     lock: guard,
                 })
             }
@@ -376,7 +376,7 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+/// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
 /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
 /// let handle = counter.read();
 /// let guard = handle.block(); //block until we get the write lock
@@ -403,7 +403,7 @@ impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.read();
     /// let guard = handle.block(); //block until we get the write lock
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
@@ -434,7 +434,7 @@ impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.read();
     /// let task = handle.spawn(); //initiate the operation
     /// // do other work
@@ -492,7 +492,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcReadHandle<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+/// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
 /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
 /// let handle = counter.write();
 /// let mut guard = handle.block(); //block until we get the write lock
@@ -519,7 +519,7 @@ impl<T: Sync + Send> GlobalRwDarcWriteHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.write();
     /// let mut guard = handle.block(); //block until we get the write lock
     /// *guard += my_pe;
@@ -549,7 +549,7 @@ impl<T: Sync + Send> GlobalRwDarcWriteHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.write();
     /// let task = handle.spawn(); //initiate the operation
     /// // do other work
@@ -592,7 +592,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcWriteHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 ///
-/// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+/// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
 /// let handle = counter.collective_write();
 /// let mut guard = handle.block(); // this will block until all PEs have acquired the lock
 /// *guard += my_pe;
@@ -615,7 +615,7 @@ impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.collective_write();
     /// let mut guard = handle.block(); //block until we get the write lock
     /// *guard += my_pe;
@@ -645,7 +645,7 @@ impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let handle = counter.collective_write();
     /// let task = handle.spawn();//initiate the operation
     /// // do other work
@@ -757,7 +757,7 @@ impl<T: 'static> OrigDarc<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 ///
-/// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+/// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
 /// let five_as_darc = five.into_darc().block();
 /// /* alternatively something like the following is valid as well
 /// let five_as_darc = world.block_on(async move{
@@ -790,7 +790,7 @@ impl<T: Sync + Send> IntoDarcHandle<T> {
     /// use lamellar::darc::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_darc = five.into_darc().block();
     pub fn block(mut self) -> Darc<T> {
         self.launched = true;
@@ -802,8 +802,7 @@ impl<T: Sync + Send> IntoDarcHandle<T> {
         self.team.clone().block_on(self)
     }
 
-    /// This method will spawn the associated active message to capture the lock on the work queue,
-    /// initiating the operation.
+    /// This method will spawn the conversion  into the Darc on the work queue.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     /// # Examples
@@ -811,7 +810,7 @@ impl<T: Sync + Send> IntoDarcHandle<T> {
     /// use lamellar::darc::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_darc_task = five.into_darc().spawn();
     /// let five_as_darc = five_as_darc_task.block();
     /// ```
@@ -859,7 +858,7 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 ///
-/// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+/// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
 /// let five_as_localrw = five.into_localrw().block();
 /// /* alternatively something like the following is valid as well
 /// let five_as_localrw = world.block_on(async move{
@@ -892,7 +891,7 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
     /// use lamellar::darc::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_localrw = five.into_localrw().block();
     pub fn block(mut self) -> LocalRwDarc<T> {
         self.launched = true;
@@ -905,8 +904,7 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
         self.team.clone().block_on(self)
     }
 
-    /// This method will spawn the associated active message to capture the lock on the work queue,
-    /// initiating the operation.
+    /// /// This method will spawn the conversion into the LocalRwDarc on the work queue.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     /// # Examples
@@ -914,7 +912,7 @@ impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
     /// use lamellar::darc::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_localrw_task = five.into_localrw().spawn();
     /// let five_as_localrw = five_as_localrw_task.block();
     /// ```
@@ -963,7 +961,7 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
 ///
 /// let world = LamellarWorldBuilder::new().build();
 ///
-/// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+/// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
 /// let five_as_globalrw = five.into_globalrw().block();
 /// /* alternatively something like the following is valid as well
 /// let five_as_globalrw = world.block_on(async move{
@@ -996,7 +994,7 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
     /// use lamellar::darc::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_globalrw = five.into_globalrw().block();
     pub fn block(mut self) -> GlobalRwDarc<T> {
         self.launched = true;
@@ -1008,8 +1006,7 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
         self.team.clone().block_on(self)
     }
 
-    /// This method will spawn the associated active message to capture the lock on the work queue,
-    /// initiating the operation.
+    /// This method will spawn the conversion into the GlobalRwDarc on the work queue.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     /// /// # Examples
@@ -1018,7 +1015,7 @@ impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
     /// use lamellar::darc::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_globalrw_task = five.into_globalrw().spawn();
     /// let five_as_globalrw = five_as_globalrw_task.block();
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
@@ -1047,5 +1044,244 @@ impl<T: Sync + Send> Future for IntoGlobalRwDarcHandle<T> {
             ))));
         darc.inner_mut().drop = Some(GlobalRwDarc::drop);
         Poll::Ready(GlobalRwDarc { darc })
+    }
+}
+
+#[must_use = " Darc 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project(PinnedDrop)]
+#[doc(alias = "Collective")]
+/// This is a handle representing the operation of creating a new [Darc].
+/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
+///
+/// # Collective Operation
+/// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
+///
+/// # Examples
+/// ```
+/// use lamellar::darc::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+///
+/// let five = Darc::new(&world,5).block().expect("PE in world team");
+/// ```
+pub struct DarcHandle<T: 'static> {
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
+    #[pin]
+    pub(crate) creation_future: Pin<Box<dyn Future<Output = Result<Darc<T>, IdError>> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for DarcHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a DarcHandle").print();
+        }
+    }
+}
+
+impl<T: Sync + Send> DarcHandle<T> {
+    /// Used to drive creation of a new darc
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five = Darc::new(&world,5).block().expect("PE in world team");
+    pub fn block(mut self) -> Result<Darc<T>, IdError> {
+        self.launched = true;
+        RuntimeWarning::BlockingCall("DarcHandle::block", "<handle>.spawn() or<handle>.await")
+            .print();
+        self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the creation of the Darc on the work queue.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five_task = Darc::new(&world,5).spawn();
+    /// // do some other work
+    /// let five = five_task.block().expect("PE in world team");
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<Result<Darc<T>, IdError>> {
+        self.launched = true;
+        self.team.clone().spawn(self)
+    }
+}
+
+impl<T: Sync + Send> Future for DarcHandle<T> {
+    type Output = Result<Darc<T>, IdError>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
+        let mut this = self.project();
+        let darc = ready!(this.creation_future.as_mut().poll(cx));
+        Poll::Ready(darc)
+    }
+}
+
+#[must_use = " LocalRwDarc 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project(PinnedDrop)]
+#[doc(alias = "Collective")]
+/// This is a handle representing the operation of creating a new [LocalRwDarc].
+/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the LocalRwDarc's team, only returning once every PE in the team has completed the call.
+///
+/// # Collective Operation
+/// Requires all PEs associated with the `LocalRwDarc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
+///
+/// # Examples
+/// ```
+/// use lamellar::darc::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+///
+/// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
+/// ```
+pub struct LocalRwDarcHandle<T: 'static> {
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
+    #[pin]
+    pub(crate) creation_future:
+        Pin<Box<dyn Future<Output = Result<Darc<Arc<RwLock<T>>>, IdError>> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for LocalRwDarcHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a LocalRwDarc").print();
+        }
+    }
+}
+
+impl<T: Sync + Send> LocalRwDarcHandle<T> {
+    /// Used to drive creation of a new darc
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
+    pub fn block(mut self) -> Result<LocalRwDarc<T>, IdError> {
+        self.launched = true;
+        RuntimeWarning::BlockingCall("DarcHandle::block", "<handle>.spawn() or<handle>.await")
+            .print();
+        self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the creation of the LocalRwDarc on the work queue.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five_task = LocalRwDarc::new(&world,5).spawn();
+    /// // do some other work
+    /// let five = five_task.block().expect("PE in world team");
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<Result<LocalRwDarc<T>, IdError>> {
+        self.launched = true;
+        self.team.clone().spawn(self)
+    }
+}
+
+impl<T: Sync + Send> Future for LocalRwDarcHandle<T> {
+    type Output = Result<LocalRwDarc<T>, IdError>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
+        let mut this = self.project();
+        let darc = ready!(this.creation_future.as_mut().poll(cx))?;
+        Poll::Ready(Ok(LocalRwDarc { darc }))
+    }
+}
+
+#[must_use = " GlobalRwDarc 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project(PinnedDrop)]
+#[doc(alias = "Collective")]
+/// This is a handle representing the operation of creating a new [GlobalRwDarc].
+/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
+///
+/// # Collective Operation
+/// Requires all PEs associated with the `GlobalRwDarc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
+///
+/// # Examples
+/// ```
+/// use lamellar::darc::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+///
+/// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
+/// ```
+pub struct GlobalRwDarcHandle<T: 'static> {
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
+    #[pin]
+    pub(crate) creation_future:
+        Pin<Box<dyn Future<Output = Result<Darc<DistRwLock<T>>, IdError>> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: 'static> PinnedDrop for GlobalRwDarcHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a GlobalRwDarc").print();
+        }
+    }
+}
+
+impl<T: Sync + Send> GlobalRwDarcHandle<T> {
+    /// Used to drive creation of a new darc
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
+    pub fn block(mut self) -> Result<GlobalRwDarc<T>, IdError> {
+        self.launched = true;
+        RuntimeWarning::BlockingCall("DarcHandle::block", "<handle>.spawn() or<handle>.await")
+            .print();
+        self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the creation of the GlobalRwDarc on the work queue.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// /// # Examples
+    ///
+    ///```
+    /// use lamellar::darc::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let five_task = GlobalRwDarc::new(&world,5).spawn();
+    /// // do some other work
+    /// let five = five_task.block().expect("PE in world team");
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<Result<GlobalRwDarc<T>, IdError>> {
+        self.launched = true;
+        self.team.clone().spawn(self)
+    }
+}
+
+impl<T: Sync + Send> Future for GlobalRwDarcHandle<T> {
+    type Output = Result<GlobalRwDarc<T>, IdError>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
+        let mut this = self.project();
+        let darc = ready!(this.creation_future.as_mut().poll(cx))?;
+        Poll::Ready(Ok(GlobalRwDarc { darc }))
     }
 }

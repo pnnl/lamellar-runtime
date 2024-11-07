@@ -102,7 +102,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,40,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// let _ = array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {

@@ -125,9 +125,9 @@ macro_rules! blocking_get_test{
             let mem_seg_len = array_total_len;
             let mut success = true;
             #[allow(unused_mut)]
-            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
+            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().unwrap().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
             initialize_array!($array, array, $t);
             array.wait_all();

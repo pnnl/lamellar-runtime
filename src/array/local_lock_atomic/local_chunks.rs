@@ -240,7 +240,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// //block in a non-async context
     /// let _ = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
@@ -276,7 +276,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// let _ = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {
     ///         for elem in chunk.iter_mut() {

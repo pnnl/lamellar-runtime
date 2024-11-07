@@ -97,8 +97,8 @@ struct NaiveMM {
 #[lamellar::am]
 impl LamellarAM for NaiveMM {
     async fn exec() {
-        let a = lamellar::world.alloc_one_sided_mem_region(self.a.block_size * self.a.block_size); //the tile for the A matrix
-        let b = lamellar::world.alloc_one_sided_mem_region(self.b.block_size * self.b.block_size); //the tile for the B matrix
+        let a = lamellar::world.alloc_one_sided_mem_region(self.a.block_size * self.a.block_size).expect("Enough memory should exist"); //the tile for the A matrix
+        let b = lamellar::world.alloc_one_sided_mem_region(self.b.block_size * self.b.block_size).expect("Enough memory should exist"); //the tile for the B matrix
         let b_fut = get_sub_mat(&self.b, &b); //b is remote so we will launch "gets" for this data first
         let a_fut = get_sub_mat(&self.a, &a);
         let a_b_fut = future::join(a_fut, b_fut);
@@ -162,9 +162,18 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = world.alloc_shared_mem_region::<f32>((m * n) / num_pes);
-    let b = world.alloc_shared_mem_region::<f32>((n * p) / num_pes);
-    let c = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
+    let a = world
+        .alloc_shared_mem_region::<f32>((m * n) / num_pes)
+        .block()
+        .unwrap();
+    let b = world
+        .alloc_shared_mem_region::<f32>((n * p) / num_pes)
+        .block()
+        .unwrap();
+    let c = world
+        .alloc_shared_mem_region::<f32>((m * p) / num_pes)
+        .block()
+        .unwrap();
     unsafe {
         let mut cnt = (((m * n) / num_pes) * my_pe) as f32;
         for elem in a.as_mut_slice().unwrap() {

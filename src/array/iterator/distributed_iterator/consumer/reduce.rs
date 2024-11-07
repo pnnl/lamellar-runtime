@@ -106,8 +106,13 @@ where
         team: Pin<Arc<LamellarTeamRT>>,
         op: F,
     ) -> Option<T> {
-        let local_vals =
-            UnsafeArray::<T>::async_new(&team, team.num_pes, Distribution::Block).await;
+        let local_vals = UnsafeArray::<T>::async_new(
+            &team,
+            team.num_pes,
+            Distribution::Block,
+            crate::darc::DarcMode::UnsafeArray,
+        )
+        .await;
         unsafe {
             local_vals.local_as_mut_slice()[0] = local_val;
         };
@@ -126,19 +131,20 @@ where
         )
     }
 
-    fn reduce_remote_vals(&self, local_val: T) -> Option<T> {
-        self.team.tasking_barrier();
-        let local_vals = UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block);
-        unsafe {
-            local_vals.local_as_mut_slice()[0] = local_val;
-        };
-        local_vals.tasking_barrier();
-        let buffered_iter = unsafe { local_vals.buffered_onesided_iter(self.team.num_pes) };
-        buffered_iter
-            .into_iter()
-            .map(|&x| x)
-            .reduce(self.op.clone())
-    }
+    // fn reduce_remote_vals(&self, local_val: T) -> Option<T> {
+    //     // self.team.tasking_barrier();
+    //     let local_vals =
+    //         UnsafeArray::<T>::new(&self.team, self.team.num_pes, Distribution::Block).block();
+    //     unsafe {
+    //         local_vals.local_as_mut_slice()[0] = local_val;
+    //     };
+    //     local_vals.tasking_barrier();
+    //     let buffered_iter = unsafe { local_vals.buffered_onesided_iter(self.team.num_pes) };
+    //     buffered_iter
+    //         .into_iter()
+    //         .map(|&x| x)
+    //         .reduce(self.op.clone())
+    // }
 }
 
 impl<T, F> Future for InnerDistIterReduceHandle<T, F>

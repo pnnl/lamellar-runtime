@@ -1,10 +1,10 @@
-pub use crate::array::atomic::AtomicArray;
-pub use crate::array::generic_atomic::GenericAtomicArray;
-pub use crate::array::global_lock_atomic::GlobalLockArray;
-pub use crate::array::local_lock_atomic::LocalLockArray;
-pub use crate::array::native_atomic::NativeAtomicArray;
-pub use crate::array::r#unsafe::UnsafeArray;
-pub use crate::array::read_only::ReadOnlyArray;
+pub use crate::array::atomic::{AtomicArray,AtomicArrayHandle};
+pub use crate::array::generic_atomic::{GenericAtomicArray};
+pub use crate::array::global_lock_atomic::{GlobalLockArray,handle::GlobalLockArrayHandle};
+pub use crate::array::local_lock_atomic::{LocalLockArray,handle::LocalLockArrayHandle};
+pub use crate::array::native_atomic::{NativeAtomicArray};
+pub use crate::array::r#unsafe::{UnsafeArray,UnsafeArrayHandle};
+pub use crate::array::read_only::{ReadOnlyArray,ReadOnlyArrayHandle};
 //#[doc(hidden)]
 pub use crate::array::{
     register_reduction,
@@ -32,7 +32,9 @@ pub use crate::array::operations::{
     AccessOps, ArithmeticOps, ArrayOps as _ArrayOps, BitWiseOps, CompareExchangeEpsilonOps,
     CompareExchangeOps, ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps,
     ElementComparePartialEqOps, ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps,
-    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps, UnsafeAccessOps, UnsafeArithmeticOps, UnsafeBitWiseOps, UnsafeCompareExchangeEpsilonOps, UnsafeCompareExchangeOps, UnsafeShiftOps, UnsafeReadOnlyOps
+    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps, UnsafeAccessOps,
+    UnsafeArithmeticOps, UnsafeBitWiseOps, UnsafeCompareExchangeEpsilonOps,
+    UnsafeCompareExchangeOps, UnsafeReadOnlyOps, UnsafeShiftOps,
 };
 // pub use crate::array::operations::*;
 

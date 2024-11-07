@@ -93,8 +93,13 @@ where
     T: Dist + ArrayOps + std::iter::Sum,
 {
     async fn async_reduce_remote_vals(local_sum: T, team: Pin<Arc<LamellarTeamRT>>) -> T {
-        let local_sums =
-            UnsafeArray::<T>::async_new(&team, team.num_pes, Distribution::Block).await;
+        let local_sums = UnsafeArray::<T>::async_new(
+            &team,
+            team.num_pes,
+            Distribution::Block,
+            crate::darc::DarcMode::UnsafeArray,
+        )
+        .await;
         unsafe {
             local_sums.local_as_mut_slice()[0] = local_sum;
         };
@@ -109,20 +114,20 @@ where
         }
     }
 
-    fn reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
-        unsafe {
-            local_sums.local_as_mut_slice()[0] = local_sum;
-        };
-        local_sums.tasking_barrier();
-        // let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
-        // buffered_iter.into_iter().map(|&e| e).sum()
-        unsafe {
-            local_sums
-                .sum()
-                .blocking_wait()
-                .expect("array size is greater than zero")
-        }
-    }
+    // fn reduce_remote_vals(&self, local_sum: T, local_sums: UnsafeArray<T>) -> T {
+    //     unsafe {
+    //         local_sums.local_as_mut_slice()[0] = local_sum;
+    //     };
+    //     local_sums.tasking_barrier();
+    //     // let buffered_iter = unsafe { local_sums.buffered_onesided_iter(self.team.num_pes) };
+    //     // buffered_iter.into_iter().map(|&e| e).sum()
+    //     unsafe {
+    //         local_sums
+    //             .sum()
+    //             .blocking_wait()
+    //             .expect("array size is greater than zero")
+    //     }
+    // }
 }
 
 impl<T> Future for InnerDistIterSumHandle<T>

@@ -62,9 +62,9 @@ macro_rules! put_test{
             let array_total_len = $len;
             let mem_seg_len = array_total_len;
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
+            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().unwrap().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
             let init_val = my_pe as $t;
             initialize_array!($array, array, init_val);

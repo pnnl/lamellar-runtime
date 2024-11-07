@@ -36,9 +36,9 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major
-    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major
-    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major
+    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
                                                                          //initialize
     a.dist_iter_mut()
         .enumerate()
@@ -75,7 +75,7 @@ fn main() {
     // we construct a global array where each pe will contain the sequence (0..n_blks)
     // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
     let nblks_array =
-        LocalLockArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block);
+        LocalLockArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block).block();
 
     nblks_array
         .dist_iter_mut()

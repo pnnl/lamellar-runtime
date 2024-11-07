@@ -123,7 +123,7 @@ macro_rules! fetch_add_test{
             let rand_idx = Uniform::from(0..array_total_len);
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let pe_max_val: $t = 10 as $t;
             let max_val = pe_max_val * num_pes as $t;
@@ -435,8 +435,8 @@ macro_rules! input_test{
             let array_total_len = $len;
 
             // let mut success = true;
-            let array: $array::<usize> = $array::<usize>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
-            let input_array: UnsafeArray::<usize> = UnsafeArray::<usize>::new(world.team(), array_total_len*num_pes, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<usize> = $array::<usize>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+            let input_array: UnsafeArray::<usize> = UnsafeArray::<usize>::new(world.team(), array_total_len*num_pes, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
             // let init_val=0;
             initialize_array2!($array, array, init_val);
             if $dist == lamellar::array::Distribution::Block{
@@ -524,7 +524,7 @@ macro_rules! input_test{
             // scoped &LMR<T>------------------------------
             let mut reqs = vec![];
             unsafe {
-                let lmr=world.alloc_one_sided_mem_region(array.len());
+                let lmr=world.alloc_one_sided_mem_region(array.len()).unwrap();
                 let slice = lmr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;
@@ -536,7 +536,7 @@ macro_rules! input_test{
             // scoped SMR<T>------------------------------
             let mut reqs = vec![];
             unsafe {
-                let smr=world.alloc_shared_mem_region(array.len());
+                let smr=world.alloc_shared_mem_region(array.len()).block().unwrap();
                 let slice = smr.as_mut_slice().unwrap();
                 for i in 0..array.len(){
                     slice[i]=i;

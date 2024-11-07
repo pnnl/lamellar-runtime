@@ -5,19 +5,100 @@ use std::task::{Context, Poll};
 use crate::darc::handle::{LocalRwDarcReadHandle, LocalRwDarcWriteHandle};
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::Dist;
 use crate::LocalLockArray;
+use crate::{Dist, LamellarTeamRT};
 
 use futures_util::Future;
-use pin_project::pin_project;
+use pin_project::{pin_project, pinned_drop};
 
 use super::{
-    LocalLockLocalChunks, LocalLockLocalChunksMut, LocalLockLocalData, LocalLockMutLocalData,
-    LocalLockReadGuard, LocalLockWriteGuard,
+    ArrayOps, LocalLockLocalChunks, LocalLockLocalChunksMut, LocalLockLocalData,
+    LocalLockMutLocalData, LocalLockReadGuard, LocalLockWriteGuard,
 };
 
+#[must_use = " LocalLockArray 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project(PinnedDrop)]
+#[doc(alias = "Collective")]
+/// This is a handle representing the operation of creating a new [LocalLockArray].
+/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
+/// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the LocalLockArray's team, only returning once every PE in the team has completed the call.
+///
+/// # Collective Operation
+/// Requires all PEs associated with the `LocalLockArray` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
+///
+/// # Examples
+/// ```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+///
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
+/// ```
+pub struct LocalLockArrayHandle<T: Dist + ArrayOps + 'static> {
+    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) launched: bool,
+    #[pin]
+    pub(crate) creation_future: Pin<Box<dyn Future<Output = LocalLockArray<T>> + Send>>,
+}
+
+#[pinned_drop]
+impl<T: Dist + ArrayOps + 'static> PinnedDrop for LocalLockArrayHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.launched {
+            RuntimeWarning::DroppedHandle("a LocalLockArrayHandle").print();
+        }
+    }
+}
+
+impl<T: Dist + ArrayOps + 'static> LocalLockArrayHandle<T> {
+    /// Used to drive creation of a new LocalLockArray
+    /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
+    pub fn block(mut self) -> LocalLockArray<T> {
+        self.launched = true;
+        RuntimeWarning::BlockingCall(
+            "LocalLockArrayHandle::block",
+            "<handle>.spawn() or<handle>.await",
+        )
+        .print();
+        self.team.clone().block_on(self)
+    }
+
+    /// This method will spawn the creation of the LocalLockArray on the work queue
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    /// /// # Examples
+    ///
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array_task: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).spawn();
+    /// // do some other work
+    /// let array = array_task.block();
+    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
+    pub fn spawn(mut self) -> LamellarTask<LocalLockArray<T>> {
+        self.launched = true;
+        self.team.clone().spawn(self)
+    }
+}
+
+impl<T: Dist + ArrayOps + 'static> Future for LocalLockArrayHandle<T> {
+    type Output = LocalLockArray<T>;
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.launched = true;
+        let mut this = self.project();
+        this.creation_future.as_mut().poll(cx)
+    }
+}
+
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project] //unused drop warning triggered by LocalRwDarcReadHandle
+#[pin_project(PinnedDrop)] //unused drop warning triggered by LocalRwDarcReadHandle
 /// Handle used to retrieve the aquired read lock of a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -30,7 +111,7 @@ use super::{
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.read_lock();
 /// let task = world.spawn(async move {
 ///     let read_lock = handle.await;
@@ -43,6 +124,15 @@ pub struct LocalLockReadHandle<T> {
     pub(crate) array: LocalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LocalLockReadHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.lock_handle.launched {
+            RuntimeWarning::DroppedHandle("a LocalLockReadHandle").print();
+        }
+    }
 }
 
 impl<T: Dist> LocalLockReadHandle<T> {
@@ -61,7 +151,7 @@ impl<T: Dist> LocalLockReadHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_lock();
     /// let guard = handle.block();
     ///```
@@ -83,7 +173,7 @@ impl<T: Dist> LocalLockReadHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_lock();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work
@@ -110,7 +200,7 @@ impl<T: Dist> Future for LocalLockReadHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project] //unused drop warning triggered by LocalRwDarcReadHandle
+#[pin_project(PinnedDrop)] //unused drop warning triggered by LocalRwDarcReadHandle
 /// Handle used to retrieve the aquired local data [LocalLockLocalData] of  a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -124,7 +214,7 @@ impl<T: Dist> Future for LocalLockReadHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 ///
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.read_local_data();
 /// world.spawn(async move {
 ///     let  local_data = handle.await;
@@ -141,6 +231,15 @@ pub struct LocalLockLocalDataHandle<T: Dist> {
     pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
 }
 
+#[pinned_drop]
+impl<T: Dist> PinnedDrop for LocalLockLocalDataHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.lock_handle.launched {
+            RuntimeWarning::DroppedHandle("a LocalLockLocalDataHandle").print();
+        }
+    }
+}
+
 impl<T: Dist> LocalLockLocalDataHandle<T> {
     /// Blocks the calling thread to retrieve the aquired local data [LocalLockLocalData] of a LocalLockArray within a non async context
     ///
@@ -151,7 +250,7 @@ impl<T: Dist> LocalLockLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_local_data();
     /// let  local_data = handle.block();
     /// println!("local data: {:?}",local_data);
@@ -175,7 +274,7 @@ impl<T: Dist> LocalLockLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.read_local_data();
     /// let task = handle.spawn(); // initiate getting the read lock
     /// // do other work
@@ -206,7 +305,7 @@ impl<T: Dist> Future for LocalLockLocalDataHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project] //unused drop warning triggered by LocalRwDarcWriteHandle
+#[pin_project(PinnedDrop)] //unused drop warning triggered by LocalRwDarcWriteHandle
 /// Handle used to retrieve the aquired write lock of a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -219,7 +318,7 @@ impl<T: Dist> Future for LocalLockLocalDataHandle<T> {
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.write_lock();
 /// let task = world.spawn(async move {
 ///     let write_lock = handle.await;
@@ -232,6 +331,15 @@ pub struct LocalLockWriteHandle<T> {
     pub(crate) array: LocalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: LocalRwDarcWriteHandle<()>,
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LocalLockWriteHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.lock_handle.launched {
+            RuntimeWarning::DroppedHandle("a LocalRwDarcWriteHandle").print();
+        }
+    }
 }
 
 impl<T: Dist> LocalLockWriteHandle<T> {
@@ -249,7 +357,7 @@ impl<T: Dist> LocalLockWriteHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_lock();
     /// handle.block();
     ///```
@@ -272,7 +380,7 @@ impl<T: Dist> LocalLockWriteHandle<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_lock();
     /// let task = handle.spawn(); // initiate getting the write lock
     /// //do other work
@@ -299,7 +407,7 @@ impl<T: Dist> Future for LocalLockWriteHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project] // unused drop warning triggered by LocalRwDarcWriteHandle
+#[pin_project(PinnedDrop)] // unused drop warning triggered by LocalRwDarcWriteHandle
 /// Handle used to retrieve the aquired mutable local data [LocalLockMutLocalData] of  a LocalLockArray
 ///
 /// This handle must be awaited or blocked on to acquire the lock
@@ -313,7 +421,7 @@ impl<T: Dist> Future for LocalLockWriteHandle<T> {
 /// let world = LamellarWorldBuilder::new().build();
 /// let my_pe = world.my_pe();
 ///
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// let handle = array.write_local_data();
 /// world.spawn(async move {
 ///     let mut local_data = handle.await;
@@ -330,6 +438,15 @@ pub struct LocalLockMutLocalDataHandle<T: Dist> {
     pub(crate) lock_handle: LocalRwDarcWriteHandle<()>,
 }
 
+#[pinned_drop]
+impl<T: Dist> PinnedDrop for LocalLockMutLocalDataHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.lock_handle.launched {
+            RuntimeWarning::DroppedHandle("a LocalLockMutLocalDataHandle").print();
+        }
+    }
+}
+
 impl<T: Dist> LocalLockMutLocalDataHandle<T> {
     /// Blocks the calling thread to retrieve the aquired mutable local data [LocalLockMutLocalData] of a LocalLockArray within a non async context
     ///
@@ -340,7 +457,7 @@ impl<T: Dist> LocalLockMutLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_local_data();
     /// let mut local_data = handle.block();
     /// local_data.iter_mut().for_each(|elem| *elem += my_pe);
@@ -365,7 +482,7 @@ impl<T: Dist> LocalLockMutLocalDataHandle<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     /// let handle = array.write_local_data();
     /// let task = handle.spawn(); // initiate getting the write lock
     /// //do other work
@@ -396,7 +513,7 @@ impl<T: Dist> Future for LocalLockMutLocalDataHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project] //unused drop warning triggered by LocalRwDarcReadHandle
+#[pin_project(PinnedDrop)] //unused drop warning triggered by LocalRwDarcReadHandle
 /// Constructs a handle for immutably iterating over fixed sized chunks(slices) of the local data of this array.
 /// This handle must be either await'd in an async context or block'd in an non-async context.
 /// Awaiting or blocking will not return until the read lock has been acquired.
@@ -408,7 +525,7 @@ impl<T: Dist> Future for LocalLockMutLocalDataHandle<T> {
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
 /// let my_pe = world.my_pe();
 /// //block in a non-async context
 /// let _ = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
@@ -432,6 +549,15 @@ pub struct LocalLockLocalChunksHandle<T> {
     pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
 }
 
+#[pinned_drop]
+impl<T> PinnedDrop for LocalLockLocalChunksHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.lock_handle.launched {
+            RuntimeWarning::DroppedHandle("a LocalLockLocalChunksHandle").print();
+        }
+    }
+}
+
 impl<T: Dist> LocalLockLocalChunksHandle<T> {
     /// Blocks the calling thread to retrieve the aquired immutable local chunks iterator of a LocalLockArray within a non async context
     ///
@@ -440,7 +566,7 @@ impl<T: Dist> LocalLockLocalChunksHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// //block in a non-async context
     /// let _ = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
@@ -466,7 +592,7 @@ impl<T: Dist> LocalLockLocalChunksHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// //block in a non-async context
     /// let iter_task = array.read_local_chunks(5).block().enumerate().for_each(move|(i,chunk)| {
@@ -499,7 +625,7 @@ impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
 }
 
 #[must_use = "LocalLockArray lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project] // unused drop warning triggered by LocalRwDarcWriteHandle
+#[pin_project(PinnedDrop)] // unused drop warning triggered by LocalRwDarcWriteHandle
 /// A handle for mutably iterating over fixed sized chunks(slices) of the local data of this array.
 /// This handle must be either await'd in an async context or block'd in an non-async context.
 /// Awaiting or blocking will not return until the write lock has been acquired.
@@ -511,7 +637,7 @@ impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+/// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
 /// let my_pe = world.my_pe();
 /// let _ = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {
 ///         for elem in chunk.iter_mut() {
@@ -535,6 +661,15 @@ pub struct LocalLockLocalChunksMutHandle<T> {
     pub(crate) lock_handle: LocalRwDarcWriteHandle<()>,
 }
 
+#[pinned_drop]
+impl<T> PinnedDrop for LocalLockLocalChunksMutHandle<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.lock_handle.launched {
+            RuntimeWarning::DroppedHandle("a LocalLockLocalChunksMutHandle").print();
+        }
+    }
+}
+
 impl<T: Dist> LocalLockLocalChunksMutHandle<T> {
     /// Blocks the calling thread to retrieve the aquired mutable local chunks iterator of a LocalLockArray within a non async context
     ///
@@ -543,7 +678,7 @@ impl<T: Dist> LocalLockLocalChunksMutHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// //block in a non-async context
     /// let _ = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {
@@ -571,7 +706,7 @@ impl<T: Dist> LocalLockLocalChunksMutHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     /// //block in a non-async context
     /// let iter_task = array.write_local_chunks(5).block().enumerate().for_each(move|(i, mut chunk)| {

@@ -55,7 +55,7 @@ fn main() {
         (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
     ));
 
-    let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
+    let global_darc = GlobalRwDarc::new(world.team(), 0).block().unwrap();
     let read_lock = global_darc.read().block();
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
@@ -64,21 +64,21 @@ fn main() {
     std::thread::sleep(std::time::Duration::from_secs(1));
     drop(write_lock);
     //----
-    let local_darc = LocalRwDarc::new(world.team(), 10).unwrap();
+    let local_darc = LocalRwDarc::new(world.team(), 10).block().unwrap();
     println!("created new local rw");
     // local_darc.print();
 
     let wrapped = WrappedWrappedWrappedDarc {
         wrapped: WrappedWrappedDarc {
             wrapped: WrappedDarc {
-                wrapped: Darc::new(world.team(), 3).unwrap(),
+                wrapped: Darc::new(world.team(), 3).block().unwrap(),
             },
         },
     };
-    let darc1 = Darc::new(world.team(), 10).unwrap();
-    let darc2 = Darc::new(world.team(), 20).unwrap();
+    let darc1 = Darc::new(world.team(), 10).block().unwrap();
+    let darc2 = Darc::new(world.team(), 20).block().unwrap();
     if let Some(team) = even_team {
-        let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
+        let team_darc = Darc::new(team.clone(), AtomicUsize::new(10)).block();
         let mut tg = typed_am_group!(DarcAm, team.clone());
         println!("{:?} created team darc", std::thread::current().id());
         if let Ok(team_darc) = team_darc {
@@ -92,7 +92,7 @@ fn main() {
                 wrapped: wrapped.clone(),
                 wrapped_tuple: (wrapped.clone(), wrapped.clone()),
                 darc_tuple: (darc1.clone(), darc2.clone()),
-                my_arc: Darc::new(team.clone(), Arc::new(0)).unwrap(),
+                my_arc: Darc::new(team.clone(), Arc::new(0)).block().unwrap(),
             };
             let _ = team.exec_am_pe(0, darc_am.clone()).spawn();
             let _ = team.exec_am_all(darc_am.clone()).spawn();

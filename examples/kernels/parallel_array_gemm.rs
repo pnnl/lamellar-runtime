@@ -28,9 +28,9 @@ fn main() {
 
     println!("m: {}, n: {}, p: {}", m, n, p);
 
-    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major
-    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major
-    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major
+    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
 
     //initialize matrices
     a.dist_iter_mut()

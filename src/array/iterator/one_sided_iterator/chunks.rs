@@ -50,7 +50,7 @@ where
     ) -> (OneSidedMemoryRegion<I::ElemType>, ArrayRdmaHandle) {
         // println!(" get chunk of len: {:?}", size);
         let mem_region: OneSidedMemoryRegion<I::ElemType> =
-            array.team_rt().alloc_one_sided_mem_region(size);
+            array.team_rt().alloc_one_sided_mem_region_or_panic(size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the mem_region as this is the only reference
         let mut req = unsafe { array.internal_get(index, &mem_region) };

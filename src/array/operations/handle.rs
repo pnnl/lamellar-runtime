@@ -196,7 +196,7 @@ pub struct ArrayFetchBatchOpHandle<R: AmDist> {
     results: Vec<R>,
 }
 
-enum FetchBatchOpState<R> {
+pub(crate) enum FetchBatchOpState<R> {
     Reqs(VecDeque<(AmHandle<Vec<R>>, Vec<usize>)>),
     Launched(VecDeque<(LamellarTask<Vec<R>>, Vec<usize>)>),
 }

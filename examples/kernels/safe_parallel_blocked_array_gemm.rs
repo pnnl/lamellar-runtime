@@ -29,9 +29,9 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major -- we will change this into a readonly array after initialization
-    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major -- we will change this into a readonly array after initialization
-    let c = LocalLockArray::<f32>::new(&world, m * p, Distribution::Block); //row major
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major -- we will change this into a readonly array after initialization
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major -- we will change this into a readonly array after initialization
+    let c = LocalLockArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
                                                                             //initialize
     let a_init = a
         .dist_iter_mut()
@@ -68,7 +68,7 @@ fn main() {
     // this is a "hack" until we support something like (0..n_blks).dist_iter()
     // we construct a global array where each pe will contain the sequence (0..n_blks)
     // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
-    let nblks_array = LocalLockArray::new(&world, n_blks * num_pes, Distribution::Block);
+    let nblks_array = LocalLockArray::new(&world, n_blks * num_pes, Distribution::Block).block();
 
     nblks_array
         .dist_iter_mut()
@@ -76,7 +76,7 @@ fn main() {
         .for_each(move |(i, x)| *x = i % n_blks)
         .block();
 
-    let m_blks_pe_array = LocalLockArray::new(&world, m_blks_pe * num_pes, Distribution::Block);
+    let m_blks_pe_array = LocalLockArray::new(&world, m_blks_pe * num_pes, Distribution::Block).block();
 
     m_blks_pe_array
         .dist_iter_mut()

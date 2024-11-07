@@ -36,9 +36,11 @@ fn main() {
     let len_per_pe = total_len as f32 / num_pes as f32;
     let my_local_size = len_per_pe.round() as usize; //((len_per_pe * (my_pe+1) as f32).round() - (len_per_pe * my_pe as f32).round()) as usize;
     println!("my local size {:?}", my_local_size);
-    let block_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block);
-    let cyclic_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic);
-    let local_mem_region = world.alloc_one_sided_mem_region(total_len);
+    let block_array =
+        UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block).block();
+    let cyclic_array =
+        UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).block();
+    let local_mem_region = world.alloc_one_sided_mem_region(total_len).expect("Enough memory should exist");
     world.barrier();
     if my_pe == 0 {
         unsafe {
@@ -152,7 +154,7 @@ fn main() {
     let block_array = block_array.into_read_only();
     let _ = block_array.sum().block();
 
-    let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block);
+    let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block).block();
     let min = unsafe { one_elem_array.min() };
     let min = one_elem_array.block_on(min);
     println!("one elem array min: {min:?}");

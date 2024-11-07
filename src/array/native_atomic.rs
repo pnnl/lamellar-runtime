@@ -1,7 +1,11 @@
+mod handle;
+pub(crate) use handle::NativeAtomicArrayHandle;
+
 pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
+
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
@@ -923,14 +927,25 @@ impl<T: Dist + ArrayOps + std::default::Default> NativeAtomicArray<T> {
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> NativeAtomicArray<T> {
+    ) -> NativeAtomicArrayHandle<T> {
         // println!("new native atomic array 1");
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        array.block_on_outstanding(DarcMode::NativeAtomicArray);
+        // let array = UnsafeArray::new(team.clone(), array_size, distribution);
+        // array.block_on_outstanding(DarcMode::NativeAtomicArray);
 
-        NativeAtomicArray {
-            array: array,
-            orig_t: NativeAtomicType::from::<T>(),
+        // NativeAtomicArray {
+        //     array: array,
+        //     orig_t: NativeAtomicType::of::<T>(),
+        // }
+        let team = team.into().team.clone();
+        NativeAtomicArrayHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(UnsafeArray::async_new(
+                team,
+                array_size,
+                distribution,
+                DarcMode::NativeAtomicArray,
+            )),
         }
     }
 }
@@ -1022,7 +1037,7 @@ impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
 
         NativeAtomicArray {
             array: array,
-            orig_t: NativeAtomicType::from::<T>(),
+            orig_t: NativeAtomicType::of::<T>(),
         }
     }
 }
@@ -1038,7 +1053,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NativeAtomicArray<T> {
 
         NativeAtomicArray {
             array: array,
-            orig_t: NativeAtomicType::from::<T>(),
+            orig_t: NativeAtomicType::of::<T>(),
         }
     }
 }
@@ -1333,7 +1348,7 @@ pub enum NativeAtomicType {
 
 //#[doc(hidden)]
 impl NativeAtomicType {
-    fn from<T: 'static>() -> NativeAtomicType {
+    pub(crate) fn of<T: 'static>() -> NativeAtomicType {
         let t = TypeId::of::<T>();
         if t == TypeId::of::<i8>() {
             NativeAtomicType::I8

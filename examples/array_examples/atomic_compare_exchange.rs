@@ -23,7 +23,7 @@ fn main() {
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
 
-    let array = AtomicArray::<usize>::new(world.team(), num_pes * 2, Distribution::Block);
+    let array = AtomicArray::<usize>::new(world.team(), num_pes * 2, Distribution::Block).block();
     array.dist_iter_mut().for_each(|x| x.store(0)).block(); //initialize array -- use atomic store
     array.barrier();
 
@@ -44,7 +44,7 @@ fn main() {
     array.barrier();
     array.print();
 
-    let array_2 = AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic);
+    let array_2 = AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic).block();
     array_2.dist_iter_mut().for_each(|x| x.store(0.0)).block();
     array_2.barrier();
 

@@ -705,7 +705,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///     let world = LamellarWorldBuilder::new().build(); // the world
 ///     
 ///     let array =  // the atomic distributed array
-///         AtomicArray::<Custom>::new(&world,3,Distribution::Block);
+///         AtomicArray::<Custom>::new(&world,3,Distribution::Block).block();
 ///
 ///     println!();
 ///     println!("initialize a length-3 array:\n");  // print the entries

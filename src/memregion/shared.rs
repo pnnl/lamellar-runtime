@@ -85,29 +85,53 @@ impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> SharedMemoryRegion<T> {
-    pub(crate) fn new(
-        size: usize,
-        team: Pin<Arc<LamellarTeamRT>>,
-        alloc: AllocationType,
-    ) -> SharedMemoryRegion<T> {
-        SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
-    }
+    // pub(crate) fn new(
+    //     size: usize,
+    //     team: Pin<Arc<LamellarTeamRT>>,
+    //     alloc: AllocationType,
+    // ) -> SharedMemoryRegionHandle<T> {
+    //     SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
+    // }
 
     pub(crate) fn try_new(
         size: usize,
         team: Pin<Arc<LamellarTeamRT>>,
         alloc: AllocationType,
-    ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
+    ) -> SharedMemoryRegionHandle<T> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
-        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
-        let mr = unsafe { mr_t.to_base::<u8>() };
-        Ok(SharedMemoryRegion {
-            mr: Darc::try_new(team.clone(), mr, crate::darc::DarcMode::Darc)
-                .expect("memregions can only be created on a member of the team"),
-            sub_region_offset: 0,
-            sub_region_size: size,
-            phantom: PhantomData,
-        })
+
+        // Ok(SharedMemoryRegion {
+        //     mr: Darc::try_new(team.clone(), mr, crate::darc::DarcMode::Darc)
+        //         .expect("memregions can only be created on a member of the team"),
+        //     sub_region_offset: 0,
+        //     sub_region_size: size,
+        //     phantom: PhantomData,
+        // })
+
+        SharedMemoryRegionHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                team.async_barrier().await;
+                let mr_t: MemoryRegion<T> =
+                    MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
+                let mr = unsafe { mr_t.to_base::<u8>() };
+                let res: Result<SharedMemoryRegion<T>, anyhow::Error> = Ok(SharedMemoryRegion {
+                    mr: Darc::async_try_new_with_drop(
+                        team.clone(),
+                        mr,
+                        crate::darc::DarcMode::Darc,
+                        None,
+                    )
+                    .await
+                    .expect("memregions can only be created on a member of the team"),
+                    sub_region_offset: 0,
+                    sub_region_size: size,
+                    phantom: PhantomData,
+                });
+                res
+            }),
+        }
     }
 }
 

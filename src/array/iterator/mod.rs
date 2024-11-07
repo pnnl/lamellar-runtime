@@ -80,7 +80,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// world.block_on(
     ///     array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"))
@@ -100,7 +100,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// world.block_on(
     ///     array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {}",elem.load())) // "load" is specific to AtomicArray elements, other types can deref the element directly"
@@ -120,7 +120,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// if my_pe == 0 {
     ///     for elem in array.onesided_iter().into_iter() { //"into_iter()" converts into a standard Rust Iterator
@@ -147,7 +147,7 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// if my_pe == 0 {
     ///     for elem in array.buffered_onesided_iter(100).into_iter() { // "into_iter()" converts into a standard Rust Iterator
@@ -179,7 +179,7 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// world.block_on(
     ///     array.dist_iter_mut().for_each(move |elem| *elem = my_pe)
@@ -199,7 +199,7 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// world.block_on(
     ///    array.local_iter_mut().for_each(move |elem| *elem = my_pe)

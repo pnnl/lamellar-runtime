@@ -14,10 +14,10 @@ fn print_env<T: LamellarEnv>(env: &T) {
 
 fn main() {
     let world = LamellarWorldBuilder::new().build();
-    let darc = Darc::new(&world, 0).unwrap();
-    let lrw_darc = LocalRwDarc::new(&world, 0).unwrap();
-    let grw_darc = GlobalRwDarc::new(&world, 0).unwrap();
-    let array = UnsafeArray::<u8>::new(world.clone(), 10, Distribution::Block);
+    let darc = Darc::new(&world, 0).block().unwrap();
+    let lrw_darc = LocalRwDarc::new(&world, 0).block().unwrap();
+    let grw_darc = GlobalRwDarc::new(&world, 0).block().unwrap();
+    let array = UnsafeArray::<u8>::new(world.clone(), 10, Distribution::Block).block();
     let team = world
         .create_team_from_arch(StridedArch::new(0, 2, world.num_pes() / 2))
         .unwrap();

@@ -22,7 +22,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
     ///     for elem in buf.as_mut_slice()
@@ -88,7 +88,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
     ///     for elem in buf.as_mut_slice()

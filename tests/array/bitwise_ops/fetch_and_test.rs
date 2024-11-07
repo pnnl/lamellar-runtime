@@ -75,7 +75,7 @@ macro_rules! fetch_and_test{
             let array_total_len = $len;
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let init_val =!(0 as $t);
             let final_val = init_val << num_pes;

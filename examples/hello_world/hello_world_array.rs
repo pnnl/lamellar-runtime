@@ -20,7 +20,7 @@ fn main() {
     println!("local_vec_time: {:?}", local_vec_time);
 
     let timer = std::time::Instant::now();
-    let array = AtomicArray::<usize>::new(world.team(), global_length, Distribution::Block);
+    let array = AtomicArray::<usize>::new(world.team(), global_length, Distribution::Block).block();
     let array_time = timer.elapsed();
     println!("array_time: {:?}", array_time);
 

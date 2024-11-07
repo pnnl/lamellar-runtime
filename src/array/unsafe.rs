@@ -1,9 +1,10 @@
+pub(crate) mod handle;
 mod iteration;
-
 pub(crate) mod local_chunks;
-// pub use local_chunks::{};
 pub(crate) mod operations;
 mod rdma;
+
+pub use handle::UnsafeArrayHandle;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::active_messaging::*;
@@ -150,118 +151,31 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     pub fn new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> UnsafeArray<T> {
+    ) -> UnsafeArrayHandle<T> {
+        // let temp_team = team.into();
         let team = team.into().team.clone();
-        team.tasking_barrier();
-        let task_group = LamellarTaskGroup::new(team.clone());
-        let my_pe = team.team_pe_id().unwrap();
-        let num_pes = team.num_pes();
-        let full_array_size = std::cmp::max(array_size, num_pes);
-
-        let elem_per_pe = full_array_size / num_pes;
-        let remaining_elems = full_array_size % num_pes;
-        let mut per_pe_size = elem_per_pe;
-        if remaining_elems > 0 {
-            per_pe_size += 1
+        UnsafeArrayHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(UnsafeArray::async_new(
+                team,
+                array_size,
+                distribution,
+                DarcMode::UnsafeArray,
+            )),
         }
-        // println!("new unsafe array {:?} {:?}", elem_per_pe, per_pe_size);
-        let rmr_t: MemoryRegion<T> = if team.num_world_pes == team.num_pes {
-            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global)
-        } else {
-            MemoryRegion::new(
-                per_pe_size,
-                team.lamellae.clone(),
-                AllocationType::Sub(team.get_pes()),
-            )
-        };
-        // let rmr = MemoryRegion::new(
-        //     per_pe_size * std::mem::size_of::<T>(),
-        //     team.lamellae.clone(),
-        //     AllocationType::Global,
-        // );
-        // println!("new array {:?}",rmr_t.as_ptr());
-
-        unsafe {
-            // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
-            //     *elem = std::mem::zeroed();
-            // }
-            if std::mem::needs_drop::<T>() {
-                // If `T` needs to be dropped then we have to do this one item at a time, in
-                // case one of the intermediate drops does a panic.
-                // slice.iter_mut().for_each(write_zeroes);
-                panic!("need drop not yet supported");
-            } else {
-                // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(
-                    rmr_t.as_mut_slice().expect("data should exist on pe"),
-                );
-                std::ptr::write_bytes(
-                    rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
-                    0u8,
-                    len,
-                )
-            }
-        }
-        let rmr = unsafe { rmr_t.to_base::<u8>() };
-        // println!("new array u8 {:?}",rmr.as_ptr());
-
-        let data = Darc::try_new_with_drop(
-            team.clone(),
-            UnsafeArrayData {
-                mem_region: rmr,
-                array_counters: Arc::new(AMCounters::new()),
-                team: team.clone(),
-                task_group: Arc::new(task_group),
-                my_pe: my_pe,
-                num_pes: num_pes,
-                req_cnt: Arc::new(AtomicUsize::new(0)),
-            },
-            crate::darc::DarcMode::UnsafeArray,
-            None,
-        )
-        .expect("trying to create array on non team member");
-        // println!("new unsafe array darc {:?}", data);
-        // data.print();
-        let array = UnsafeArray {
-            inner: UnsafeArrayInner {
-                data: data,
-                distribution: distribution.clone(),
-                // wait: wait,
-                orig_elem_per_pe: elem_per_pe,
-                orig_remaining_elems: remaining_elems,
-                elem_size: std::mem::size_of::<T>(),
-                offset: 0,             //relative to size of T
-                size: full_array_size, //relative to size of T
-                sub: false,
-            },
-            phantom: PhantomData,
-        };
-        // println!("new unsafe");
-        // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
-        // println!("elem per pe {:?}", elem_per_pe);
-        // for i in 0..num_pes{
-        //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
-        // }
-        // array.inner.data.print();
-        if full_array_size != array_size {
-            println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
-            array.sub_array(0..array_size)
-        } else {
-            array
-        }
-        // println!("after buffered ops");
-        // array.inner.data.print();
     }
 
     pub(crate) async fn async_new<U: Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
+        darc_mode: DarcMode,
     ) -> UnsafeArray<T> {
         let team = team.into().team.clone();
         team.async_barrier().await;
@@ -285,11 +199,6 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 AllocationType::Sub(team.get_pes()),
             )
         };
-        // let rmr = MemoryRegion::new(
-        //     per_pe_size * std::mem::size_of::<T>(),
-        //     team.lamellae.clone(),
-        //     AllocationType::Global,
-        // );
 
         unsafe {
             // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
@@ -299,7 +208,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 // If `T` needs to be dropped then we have to do this one item at a time, in
                 // case one of the intermediate drops does a panic.
                 // slice.iter_mut().for_each(write_zeroes);
-                panic!("need drop not yet supported");
+                panic!("Lamellar Arrays do not yet support elements that impl Drop");
             } else {
                 // Otherwise we can be really fast and just fill everthing with zeros.
                 let len = std::mem::size_of_val::<[T]>(
@@ -314,7 +223,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         }
         let rmr = unsafe { rmr_t.to_base::<u8>() };
 
-        let data = Darc::try_new_with_drop(
+        let data = Darc::async_try_new_with_drop(
             team.clone(),
             UnsafeArrayData {
                 mem_region: rmr,
@@ -325,15 +234,15 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 num_pes: num_pes,
                 req_cnt: Arc::new(AtomicUsize::new(0)),
             },
-            crate::darc::DarcMode::UnsafeArray,
+            darc_mode,
             None,
         )
+        .await
         .expect("trying to create array on non team member");
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data: data,
                 distribution: distribution.clone(),
-                // wait: wait,
                 orig_elem_per_pe: elem_per_pe,
                 orig_remaining_elems: remaining_elems,
                 elem_size: std::mem::size_of::<T>(),
@@ -371,9 +280,9 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
     ///```
     pub fn use_distribution(mut self, distribution: Distribution) -> Self {
         self.inner.distribution = distribution;
@@ -395,7 +304,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     let slice = array.local_as_slice();
@@ -421,7 +330,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     let slice =  array.local_as_mut_slice();
@@ -454,7 +363,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     /// unsafe {
     ///     let slice = array.local_data();
     ///     println!("PE{my_pe} data: {slice:?}");
@@ -479,7 +388,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     let slice = array.mut_local_data();
@@ -506,7 +415,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// assert_eq!(array.sub_array_range(),(0..100));
     ///
@@ -615,7 +524,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let read_only_array = array.into_read_only();
     ///```
@@ -626,7 +535,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let mut_slice = unsafe {array1.local_as_mut_slice()};
@@ -665,7 +574,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_lock_array = array.into_local_lock();
     ///```
@@ -675,7 +584,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let mut_slice = unsafe {array1.local_as_mut_slice()};
@@ -709,7 +618,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let global_lock_array = array.into_global_lock();
     ///```
@@ -719,7 +628,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -763,7 +672,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let atomic_array = array.into_local_lock();
     ///```
@@ -773,7 +682,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let mut_slice = unsafe {array1.local_as_mut_slice()};
@@ -816,8 +725,13 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
         let (local_vals, distribution) = input;
         // println!("local_vals len: {:?}", local_vals.len());
         team.async_barrier().await;
-        let local_sizes =
-            UnsafeArray::<usize>::async_new(team.clone(), team.num_pes, Distribution::Block).await;
+        let local_sizes = UnsafeArray::<usize>::async_new(
+            team.clone(),
+            team.num_pes,
+            Distribution::Block,
+            crate::darc::DarcMode::UnsafeArray,
+        )
+        .await;
         unsafe {
             local_sizes.local_as_mut_slice()[0] = local_vals.len();
         }
@@ -840,7 +754,13 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
                 })
                 .await;
         }
-        let array = UnsafeArray::<T>::async_new(team.clone(), size, distribution).await;
+        let array = UnsafeArray::<T>::async_new(
+            team.clone(),
+            size,
+            distribution,
+            crate::darc::DarcMode::UnsafeArray,
+        )
+        .await;
         if local_vals.len() > 0 {
             unsafe { array.put(my_start, local_vals).await };
         }
@@ -853,9 +773,9 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let (local_vals, distribution) = input;
         // println!("local_vals len: {:?}", local_vals.len());
-        team.tasking_barrier();
+        // team.tasking_barrier();
         let local_sizes =
-            UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block);
+            UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block).block();
         unsafe {
             local_sizes.local_as_mut_slice()[0] = local_vals.len();
         }
@@ -875,7 +795,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
                     }
                 });
         }
-        let array = UnsafeArray::<T>::new(team.clone(), size, distribution);
+        let array = UnsafeArray::<T>::new(team.clone(), size, distribution).block();
         if local_vals.len() > 0 {
             array.block_on(unsafe { array.put(my_start, local_vals) });
         }
@@ -1346,8 +1266,8 @@ impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block);
+    /// let block_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// unsafe{
     ///     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
@@ -1435,7 +1355,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
@@ -1473,7 +1393,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
@@ -1511,7 +1431,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block).block();
     /// unsafe {
     ///     let req = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
     ///         *elem = i+1;
@@ -1547,7 +1467,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2).spawn()}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();
@@ -1580,7 +1500,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block);
+    /// let array = UnsafeArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = unsafe{array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i*2).spawn()}; //safe as we are accessing in a data parallel fashion
     /// array.wait_all();

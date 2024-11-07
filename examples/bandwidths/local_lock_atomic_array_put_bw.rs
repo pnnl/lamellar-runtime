@@ -14,8 +14,8 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let array: LocalLockArray<u8> =
-        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
-    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
+    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN).expect("Enough memory should exist");
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;

@@ -1,3 +1,6 @@
+mod handle;
+pub(crate) use handle::GenericAtomicArrayHandle;
+
 pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
@@ -411,19 +414,30 @@ impl<T: Dist + ArrayOps + std::default::Default> GenericAtomicArray<T> {
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> GenericAtomicArray<T> {
+    ) -> GenericAtomicArrayHandle<T> {
         // println!("new generic_atomic array");
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        array.block_on_outstanding(DarcMode::GenericAtomicArray);
-        let mut vec = vec![];
-        for _i in 0..array.num_elems_local() {
-            vec.push(Mutex::new(()));
-        }
-        let locks = Darc::new(team, vec).unwrap();
 
-        GenericAtomicArray {
-            locks: locks,
-            array: array,
+        let team = team.into().team.clone();
+        GenericAtomicArrayHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                let array = UnsafeArray::async_new(
+                    team.clone(),
+                    array_size,
+                    distribution,
+                    DarcMode::LocalLockArray,
+                )
+                .await;
+                let mut vec = vec![];
+                for _i in 0..array.num_elems_local() {
+                    vec.push(Mutex::new(()));
+                }
+                GenericAtomicArray {
+                    locks: Darc::new(team, vec).await.expect("pe exists in team"),
+                    array,
+                }
+            }),
         }
     }
 }
@@ -605,7 +619,7 @@ impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
         for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
         }
-        let locks = Darc::new(array.team_rt(), vec).unwrap();
+        let locks = Darc::new(array.team_rt(), vec).block().unwrap();
 
         GenericAtomicArray {
             locks: locks,
@@ -625,7 +639,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GenericAtomicArray<T> {
         for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
         }
-        let locks = Darc::new(array.team_rt(), vec).unwrap();
+        let locks = Darc::new(array.team_rt(), vec).block().unwrap();
 
         GenericAtomicArray {
             locks: locks,
@@ -860,8 +874,8 @@ impl<T: Dist + std::fmt::Debug> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+    /// let block_array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
     ///
     /// block_array.print();
     /// println!();

@@ -12,8 +12,11 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN);
-    let data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN);
+    let mem_reg = world
+        .alloc_shared_mem_region::<u8>(MEMREG_LEN)
+        .block()
+        .unwrap();
+    let data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN).expect("Enough memory should exist");
     for j in 0..MEMREG_LEN as usize {
         unsafe {
             data.as_mut_slice().unwrap()[j] = my_pe as u8;

@@ -188,7 +188,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// let init_iter = array.dist_iter_mut().for_each(move|e| *e = my_pe).spawn(); //initialize array
@@ -221,7 +221,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.dist_iter_mut().for_each(move|e| *e = my_pe).block();
@@ -255,7 +255,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.dist_iter().map(|elem| *elem as f64).monotonic().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
@@ -288,7 +288,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array = LocalLockArray::<usize>::new(&world,16,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,16,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.local_iter_mut().for_each(move|e| *e = my_pe).block();
@@ -326,7 +326,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// world.block_on(
     ///     array
@@ -358,7 +358,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let iter = array.dist_iter().for_each_async(|elem| async move {
     ///     async_std::task::yield_now().await;
@@ -393,7 +393,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// array.block_on(array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id())));
     ///```
@@ -423,7 +423,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let iter = array.dist_iter().for_each_async_with_schedule(Schedule::Chunk(10),|elem| async move {
     ///     async_std::task::yield_now().await;
@@ -452,7 +452,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).reduce(|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
@@ -478,7 +478,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
@@ -512,12 +512,12 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter()
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
     ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
-    ///                .collect::<AtomicArray<usize>>(Distribution::Block);
+    ///                .collect::<AtomicArray<usize>>(Distribution::Block).block();
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -547,12 +547,12 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter()
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
     ///                .filter(|elem| * elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
-    ///                .collect::<AtomicArray<usize>>(Distribution::Block);
+    ///                .collect::<AtomicArray<usize>>(Distribution::Block).block();
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -590,7 +590,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     /// // initialize a world and an atomic array
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block).block();
     ///
     /// // clone the array; this doesn't duplicate the underlying
     /// // data but it does create a second pointer that we can
@@ -603,7 +603,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///         move |elem|
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
-    ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
+    ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic).block();
     /// let _new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -638,7 +638,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     /// // initialize a world and an atomic array
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block).block();
     ///
     /// // clone the array; this doesn't duplicate the underlying
     /// // data but it does create a second pointer that we can
@@ -651,7 +651,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///         move |elem|
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
-    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic);
+    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic).block();
     /// let _new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -681,7 +681,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().filter(|elem|  **elem < 10).count();
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
@@ -703,7 +703,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().filter(|elem|  **elem < 10).count_with_schedule(Schedule::Dynamic);
     /// let cnt = array.block_on(req); //wait on the collect request to get the new array
@@ -728,7 +728,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).sum();
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
@@ -757,7 +757,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).sum_with_schedule(Schedule::Guided);
     /// let sum = array.block_on(req); //wait on the collect request to get the new array
@@ -780,7 +780,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.dist_iter().enumerate().for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
@@ -807,7 +807,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.dist_iter().enumerate().skip(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
@@ -831,7 +831,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.dist_iter().enumerate().step_by(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
@@ -853,7 +853,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block);
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,8,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// array.dist_iter().enumerate().take(3).for_each(move|(i,elem)| println!("PE: {my_pe} i: {i} elem: {elem}")).block();
@@ -884,7 +884,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let dist_iter = array.dist_iter().for_each(move |e| println!("{e}"));
 /// world.block_on(dist_iter);
@@ -1000,7 +1000,7 @@ impl<
 /// use lamellar::array::prelude::*;
 ///
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block);
+/// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block).block();
 /// let my_pe = world.my_pe();
 /// let dist_iter = array.dist_iter_mut().for_each(move |e| *e = my_pe );
 /// world.block_on(dist_iter);

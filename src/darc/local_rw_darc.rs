@@ -11,13 +11,14 @@ use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
+use super::handle::LocalRwDarcHandle;
 pub(crate) use super::handle::{
     IntoDarcHandle, IntoGlobalRwDarcHandle, LocalRwDarcReadHandle, LocalRwDarcWriteHandle,
 };
 
 #[derive(Debug)]
 pub struct LocalRwDarcReadGuard<T: 'static> {
-    pub(crate) darc: LocalRwDarc<T>,
+    pub(crate) _darc: LocalRwDarc<T>,
     pub(crate) lock: RwLockReadGuardArc<T>,
 }
 
@@ -46,7 +47,7 @@ impl<T> std::ops::Deref for LocalRwDarcReadGuard<T> {
 
 #[derive(Debug)]
 pub struct LocalRwDarcWriteGuard<T: 'static> {
-    pub(crate) darc: LocalRwDarc<T>,
+    pub(crate) _darc: LocalRwDarc<T>,
     pub(crate) lock: RwLockWriteGuardArc<T>,
 }
 
@@ -221,7 +222,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// //-------------
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
     /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let guard = counter.read().block(); //we can also explicitly block on the lock in a non async context
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
@@ -263,7 +264,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// //-------------
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = LocalRwDarc::new(&world, 0).unwrap();
+    /// let counter = LocalRwDarc::new(&world, 0).block().unwrap();
     /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let mut  guard = counter.write().block(); //we can also explicitly block on the lock in a non async context
     /// *guard += my_pe;
@@ -272,9 +273,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     pub fn write(&self) -> LocalRwDarcWriteHandle<T> {
         LocalRwDarcWriteHandle::new(self.clone())
     }
-}
 
-impl<T> LocalRwDarc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `LocalRwDarc<T>` on the PEs specified by team.
     ///
@@ -292,12 +291,23 @@ impl<T> LocalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// ```
-    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
-        Ok(LocalRwDarc {
-            darc: Darc::try_new(team, Arc::new(RwLock::new(item)), DarcMode::LocalRw)?,
-        })
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> LocalRwDarcHandle<T> {
+        // Ok(LocalRwDarc {
+        //     darc: Darc::try_new(team, Arc::new(RwLock::new(item)), DarcMode::LocalRw)?,
+        // })
+        let team = team.into().team.clone();
+        LocalRwDarcHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(Darc::async_try_new_with_drop(
+                team,
+                Arc::new(RwLock::new(item)),
+                DarcMode::LocalRw,
+                None,
+            )),
+        }
     }
 
     // pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<LocalRwDarc<T>, IdError> {
@@ -328,7 +338,7 @@ impl<T> LocalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_globaldarc = world.block_on(async move {five.into_globalrw().await});
     /// ```
     pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {
@@ -369,7 +379,7 @@ impl<T: Send + Sync> LocalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = LocalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_darc = five.into_darc().block();
     /// ```
     pub fn into_darc(self) -> IntoDarcHandle<T> {

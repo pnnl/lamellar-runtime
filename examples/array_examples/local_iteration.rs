@@ -5,8 +5,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
-    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
+    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).

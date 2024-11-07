@@ -9,13 +9,12 @@ use std::sync::Arc;
 use crate::active_messaging::RemotePtr;
 use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
-use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
 use super::handle::{
-    GlobalRwDarcCollectiveWriteHandle, GlobalRwDarcReadHandle, GlobalRwDarcWriteHandle,
-    IntoDarcHandle, IntoLocalRwDarcHandle,
+    GlobalRwDarcCollectiveWriteHandle, GlobalRwDarcHandle, GlobalRwDarcReadHandle,
+    GlobalRwDarcWriteHandle, IntoDarcHandle, IntoLocalRwDarcHandle,
 };
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
@@ -39,7 +38,7 @@ pub(crate) struct DistRwLock<T> {
 }
 
 unsafe impl<T: Send> Send for DistRwLock<T> {}
-unsafe impl<T: Sync> Sync for DistRwLock<T> {}
+unsafe impl<T: Send> Sync for DistRwLock<T> {}
 
 /// # Safety
 ///
@@ -318,7 +317,7 @@ impl<T> Clone for GlobalRwDarcReadGuard<T> {
     }
 }
 
-impl<T> Drop for GlobalRwDarcReadGuard<T> {
+impl<T: 'static> Drop for GlobalRwDarcReadGuard<T> {
     fn drop(&mut self) {
         // println!("dropping global rwdarc read guard");
         if self.local_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
@@ -328,7 +327,7 @@ impl<T> Drop for GlobalRwDarcReadGuard<T> {
                 0,
                 inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
             );
-            let mut am = team.spawn_am_pe_tg(
+            let _am = team.spawn_am_pe_tg(
                 0,
                 UnlockAm {
                     rwlock_addr: remote_rwlock_addr,
@@ -370,7 +369,7 @@ impl<T> DerefMut for GlobalRwDarcWriteGuard<T> {
     }
 }
 
-impl<T> Drop for GlobalRwDarcWriteGuard<T> {
+impl<T: 'static> Drop for GlobalRwDarcWriteGuard<T> {
     fn drop(&mut self) {
         // println!("dropping write guard");
         let inner = self.darc.inner();
@@ -379,7 +378,7 @@ impl<T> Drop for GlobalRwDarcWriteGuard<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        let mut am = team.spawn_am_pe_tg(
+        let _am = team.spawn_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -420,7 +419,7 @@ impl<T> DerefMut for GlobalRwDarcCollectiveWriteGuard<T> {
     }
 }
 
-impl<T> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
+impl<T: 'static> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
     fn drop(&mut self) {
         // println!("dropping collective write guard");
         let inner = self.darc.inner();
@@ -429,7 +428,7 @@ impl<T> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        let mut am = team.spawn_am_pe_tg(
+        let _am = team.spawn_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -592,7 +591,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let guard = counter.read().block();
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
@@ -658,7 +657,7 @@ impl<T> GlobalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
     /// let mut guard = counter.write().block();  //block until we get the write lock
     /// *guard += my_pe;
@@ -708,7 +707,7 @@ impl<T> GlobalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
     /// let mut guard = counter.collective_write().block(); // this will block until all PEs have acquired the lock
     /// *guard += my_pe;
     ///```
@@ -738,7 +737,7 @@ impl<T> GlobalRwDarc<T> {
     }
 }
 
-impl<T> GlobalRwDarc<T> {
+impl<T: Send> GlobalRwDarc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `GlobalRwDarc<T>` on the PEs specified by team.
     ///
@@ -756,20 +755,29 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
     /// ```
-    pub fn new<U: Clone + Into<IntoLamellarTeam>>(
-        team: U,
-        item: T,
-    ) -> Result<GlobalRwDarc<T>, IdError> {
-        Ok(GlobalRwDarc {
-            darc: Darc::try_new_with_drop(
+    pub fn new<U: Clone + Into<IntoLamellarTeam>>(team: U, item: T) -> GlobalRwDarcHandle<T> {
+        // Ok(GlobalRwDarc {
+        //     darc: Darc::try_new_with_drop(
+        //         team.clone(),
+        //         DistRwLock::new(item, team),
+        //         DarcMode::GlobalRw,
+        //         Some(GlobalRwDarc::drop),
+        //     )?,
+        // })
+        let team = team.into().team.clone();
+        let locked_item = DistRwLock::new(item, team.clone());
+        GlobalRwDarcHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(Darc::async_try_new_with_drop(
                 team.clone(),
-                DistRwLock::new(item, team),
+                locked_item,
                 DarcMode::GlobalRw,
                 Some(GlobalRwDarc::drop),
-            )?,
-        })
+            )),
+        }
     }
     pub(crate) fn drop(lock: &mut DistRwLock<T>) -> bool {
         lock.dirty_num_locks() == 0
@@ -806,7 +814,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_darc = five.into_darc().block();
     /// ```
     pub fn into_darc(self) -> IntoDarcHandle<T> {
@@ -850,7 +858,7 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
     /// let five_as_localdarc = world.block_on(async move {five.into_localrw().await});
     /// ```
     pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
@@ -886,7 +894,7 @@ impl<T> Clone for GlobalRwDarc<T> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
+impl<T: fmt::Display + Send> fmt::Display for GlobalRwDarc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unsafe { fmt::Display::fmt(&self.inner().item().data.get().as_ref().unwrap(), f) }
     }

@@ -6,7 +6,7 @@ fn main() {
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
 
-    let array = GlobalLockArray::<usize>::new(&world, 100, Distribution::Block);
+    let array = GlobalLockArray::<usize>::new(&world, 100, Distribution::Block).block();
 
     let s = Instant::now();
     let local_data = array.read_local_data().block();

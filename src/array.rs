@@ -49,7 +49,7 @@
 //!
 //! // define an length-10 array of type UnsafeArray<usize>
 //! let world = LamellarWorldBuilder::new().build();
-//! let array =  UnsafeArray::<usize>::new(&world, 10,Distribution::Block);
+//! let array =  UnsafeArray::<usize>::new(&world, 10,Distribution::Block).block();
 //!
 //! // convert between array types    
 //! let array = array.into_local_lock(); // LocalLockArray
@@ -230,14 +230,14 @@ impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
 ///```
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
-/// let block_array = AtomicArray::<usize>::new(world,12,Distribution::Block);
+/// let block_array = AtomicArray::<usize>::new(world,12,Distribution::Block).block();
 /// //block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
 ///```
 /// ## Cyclic
 ///```
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
-/// let cyclic_array = AtomicArray::<usize>::new(world,12,Distribution::Cyclic);
+/// let cyclic_array = AtomicArray::<usize>::new(world,12,Distribution::Cyclic).block();
 /// //cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
 ///```
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Eq, PartialEq)]
@@ -302,7 +302,7 @@ impl<T: Dist> LamellarRead for &[T] {}
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(1);
         unsafe {
             buf.as_mut_slice().expect("Data should exist on PE")[0] = val.clone();
         }
@@ -313,7 +313,7 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(1);
         unsafe {
             buf.as_mut_slice().expect("Data should exist on PE")[0] = val;
         }
@@ -324,7 +324,7 @@ impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -338,7 +338,7 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -352,7 +352,7 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -1045,7 +1045,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let a_team = array.team();
     ///```
@@ -1061,7 +1061,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     // ///```
     // /// use lamellar::array::prelude::*;
     // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     // ///
     // /// assert_eq!(world.my_pe(),array.my_pe());
     // ///```
@@ -1077,7 +1077,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     // ///```
     // /// use lamellar::array::prelude::*;
     // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic);
+    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     // ///
     // /// assert_eq!(world.num_pes(),array.num_pes());
     // ///```
@@ -1093,7 +1093,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// assert_eq!(100,array.len());
     ///```
@@ -1110,7 +1110,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```no_run //assert is for 4 PEs
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<u8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    /// let array: ReadOnlyArray<u8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// assert_eq!(25,array.num_elems_local());
     ///```
@@ -1124,9 +1124,9 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block);
+    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
     ///```
     // fn use_distribution(self, distribution: Distribution) -> Self;
 
@@ -1140,7 +1140,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     // ///```
     // /// use lamellar::array::prelude::*;
     // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic);
+    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     // ///
     // /// array.barrier();
     // ///```
@@ -1158,7 +1158,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     // ///```
     // /// use lamellar::array::prelude::*;
     // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     // ///
     // /// for i in 0..100{
     // ///     array.add(i,1);
@@ -1181,7 +1181,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     // ///```
     // /// use lamellar::array::prelude::*;
     // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     // ///
     // /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it
     // /// let result = array.block_on(request); //block until am has executed
@@ -1203,7 +1203,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block);
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block).block();
     /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
     /// let  Some((pe,offset)) = block_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(1,2));
@@ -1213,7 +1213,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(2,1));
@@ -1234,7 +1234,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block);
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block).block();
     /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
     /// let index = block_array.first_global_index_for_pe(0).unwrap();
     /// assert_eq!(index , 0);
@@ -1250,7 +1250,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// let index = cyclic_array.first_global_index_for_pe(0).unwrap();
@@ -1278,7 +1278,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block);
+    /// let block_array: UnsafeArray<usize> = UnsafeArray::new(&world,16,Distribution::Block).block();
     /// // block array index location  = PE0 [0,1,2,3],  PE1 [4,5,6,7],  PE2 [8,9,10,11], PE3 [12,13,14,15]
     /// let index = block_array.last_global_index_for_pe(0).unwrap();
     /// assert_eq!(index , 3);
@@ -1294,7 +1294,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic);
+    /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
     /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// let index = cyclic_array.last_global_index_for_pe(0).unwrap();
@@ -1359,7 +1359,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let sub_array = array.sub_array(25..75);
     ///```
@@ -1379,7 +1379,7 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let sub_array = array.sub_array(25..75);
     /// assert_eq!(25,sub_array.global_index(0));
@@ -1422,7 +1422,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
     /// unsafe { // we just created buf and have not shared it so free to mutate safely
@@ -1485,7 +1485,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
-    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let _ = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe).block(); //we will used this val as completion detection
     /// array.barrier();
     /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
@@ -1561,7 +1561,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// let len = buf.len();
     /// let _ = array.dist_iter_mut().for_each(move |elem| *elem = len).spawn(); //we will used this val as completion detection
@@ -1631,8 +1631,8 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let _ = block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| {
     ///     elem.store(i);
@@ -1689,7 +1689,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///```
 /// use lamellar::array::prelude::*;
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
 /// use rand::Rng;
 ///
 /// let array_clone = array.clone();
@@ -1705,7 +1705,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// use lamellar::array::prelude::*;
 /// use rand::Rng;
 /// let world = LamellarWorldBuilder::new().build();
-/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
 /// let array_clone = array.clone();
 /// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1722,7 +1722,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// use rand::Rng;
 /// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
-/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
 /// let array_clone = array.clone();
 /// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1740,7 +1740,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// use rand::Rng;
 /// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
-/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
 /// let array_clone = array.clone();
 /// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1804,7 +1804,7 @@ where
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// let _ = array.local_iter().for_each(move |_| {
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1837,7 +1837,7 @@ where
 //     /// use rand::Rng;
 //     /// let world = LamellarWorldBuilder::new().build();
 //     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+//     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
 //     /// let array_clone = array.clone();
 //     /// let req = array.local_iter().for_each(move |_| {
 //     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
@@ -1863,7 +1863,7 @@ where
 //     /// use lamellar::array::prelude::*;
 //     /// let world = LamellarWorldBuilder::new().build();
 //     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
 //     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
 //     ///     elem.store(i+1);
 //     /// });
@@ -1894,7 +1894,7 @@ where
 //     /// use lamellar::array::prelude::*;
 //     /// let world = LamellarWorldBuilder::new().build();
 //     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
 //     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
 //     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
 //     /// let max = array.block_on(array.max());
@@ -1916,7 +1916,7 @@ where
 //     /// use lamellar::array::prelude::*;
 //     /// let world = LamellarWorldBuilder::new().build();
 //     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block);
+//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
 //     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
 //     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
 //     /// let min = array.block_on(array.min());
@@ -1955,7 +1955,7 @@ where
 /// );
 /// let world = LamellarWorldBuilder::new().build();
 /// let num_pes = world.num_pes();
-/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block);
+/// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
 /// let array_clone = array.clone();
 /// let _ = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());

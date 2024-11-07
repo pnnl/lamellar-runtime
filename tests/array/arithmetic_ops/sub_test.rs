@@ -91,7 +91,7 @@ macro_rules! sub_test{
             let rand_idx = Uniform::from(0..array_total_len);
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let pe_max_val: $t = 100 as $t;
             let max_val = pe_max_val * num_pes as $t;

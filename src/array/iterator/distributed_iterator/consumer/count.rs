@@ -107,7 +107,7 @@ impl LamellarAm for UpdateCntAm {
 
 impl InnerDistIterCountHandle {
     async fn async_reduce_remote_counts(local_cnt: usize, team: Pin<Arc<LamellarTeamRT>>) -> usize {
-        let cnt = Darc::async_try_new(&team, AtomicUsize::new(0), DarcMode::Darc)
+        let cnt = Darc::async_try_new_with_drop(&team, AtomicUsize::new(0), DarcMode::Darc, None)
             .await
             .unwrap();
         team.exec_am_all(UpdateCntAm {
@@ -119,18 +119,18 @@ impl InnerDistIterCountHandle {
         cnt.load(Ordering::SeqCst)
     }
 
-    fn reduce_remote_counts(&self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
-        let _ = self
-            .team
-            .exec_am_all(UpdateCntAm {
-                remote_cnt: local_cnt,
-                cnt: cnt.clone(),
-            })
-            .spawn();
-        self.team.wait_all();
-        self.team.tasking_barrier();
-        cnt.load(Ordering::SeqCst)
-    }
+    // fn reduce_remote_counts(&self, local_cnt: usize, cnt: Darc<AtomicUsize>) -> usize {
+    //     let _ = self
+    //         .team
+    //         .exec_am_all(UpdateCntAm {
+    //             remote_cnt: local_cnt,
+    //             cnt: cnt.clone(),
+    //         })
+    //         .spawn();
+    //     self.team.wait_all();
+    //     self.team.tasking_barrier();
+    //     cnt.load(Ordering::SeqCst)
+    // }
 }
 
 impl Future for InnerDistIterCountHandle {
@@ -253,7 +253,7 @@ impl Future for DistIterCountHandle {
         match this.state.as_mut().project() {
             StateProj::Lock(lock, inner) => {
                 ready!(lock.poll(cx));
-                let mut barrier = this.array.barrier_handle();
+                let barrier = this.array.barrier_handle();
                 *this.state = State::Barrier(
                     barrier,
                     inner.take().expect("reqs should still be in this state"),

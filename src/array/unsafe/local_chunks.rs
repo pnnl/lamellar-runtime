@@ -189,7 +189,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// let _ = unsafe{array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
@@ -215,7 +215,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,40,Distribution::Block).block();
     /// let my_pe = world.my_pe();
     ///
     /// unsafe{
