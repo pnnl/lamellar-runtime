@@ -1424,6 +1424,8 @@ impl LamellarTeamRT {
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
+        let mut world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
+        let mut world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
 
         // println!(
         //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
@@ -1436,10 +1438,15 @@ impl LamellarTeamRT {
                 || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
                 || orig_launched != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
                 || (self.parent.is_none()
-                    && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
+                    && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                    || world_orig_reqs != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                    || world_orig_launched != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
+                ))
         {
             orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
             orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
+            world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
+            world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
             // std::thread::yield_now();
             // self.flush();
             if std::thread::current().id() != *crate::MAIN_THREAD {

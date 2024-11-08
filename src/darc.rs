@@ -1620,6 +1620,8 @@ macro_rules! launch_drop {
             );
         }
         // team.print_cnt();
+        team.team_counters.inc_outstanding(1);
+        team.world_counters.inc_outstanding(1); //ensure we don't trigger any warnings in wait all
         let mut am = team.exec_am_local(DroppedWaitAM {
             inner_addr: $inner_addr as *const u8 as usize,
             mode_addr: $inner.mode_addr,
@@ -1629,6 +1631,8 @@ macro_rules! launch_drop {
             phantom: PhantomData::<T>,
         });
         am.launch();
+        team.team_counters.dec_outstanding(1);
+        team.world_counters.dec_outstanding(1);
     };
 }
 
