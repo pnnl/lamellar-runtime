@@ -50,7 +50,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_one_sided_mem_region::<u8>(10).expect("Enough memory should exist");
+    let array = world.alloc_one_sided_mem_region::<u8>(10);
 
     let mut rng = rand::thread_rng();
     let pes = Uniform::from(0..num_pes);

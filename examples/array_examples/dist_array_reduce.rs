@@ -40,7 +40,7 @@ fn main() {
         UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block).block();
     let cyclic_array =
         UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).block();
-    let local_mem_region = world.alloc_one_sided_mem_region(total_len).expect("Enough memory should exist");
+    let local_mem_region = world.alloc_one_sided_mem_region(total_len);
     world.barrier();
     if my_pe == 0 {
         unsafe {

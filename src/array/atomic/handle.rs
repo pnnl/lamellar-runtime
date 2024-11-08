@@ -69,7 +69,7 @@ impl<T: Dist + ArrayOps + 'static> AtomicArrayHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     pub fn block(mut self) -> AtomicArray<T> {
         self.launched = true;
         self.inner.set_launched(true);
@@ -90,7 +90,7 @@ impl<T: Dist + ArrayOps + 'static> AtomicArrayHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array_task: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).spawn();
+    /// let array_task = AtomicArray::<usize>::new(&world,100,Distribution::Cyclic).spawn();
     /// // do some other work
     /// let array = array_task.block();
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]

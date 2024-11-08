@@ -173,7 +173,7 @@ impl<T: Dist> UnsafeArray<T> {
                     .inner
                     .data
                     .team
-                    .alloc_one_sided_mem_region_or_panic::<T>(num_elems_pe);
+                    .alloc_one_sided_mem_region::<T>(num_elems_pe);
                 unsafe {
                     for i in 0..std::cmp::min(buf.len(), num_pes) {
                         let mut k = 0;
@@ -200,7 +200,7 @@ impl<T: Dist> UnsafeArray<T> {
                         .inner
                         .data
                         .team
-                        .alloc_one_sided_mem_region_or_panic::<T>(num_elems_pe);
+                        .alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
@@ -248,7 +248,7 @@ impl<T: Dist> UnsafeArray<T> {
                             .inner
                             .data
                             .team
-                            .alloc_one_sided_mem_region_or_panic::<T>(num_elems_pe);
+                            .alloc_one_sided_mem_region::<T>(num_elems_pe);
                         let rem = buf.len() % num_pes;
                         // let temp_buf: LamellarMemoryRegion<T> = buf.team_into(&self.inner.data.team);
                         for i in 0..std::cmp::min(buf.len(), num_pes) {
@@ -290,7 +290,7 @@ impl<T: Dist> UnsafeArray<T> {
                         .inner
                         .data
                         .team
-                        .alloc_one_sided_mem_region_or_panic::<T>(num_elems_pe);
+                        .alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let pe = (start_pe + i) % num_pes;
                     let offset = global_index / num_pes + overflow;
                     let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
@@ -639,7 +639,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     pub(crate) unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region_or_panic(1);
+        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         self.blocking_get(index, &buf);
         ArrayRdmaAtHandle {
             array: self.as_lamellar_byte_array(),

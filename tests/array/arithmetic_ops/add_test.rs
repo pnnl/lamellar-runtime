@@ -426,7 +426,7 @@ macro_rules! input_test {
         // LMR<T>------------------------------
 
         unsafe {
-            let lmr = world.alloc_one_sided_mem_region(array.len()).unwrap();
+            let lmr = world.alloc_one_sided_mem_region(array.len());
             let slice = lmr.as_mut_slice().unwrap();
             for i in 0..array.len() {
                 slice[i] = i;
@@ -438,7 +438,7 @@ macro_rules! input_test {
 
         // SMR<T>------------------------------
         unsafe {
-            let smr = world.alloc_shared_mem_region(array.len()).block().unwrap();
+            let smr = world.alloc_shared_mem_region(array.len()).block();
 
             let slice = smr.as_mut_slice().unwrap();
             for i in 0..array.len() {

@@ -13,21 +13,6 @@ use pin_project::{pin_project, pinned_drop};
 #[must_use = " NativeAtomicArray 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project(PinnedDrop)]
 #[doc(alias = "Collective")]
-/// This is a handle representing the operation of creating a new [NativeAtomicArray].
-/// This handled must either be awaited in an async context or blocked on in a non-async context for the operation to be performed.
-/// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the NativeAtomicArray's team, only returning once every PE in the team has completed the call.
-///
-/// # Collective Operation
-/// Requires all PEs associated with the `NativeAtomicArray` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
-///
-/// # Examples
-/// ```
-/// use lamellar::array::prelude::*;
-///
-/// let world = LamellarWorldBuilder::new().build();
-///
-/// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world,100,Distribution::Cyclic).block();
-/// ```
 pub(crate) struct NativeAtomicArrayHandle<T: Dist + ArrayOps + 'static> {
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) launched: bool,
@@ -45,15 +30,7 @@ impl<T: Dist + ArrayOps + 'static> PinnedDrop for NativeAtomicArrayHandle<T> {
 }
 
 impl<T: Dist + ArrayOps + 'static> NativeAtomicArrayHandle<T> {
-    /// Used to drive creation of a new NativeAtomicArray
-    /// # Examples
-    ///
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: NativeAtomicArray<usize> = NativeAtomicArray::new(&world,100,Distribution::Cyclic).block();
-    pub fn block(mut self) -> NativeAtomicArray<T> {
+    pub(crate) fn block(mut self) -> NativeAtomicArray<T> {
         self.launched = true;
         RuntimeWarning::BlockingCall(
             "NativeAtomicArrayHandle::block",
@@ -63,20 +40,9 @@ impl<T: Dist + ArrayOps + 'static> NativeAtomicArrayHandle<T> {
         self.team.clone().block_on(self)
     }
 
-    /// This method will spawn the creation of the NativeAtomicArray on the work queue
-    ///
-    /// This function returns a handle that can be used to wait for the operation to complete
-    /// /// # Examples
-    ///
-    ///```
-    /// use lamellar::array::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array_task: NativeAtomicArray<usize> = NativeAtomicArray::new(&world,100,Distribution::Cyclic).spawn();
-    /// // do some other work
-    /// let array = array_task.block();
+   
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub fn spawn(mut self) -> LamellarTask<NativeAtomicArray<T>> {
+    pub(crate) fn spawn(mut self) -> LamellarTask<NativeAtomicArray<T>> {
         self.launched = true;
         self.team.clone().spawn(self)
     }

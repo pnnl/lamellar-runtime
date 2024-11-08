@@ -430,7 +430,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
         team: Pin<Arc<LamellarTeamRT>>,
         buf_size: usize,
     ) -> OneSidedIter<'a, T, A> {
-        let buf_0 = team.alloc_one_sided_mem_region_or_panic(buf_size);
+        let buf_0 = team.alloc_one_sided_mem_region(buf_size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the buf_0 as self is the only reference
 

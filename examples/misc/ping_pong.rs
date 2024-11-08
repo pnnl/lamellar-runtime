@@ -328,28 +328,23 @@ fn main() {
 
     let indices = world
         .alloc_shared_mem_region::<usize>(UPDATES_PER_CORE * world.num_threads_per_pe())
-        .block()
-        .unwrap();
+        .block();
 
     let index_send_buffers = world
         .alloc_shared_mem_region::<usize>(buffer_size * num_pes)
-        .block()
-        .unwrap();
+        .block();
     world.barrier();
     let index_recv_buffers = world
         .alloc_shared_mem_region::<usize>(buffer_size * num_pes)
-        .block()
-        .unwrap();
+        .block();
     world.barrier();
     let result_send_buffers = world
         .alloc_shared_mem_region::<usize>(buffer_size * num_pes)
-        .block()
-        .unwrap();
+        .block();
     world.barrier();
     let result_recv_buffers = world
         .alloc_shared_mem_region::<usize>(buffer_size * num_pes)
-        .block()
-        .unwrap();
+        .block();
     world.barrier();
     let mut rng: StdRng = SeedableRng::seed_from_u64(my_pe as u64);
     let table_size_per_pe = 100000 * world.num_threads_per_pe();

@@ -512,12 +512,12 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
+    /// let array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter()
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
     ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
-    ///                .collect::<AtomicArray<usize>>(Distribution::Block).block();
+    ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -547,12 +547,12 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
+    /// let array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter()
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
     ///                .filter(|elem| * elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
-    ///                .collect::<AtomicArray<usize>>(Distribution::Block).block();
+    ///                .collect::<AtomicArray<usize>>(Distribution::Block);
     /// let new_array = array.block_on(req); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -590,7 +590,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     /// // initialize a world and an atomic array
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block).block();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// // clone the array; this doesn't duplicate the underlying
     /// // data but it does create a second pointer that we can
@@ -603,7 +603,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///         move |elem|
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
-    ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic).block();
+    ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -638,7 +638,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// use lamellar::array::prelude::*;
     /// // initialize a world and an atomic array
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Block).block();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// // clone the array; this doesn't duplicate the underlying
     /// // data but it does create a second pointer that we can
@@ -651,7 +651,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///         move |elem|
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
-    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic).block();
+    ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic);
     /// let _new_array = array.block_on(req);
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

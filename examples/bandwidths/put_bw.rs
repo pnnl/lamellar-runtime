@@ -13,11 +13,10 @@ fn main() {
     let num_pes = world.num_pes();
     let array = world
         .alloc_shared_mem_region::<u8>(ARRAY_LEN)
-        .block()
-        .unwrap();
+        .block();
     let data = world
         .alloc_one_sided_mem_region::<u8>(ARRAY_LEN)
-        .expect("Enough memory should exist");
+        ;
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;

@@ -145,8 +145,7 @@ fn dft_lamellar(
     let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
     let add_spec = world
         .alloc_shared_mem_region::<f64>(spectrum_slice.len())
-        .block()
-        .unwrap();
+        .block();
 
     let timer = Instant::now();
     for pe in 0..num_pes {
@@ -640,18 +639,18 @@ fn main() {
         let partial_sum = world
             .alloc_shared_mem_region::<f64>(num_pes)
             .block()
-            .expect("Enough memory should exist");
+            ;
         let partial_spectrum = world
             .alloc_shared_mem_region::<f64>(array_len)
             .block()
-            .expect("Enough memory should exist");
+            ;
         let partial_signal = world
             .alloc_shared_mem_region::<f64>(array_len)
             .block()
-            .expect("Enough memory should exist");
-        let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len).expect("Enough memory should exist");
-        let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len).expect("Enough memory should exist");
-        let magic = world.alloc_one_sided_mem_region::<f64>(num_pes).expect("Enough memory should exist");
+            ;
+        let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len);
+        let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len);
+        let magic = world.alloc_one_sided_mem_region::<f64>(num_pes);
 
         let full_spectrum_array =
             UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();

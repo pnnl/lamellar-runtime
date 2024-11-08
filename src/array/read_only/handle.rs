@@ -72,7 +72,7 @@ impl<T: Dist + ArrayOps + 'static> ReadOnlyArrayHandle<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array_task: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).spawn();
+    /// let array_task = ReadOnlyArray::<usize>::new(&world,100,Distribution::Cyclic).spawn();
     /// // do some other work
     /// let array = array_task.block();
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]

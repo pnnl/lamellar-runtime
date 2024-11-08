@@ -25,7 +25,7 @@ impl LamellarAM for DataAM {
     async fn exec(&self) {
         unsafe {
             // let local = lamellar::team.local_array::<u8>(self.length, 255u8);
-            let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length).expect("Enough memory should exist");
+            let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice().unwrap();
             local_slice[self.length - 1] = 255u8;
             self.array.get_unchecked(self.index, local.clone());
@@ -42,8 +42,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN).expect("Enough memory should exist");
-    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN).expect("Enough memory should exist");
+    let array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;

@@ -358,9 +358,9 @@ impl<T: Dist> GlobalLockArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
+    /// let array = GlobalLockArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
+    /// let block_view = array.clone().use_distribution(Distribution::Block);
     ///```
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GlobalLockArray {

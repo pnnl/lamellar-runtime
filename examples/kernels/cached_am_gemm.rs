@@ -105,7 +105,7 @@ impl LamellarAM for MatMulAM {
     async fn exec() {
         let b = lamellar::world
             .alloc_one_sided_mem_region::<f32>(self.b.block_size * self.b.block_size)
-            .expect("enough memory exists");
+            ;
         get_sub_mat(&self.b, &b).await;
         // we dont actually want to alloc a shared memory region as there is an implicit barrier here
         // introduces sync point and potential for deadlock
@@ -122,7 +122,7 @@ impl LamellarAM for MatMulAM {
             c.row_block = row;
             let sub_a = lamellar::world
                 .alloc_one_sided_mem_region::<f32>(a.block_size * a.block_size)
-                .expect("enough memory exists");
+                ;
             get_sub_mat(&a, &sub_a).await; //this should be local copy so returns immediately
             do_gemm(&sub_a, &b, c, self.block_size);
         }
@@ -179,15 +179,15 @@ fn main() {
     let a = world
         .alloc_shared_mem_region::<f32>((m * n) / num_pes)
         .block()
-        .expect("enough memory exists");
+        ;
     let b = world
         .alloc_shared_mem_region::<f32>((n * p) / num_pes)
         .block()
-        .expect("enough memory exists");
+        ;
     let c = world
         .alloc_shared_mem_region::<f32>((m * p) / num_pes)
         .block()
-        .expect("enough memory exists");
+        ;
     // let c2 = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
     unsafe {
         let mut cnt = my_pe as f32 * ((m * n) / num_pes) as f32;

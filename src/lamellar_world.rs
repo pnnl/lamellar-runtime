@@ -3,7 +3,7 @@ use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, Lamellae
 use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::memregion::handle::SharedMemoryRegionHandle;
+use crate::memregion::handle::{FallibleSharedMemoryRegionHandle,SharedMemoryRegionHandle};
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion,  Dist, RemoteMemoryRegion,
 };
@@ -134,16 +134,28 @@ impl ActiveMessaging for LamellarWorld {
 
 impl RemoteMemoryRegion for LamellarWorld {
     //#[tracing::instrument(skip_all)]
+    fn try_alloc_shared_mem_region<T: Dist>(&self, size: usize) -> FallibleSharedMemoryRegionHandle<T> {
+        self.team.try_alloc_shared_mem_region::<T>(size)
+    }
+
+    //#[tracing::instrument(skip_all)]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
-        self.barrier();
         self.team.alloc_shared_mem_region::<T>(size)
+    }
+
+    //#[tracing::instrument(skip_all)]
+    fn try_alloc_one_sided_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
+        self.team.try_alloc_one_sided_mem_region::<T>(size)
     }
 
     //#[tracing::instrument(skip_all)]
     fn alloc_one_sided_mem_region<T: Dist>(
         &self,
         size: usize,
-    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
+    ) -> OneSidedMemoryRegion<T> {
         self.team.alloc_one_sided_mem_region::<T>(size)
     }
 }

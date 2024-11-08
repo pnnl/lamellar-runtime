@@ -34,7 +34,7 @@ impl LamellarAM for RdmaAM {
         //get the original nodes data
         let local = lamellar::world
             .alloc_one_sided_mem_region::<u8>(ARRAY_LEN)
-            .expect("Enough memory should exist");
+            ;
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
@@ -68,7 +68,7 @@ impl LamellarAM for RdmaLocalMRAM {
         );
 
         //get the original nodes data
-        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN).expect("Enough memory should exist");
+        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
@@ -110,8 +110,8 @@ fn main() {
     let array = world
         .alloc_shared_mem_region::<u8>(ARRAY_LEN)
         .block()
-        .expect("Enough memory should exist");
-    let local_array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN).expect("Enough memory should exist");
+        ;
+    let local_array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in array.as_mut_slice().unwrap() {
             *i = 255_u8;

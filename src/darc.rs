@@ -1483,7 +1483,7 @@ impl<T: Send + Sync> Darc<T> {
     ///
     /// let five_handle = Darc::new(&world,5);
     /// let five_as_localdarc = world.block_on(async move {
-    ///     let five = five_handle.await;
+    ///     let five = five_handle.await.expect("PE in world team");
     ///     five.into_localrw().await
     /// });
     /// ```

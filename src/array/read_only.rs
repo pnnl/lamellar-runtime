@@ -103,7 +103,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
+    /// let block_view = array.clone().use_distribution(Distribution::Block);
     ///```
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         ReadOnlyArray {

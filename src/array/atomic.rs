@@ -904,9 +904,9 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
+    /// let block_view = array.clone().use_distribution(Distribution::Block);
     ///```
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         match self {
@@ -928,7 +928,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} local_data[0]: {:?}",local_data.at(0).load());

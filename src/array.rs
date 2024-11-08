@@ -194,6 +194,9 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
+// lamellar_impl::generate_reductions_for_type_rt!(true, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
+
 // lamellar_impl::generate_reductions_for_type_rt!(false, f32);
 // lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32);
 
@@ -302,7 +305,7 @@ impl<T: Dist> LamellarRead for &[T] {}
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(1);
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().expect("Data should exist on PE")[0] = val.clone();
         }
@@ -313,7 +316,7 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(1);
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().expect("Data should exist on PE")[0] = val;
         }
@@ -324,7 +327,7 @@ impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -338,7 +341,7 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -352,7 +355,7 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region_or_panic(vals.len());
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -1051,38 +1054,6 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
 
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the current PE of the calling thread
-    // ///
-    // /// # One-sided Operation
-    // /// the result is returned only on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
-    // ///
-    // /// assert_eq!(world.my_pe(),array.my_pe());
-    // ///```
-    // fn my_pe(&self) -> usize;
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Return the number of PEs containing data for this array
-    // ///
-    // /// # One-sided Operation
-    // /// the result is returned only on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
-    // ///
-    // /// assert_eq!(world.num_pes(),array.num_pes());
-    // ///```
-    // fn num_pes(&self) -> usize;
-
     #[doc(alias("One-sided", "onesided"))]
     /// Return the total number of elements in this array
     ///
@@ -1110,84 +1081,12 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```no_run //assert is for 4 PEs
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: ReadOnlyArray<u8> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
+    /// let array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     ///
     /// assert_eq!(25,array.num_elems_local());
     ///```
     fn num_elems_local(&self) -> usize;
 
-    /// Change the distribution this array handle uses to index into the data of the array.
-    ///
-    /// This is a one-sided call and does not redistribute the actual data, it simply changes how the array is indexed for this particular handle.
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
-    /// // do something interesting... or not
-    /// let block_view = array.clone().use_distribution(Distribution::Block).block();
-    ///```
-    // fn use_distribution(self, distribution: Distribution) -> Self;
-
-    // #[doc(alias = "Collective")]
-    // /// Global synchronization method which blocks calling thread until all PEs in the owning Array data have entered the barrier
-    // ///
-    // /// # Collective Operation
-    // /// Requires all PEs associated with the array to enter the barrier, otherwise deadlock will occur
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
-    // ///
-    // /// array.barrier();
-    // ///```
-    // fn barrier(&self);
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// blocks calling thread until all remote tasks (e.g. element wise operations)
-    // /// initiated by the calling PE have completed.
-    // ///
-    // /// # One-sided Operation
-    // /// this is not a distributed synchronization primitive (i.e. it has no knowledge of a Remote PEs tasks), the calling thread will only wait for tasks
-    // /// to finish that were initiated by the calling PE itself
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
-    // ///
-    // /// for i in 0..100{
-    // ///     array.add(i,1);
-    // /// }
-    // /// array.wait_all(); //block until the previous add operations have finished
-    // ///```
-    // fn wait_all(&self);
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Run a future to completion on the current thread
-    // ///
-    // /// This function will block the caller until the given future has completed, the future is executed within the Lamellar threadpool
-    // ///
-    // /// Users can await any future, including those returned from lamellar remote operations
-    // ///
-    // /// # One-sided Operation
-    // /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
-    // ///
-    // /// let request = array.fetch_add(10,1000); //fetch index 10 and add 1000 to it
-    // /// let result = array.block_on(request); //block until am has executed
-    // /// // we also could have used world.block_on() or team.block_on()
-    // ///```
-    // fn block_on<F: Future>(&self, f: F) -> F::Output;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Given a global index, calculate the PE and offset on that PE where the element actually resides.
@@ -1307,30 +1206,6 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     /// assert_eq!(index , 15);
     ///```
     fn last_global_index_for_pe(&self, pe: usize) -> Option<usize>;
-
-    // /// Returns a distributed iterator for the LamellarArray
-    // /// must be called accross all pes containing data in the array
-    // /// iteration on a pe only occurs on the data which is locally present
-    // /// with all pes iterating concurrently
-    // /// blocking: true
-    // pub fn dist_iter(&self) -> DistIter<'static, T>;
-
-    // /// Returns a distributed iterator for the LamellarArray
-    // /// must be called accross all pes containing data in the array
-    // /// iteration on a pe only occurs on the data which is locally present
-    // /// with all pes iterating concurrently
-    // pub fn dist_iter_mut(&self) -> DistIterMut<'static, T>;
-
-    // /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
-    // /// where this was called, data that is not local to the PE is automatically
-    // /// copied and transferred
-    // pub fn onesided_iter(&self) -> OneSidedIter<'_, T> ;
-
-    // /// Returns an iterator for the LamellarArray, all iteration occurs on the PE
-    // /// where this was called, data that is not local to the PE is automatically
-    // /// copied and transferred, array data is buffered to more efficiently make
-    // /// use of network buffers
-    // pub fn buffered_onesided_iter(&self, buf_size: usize) -> OneSidedIter<'_, T> ;
 }
 
 /// Sub arrays are contiguous subsets of the elements of an array.

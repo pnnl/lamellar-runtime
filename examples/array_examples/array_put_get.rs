@@ -34,11 +34,11 @@ fn main() {
         let shared_mem_region = world
             .alloc_shared_mem_region(total_len)
             .await
-            .expect("Enough memory should exist")
+            
             .into(); //Convert into abstract LamellarMemoryRegion
         let local_mem_region = world
             .alloc_one_sided_mem_region(total_len)
-            .expect("Enough memory should exist")
+            
             .into();
         initialize_array(&block_array).await;
         initialize_array(&cyclic_array).await;

@@ -28,7 +28,7 @@ pub(crate) mod one_sided;
 pub use one_sided::OneSidedMemoryRegion;
 
 pub(crate) mod handle;
-use handle::SharedMemoryRegionHandle;
+use handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle};
 
 use enum_dispatch::enum_dispatch;
 
@@ -287,7 +287,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// assert_eq!(mem_region.len(),1000);
     ///```
     fn len(&self) -> usize;
@@ -313,7 +313,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
     ///```
     unsafe fn as_slice(&self) -> MemResult<&[T]>;
@@ -335,7 +335,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let val = unsafe{mem_region.at(999).expect("PE is part of the world team")};
     ///```
     unsafe fn at(&self, index: usize) -> MemResult<&T>;
@@ -357,7 +357,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
     ///```
     unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>;
@@ -379,7 +379,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
     ///```
     unsafe fn as_ptr(&self) -> MemResult<*const T>;
@@ -401,7 +401,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
     ///```
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>;
@@ -440,7 +440,7 @@ pub trait SubRegion<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100);
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
     ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
@@ -476,8 +476,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     ///
@@ -516,8 +516,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     ///
@@ -559,8 +559,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     ///
@@ -599,8 +599,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     ///
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
@@ -647,8 +647,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let num_pes = world.num_pes();
     ///
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10);
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10);
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
     ///
     /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
     /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
@@ -1214,6 +1214,14 @@ pub trait RemoteMemoryRegion {
     #[doc(alias = "Collective")]
     /// Allocate a shared memory region from the asymmetric heap.
     /// There will be `size` number of `T` elements on each PE.
+    /// 
+    /// Note: If there is not enough memory in the lamellar heap on the calling PE
+    /// this call will trigger a "heap grow" operation (initiated and handled by the runtime),
+    /// this behavior can be disabled by setting the env variable "LAMELLAR_HEAP_MODE=static",
+    /// in which case this call will cause a panic if there is not enough memory.
+    /// 
+    /// Alternatively, you can use the `try_alloc_shared_mem_region` method which returns
+    /// a `Result` and allows you to handle the error case when there is not enough memory.
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -1222,6 +1230,41 @@ pub trait RemoteMemoryRegion {
         &self,
         size: usize,
     ) -> SharedMemoryRegionHandle<T>;
+
+    #[doc(alias = "Collective")]
+    /// Allocate a shared memory region from the asymmetric heap.
+    /// There will be `size` number of `T` elements on each PE.
+    ///
+    /// # Collective Operation
+    /// Requires all PEs associated with the `array` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    ///
+    fn try_alloc_shared_mem_region<T: Dist + std::marker::Sized>(
+        &self,
+        size: usize,
+    ) -> FallibleSharedMemoryRegionHandle<T>;
+
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Allocate a one-sided memory region from the internal lamellar heap.
+    /// This region only exists on the calling PE, but the returned handle can be
+    /// sent to other PEs allowing remote access to the region.
+    /// There will be `size` number of `T` elements on the calling PE.
+    /// 
+    /// Note: If there is not enough memory in the lamellar heap on the calling PE
+    /// this call will trigger a "heap grow" operation (initiated and handled by the runtime),
+    /// this behavior can be disabled by setting the env variable "LAMELLAR_HEAP_MODE=static",
+    /// in which case this call will cause a panic if there is not enough memory.
+    /// 
+    /// Alternatively, you can use the `try_alloc_one_sided_mem_region` method which returns
+    /// a `Result` and allows you to handle the error case when there is not enough memory.
+    ///
+    /// # One-sided Operation
+    /// the calling PE will allocate the memory region locally, without intervention from the other PEs.
+    ///
+    fn alloc_one_sided_mem_region<T: Dist + std::marker::Sized>(
+        &self,
+        size: usize,
+    ) -> OneSidedMemoryRegion<T>;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Allocate a one-sided memory region from the internal lamellar heap.
@@ -1232,7 +1275,7 @@ pub trait RemoteMemoryRegion {
     /// # One-sided Operation
     /// the calling PE will allocate the memory region locally, without intervention from the other PEs.
     ///
-    fn alloc_one_sided_mem_region<T: Dist + std::marker::Sized>(
+    fn try_alloc_one_sided_mem_region<T: Dist + std::marker::Sized>(
         &self,
         size: usize,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error>;
