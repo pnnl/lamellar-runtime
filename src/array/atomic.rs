@@ -916,7 +916,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.   
+    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
@@ -940,7 +940,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.   
+    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
@@ -999,7 +999,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     ///```
     ///
     /// # Warning
@@ -1017,15 +1017,15 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     /// unsafe_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("atomic into_unsafe");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.into_unsafe(),
+            AtomicArray::GenericAtomicArray(array) => array.into_unsafe(),
         }
     }
     // pub fn into_local_only(self) -> LocalOnlyArray<T> {
@@ -1054,7 +1054,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -1071,15 +1071,15 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     /// read_only_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("atomic into_read_only");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.array.into_read_only(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into_read_only(),
         }
     }
 
@@ -1101,7 +1101,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -1118,15 +1118,15 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     /// local_lock_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("atomic into_local_lock");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.array.into_local_lock(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into_local_lock(),
         }
     }
 
@@ -1148,7 +1148,7 @@ impl<T: Dist> AtomicArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -1165,27 +1165,27 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     /// global_lock_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("atomic into_global_lock");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.array.into_global_lock(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into_global_lock(),
         }
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-        array.into()
-    }
-}
+// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
+//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         let (vals, distribution) = input;
+//         let input = (&vals, distribution);
+//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
+//         array.into()
+//     }
+// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
@@ -1195,16 +1195,16 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T
     }
 }
 
-impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
-        // println!("Converting from UnsafeArray to AtomicArray");
-        if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
-            NativeAtomicArray::from(array).into()
-        } else {
-            GenericAtomicArray::from(array).into()
-        }
-    }
-}
+// impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
+//     fn from(array: UnsafeArray<T>) -> Self {
+//         // println!("Converting from UnsafeArray to AtomicArray");
+//         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
+//             NativeAtomicArray::from(array).into()
+//         } else {
+//             GenericAtomicArray::from(array).into()
+//         }
+//     }
+// }
 
 #[async_trait]
 impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
@@ -1225,25 +1225,25 @@ impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
 //     }
 // }
 
-impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
-    fn from(array: ReadOnlyArray<T>) -> Self {
-        // println!("Converting from ReadOnlyArray to AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
-impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
-    fn from(array: LocalLockArray<T>) -> Self {
-        // println!("Converting from LocalLockArray to AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
+//     fn from(array: ReadOnlyArray<T>) -> Self {
+//         // println!("Converting from ReadOnlyArray to AtomicArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
+// impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
+//     fn from(array: LocalLockArray<T>) -> Self {
+//         // println!("Converting from LocalLockArray to AtomicArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
-impl<T: Dist + 'static> From<GlobalLockArray<T>> for AtomicArray<T> {
-    fn from(array: GlobalLockArray<T>) -> Self {
-        // println!("Converting from GlobalLockArray to AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist + 'static> From<GlobalLockArray<T>> for AtomicArray<T> {
+//     fn from(array: GlobalLockArray<T>) -> Self {
+//         // println!("Converting from GlobalLockArray to AtomicArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
 impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
     fn from(array: AtomicArray<T>) -> Self {
@@ -1291,7 +1291,7 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
-    /// the returned reduction result is only available on the calling PE  
+    /// the returned reduction result is only available on the calling PE
     ///
     ///  # Safety
     /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,

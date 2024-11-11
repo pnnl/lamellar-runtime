@@ -24,9 +24,9 @@ fn main() {
         .local_iter_mut()
         .for_each(move |elem| *elem = num_pes as u8)
         .block(); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, so use locallock for initializiation
-    let array = array.into_atomic(); //this enforces a wait_all and barrier
-                                     // array.wait_all();
-                                     // array.barrier();
+    let array = array.into_atomic().block(); //this enforces a wait_all and barrier
+                                             // array.wait_all();
+                                             // array.barrier();
 
     world.barrier();
     let s = Instant::now();
@@ -101,7 +101,7 @@ fn main() {
             (sum as f64 / 1048576.0) / cur_t, // throughput of user payload
             ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
             cur - old, //total bytes sent including overhead
-            (cur - old) as f64 / cur_t, //throughput including overhead 
+            (cur - old) as f64 / cur_t, //throughput including overhead
             (mbs_c -mbs_o )/ cur_t,
             (cur_t/cnt as f64) * 1_000_000 as f64 ,
         );

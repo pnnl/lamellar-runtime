@@ -31,13 +31,13 @@ fn main() {
     print_env(&grw_darc);
     println!("environment from UnsafeArray");
     print_env(&array);
-    let array = array.into_atomic();
+    let array = array.into_atomic().block();
     println!("environment from AtomicArray");
     print_env(&array);
-    let array = array.into_local_lock();
+    let array = array.into_local_lock().block();
     println!("environment from LocalOnlyArray");
     print_env(&array);
-    let array = array.into_global_lock();
+    let array = array.into_global_lock().block();
     println!("environment from GlobalLockArray");
     print_env(&array);
     if world.my_pe() % 2 == 0 {

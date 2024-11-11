@@ -5,8 +5,10 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();
-    let block_array = LocalLockArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
-    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
+    let block_array =
+        LocalLockArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
+    let cyclic_array =
+        AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
 
     // We expose multiple ways to iterate over a lamellar array
     // the first approach introduces what we call a distributed iterator (inspired by Rayon's parallel iterators).
@@ -33,7 +35,7 @@ fn main() {
         .for_each(move |elem| elem.store(my_pe))
         .block();
 
-    // let block_array = block_array.into_read_only();
+    // let block_array = block_array.into_read_only().block();
     block_array.print();
     cyclic_array.print();
 

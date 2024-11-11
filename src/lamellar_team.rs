@@ -15,8 +15,8 @@ use crate::memregion::{
 use crate::scheduler::{LamellarTask, ReqId, Scheduler};
 use crate::warnings::RuntimeWarning;
 
-#[cfg(feature = "nightly")]
-use crate::utils::ser_closure;
+// #[cfg(feature = "nightly")]
+// use crate::utils::ser_closure;
 
 // use log::trace;
 use std::collections::hash_map::DefaultHasher;
@@ -574,7 +574,10 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
     //#[tracing::instrument(skip_all)]
 
-    fn try_alloc_shared_mem_region<T: Dist>(&self, size: usize) -> FallibleSharedMemoryRegionHandle<T> {
+    fn try_alloc_shared_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> FallibleSharedMemoryRegionHandle<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         // self.team.barrier.barrier();
@@ -617,10 +620,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn alloc_one_sided_mem_region<T: Dist>(
-        &self,
-        size: usize,
-    ) -> OneSidedMemoryRegion<T> {
+    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
@@ -1439,9 +1439,10 @@ impl LamellarTeamRT {
                 || orig_launched != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
                 || (self.parent.is_none()
                     && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                    || world_orig_reqs != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                    || world_orig_launched != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
-                ))
+                        || world_orig_reqs
+                            != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                        || world_orig_launched
+                            != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))))
         {
             orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
             orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
@@ -2228,7 +2229,7 @@ impl LamellarTeamRT {
         OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone())
     }
 
-     /// allocate a local memory region from the asymmetric heap
+    /// allocate a local memory region from the asymmetric heap
     ///
     /// # Arguments
     ///
@@ -2238,7 +2239,7 @@ impl LamellarTeamRT {
     pub(crate) fn alloc_one_sided_mem_region<T: Dist>(
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
-    ) -> OneSidedMemoryRegion<T>{
+    ) -> OneSidedMemoryRegion<T> {
         let mut lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
         while let Err(_err) = lmr {
             std::thread::yield_now();

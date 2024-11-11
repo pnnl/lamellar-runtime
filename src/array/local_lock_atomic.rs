@@ -12,6 +12,7 @@ mod rdma;
 use crate::array::private::ArrayExecAm;
 use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::AsyncFrom;
 use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
@@ -422,7 +423,7 @@ impl<T: Dist> LocalLockArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return a handle for accessing the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.   
+    /// Return a handle for accessing the calling PE's local data as a [LocalLockLocalData], which allows safe immutable access to local elements.
     ///
     /// The returned handle must be await'd `.read_local_data().await` within an async context or
     /// it must be blocked on `.read_local_data().block()` in a non async context to actually acquire the lock
@@ -455,7 +456,7 @@ impl<T: Dist> LocalLockArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return a handle for accessing the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.   
+    /// Return a handle for accessing the calling PE's local data as a [LocalLockMutLocalData], which allows safe mutable access to local elements.
     ///
     /// The returned handle must be await'd `.write_local_data().await` within an async context or
     /// it must be blocked on `.write_local_data().block()` in a non async context to actually acquire the lock
@@ -513,7 +514,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     ///```
     ///
     /// # Warning
@@ -531,12 +532,17 @@ impl<T: Dist> LocalLockArray<T> {
     /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     /// unsafe_array.print();
     /// println!("{slice:?}");
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("locallock into_unsafe");
-        self.array.into()
+        // self.array.into()
+        IntoUnsafeArrayHandle {
+            team: self.array.inner.data.team.clone(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
     // pub fn into_local_only(self) -> LocalOnlyArray<T> {
@@ -562,7 +568,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -579,13 +585,13 @@ impl<T: Dist> LocalLockArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     /// read_only_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("locallock into_read_only");
-        self.array.into()
+        self.array.into_read_only()
     }
 
     #[doc(alias = "Collective")]
@@ -606,7 +612,7 @@ impl<T: Dist> LocalLockArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -623,13 +629,13 @@ impl<T: Dist> LocalLockArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     /// global_lock_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("readonly into_global_lock");
-        self.array.into()
+        self.array.into_global_lock()
     }
 }
 
@@ -652,7 +658,7 @@ impl<T: Dist + 'static> LocalLockArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let atomic_array = array.into_atomic();
+    /// let atomic_array = array.into_atomic().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -669,43 +675,36 @@ impl<T: Dist + 'static> LocalLockArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let atomic_array = array.into_atomic();
+    /// let atomic_array = array.into_atomic().block();
     /// atomic_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_atomic(self) -> AtomicArray<T> {
+    pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         // println!("locallock into_atomic");
-        self.array.into()
+        self.array.into_atomic()
+        // IntoAtomicArrayHandle {
+        //     array: self.array.clone(),
+        //     team: self.array.team_rt(),
+        //     launched: false,
+        //     outstanding_future: Box::pin(self.array.async_into()),
+        // }
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-        array.into()
-    }
-}
+// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
+//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         let (vals, distribution) = input;
+//         let input = (&vals, distribution);
+//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
+//         array.into()
+//     }
+// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for LocalLockArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
-    }
-}
-
-impl<T: Dist> From<UnsafeArray<T>> for LocalLockArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
-        // println!("locallock from unsafe");
-        array.block_on_outstanding(DarcMode::LocalLockArray);
-        let lock = LocalRwDarc::new(array.team_rt(), ()).block().unwrap();
-
-        LocalLockArray {
-            lock: lock,
-            array: array,
-        }
     }
 }
 
@@ -730,26 +729,26 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
 //     }
 // }
 
-impl<T: Dist> From<AtomicArray<T>> for LocalLockArray<T> {
-    fn from(array: AtomicArray<T>) -> Self {
-        // println!("locallock from atomic");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<AtomicArray<T>> for LocalLockArray<T> {
+//     fn from(array: AtomicArray<T>) -> Self {
+//         // println!("locallock from atomic");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
-impl<T: Dist> From<ReadOnlyArray<T>> for LocalLockArray<T> {
-    fn from(array: ReadOnlyArray<T>) -> Self {
-        // println!("locallock from readonly");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<ReadOnlyArray<T>> for LocalLockArray<T> {
+//     fn from(array: ReadOnlyArray<T>) -> Self {
+//         // println!("locallock from readonly");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
-impl<T: Dist> From<GlobalLockArray<T>> for LocalLockArray<T> {
-    fn from(array: GlobalLockArray<T>) -> Self {
-        // println!("LocalLockArray from GlobalLockArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<GlobalLockArray<T>> for LocalLockArray<T> {
+//     fn from(array: GlobalLockArray<T>) -> Self {
+//         // println!("LocalLockArray from GlobalLockArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
 impl<T: Dist> From<LocalLockArray<T>> for LocalLockByteArray {
     fn from(array: LocalLockArray<T>) -> Self {
@@ -789,7 +788,7 @@ impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
 
 impl<T: Dist> private::ArrayExecAm<T> for LocalLockArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
@@ -876,7 +875,7 @@ impl<T: Dist> ActiveMessaging for LocalLockArray<T> {
 
 impl<T: Dist> LamellarArray<T> for LocalLockArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)
@@ -1042,7 +1041,7 @@ impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
-    /// the returned reduction result is only available on the calling PE  
+    /// the returned reduction result is only available on the calling PE
     ///
     /// # Safety
     /// the local read lock ensures atomicity of only the local portion of the array, I.e. elements on a PE wont change while the operation is being executed on that PE

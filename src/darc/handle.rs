@@ -783,7 +783,7 @@ impl<T: 'static> PinnedDrop for IntoDarcHandle<T> {
 }
 
 impl<T: Sync + Send> IntoDarcHandle<T> {
-    /// Used to drive to conversion of a [LocalRwDarc] or [GlobalRwDarc] into a [Darc]
+    /// Used to drive the cconversion of a [LocalRwDarc] or [GlobalRwDarc] into a [Darc]
     /// # Examples
     ///
     ///```
@@ -884,7 +884,7 @@ impl<T: 'static> PinnedDrop for IntoLocalRwDarcHandle<T> {
 }
 
 impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
-    /// Used to drive to conversion of a [Darc] or [GlobalRwDarc] into a [LocalRwDarc]
+    /// Used to drive the cconversion of a [Darc] or [GlobalRwDarc] into a [LocalRwDarc]
     /// # Examples
     ///
     ///```
@@ -987,7 +987,7 @@ impl<T: 'static> PinnedDrop for IntoGlobalRwDarcHandle<T> {
 }
 
 impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
-    /// Used to drive to conversion of a  [Darc] or [LocalRwDarc] into a [GlobalRwDarc]
+    /// Used to drive the cconversion of a  [Darc] or [LocalRwDarc] into a [GlobalRwDarc]
     /// # Examples
     ///
     ///```

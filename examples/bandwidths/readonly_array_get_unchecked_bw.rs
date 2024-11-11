@@ -12,7 +12,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array: UnsafeArray<u8> = UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
+    let array: UnsafeArray<u8> =
+        UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
@@ -29,7 +30,7 @@ fn main() {
             .block();
     }
     array.barrier();
-    let array = array.into_read_only();
+    let array = array.into_read_only().block();
 
     world.barrier();
     let s = Instant::now();
@@ -96,7 +97,7 @@ fn main() {
             (sum as f64 / 1048576.0) / cur_t, // throughput of user payload
             ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
             cur - old, //total bytes sent including overhead
-            (cur - old) as f64 / cur_t, //throughput including overhead 
+            (cur - old) as f64 / cur_t, //throughput including overhead
             (mbs_c -mbs_o )/ cur_t,
             (cur_t/cnt as f64) * 1_000_000 as f64 ,
         );

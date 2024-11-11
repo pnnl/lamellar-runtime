@@ -55,8 +55,8 @@ fn main() {
 
     world.wait_all();
     world.barrier();
-    let a = a.into_read_only();
-    let b = b.into_read_only();
+    let a = a.into_read_only().block();
+    let b = b.into_read_only().block();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 

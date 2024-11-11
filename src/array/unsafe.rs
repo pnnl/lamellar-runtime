@@ -526,7 +526,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     ///```
     ///
     /// # Warning
@@ -544,13 +544,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let ro_array = array.into_read_only();
+    /// let ro_array = array.into_read_only().block();
     /// ro_array.print();
     /// println!("{mut_slice:?}");
     ///```
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("unsafe into read only");
-        self.into()
+        IntoReadOnlyArrayHandle {
+            team: self.team_rt(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
     // pub fn into_local_only(self) -> LocalOnlyArray<T> {
@@ -576,7 +580,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -593,13 +597,19 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "iinto_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     /// local_lock_array.print();
     /// println!("{mut_slice:?}");
     ///```
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("unsafe into local lock atomic");
-        self.into()
+        // self.into()
+
+        IntoLocalLockArrayHandle {
+            team: self.team_rt(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
     #[doc(alias = "Collective")]
@@ -620,7 +630,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -637,13 +647,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     /// global_lock_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("readonly into_global_lock");
-        self.into()
+        IntoGlobalLockArrayHandle {
+            team: self.team_rt(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
     pub(crate) fn tasking_barrier(&self) {
@@ -674,7 +688,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let atomic_array = array.into_local_lock();
+    /// let atomic_array = array.into_local_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -691,13 +705,17 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let atomic_array = array.into_local_lock();
+    /// let atomic_array = array.into_local_lock().block();
     /// atomic_array.print();
     /// println!("{mut_slice:?}");
     ///```
-    pub fn into_atomic(self) -> AtomicArray<T> {
+    pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         // println!("unsafe into atomic");
-        self.into()
+        IntoAtomicArrayHandle {
+            team: self.team_rt(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 }
 
@@ -804,46 +822,76 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
-    fn from(array: AtomicArray<T>) -> Self {
+// impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
+//     fn from(array: AtomicArray<T>) -> Self {
+//         match array {
+//             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
+//             AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::from(array),
+//         }
+//     }
+// }
+
+#[async_trait]
+impl<T: Dist> AsyncFrom<AtomicArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: AtomicArray<T>) -> Self {
         match array {
-            AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
-            AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::from(array),
+            AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
+            AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
         }
     }
 }
 
-impl<T: Dist> From<NativeAtomicArray<T>> for UnsafeArray<T> {
-    fn from(array: NativeAtomicArray<T>) -> Self {
-        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+#[async_trait]
+impl<T: Dist> AsyncFrom<NativeAtomicArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: NativeAtomicArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
         array.array
     }
 }
 
-impl<T: Dist> From<GenericAtomicArray<T>> for UnsafeArray<T> {
-    fn from(array: GenericAtomicArray<T>) -> Self {
-        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+#[async_trait]
+impl<T: Dist> AsyncFrom<GenericAtomicArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: GenericAtomicArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
         array.array
     }
 }
 
-impl<T: Dist> From<LocalLockArray<T>> for UnsafeArray<T> {
-    fn from(array: LocalLockArray<T>) -> Self {
-        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+#[async_trait]
+impl<T: Dist> AsyncFrom<LocalLockArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: LocalLockArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
         array.array
     }
 }
 
-impl<T: Dist> From<GlobalLockArray<T>> for UnsafeArray<T> {
-    fn from(array: GlobalLockArray<T>) -> Self {
-        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+#[async_trait]
+impl<T: Dist> AsyncFrom<GlobalLockArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: GlobalLockArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
         array.array
     }
 }
 
-impl<T: Dist> From<ReadOnlyArray<T>> for UnsafeArray<T> {
-    fn from(array: ReadOnlyArray<T>) -> Self {
-        array.array.block_on_outstanding(DarcMode::UnsafeArray);
+#[async_trait]
+impl<T: Dist> AsyncFrom<ReadOnlyArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: ReadOnlyArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
         array.array
     }
 }
@@ -898,7 +946,7 @@ impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
 
 impl<T: Dist> ArrayExecAm<T> for UnsafeArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.team_rt().clone()
+        self.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.inner.data.array_counters.clone()
@@ -1346,7 +1394,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
-    /// the returned reduction result is only available on the calling PE  
+    /// the returned reduction result is only available on the calling PE
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples
@@ -1384,7 +1432,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
-    /// the returned sum reduction result is only available on the calling PE  
+    /// the returned sum reduction result is only available on the calling PE
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples
@@ -1422,7 +1470,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
-    /// the returned prod reduction result is only available on the calling PE  
+    /// the returned prod reduction result is only available on the calling PE
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples
@@ -1459,7 +1507,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
-    /// the returned max reduction result is only available on the calling PE  
+    /// the returned max reduction result is only available on the calling PE
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples
@@ -1492,7 +1540,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
-    /// the returned min reduction result is only available on the calling PE  
+    /// the returned min reduction result is only available on the calling PE
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples

@@ -464,7 +464,7 @@ macro_rules! input_test {
         println!("passed &UnsafeArray<T>");
 
         // ReadOnlyArray<T>------------------------------
-        let input_array = input_array.into_read_only();
+        let input_array = input_array.into_read_only().block();
         // array.add(input_array.clone(),1);
         // check_results!($array,array,num_pes,"ReadOnlyArray<T>");
         // ReadOnlyArray<T>------------------------------
@@ -474,7 +474,7 @@ macro_rules! input_test {
         println!("passed &ReadOnlyArray<T>");
 
         // AtomicArray<T>------------------------------
-        let input_array = input_array.into_atomic();
+        let input_array = input_array.into_atomic().block();
         // array.add(input_array.clone(),1);
         // check_results!($array,array,num_pes,"AtomicArray<T>");
         // AtomicArray<T>------------------------------
@@ -484,7 +484,7 @@ macro_rules! input_test {
         println!("passed &AtomicArray<T>");
 
         // LocalLockArray<T>------------------------------
-        let input_array = input_array.into_local_lock();
+        let input_array = input_array.into_local_lock().block();
         //  array.add(input_array.clone(),1);
         //  check_results!($array,array,num_pes,"LocalLockArray<T>");
         // LocalLockArray<T>------------------------------
@@ -498,7 +498,7 @@ macro_rules! input_test {
         println!("passed &LocalLockArray<T>");
 
         // GlobalLockArray<T>------------------------------
-        let input_array = input_array.into_global_lock();
+        let input_array = input_array.into_global_lock().block();
         //  array.add(input_array.clone(),1);
         //  check_results!($array,array,num_pes,"GlobalLockArray<T>");
         // GlobalLockArray<T>------------------------------

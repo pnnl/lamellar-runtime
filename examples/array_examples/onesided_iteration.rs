@@ -127,7 +127,7 @@ fn main() {
     //     let array = LocalLockArray::<usize>::new(&world, 8, Distribution::Block).block();
     //     let my_pe = world.my_pe();
     //     let num_pes = world.num_pes();
-    let block_array = block_array.into_local_lock();
+    let block_array = block_array.into_local_lock().block();
     block_array
         .dist_iter_mut()
         .for_each(move |e| *e = my_pe)

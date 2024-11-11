@@ -636,18 +636,9 @@ fn main() {
         let global_len = num_pes * array_len;
 
         println!("my_pe {:?} num_pes {:?}", my_pe, num_pes);
-        let partial_sum = world
-            .alloc_shared_mem_region::<f64>(num_pes)
-            .block()
-            ;
-        let partial_spectrum = world
-            .alloc_shared_mem_region::<f64>(array_len)
-            .block()
-            ;
-        let partial_signal = world
-            .alloc_shared_mem_region::<f64>(array_len)
-            .block()
-            ;
+        let partial_sum = world.alloc_shared_mem_region::<f64>(num_pes).block();
+        let partial_spectrum = world.alloc_shared_mem_region::<f64>(array_len).block();
+        let partial_signal = world.alloc_shared_mem_region::<f64>(array_len).block();
         let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len);
         let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len);
         let magic = world.alloc_one_sided_mem_region::<f64>(num_pes);
@@ -886,8 +877,8 @@ fn main() {
         //     .for_each(|elem| *elem = 0.0);
         // full_spectrum_array.wait_all();
         // full_spectrum_array.barrier();
-        let full_signal_array = full_signal_array.into_read_only();
-        let full_spectrum_array = full_spectrum_array.into_atomic();
+        let full_signal_array = full_signal_array.into_read_only().block();
+        let full_spectrum_array = full_spectrum_array.into_atomic().block();
 
         for _i in 0..num_trials {
             // let timer = Instant::now();
@@ -915,7 +906,7 @@ fn main() {
         }
         ti += 1;
 
-        let full_spectrum_array = full_spectrum_array.into_local_lock();
+        let full_spectrum_array = full_spectrum_array.into_local_lock().block();
         for _i in 0..num_trials {
             // let timer = Instant::now();
             times[ti].push(dft_lamellar_array_opt_3(

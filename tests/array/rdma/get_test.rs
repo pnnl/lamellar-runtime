@@ -48,14 +48,14 @@ macro_rules! initialize_array {
     };
     (ReadOnlyArray,$array:ident,$t:ty) => {
         // println!("into unsafe");
-        let temp = $array.into_unsafe();
+        let temp = $array.into_unsafe().block();
         // println!("unsafe");
         unsafe {
             temp.dist_iter_mut()
                 .enumerate()
                 .for_each(move |(i, x)| *x = i as $t)
                 .block();
-            $array = temp.into_read_only();
+            $array = temp.into_read_only().block();
         }
     };
 }
@@ -97,7 +97,7 @@ macro_rules! initialize_array_range {
     }};
     (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {{
         // println!("into unsafe");
-        let temp = $array.into_unsafe();
+        let temp = $array.into_unsafe().block();
         // println!("unsafe");
         unsafe {
             let subarray = temp.sub_array($range);
@@ -109,7 +109,7 @@ macro_rules! initialize_array_range {
             drop(subarray);
         }
         println!("into read only");
-        $array = temp.into_read_only();
+        $array = temp.into_read_only().block();
         println!("read only");
     }};
 }

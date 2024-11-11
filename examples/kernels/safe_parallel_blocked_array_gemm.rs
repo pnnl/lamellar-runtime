@@ -32,7 +32,7 @@ fn main() {
     let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major -- we will change this into a readonly array after initialization
     let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major -- we will change this into a readonly array after initialization
     let c = LocalLockArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
-                                                                            //initialize
+                                                                                    //initialize
     let a_init = a
         .dist_iter_mut()
         .enumerate()
@@ -49,8 +49,8 @@ fn main() {
     });
     let c_init = c.dist_iter_mut().for_each(move |x| *x = 0.0);
     world.block_on_all([a_init, b_init, c_init]);
-    let a = a.into_read_only();
-    let b = b.into_read_only();
+    let a = a.into_read_only().block();
+    let b = b.into_read_only().block();
 
     world.barrier();
 
@@ -76,7 +76,8 @@ fn main() {
         .for_each(move |(i, x)| *x = i % n_blks)
         .block();
 
-    let m_blks_pe_array = LocalLockArray::new(&world, m_blks_pe * num_pes, Distribution::Block).block();
+    let m_blks_pe_array =
+        LocalLockArray::new(&world, m_blks_pe * num_pes, Distribution::Block).block();
 
     m_blks_pe_array
         .dist_iter_mut()
@@ -84,8 +85,8 @@ fn main() {
         .for_each(move |(i, x)| *x = i % m_blks_pe)
         .block();
     world.barrier();
-    let nblks_array = nblks_array.into_read_only();
-    let m_blks_pe_array = m_blks_pe_array.into_read_only();
+    let nblks_array = nblks_array.into_read_only().block();
+    let m_blks_pe_array = m_blks_pe_array.into_read_only().block();
     println!("{blocksize} {m_blks} {m_blks_pe} {n_blks} {p_blks}");
 
     let start = std::time::Instant::now();

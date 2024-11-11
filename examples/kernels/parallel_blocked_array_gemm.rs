@@ -39,7 +39,7 @@ fn main() {
     let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major
     let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
-                                                                         //initialize
+                                                                                 //initialize
     a.dist_iter_mut()
         .enumerate()
         .for_each(|(i, x)| *x = i as f32)
@@ -59,8 +59,8 @@ fn main() {
         .block();
     c.dist_iter_mut().for_each(|x| x.store(0.0)).block();
     world.barrier();
-    let a = a.into_read_only();
-    let b = b.into_read_only();
+    let a = a.into_read_only().block();
+    let b = b.into_read_only().block();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
     let blocksize = dim / num_pes;
@@ -75,7 +75,8 @@ fn main() {
     // we construct a global array where each pe will contain the sequence (0..n_blks)
     // we can then call dist_iter() on this array to iterate over the range in parallel on each PE
     let nblks_array =
-        LocalLockArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block).block();
+        LocalLockArray::<Block>::new(&world, (n_blks * n_blks) * num_pes, Distribution::Block)
+            .block();
 
     nblks_array
         .dist_iter_mut()
@@ -86,7 +87,7 @@ fn main() {
             x.k = i % n_blks
         })
         .block();
-    let nblks_array = nblks_array.into_read_only();
+    let nblks_array = nblks_array.into_read_only().block();
 
     let start = std::time::Instant::now();
     let a_clone = a.clone();

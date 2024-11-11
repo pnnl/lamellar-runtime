@@ -208,12 +208,12 @@ impl<T: Dist> LamellarArrayIterators<T> for AtomicArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone().into(), LamellarArray::team_rt(self).clone(), 1)
+        OneSidedIter::new(self.clone(), LamellarArray::team_rt(self).clone(), 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
         OneSidedIter::new(
-            self.clone().into(),
+            self.clone(),
             LamellarArray::team_rt(self).clone(),
             std::cmp::min(buf_size, self.len()),
         )

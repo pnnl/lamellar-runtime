@@ -4,7 +4,7 @@ use crate::array::iterator::private::*;
 use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::operations::ArrayOps;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution, TeamInto};
+use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution};
 use crate::barrier::BarrierHandle;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -193,11 +193,11 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
         array
     }
 
-    fn create_array(&self, local_vals: Vec<T>) -> A {
-        let input = (local_vals, self.distribution);
-        let array: A = TeamInto::team_into(input, &self.team);
-        array
-    }
+    // fn create_array(&self, local_vals: Vec<T>) -> A {
+    //     let input = (local_vals, self.distribution);
+    //     let array: A = TeamInto::team_into(input, &self.team);
+    //     array
+    // }
 }
 
 impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + 'static> Future

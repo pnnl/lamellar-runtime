@@ -1001,25 +1001,31 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.array.local_as_mut_slice()
     }
 
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("native into_unsafe");
-        self.array.into()
+        // self.array.into()
+
+        IntoUnsafeArrayHandle {
+            team: self.array.inner.data.team.clone(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("native into_read_only");
-        self.array.into()
+        self.array.into_read_only()
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-        array.into()
-    }
-}
+// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {
+//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         let (vals, distribution) = input;
+//         let input = (&vals, distribution);
+//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
+//         array.into()
+//     }
+// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {
@@ -1030,17 +1036,17 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for NativeAtomicA
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
-        // println!("native from unsafe");
-        array.block_on_outstanding(DarcMode::NativeAtomicArray);
+// impl<T: Dist> From<UnsafeArray<T>> for NativeAtomicArray<T> {
+//     fn from(array: UnsafeArray<T>) -> Self {
+//         // println!("native from unsafe");
+//         array.block_on_outstanding(DarcMode::NativeAtomicArray);
 
-        NativeAtomicArray {
-            array: array,
-            orig_t: NativeAtomicType::of::<T>(),
-        }
-    }
-}
+//         NativeAtomicArray {
+//             array: array,
+//             orig_t: NativeAtomicType::of::<T>(),
+//         }
+//     }
+// }
 
 //#[doc(hidden)]
 #[async_trait]
@@ -1123,7 +1129,7 @@ impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
 // //#[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
@@ -1212,7 +1218,7 @@ impl<T: Dist> ActiveMessaging for NativeAtomicArray<T> {
 //#[doc(hidden)]
 impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)

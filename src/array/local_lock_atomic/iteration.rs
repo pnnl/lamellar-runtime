@@ -458,13 +458,13 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone().into(), self.array.team_rt().clone(), 1)
+        OneSidedIter::new(self.clone(), self.array.team_rt(), 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
         OneSidedIter::new(
-            self.clone().into(),
-            self.array.team_rt().clone(),
+            self.clone(),
+            self.array.team_rt(),
             std::cmp::min(buf_size, self.len()),
         )
     }

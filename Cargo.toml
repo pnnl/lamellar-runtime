@@ -15,7 +15,7 @@ categories = ["asynchronous","concurrency", "network-programming","science"]
 lamellar-impl = { version = "0.7.0", path = "impl" }
 #rofisys = { version ="0.3", optional = true }
 rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
-inventory = "0.3" 
+inventory = "0.3"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
 serde_with = "3.0.0"
@@ -84,7 +84,7 @@ default=[]
 opt-level=3
 lto=false
 codegen-units=1
-debug = true   
+debug = true
 
 
 [lib]
@@ -169,10 +169,6 @@ path = "tests/array/atomic_ops/swap_test.rs"
 [[example]]
 name = "compare_exchange_test"
 path = "tests/array/atomic_ops/compare_exchange_test.rs"
-
-[[example]]
-name = "array_into_test"
-path = "tests/array/array_into_test.rs"
 
 ##------------ Bandwidth Examples -----------------##
 
@@ -480,6 +476,3 @@ path="examples/hello_world/hello_world_array.rs"
 [[example]]
 name="hello_world_array_iteration"
 path="examples/hello_world/hello_world_array_iteration.rs"
-
-
-

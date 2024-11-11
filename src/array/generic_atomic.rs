@@ -540,27 +540,32 @@ impl<T: Dist> GenericAtomicArray<T> {
     // }
 
     //#[doc(hidden)]
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("generic into_unsafe");
-        self.array.into()
+        // self.array.into()
+        IntoUnsafeArrayHandle {
+            team: self.array.inner.data.team.clone(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
     //#[doc(hidden)]
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("generic into_read_only");
-        self.array.into()
+        self.array.into_read_only()
     }
 
     //#[doc(hidden)]
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("generic into_local_lock");
-        self.array.into()
+        self.array.into_local_lock()
     }
 
     //#[doc(hidden)]
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("generic into_local_lock");
-        self.array.into()
+        self.array.into_global_lock()
     }
 
     //#[doc(hidden)]
@@ -588,9 +593,9 @@ impl<T: Dist> GenericAtomicArray<T> {
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
     #[doc(hidden)]
-    pub fn into_atomic(self) -> GenericAtomicArray<T> {
+    pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         // println!("generic into_atomic");
-        self.array.into()
+        self.array.into_atomic()
     }
 }
 
@@ -704,7 +709,7 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
 
 impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
@@ -791,7 +796,7 @@ impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
 
 impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)

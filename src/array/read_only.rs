@@ -176,7 +176,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     ///```
     ///
     /// # Warning
@@ -194,13 +194,17 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     /// unsafe_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("readonly into_unsafe");
-        self.array.into()
+        IntoUnsafeArrayHandle {
+            team: self.array.inner.data.team.clone(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
     // pub fn into_local_only(self) -> LocalOnlyArray<T> {
@@ -226,7 +230,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -243,13 +247,13 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     /// local_lock_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("readonly into_local_lock");
-        self.array.into()
+        self.array.into_local_lock()
     }
 
     #[doc(alias = "Collective")]
@@ -270,7 +274,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -287,13 +291,13 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     /// global_lock_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("readonly into_global_lock");
-        self.array.into()
+        self.array.into_global_lock()
     }
 }
 
@@ -316,7 +320,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let atomic_array = array.into_local_lock();
+    /// let atomic_array = array.into_local_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -333,23 +337,23 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// // but array1 will not be dropped until after slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let atomic_array = array.into_local_lock();
+    /// let atomic_array = array.into_local_lock().block();
     /// atomic_array.print();
     /// println!("{slice:?}");
     ///```
-    pub fn into_atomic(self) -> AtomicArray<T> {
-        self.array.into()
+    pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
+        self.array.into_atomic()
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-        array.into()
-    }
-}
+// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
+//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         let (vals, distribution) = input;
+//         let input = (&vals, distribution);
+//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
+//         array.into()
+//     }
+// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
@@ -359,21 +363,21 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for ReadOnlyArray<T> {
-    fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-        array.into()
-    }
-}
+// impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for ReadOnlyArray<T> {
+//     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
+//         array.into()
+//     }
+// }
 
-impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
-        // println!("readonly from UnsafeArray");
-        array.block_on_outstanding(DarcMode::ReadOnlyArray);
+// impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
+//     fn from(array: UnsafeArray<T>) -> Self {
+//         // println!("readonly from UnsafeArray");
+//         array.block_on_outstanding(DarcMode::ReadOnlyArray);
 
-        ReadOnlyArray { array: array }
-    }
-}
+//         ReadOnlyArray { array: array }
+//     }
+// }
 
 #[async_trait]
 impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {
@@ -392,26 +396,26 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {
 //     }
 // }
 
-impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
-    fn from(array: AtomicArray<T>) -> Self {
-        // println!("readonly from AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
+//     fn from(array: AtomicArray<T>) -> Self {
+//         // println!("readonly from AtomicArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
-impl<T: Dist> From<LocalLockArray<T>> for ReadOnlyArray<T> {
-    fn from(array: LocalLockArray<T>) -> Self {
-        // println!("readonly from LocalLockArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<LocalLockArray<T>> for ReadOnlyArray<T> {
+//     fn from(array: LocalLockArray<T>) -> Self {
+//         // println!("readonly from LocalLockArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
-impl<T: Dist> From<GlobalLockArray<T>> for ReadOnlyArray<T> {
-    fn from(array: GlobalLockArray<T>) -> Self {
-        // println!("readonly from GlobalLockArray");
-        unsafe { array.into_inner().into() }
-    }
-}
+// impl<T: Dist> From<GlobalLockArray<T>> for ReadOnlyArray<T> {
+//     fn from(array: GlobalLockArray<T>) -> Self {
+//         // println!("readonly from GlobalLockArray");
+//         unsafe { array.into_inner().into() }
+//     }
+// }
 
 impl<T: Dist> From<ReadOnlyArray<T>> for ReadOnlyByteArray {
     fn from(array: ReadOnlyArray<T>) -> Self {
@@ -454,7 +458,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
-    /// the returned reduction result is only available on the calling PE  
+    /// the returned reduction result is only available on the calling PE
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     /// # Examples
@@ -471,7 +475,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// array.wait_all();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
     /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
@@ -504,7 +508,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// array.wait_all();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
     /// let sum = array.block_on(array.sum()).expect("array len > 0");
     /// assert_eq!(array.len()*num_pes,sum);
     /// ```
@@ -533,7 +537,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     ///     elem.store(i+1);
     /// }).block();
     /// array.wait_all();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
     /// let prod =  array.block_on(array.prod()).expect("array len > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
@@ -561,7 +565,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// array.wait_all();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
     /// let max = array.block_on(array.max()).expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
@@ -588,7 +592,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// array.wait_all();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
     /// let min = array.block_on(array.min()).expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
@@ -600,7 +604,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
 
 impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
@@ -687,7 +691,7 @@ impl<T: Dist> ActiveMessaging for ReadOnlyArray<T> {
 
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+        self.array.team_rt()
     }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)

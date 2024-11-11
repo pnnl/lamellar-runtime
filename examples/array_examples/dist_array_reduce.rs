@@ -151,7 +151,7 @@ fn main() {
             .for_each(|x| println!("x: {:?}", x))
             .block()
     };
-    let block_array = block_array.into_read_only();
+    let block_array = block_array.into_read_only().block();
     let _ = block_array.sum().block();
 
     let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block).block();

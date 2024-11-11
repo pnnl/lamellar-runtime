@@ -25,7 +25,7 @@
 //! # Safety
 //! Array Data Lifetimes: LamellarArrays are built upon [Darcs][crate::darc::Darc] (Distributed Atomic Reference Counting Pointers) and as such have distributed lifetime management.
 //! This means that as long as a single reference to an array exists anywhere in the distributed system, the data for the entire array will remain valid on every PE (even though a given PE may have dropped all its local references).
-//! While the compiler handles lifetimes within the context of a single PE, our distributed lifetime management relies on "garbage collecting active messages" to ensure all remote references have been accounted for.  
+//! While the compiler handles lifetimes within the context of a single PE, our distributed lifetime management relies on "garbage collecting active messages" to ensure all remote references have been accounted for.
 //!
 //! # Multiple array types
 //! We provide several array types, each with their own saftey gaurantees with respect to how data is accessed (further details can be found in the documentation for each type)
@@ -51,11 +51,11 @@
 //! let world = LamellarWorldBuilder::new().build();
 //! let array =  UnsafeArray::<usize>::new(&world, 10,Distribution::Block).block();
 //!
-//! // convert between array types    
-//! let array = array.into_local_lock(); // LocalLockArray
-//! let array = array.into_global_lock(); // GlobalLockArray
-//! let array = array.into_atomic(); // AtomicArray
-//! let array = array.into_read_only(); // ReadOnlyArray
+//! // convert between array types
+//! let array = array.into_local_lock().block(); // LocalLockArray
+//! let array = array.into_global_lock().block(); // GlobalLockArray
+//! let array = array.into_atomic().block(); // AtomicArray
+//! let array = array.into_read_only().block(); // ReadOnlyArray
 //!
 //! // get a reference to the underlying slice: &[usize]
 //! let local_data = array.local_data();
@@ -533,7 +533,8 @@ pub trait TeamFrom<T: ?Sized> {
 // #[async_trait]
 /// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 /// and to be used within an async context
-pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> + Sized {
+// pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> + Sized {
+pub trait AsyncTeamFrom<T: ?Sized>: Sized {
     /// Converts to this type from the input type
     fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> impl Future<Output = Self> + Send;
 }
@@ -1087,7 +1088,6 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///```
     fn num_elems_local(&self) -> usize;
 
-
     #[doc(alias("One-sided", "onesided"))]
     /// Given a global index, calculate the PE and offset on that PE where the element actually resides.
     /// Returns None if the index is Out of bounds
@@ -1441,7 +1441,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// let len = buf.len();
     /// let _ = array.dist_iter_mut().for_each(move |elem| *elem = len).spawn(); //we will used this val as completion detection
     ///
-    /// //Safe as we are this is the only reference to buf   
+    /// //Safe as we are this is the only reference to buf
     /// unsafe {
     ///     for (i,elem) in buf.as_mut_slice()
     ///                       .expect("we just created it so we know its local")
@@ -1458,9 +1458,9 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     ///     println!();
     /// }
     /// array.barrier(); //block other PEs until PE0 has finised "putting" the data
-    ///    
+    ///
     /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
-    ///     
+    ///
     ///
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -1621,7 +1621,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
-/// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+/// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
 /// let sum = array.block_on(array.sum()).expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
@@ -1670,7 +1670,7 @@ where
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
-    /// the returned reduction result is only available on the calling PE  
+    /// the returned reduction result is only available on the calling PE
     ///
     /// # Examples
     /// ```
@@ -1685,7 +1685,7 @@ where
     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
     ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
-    /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+    /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
     /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
@@ -1718,7 +1718,7 @@ where
 //     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 //     ///     array_clone.add(index,1); //randomly at one to an element in the array.
 //     /// });
-//     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+//     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
 //     /// let sum = array.block_on(array.sum());
 //     /// assert_eq!(array.len()*num_pes,sum);
 //     ///```
@@ -1771,7 +1771,7 @@ where
 //     /// let num_pes = world.num_pes();
 //     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
 //     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
-//     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+//     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
 //     /// let max = array.block_on(array.max());
 //     /// assert_eq!((array.len()-1)*2,max);
 //     ///```
@@ -1793,7 +1793,7 @@ where
 //     /// let num_pes = world.num_pes();
 //     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
 //     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
-//     /// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+//     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
 //     /// let min = array.block_on(array.min());
 //     /// assert_eq!(0,min);
 //     ///```
@@ -1836,7 +1836,7 @@ where
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
-/// let array = array.into_read_only(); //only returns once there is a single reference remaining on each PE
+/// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
 /// let sum = array.block_on(array.sum());
 /// let my_sum = array.block_on(array.reduce("my_sum")); //pass a &str containing the reduction to use
 /// assert_eq!(sum,my_sum);

@@ -26,7 +26,7 @@ fn main() {
     let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major
     let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major
     let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
-                                                                         //initialize matrices
+                                                                                 //initialize matrices
 
     a.dist_iter_mut()
         .enumerate()
@@ -49,8 +49,8 @@ fn main() {
 
     world.barrier();
 
-    let a = a.into_read_only();
-    let b = b.into_read_only();
+    let a = a.into_read_only().block();
+    let b = b.into_read_only().block();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 

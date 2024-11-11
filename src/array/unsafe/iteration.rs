@@ -147,7 +147,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     pub unsafe fn onesided_iter(&self) -> OneSidedIter<'_, T, UnsafeArray<T>> {
-        OneSidedIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
+        OneSidedIter::new(self.clone(), self.inner.data.team.clone(), 1)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -186,7 +186,7 @@ impl<T: Dist> UnsafeArray<T> {
         buf_size: usize,
     ) -> OneSidedIter<'_, T, UnsafeArray<T>> {
         OneSidedIter::new(
-            self.clone().into(),
+            self.clone(),
             self.inner.data.team.clone(),
             std::cmp::min(buf_size, self.len()),
         )

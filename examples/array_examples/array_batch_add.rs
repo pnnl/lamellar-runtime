@@ -28,7 +28,8 @@ fn main() {
         let num_pes = world.num_pes();
         let my_pe = world.my_pe();
         let array_size = 1000000;
-        let array = AtomicArray::<usize>::new(world.clone(), array_size, Distribution::Block).block(); //non intrinsic atomic, non bitwise
+        let array =
+            AtomicArray::<usize>::new(world.clone(), array_size, Distribution::Block).block(); //non intrinsic atomic, non bitwise
                                                                                                //create vec of random indices between 0 & 1000000
         let mut rng = rand::thread_rng();
         let indices = (0..10_000_000)
@@ -110,7 +111,7 @@ fn main() {
             println!("{:?}", timer.elapsed());
         }
         println!("{:?}", world.block_on(array.sum()));
-        let array = array.into_unsafe();
+        let array = array.into_unsafe().block();
 
         world.barrier();
         // let iter = vals.into_iter();
