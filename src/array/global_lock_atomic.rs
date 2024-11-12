@@ -745,7 +745,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GlobalLockArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("GlobalLock from unsafe");
         array.await_on_outstanding(DarcMode::GlobalLockArray).await;
-        let lock = GlobalRwDarc::new(array.team_rt(), ()).block().unwrap();
+        let lock = GlobalRwDarc::new(array.team_rt(), ()).await.expect("PE in team");
 
         GlobalLockArray {
             lock: lock,

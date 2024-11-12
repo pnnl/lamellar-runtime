@@ -16,7 +16,7 @@ macro_rules! create_test {
                     .arg("-T=4")
                     .arg("./target/release/examples/xor_test")
                     .arg(stringify!($array))
-                    .arg($dist).block();
+                    .arg($dist)
                     .arg(stringify!($elem))
                     .arg(stringify!($len))
                     .assert();

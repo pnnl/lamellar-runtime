@@ -713,7 +713,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("locallock from unsafe");
         array.await_on_outstanding(DarcMode::LocalLockArray).await;
-        let lock = LocalRwDarc::new(array.team_rt(), ()).block().unwrap();
+        let lock = LocalRwDarc::new(array.team_rt(), ()).await.expect("PE in team");
 
         LocalLockArray {
             lock: lock,

@@ -599,37 +599,20 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-        array.into()
-    }
-}
+// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
+//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//         let (vals, distribution) = input;
+//         let input = (&vals, distribution);
+//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
+//         array.into()
+//     }
+// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
-    }
-}
-
-impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
-        // println!("generic from unsafe array");
-        array.block_on_outstanding(DarcMode::GenericAtomicArray);
-        let mut vec = vec![];
-        for _i in 0..array.num_elems_local() {
-            vec.push(Mutex::new(()));
-        }
-        let locks = Darc::new(array.team_rt(), vec).block().unwrap();
-
-        GenericAtomicArray {
-            locks: locks,
-            array: array,
-        }
     }
 }
 
@@ -644,7 +627,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GenericAtomicArray<T> {
         for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
         }
-        let locks = Darc::new(array.team_rt(), vec).block().unwrap();
+        let locks = Darc::new(array.team_rt(), vec).await.expect("PE in team");
 
         GenericAtomicArray {
             locks: locks,

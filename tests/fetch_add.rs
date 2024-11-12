@@ -17,7 +17,7 @@ macro_rules! create_test {
                     .arg("-T=4")
                     .arg("./target/release/examples/fetch_add_test")
                     .arg(stringify!($array))
-                    .arg($dist).block();
+                    .arg($dist)
                     .arg(stringify!($elem))
                     .arg(stringify!($len))
                     .assert();
@@ -39,7 +39,7 @@ macro_rules! create_test {
                     .arg("--mpi=pmi2")
                     .arg("./target/release/examples/fetch_add_test")
                     .arg(stringify!($array))
-                    .arg($dist).block();
+                    .arg($dist)
                     .arg(stringify!($elem))
                     .arg(stringify!($len))
                     .assert();
