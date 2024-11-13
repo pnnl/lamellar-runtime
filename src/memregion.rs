@@ -193,14 +193,14 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all)]
-    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::LamellarMemRegion(mr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     //#[tracing::instrument(skip_all)]
-    fn team_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::LamellarMemRegion(mr)
     }
 }
@@ -209,7 +209,7 @@ impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T
     //#[tracing::instrument(skip_all)]
     fn team_try_from(
         mr: &LamellarMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::LamellarMemRegion(mr.clone()))
     }
@@ -219,7 +219,7 @@ impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaInput<T>
     //#[tracing::instrument(skip_all)]
     fn team_try_from(
         mr: LamellarMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::LamellarMemRegion(mr))
     }
@@ -234,14 +234,14 @@ impl<T: Dist> From<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 
 impl<T: Dist> TeamFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all)]
-    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(mr: &LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     //#[tracing::instrument(skip_all)]
-    fn team_from(mr: LamellarMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(mr: LamellarMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::LamellarMemRegion(mr)
     }
 }
@@ -250,7 +250,7 @@ impl<T: Dist> TeamTryFrom<&LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<
     //#[tracing::instrument(skip_all)]
     fn team_try_from(
         mr: &LamellarMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaOutput::LamellarMemRegion(mr.clone()))
     }
@@ -260,7 +260,7 @@ impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T
     //#[tracing::instrument(skip_all)]
     fn team_try_from(
         mr: LamellarMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaOutput::LamellarMemRegion(mr))
     }

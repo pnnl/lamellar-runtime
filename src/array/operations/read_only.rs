@@ -5,7 +5,8 @@ use super::handle::{ArrayFetchBatchOpHandle, ArrayFetchOpHandle};
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for remotely reading elements
 ///
-/// These operations can be performed using any LamellarArray type.
+/// These operations can be performed using any safe LamellarArray type.
+/// For UnsafeArrays please see [UnsafeReadOnlyOps]
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -168,7 +169,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 /// }
 ///```
 pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
-    /// This call returns the value of the element at the specified index
+    /// This call returns the value of the element at the specified index for an [UnsafeArray]
     ///
     /// A future is returned as the result of this call, which is used to retrieve
     /// the result after the (possibly remote) operation as finished.

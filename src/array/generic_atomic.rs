@@ -599,18 +599,9 @@ impl<T: Dist + 'static> GenericAtomicArray<T> {
     }
 }
 
-// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
-//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-//         let (vals, distribution) = input;
-//         let input = (&vals, distribution);
-//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-//         array.into()
-//     }
-// }
-
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
-    async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
     }
@@ -691,7 +682,7 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -778,9 +769,9 @@ impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt()
-    }
+    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    //     self.array.team_rt()
+    // }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)
     // }

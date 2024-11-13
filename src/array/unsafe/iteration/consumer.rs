@@ -36,7 +36,7 @@ impl UnsafeArrayInner {
                 worker += 1;
             }
         }
-        cons.create_handle(self.data.team.clone(), reqs)
+        cons.create_handle(self.data.team().clone(), reqs)
     }
 
     pub(crate) fn sched_dynamic<C, AmO, O, I>(&self, cons: C) -> C::Handle

@@ -888,66 +888,6 @@ impl<T: 'static> DarcInner<T> {
         // self.debug_print();
     }
 
-    pub(crate) fn wait_all(&self) {
-        // println!("wait_all called on pe: {}", self.world_pe);
-
-        RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
-        let am_counters = self.am_counters();
-
-        let mut temp_now = Instant::now();
-        let mut orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
-        let mut orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
-
-        // println!(
-        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
-        //     self.world_pe,
-        //     self.am_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.am_counters.outstanding_reqs.load(Ordering::SeqCst),
-        // );
-        while self.team().panic.load(Ordering::SeqCst) == 0
-            && (am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
-                || orig_reqs != am_counters.send_req_cnt.load(Ordering::SeqCst)
-                || orig_launched != am_counters.launched_req_cnt.load(Ordering::SeqCst))
-        {
-            orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
-            orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
-            // std::thread::yield_now();
-            // self.flush();
-            if std::thread::current().id() != *crate::MAIN_THREAD {
-                self.team().scheduler.exec_task()
-            }; //mmight as well do useful work while we wait }
-            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
-                println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
-                    self.team().world_pe,
-                    am_counters.send_req_cnt.load(Ordering::SeqCst),
-                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
-                );
-                temp_now = Instant::now();
-            }
-        }
-        if am_counters.send_req_cnt.load(Ordering::SeqCst)
-            != am_counters.launched_req_cnt.load(Ordering::SeqCst)
-        {
-            println!(
-                "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-                self.team().world_pe,
-                am_counters.send_req_cnt.load(Ordering::SeqCst),
-                am_counters.outstanding_reqs.load(Ordering::SeqCst),
-                am_counters.launched_req_cnt.load(Ordering::SeqCst)
-            );
-            RuntimeWarning::UnspawnedTask(
-                "`wait_all` before all tasks/active messages have been spawned",
-            )
-            .print();
-        }
-        // println!(
-        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
-        //     self.world_pe,
-        //     self.am_counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.am_counters.outstanding_reqs.load(Ordering::SeqCst),
-        // );
-    }
     pub(crate) async fn await_all(&self) {
         let mut temp_now = Instant::now();
         let am_counters = self.am_counters();

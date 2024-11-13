@@ -9,6 +9,7 @@ use crate::array::iterator::{
 };
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
+use crate::array::private::ArrayExecAm;
 use crate::memregion::Dist;
 
 use self::iterator::IterLockFuture;
@@ -208,13 +209,13 @@ impl<T: Dist> LamellarArrayIterators<T> for AtomicArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone(), LamellarArray::team_rt(self).clone(), 1)
+        OneSidedIter::new(self.clone(), self.team_rt(), 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
         OneSidedIter::new(
             self.clone(),
-            LamellarArray::team_rt(self).clone(),
+            self.team_rt(),
             std::cmp::min(buf_size, self.len()),
         )
     }

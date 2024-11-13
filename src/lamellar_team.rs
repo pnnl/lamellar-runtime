@@ -769,7 +769,7 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
 /// Internal Runtime handle to a lamellar team
 /// this is typically used by proc macros (hence why it is public)
 /// end users should never use this directly and should instead use the [LamellarTeam] and/or [LamellarWorld] struct
-pub struct LamellarTeamRT {
+pub(crate) struct LamellarTeamRT {
     #[allow(dead_code)]
     pub(crate) world: Option<Pin<Arc<LamellarTeamRT>>>,
     parent: Option<Pin<Arc<LamellarTeamRT>>>,
@@ -1061,20 +1061,16 @@ impl LamellarTeamRT {
         // println!("team destroyed")
     }
     #[allow(dead_code)]
-    pub fn get_pes(&self) -> Vec<usize> {
+    pub(crate) fn get_pes(&self) -> Vec<usize> {
         self.arch.team_iter().collect::<Vec<usize>>()
     }
 
-    pub fn world_pe_id(&self) -> usize {
-        self.world_pe
-    }
-
-    pub fn team_pe_id(&self) -> Result<usize, IdError> {
+     pub(crate) fn team_pe_id(&self) -> Result<usize, IdError> {
         self.arch.team_pe(self.world_pe)
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn create_subteam_from_arch<L>(
+    pub(crate) fn create_subteam_from_arch<L>(
         world: Pin<Arc<LamellarTeamRT>>,
         parent: Pin<Arc<LamellarTeamRT>>,
         arch: L,
@@ -1219,12 +1215,12 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn num_pes(&self) -> usize {
+    pub(crate) fn num_pes(&self) -> usize {
         self.arch.num_pes()
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn num_threads(&self) -> usize {
+    pub(crate) fn num_threads(&self) -> usize {
         self.scheduler.num_workers() + 1 // plus one for the main thread
     }
 
@@ -1360,7 +1356,7 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn print_arch(&self) {
+     pub(crate) fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
         let mut parent = format!("");
         let mut team = format!("");
@@ -1568,7 +1564,7 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn exec_am_all<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> MultiAmHandle<F::Output>
+    pub(crate) fn exec_am_all<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -1714,7 +1710,7 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn exec_am_pe<F>(self: &Pin<Arc<LamellarTeamRT>>, pe: usize, am: F) -> AmHandle<F::Output>
+    pub(crate) fn exec_am_pe<F>(self: &Pin<Arc<LamellarTeamRT>>, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -2124,7 +2120,7 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub fn exec_am_local<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> LocalAmHandle<F::Output>
+    pub(crate) fn exec_am_local<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
@@ -2214,20 +2210,6 @@ impl LamellarTeamRT {
     //     self.barrier.barrier();
     //     mr
     // }
-
-    /// allocate a local memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
-    //#[tracing::instrument(skip_all)]
-    pub fn try_alloc_one_sided_mem_region<T: Dist>(
-        self: &Pin<Arc<LamellarTeamRT>>,
-        size: usize,
-    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone())
-    }
 
     /// allocate a local memory region from the asymmetric heap
     ///

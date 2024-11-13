@@ -416,7 +416,7 @@ impl<T: Dist> UnsafeArray<T> {
         index: usize,
         buf: U,
     ) {
-        match buf.team_try_into(&self.inner.data.team) {
+        match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => match self.inner.distribution {
                 Distribution::Block => {
                     self.block_op(ArrayRdmaCmd::Put, index, buf);
@@ -493,7 +493,7 @@ impl<T: Dist> UnsafeArray<T> {
         index: usize,
         buf: U,
     ) {
-        match buf.team_try_into(&self.inner.data.team) {
+        match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => match self.inner.distribution {
                 Distribution::Block => {
                     self.block_op(ArrayRdmaCmd::Get(false), index, buf);
@@ -564,7 +564,7 @@ impl<T: Dist> UnsafeArray<T> {
         buf: U,
     ) {
         // println!("unsafe iget {:?}",index);
-        if let Ok(buf) = buf.team_try_into(&self.inner.data.team) {
+        if let Ok(buf) = buf.team_try_into(&self.inner.data.team.team()) {
             match self.inner.distribution {
                 Distribution::Block => self.block_op(ArrayRdmaCmd::Get(true), index, buf),
                 Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(true), index, buf),
@@ -628,7 +628,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
-        match buf.team_try_into(&self.team_rt()) {
+        match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
@@ -771,7 +771,7 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle {
-        match buf.team_try_into(&self.team_rt()) {
+        match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),

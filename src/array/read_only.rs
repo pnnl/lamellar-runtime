@@ -6,7 +6,6 @@ pub(crate) mod local_chunks;
 pub use local_chunks::ReadOnlyLocalChunks;
 mod rdma;
 use crate::array::private::ArrayExecAm;
-use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
@@ -346,38 +345,15 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     }
 }
 
-// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
-//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-//         let (vals, distribution) = input;
-//         let input = (&vals, distribution);
-//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-//         array.into()
-//     }
-// }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
-    async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
     }
 }
 
-// impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for ReadOnlyArray<T> {
-//     fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-//         array.into()
-//     }
-// }
-
-// impl<T: Dist> From<UnsafeArray<T>> for ReadOnlyArray<T> {
-//     fn from(array: UnsafeArray<T>) -> Self {
-//         // println!("readonly from UnsafeArray");
-//         array.block_on_outstanding(DarcMode::ReadOnlyArray);
-
-//         ReadOnlyArray { array: array }
-//     }
-// }
 
 #[async_trait]
 impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {
@@ -388,34 +364,6 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {
         ReadOnlyArray { array: array }
     }
 }
-
-// impl<T: Dist> From<LocalOnlyArray<T>> for ReadOnlyArray<T> {
-//     fn from(array: LocalOnlyArray<T>) -> Self {
-//         // println!("readonly from LocalOnlyArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-
-// impl<T: Dist> From<AtomicArray<T>> for ReadOnlyArray<T> {
-//     fn from(array: AtomicArray<T>) -> Self {
-//         // println!("readonly from AtomicArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-
-// impl<T: Dist> From<LocalLockArray<T>> for ReadOnlyArray<T> {
-//     fn from(array: LocalLockArray<T>) -> Self {
-//         // println!("readonly from LocalLockArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-
-// impl<T: Dist> From<GlobalLockArray<T>> for ReadOnlyArray<T> {
-//     fn from(array: GlobalLockArray<T>) -> Self {
-//         // println!("readonly from GlobalLockArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
 
 impl<T: Dist> From<ReadOnlyArray<T>> for ReadOnlyByteArray {
     fn from(array: ReadOnlyArray<T>) -> Self {
@@ -603,7 +551,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -690,9 +638,9 @@ impl<T: Dist> ActiveMessaging for ReadOnlyArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt()
-    }
+    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    //     self.array.team_rt()
+    // }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)
     // }

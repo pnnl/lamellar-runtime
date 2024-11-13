@@ -16,8 +16,9 @@ pub trait ElementShiftOps: std::ops::ShlAssign + std::ops::ShrAssign + Dist + Si
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote Shift operations on array elements
 ///
-/// These operations can be performed using any [LamellarWriteArray] type
-///
+/// These operations can be performed using any safe [LamellarWriteArray] type
+/// for UnsafeArrays please see [UnsafeShiftOps] instead.
+///     
 /// Both single element operations and batched element operations are provided
 ///
 /// Generally if you are performing a large number of operations it will be better to
@@ -350,6 +351,42 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
+
+#[doc(alias("One-sided", "onesided"))]
+/// The interface for performing remote Shift operations on [UnsafeArray] elements
+///
+/// Both single element operations and batched element operations are provided
+///
+/// Generally if you are performing a large number of operations it will be better to
+/// use a batched version instead of multiple single element opertations. While the
+/// Runtime internally performs message aggregation for both single element and batched
+/// operations, single element operates have to be treated as individual requests, resulting
+/// in allocation and bookkeeping overheads. A single batched call on the other hand is treated
+/// as a single request by the runtime. (See [ReadOnlyOps] for an example comparing single vs batched load operations of a list of indices)
+///
+/// The results of a batched operation are returned to the user in the same order as the input indices.
+///
+/// # One-sided Operation
+/// performing either single or batched operations are both one-sided, with the calling PE performing any necessary work to
+/// initate and execute active messages that are sent to remote PEs.
+/// For Ops that return results, the result will only be available on the calling PE.
+///
+/// # Note
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur
+///
+/// # Batched Types
+/// One type of batched operation can be performed
+/// ## One Value - Many Indicies
+/// In this type, the same value will be applied to the provided indices
+///```
+/// use lamellar::array::prelude::*;
+///
+/// let world = LamellarWorldBuilder::new().build();
+/// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
+///
+/// let indices = vec![3,54,12,88,29,68];
+/// array.block_on(array.batch_fetch_shl(indices,2));
+///```
 pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// This call performs an in place left shift of `val` bits on the element specified by `index`.
     ///

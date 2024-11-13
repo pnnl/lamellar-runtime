@@ -223,7 +223,7 @@ impl Drop for CmdBuf {
     fn drop(&mut self) {
         // println!("dropping cmd buf");
         let old = std::mem::take(&mut self.buf);
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         // println!("dropped cmd buf");
     }
 }
@@ -1136,19 +1136,19 @@ impl Drop for InnerCQ {
         // println!("dropping InnerCQ");
         let mut send_buf = self.send_buffer.lock();
         let old = std::mem::take(&mut *send_buf);
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let mut recv_buf = self.recv_buffer.lock();
         let old = std::mem::take(&mut *recv_buf);
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let mut free_buf = self.free_buffer.lock();
         let old = std::mem::take(&mut *free_buf);
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let mut alloc_buffer = self.alloc_buffer.lock();
         let old = std::mem::take(&mut *alloc_buffer);
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let mut panic_buffer = self.panic_buffer.lock();
         let old = std::mem::take(&mut *panic_buffer);
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
             Box::new(CmdMsg {
@@ -1159,7 +1159,7 @@ impl Drop for InnerCQ {
                 cmd_hash: 0,
             }),
         );
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.clear_cmd).unwrap(),
             Box::new(CmdMsg {
@@ -1170,7 +1170,7 @@ impl Drop for InnerCQ {
                 cmd_hash: 0,
             }),
         );
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.free_cmd).unwrap(),
             Box::new(CmdMsg {
@@ -1181,7 +1181,7 @@ impl Drop for InnerCQ {
                 cmd_hash: 0,
             }),
         );
-        Box::into_raw(old);
+        let _ = Box::into_raw(old);
         self.cmd_buffers.clear();
         // println!("dropped InnerCQ");
     }

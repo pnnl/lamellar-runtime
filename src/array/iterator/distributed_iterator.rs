@@ -40,12 +40,11 @@ use crate::active_messaging::SyncSend;
 use crate::array::iterator::{private::*, Schedule};
 use crate::array::{operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
 use crate::memregion::Dist;
-use crate::LamellarTeamRT;
+use crate::LamellarTeam;
 
 use futures_util::Future;
 use paste::paste;
 use std::marker::PhantomData;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use super::IterLockFuture;
@@ -140,7 +139,7 @@ pub trait DistIteratorLauncher: InnerArray {
     }
 
     //#[doc(hidden)]
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team(&self) -> Arc<LamellarTeam> {
         self.as_inner().team()
     }
 }

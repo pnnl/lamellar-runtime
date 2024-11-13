@@ -135,7 +135,7 @@ impl<T: Dist> From<GlobalLockArray<T>> for LocalOnlyArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

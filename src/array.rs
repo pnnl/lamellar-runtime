@@ -304,8 +304,8 @@ impl<T: Dist> LamellarRead for &[T] {}
 
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
-    fn team_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
+    fn team_from(val: &T, team: &Arc<LamellarTeam>) -> Self {
+        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().expect("Data should exist on PE")[0] = val.clone();
         }
@@ -315,8 +315,8 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
-    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
+    fn team_from(val: T, team: &Arc<LamellarTeam>) -> Self {
+        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(1);
         unsafe {
             buf.as_mut_slice().expect("Data should exist on PE")[0] = val;
         }
@@ -326,8 +326,8 @@ impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
-    fn team_from(vals: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+    fn team_from(vals: Vec<T>, team: &Arc<LamellarTeam>) -> Self {
+        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -340,8 +340,8 @@ impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
 }
 impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
-    fn team_from(vals: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+    fn team_from(vals: &Vec<T>, team: &Arc<LamellarTeam>) -> Self {
+        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -354,8 +354,8 @@ impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
 }
 impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
-    fn team_from(vals: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(vals.len());
+    fn team_from(vals: &[T], team: &Arc<LamellarTeam>) -> Self {
+        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(vals.len());
         unsafe {
             std::ptr::copy_nonoverlapping(
                 vals.as_ptr(),
@@ -368,43 +368,43 @@ impl<T: Dist> TeamFrom<&[T]> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
-    fn team_from(lai: &LamellarArrayRdmaInput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(lai: &LamellarArrayRdmaInput<T>, _team: &Arc<LamellarTeam>) -> Self {
         lai.clone()
     }
 }
 
 impl<T: Dist> TeamFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<T> {
-    fn team_from(lao: &LamellarArrayRdmaOutput<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(lao: &LamellarArrayRdmaOutput<T>, _team: &Arc<LamellarTeam>) -> Self {
         lao.clone()
     }
 }
 
 impl<T: Clone> TeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
-    fn team_from(vals: (&Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(vals: (&Vec<T>, Distribution), _team: &Arc<LamellarTeam>) -> Self {
         vals.0.to_vec()
     }
 }
 
 impl<T: Clone> TeamFrom<(Vec<T>, Distribution)> for Vec<T> {
-    fn team_from(vals: (Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(vals: (Vec<T>, Distribution), _team: &Arc<LamellarTeam>) -> Self {
         vals.0.to_vec()
     }
 }
 
 impl<T: Dist> TeamTryFrom<&T> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: &T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+    fn team_try_from(val: &T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
 
 impl<T: Dist> TeamTryFrom<T> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+    fn team_try_from(val: T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
 
 impl<T: Dist> TeamTryFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+    fn team_try_from(val: Vec<T>, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         if val.len() == 0 {
             Err(anyhow::anyhow!(
                 "Trying to create an empty LamellarArrayRdmaInput"
@@ -416,7 +416,7 @@ impl<T: Dist> TeamTryFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamTryFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: &Vec<T>, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+    fn team_try_from(val: &Vec<T>, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         if val.len() == 0 {
             Err(anyhow::anyhow!(
                 "Trying to create an empty LamellarArrayRdmaInput"
@@ -428,7 +428,7 @@ impl<T: Dist> TeamTryFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamTryFrom<&[T]> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: &[T], team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error> {
+    fn team_try_from(val: &[T], team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         if val.len() == 0 {
             Err(anyhow::anyhow!(
                 "Trying to create an empty LamellarArrayRdmaInput"
@@ -442,7 +442,7 @@ impl<T: Dist> TeamTryFrom<&[T]> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamTryFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(
         lai: &LamellarArrayRdmaInput<T>,
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(lai.clone())
     }
@@ -451,7 +451,7 @@ impl<T: Dist> TeamTryFrom<&LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput
 impl<T: Dist> TeamTryFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutput<T> {
     fn team_try_from(
         lao: &LamellarArrayRdmaOutput<T>,
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(lao.clone())
     }
@@ -460,7 +460,7 @@ impl<T: Dist> TeamTryFrom<&LamellarArrayRdmaOutput<T>> for LamellarArrayRdmaOutp
 impl<T: Clone> TeamTryFrom<(&Vec<T>, Distribution)> for Vec<T> {
     fn team_try_from(
         vals: (&Vec<T>, Distribution),
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(vals.0.to_vec())
     }
@@ -468,14 +468,14 @@ impl<T: Clone> TeamTryFrom<(&Vec<T>, Distribution)> for Vec<T> {
 
 // #[async_trait]
 // impl<T: Clone> AsyncTeamFrom<(&Vec<T>, Distribution)> for Vec<T> {
-//     async fn team_from(vals: (&Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+//     async fn team_from(vals: (&Vec<T>, Distribution), _team: &Arc<LamellarTeam>) -> Self {
 //         vals.0.to_vec()
 //     }
 // }
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for Vec<T> {
-    async fn team_from(input: (Vec<T>, Distribution), _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    async fn team_from(input: (Vec<T>, Distribution), _team: &Arc<LamellarTeam>) -> Self {
         input.0
     }
 }
@@ -527,7 +527,7 @@ where
 /// Provides the same abstraction as the `From` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 pub trait TeamFrom<T: ?Sized> {
     /// Converts to this type from the input type
-    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Self;
+    fn team_from(val: T, team: &Arc<LamellarTeam>) -> Self;
 }
 
 // #[async_trait]
@@ -536,41 +536,41 @@ pub trait TeamFrom<T: ?Sized> {
 // pub trait AsyncTeamFrom<T: ?Sized>: TeamFrom<T> + Sized {
 pub trait AsyncTeamFrom<T: ?Sized>: Sized {
     /// Converts to this type from the input type
-    fn team_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> impl Future<Output = Self> + Send;
+    fn team_from(val: T, team: &Arc<LamellarTeam>) -> impl Future<Output = Self> + Send;
 }
 
 /// Provides the same abstraction as the `TryFrom` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 pub trait TeamTryFrom<T: ?Sized> {
     /// Trys to convert to this type from the input type
-    fn team_try_from(val: T, team: &Pin<Arc<LamellarTeamRT>>) -> Result<Self, anyhow::Error>
+    fn team_try_from(val: T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error>
     where
         Self: Sized;
 }
 /// Provides the same abstraction as the `Into` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 pub trait TeamInto<T: ?Sized> {
     /// converts this type into the (usually inferred) input type
-    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
+    fn team_into(self, team: &Arc<LamellarTeam>) -> T;
 }
 
 /// Provides the same abstraction as the `Into` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated to be used within an async context
 #[async_trait]
 pub trait AsyncTeamInto<T: ?Sized> {
     /// converts this type into the (usually inferred) input type
-    async fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> T;
+    async fn team_into(self, team: &Arc<LamellarTeam>) -> T;
 }
 
 /// Provides the same abstraction as the `TryInto` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
 
 pub trait TeamTryInto<T>: Sized {
     /// Trys to convert this type into the (usually inferred) input type
-    fn team_try_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> Result<T, anyhow::Error>;
+    fn team_try_into(self, team: &Arc<LamellarTeam>) -> Result<T, anyhow::Error>;
 }
 
 impl<T, U> TeamInto<U> for T
 where
     U: TeamFrom<T>,
 {
-    fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
+    fn team_into(self, team: &Arc<LamellarTeam>) -> U {
         U::team_from(self, team)
     }
 }
@@ -580,7 +580,7 @@ impl<T: Send, U> AsyncTeamInto<U> for T
 where
     U: AsyncTeamFrom<T>,
 {
-    async fn team_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> U {
+    async fn team_into(self, team: &Arc<LamellarTeam>) -> U {
         <U as AsyncTeamFrom<T>>::team_from(self, team).await
     }
 }
@@ -589,7 +589,7 @@ impl<T, U> TeamTryInto<U> for T
 where
     U: TeamTryFrom<T>,
 {
-    fn team_try_into(self, team: &Pin<Arc<LamellarTeamRT>>) -> Result<U, anyhow::Error> {
+    fn team_try_into(self, team: &Arc<LamellarTeam>) -> Result<U, anyhow::Error> {
         U::team_try_from(self, team)
     }
 }
@@ -658,29 +658,6 @@ impl LamellarByteArray {
             LamellarByteArray::GenericAtomicArray(array) => array.array.inner.data.team(),
             LamellarByteArray::LocalLockArray(array) => array.array.inner.data.team(),
             LamellarByteArray::GlobalLockArray(array) => array.array.inner.data.team(),
-        }
-    }
-    pub(crate) fn dec_outstanding(&self, num: usize) {
-        match self {
-            LamellarByteArray::UnsafeArray(array) => {
-                array.inner.data.array_counters.dec_outstanding(num)
-            }
-            LamellarByteArray::ReadOnlyArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
-            LamellarByteArray::AtomicArray(array) => array.dec_outstanding(num),
-            LamellarByteArray::NativeAtomicArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
-            LamellarByteArray::GenericAtomicArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
-            LamellarByteArray::LocalLockArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
-            LamellarByteArray::GlobalLockArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
         }
     }
 }
@@ -819,6 +796,58 @@ impl<T: Dist> ActiveMessaging for LamellarReadArray<T> {
             LamellarReadArray::AtomicArray(array) => array.block_on_all(iter),
             LamellarReadArray::LocalLockArray(array) => array.block_on_all(iter),
             LamellarReadArray::GlobalLockArray(array) => array.block_on_all(iter),
+        }
+    }
+}
+
+impl<T: Dist> LamellarEnv for LamellarReadArray<T> {
+    fn my_pe(&self) -> usize {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.my_pe(),
+            LamellarReadArray::ReadOnlyArray(array) => array.my_pe(),
+            LamellarReadArray::AtomicArray(array) => array.my_pe(),
+            LamellarReadArray::LocalLockArray(array) => array.my_pe(),
+            LamellarReadArray::GlobalLockArray(array) => array.my_pe(),
+        }
+    }
+
+    fn num_pes(&self) -> usize {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.num_pes(),
+            LamellarReadArray::ReadOnlyArray(array) => array.num_pes(),
+            LamellarReadArray::AtomicArray(array) => array.num_pes(),
+            LamellarReadArray::LocalLockArray(array) => array.num_pes(),
+            LamellarReadArray::GlobalLockArray(array) => array.num_pes(),
+        }
+    }
+
+    fn num_threads_per_pe(&self) -> usize {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.num_threads_per_pe(),
+            LamellarReadArray::ReadOnlyArray(array) => array.num_threads_per_pe(),
+            LamellarReadArray::AtomicArray(array) => array.num_threads_per_pe(),
+            LamellarReadArray::LocalLockArray(array) => array.num_threads_per_pe(),
+            LamellarReadArray::GlobalLockArray(array) => array.num_threads_per_pe(),
+        }
+    }
+
+    fn world(&self) -> Arc<LamellarTeam> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.world(),
+            LamellarReadArray::ReadOnlyArray(array) => array.world(),
+            LamellarReadArray::AtomicArray(array) => array.world(),
+            LamellarReadArray::LocalLockArray(array) => array.world(),
+            LamellarReadArray::GlobalLockArray(array) => array.world(),
+        }
+    }
+
+    fn team(&self) -> Arc<LamellarTeam> {
+        match self {
+            LamellarReadArray::UnsafeArray(array) => array.team(),
+            LamellarReadArray::ReadOnlyArray(array) => array.team(),
+            LamellarReadArray::AtomicArray(array) => array.team(),
+            LamellarReadArray::LocalLockArray(array) => array.team(),
+            LamellarReadArray::GlobalLockArray(array) => array.team(),
         }
     }
 }
@@ -964,6 +993,50 @@ impl<T: Dist> ActiveMessaging for LamellarWriteArray<T> {
     }
 }
 
+impl<T: Dist> LamellarEnv for LamellarWriteArray<T> {
+    fn my_pe(&self) -> usize {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.my_pe(),
+            LamellarWriteArray::AtomicArray(array) => array.my_pe(),
+            LamellarWriteArray::LocalLockArray(array) => array.my_pe(),
+            LamellarWriteArray::GlobalLockArray(array) => array.my_pe(),
+        }
+    }
+    fn num_pes(&self) -> usize {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.num_pes(),
+            LamellarWriteArray::AtomicArray(array) => array.num_pes(),
+            LamellarWriteArray::LocalLockArray(array) => array.num_pes(),
+            LamellarWriteArray::GlobalLockArray(array) => array.num_pes(),
+        }
+    }
+    fn num_threads_per_pe(&self) -> usize {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.num_threads_per_pe(),
+            LamellarWriteArray::AtomicArray(array) => array.num_threads_per_pe(),
+            LamellarWriteArray::LocalLockArray(array) => array.num_threads_per_pe(),
+            LamellarWriteArray::GlobalLockArray(array) => array.num_threads_per_pe(),
+        }
+    }
+    fn world(&self) -> Arc<LamellarTeam> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.world(),
+            LamellarWriteArray::AtomicArray(array) => array.world(),
+            LamellarWriteArray::LocalLockArray(array) => array.world(),
+            LamellarWriteArray::GlobalLockArray(array) => array.world(),
+        }
+    }
+    fn team(&self) -> Arc<LamellarTeam> {
+        match self {
+            LamellarWriteArray::UnsafeArray(array) => array.team(),
+            LamellarWriteArray::AtomicArray(array) => array.team(),
+            LamellarWriteArray::LocalLockArray(array) => array.team(),
+            LamellarWriteArray::GlobalLockArray(array) => array.team(),
+        }
+    }
+}
+
+
 // private sealed trait
 #[doc(hidden)]
 pub trait InnerArray: Sized {
@@ -997,26 +1070,26 @@ pub(crate) mod private {
     //#[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub(crate) trait ArrayExecAm<T: Dist> {
-        fn team(&self) -> Pin<Arc<LamellarTeamRT>>;
+        fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>>;
         fn team_counters(&self) -> Arc<AMCounters>;
         fn exec_am_local_tg<F>(&self, am: F) -> LocalAmHandle<F::Output>
         where
             F: LamellarActiveMessage + LocalAM + 'static,
         {
-            self.team().exec_am_local_tg(am, Some(self.team_counters()))
+            self.team_rt().exec_am_local_tg(am, Some(self.team_counters()))
         }
         fn exec_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
         {
-            self.team()
+            self.team_rt()
                 .exec_am_pe_tg(pe, am, Some(self.team_counters()))
         }
         fn spawn_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
         {
-            self.team()
+            self.team_rt()
                 .spawn_am_pe_tg(pe, am, Some(self.team_counters()))
         }
         // fn exec_arc_am_pe<F>(&self, pe: usize, am: LamellarArcAm) -> AmHandle<F>
@@ -1030,7 +1103,7 @@ pub(crate) mod private {
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
         {
-            self.team().exec_am_all_tg(am, Some(self.team_counters()))
+            self.team_rt().exec_am_all_tg(am, Some(self.team_counters()))
         }
     }
 }
@@ -1038,8 +1111,8 @@ pub(crate) mod private {
 /// Represents a distributed array, providing some convenience functions for getting simple information about the array.
 /// This is mostly intended for use within the runtime (specifically for use in Proc Macros) but the available functions may be useful to endusers as well.
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessaging {
-    #[doc(alias("One-sided", "onesided"))]
+pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessaging + LamellarEnv {
+    // #[doc(alias("One-sided", "onesided"))]
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
     ///
     /// # One-sided Operation
@@ -1053,7 +1126,7 @@ pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessa
     ///
     /// let a_team = array.team();
     ///```
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>>; //todo turn this into Arc<LamellarTeam>
+    // fn team(&self) -> Arc<LamellarTeam>; //todo turn this into Arc<LamellarTeam>
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return the total number of elements in this array

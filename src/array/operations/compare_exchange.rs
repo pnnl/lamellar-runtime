@@ -25,7 +25,8 @@ pub trait ElementComparePartialEqOps:
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote compare and exchange operations on array elements
 ///
-/// These operations can be performed using any [LamellarWriteArray] type
+/// These operations can be performed using any safe [LamellarWriteArray] type
+/// for UnsafeArrays please see [UnsafeCompareExchangeOps] instead.
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -181,7 +182,8 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 ///
 /// Useful for element types that only impl [PartialEq][std::cmp::PartialEq] instead of [Eq][std::cmp::Eq] (e.g `f32`,`f64`).
 ///
-/// These operations can be performed using any [LamellarWriteArray] type
+/// These operations can be performed using any safe [LamellarWriteArray] type
+/// for UnsafeArrays please see [UnsafeCompareExchangeOps] instead.
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -350,9 +352,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 }
 
 #[doc(alias("One-sided", "onesided"))]
-/// The interface for performing remote compare and exchange operations on array elements
-///
-/// These operations can be performed using any [LamellarWriteArray] type
+/// The interface for performing remote compare and exchange operations on [UnsafeArray] elements
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -371,7 +371,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// For Ops that return results, the result will only be available on the calling PE.
 ///
 /// # Note
-/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though)
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur
 ///
 /// # Batched Types
 /// Three types of batched operations can be performed
@@ -511,11 +511,9 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 }
 
 #[doc(alias("One-sided", "onesided"))]
-/// The interface for performing remote compare and exchange operations within a given epsilon on array elements
+/// The interface for performing remote compare and exchange operations within a given epsilon on [UnsafeArray] elements
 ///
 /// Useful for element types that only impl [PartialEq][std::cmp::PartialEq] instead of [Eq][std::cmp::Eq] (e.g `f32`,`f64`).
-///
-/// These operations can be performed using any [LamellarWriteArray] type
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -534,7 +532,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// For Ops that return results, the result will only be available on the calling PE.
 ///
 /// # Note
-/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur.
 ///
 /// # Batched Types
 /// Three types of batched operations can be performed

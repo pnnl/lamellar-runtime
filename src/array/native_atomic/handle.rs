@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::{ArrayOps, NativeAtomicArray, NativeAtomicType};
-use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Dist, LamellarTeamRT, UnsafeArray};
 
@@ -29,24 +28,6 @@ impl<T: Dist + ArrayOps + 'static> PinnedDrop for NativeAtomicArrayHandle<T> {
     }
 }
 
-impl<T: Dist + ArrayOps + 'static> NativeAtomicArrayHandle<T> {
-    pub(crate) fn block(mut self) -> NativeAtomicArray<T> {
-        self.launched = true;
-        RuntimeWarning::BlockingCall(
-            "NativeAtomicArrayHandle::block",
-            "<handle>.spawn() or<handle>.await",
-        )
-        .print();
-        self.team.clone().block_on(self)
-    }
-
-   
-    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub(crate) fn spawn(mut self) -> LamellarTask<NativeAtomicArray<T>> {
-        self.launched = true;
-        self.team.clone().spawn(self)
-    }
-}
 
 impl<T: Dist + ArrayOps + 'static> Future for NativeAtomicArrayHandle<T> {
     type Output = NativeAtomicArray<T>;

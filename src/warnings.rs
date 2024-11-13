@@ -51,6 +51,7 @@ impl<'a> RuntimeWarning<'a> {
         }
     }
 
+    #[cfg(feature = "runtime-warnings-panic")]
     fn panic(&self, msg: &str) {
         match self {
             RuntimeWarning::BarrierTimeout(_) => {}

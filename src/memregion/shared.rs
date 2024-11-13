@@ -107,7 +107,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
                 team.async_barrier().await;
                 let mut mr_t = 
                     MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
-                while let Err(e) = mr_t {
+                while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
                     team.lamellae.alloc_pool(size * std::mem::size_of::<T>());
                     mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
@@ -342,7 +342,7 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 }
 
 impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::SharedMemRegion(smr.clone())
     }
 }
@@ -355,7 +355,7 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
     }
 }
@@ -363,7 +363,7 @@ impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn team_try_from(
         smr: &SharedMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaOutput::SharedMemRegion(smr.clone()))
     }
@@ -372,7 +372,7 @@ impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T>
 impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(
         smr: &SharedMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::SharedMemRegion(smr.clone()))
     }

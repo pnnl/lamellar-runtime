@@ -21,6 +21,7 @@ pub(crate) trait LamellarAlloc {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Vma {
     addr: usize,
     padding: usize,
@@ -28,6 +29,7 @@ struct Vma {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct LinearAlloc {
     entries: Arc<(Mutex<Vec<Vma>>, Condvar)>,
     start_addr: usize,
@@ -504,6 +506,7 @@ impl LamellarAlloc for BTreeAlloc {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,

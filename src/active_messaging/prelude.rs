@@ -15,7 +15,7 @@ pub use crate::inventory;
 pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;
 //#[doc(hidden)]
-pub use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
+pub use crate::lamellar_team::{IntoLamellarTeam};
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
 pub use crate::LamellarEnv;

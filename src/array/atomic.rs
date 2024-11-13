@@ -10,7 +10,6 @@ use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicEleme
 use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
 use crate::array::iterator::local_iterator::LocalIteratorLauncher;
 use crate::array::native_atomic::NativeAtomicElement;
-use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 // use crate::darc::{Darc, DarcMode};
 use crate::barrier::BarrierHandle;
@@ -678,17 +677,6 @@ impl AtomicByteArray {
             AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.data.team(),
         }
     }
-
-    pub(crate) fn dec_outstanding(&self, num: usize) {
-        match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
-            AtomicByteArray::GenericAtomicByteArray(array) => {
-                array.array.inner.data.array_counters.dec_outstanding(num)
-            }
-        }
-    }
 }
 
 impl crate::active_messaging::DarcSerde for AtomicByteArray {
@@ -1178,33 +1166,15 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-// impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
-//     fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-//         let (vals, distribution) = input;
-//         let input = (&vals, distribution);
-//         let array: UnsafeArray<T> = TeamInto::team_into(input, team);
-//         array.into()
-//     }
-// }
+
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
-    async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
     }
 }
-
-// impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
-//     fn from(array: UnsafeArray<T>) -> Self {
-//         // println!("Converting from UnsafeArray to AtomicArray");
-//         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
-//             NativeAtomicArray::from(array).into()
-//         } else {
-//             GenericAtomicArray::from(array).into()
-//         }
-//     }
-// }
 
 #[async_trait]
 impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
@@ -1217,33 +1187,6 @@ impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
         }
     }
 }
-
-// impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
-//     fn from(array: LocalOnlyArray<T>) -> Self {
-//         // println!("Converting from LocalOnlyArray to AtomicArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-
-// impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
-//     fn from(array: ReadOnlyArray<T>) -> Self {
-//         // println!("Converting from ReadOnlyArray to AtomicArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-// impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
-//     fn from(array: LocalLockArray<T>) -> Self {
-//         // println!("Converting from LocalLockArray to AtomicArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-
-// impl<T: Dist + 'static> From<GlobalLockArray<T>> for AtomicArray<T> {
-//     fn from(array: GlobalLockArray<T>) -> Self {
-//         // println!("Converting from GlobalLockArray to AtomicArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
 
 impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
     fn from(array: AtomicArray<T>) -> Self {

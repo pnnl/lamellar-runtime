@@ -7,7 +7,8 @@ use super::handle::{
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for remotely writing elements
 ///
-/// These operations can be performed using any [LamellarWriteArray]  type
+/// These operations can be performed using any 'safe' [LamellarWriteArray]  type
+/// For UnsafeArrays please see [UnsafeAccessOps]
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -211,9 +212,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 }
 
 #[doc(alias("One-sided", "onesided"))]
-/// The interface for remotely writing elements
-///
-/// These operations can be performed using any [LamellarWriteArray]  type
+/// The interface for remotely writing elements on [UnsafeArray]s
 ///
 /// Both single element operations and batched element operations are provided
 ///
@@ -232,7 +231,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 /// For Ops that return results, the result will only be available on the calling PE.
 ///
 /// # Note
-/// For both single index and batched operations there are no guarantees to the order in which individual operations occur (an individal operation is guaranteed to be atomic though).
+/// For both single index and batched operations there are no guarantees to the order in which individual operations occur.
 ///
 /// # Batched Types
 /// Three types of batched operations can be performed

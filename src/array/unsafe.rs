@@ -489,16 +489,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 
-    pub(crate) fn block_on_outstanding(&self, mode: DarcMode) {
-        self.wait_all();
-        // println!("block on outstanding");
-        // self.inner.data.print();
-        // let the_array: UnsafeArray<T> = self.clone();
-        let array_darc = self.inner.data.clone();
-        self.team_rt()
-            .block_on(array_darc.block_on_outstanding(mode, 1)); //one for this instance of the array
-    }
-
     pub(crate) async fn await_on_outstanding(&self, mode: DarcMode) {
         self.await_all().await;
         // println!("block on outstanding");
@@ -660,10 +650,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    pub(crate) fn tasking_barrier(&self) {
-        self.inner.data.team.tasking_barrier();
-    }
-
     pub(crate) fn async_barrier(&self) -> BarrierHandle {
         self.inner.data.team.async_barrier()
     }
@@ -730,7 +716,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 // }
 
 impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (vals, distribution) = input;
         let input = (&vals, distribution);
         TeamInto::team_into(input, team)
@@ -739,8 +725,9 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
 
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
-    async fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (local_vals, distribution) = input;
+        let team = team.team.clone();
         // println!("local_vals len: {:?}", local_vals.len());
         team.async_barrier().await;
         let local_sizes = UnsafeArray::<usize>::async_new(
@@ -788,8 +775,9 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
 }
 
 impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
-    fn team_from(input: (&Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(input: (&Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (local_vals, distribution) = input;
+        let team = team.team.clone();
         // println!("local_vals len: {:?}", local_vals.len());
         // team.tasking_barrier();
         let local_sizes =
@@ -945,7 +933,7 @@ impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
 }
 
 impl<T: Dist> ArrayExecAm<T> for UnsafeArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -1141,9 +1129,9 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.inner.data.team.clone()
-    }
+    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    //     self.inner.data.team.clone()
+    // }
 
     // fn my_pe(&self) -> usize {
     //     self.inner.data.my_pe

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::{ArrayOps, GenericAtomicArray};
-use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Dist, LamellarTeamRT};
 
@@ -26,24 +25,6 @@ impl<T: Dist + ArrayOps + 'static> PinnedDrop for GenericAtomicArrayHandle<T> {
         if !self.launched {
             RuntimeWarning::DroppedHandle("a GenericAtomicArrayHandle").print();
         }
-    }
-}
-
-impl<T: Dist + ArrayOps + 'static> GenericAtomicArrayHandle<T> {
-    pub(crate) fn block(mut self) -> GenericAtomicArray<T> {
-        self.launched = true;
-        RuntimeWarning::BlockingCall(
-            "GenericAtomicArrayHandle::block",
-            "<handle>.spawn() or<handle>.await",
-        )
-        .print();
-        self.team.clone().block_on(self)
-    }
-
-    #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
-    pub(crate) fn spawn(mut self) -> LamellarTask<GenericAtomicArray<T>> {
-        self.launched = true;
-        self.team.clone().spawn(self)
     }
 }
 

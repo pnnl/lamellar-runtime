@@ -55,7 +55,7 @@ impl<T: Dist> LamellarArrayGet<T> for GlobalLockArray<T> {
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle {
-        match buf.team_try_into(&self.array.team_rt()) {
+        match buf.team_try_into(&self.array.team()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
@@ -94,7 +94,7 @@ impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle {
-        match buf.team_try_into(&self.array.team_rt()) {
+        match buf.team_try_into(&self.array.team()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
@@ -257,7 +257,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                 }
                 Distribution::Cyclic => {
                     //TODO think about optimized put similar to Unsafe
-                    let num_pes = ArrayExecAm::team(&self.array).num_pes();
+                    let num_pes = ArrayExecAm::team_rt(&self.array).num_pes();
                     let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
                     let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();
                     let buf_slice = self.buf.as_slice().expect("array data should be on PE");

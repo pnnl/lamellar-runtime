@@ -3,15 +3,14 @@ use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::private::*;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
 use crate::array::{ArrayOps, AsyncTeamFrom, Distribution};
-
+use crate::LamellarTeam;
 use crate::array::iterator::Schedule;
-use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
+use crate::lamellar_env::LamellarEnv;
 
 use core::marker::PhantomData;
 use futures_util::Future;
 use paste::paste;
-use std::pin::Pin;
 use std::sync::Arc;
 
 impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {}
@@ -170,7 +169,7 @@ impl LocalIteratorLauncher for UnsafeArrayInner {
         [iter.lock_if_needed(Sealed)]
     );
 
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.data.team.clone()
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.data.team.team()
     }
 }

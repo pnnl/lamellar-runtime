@@ -11,6 +11,7 @@ use crate::lamellar_team::LamellarTeamRT;
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
+use crate::lamellar_env::LamellarEnv;
 
 use core::marker::PhantomData;
 use futures_util::{ready, Future};
@@ -190,7 +191,7 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
         team: Pin<Arc<LamellarTeamRT>>,
     ) -> A {
         let input = (local_vals, dist);
-        AsyncTeamInto::team_into(input, &team).await
+        AsyncTeamInto::team_into(input, &team.team()).await
     }
     // fn create_array(&self, local_vals: Vec<T>) -> A {
     //     let input = (local_vals, self.distribution);

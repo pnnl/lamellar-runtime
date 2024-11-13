@@ -1,14 +1,12 @@
 use crate::array::iterator::one_sided_iterator::{private::*, *};
-
 use crate::array::ArrayRdmaHandle;
 use crate::lamellar_request::LamellarRequest;
-// use crate::array::LamellarArrayRequest;
-// use crate::LamellarArray;
 use crate::memregion::OneSidedMemoryRegion;
+use crate::lamellar_env::LamellarEnv;
+
 use pin_project::pin_project;
 
-// use async_trait::async_trait;
-// use futures_util::Future;
+
 #[pin_project]
 pub struct Chunks<I>
 where
@@ -50,7 +48,7 @@ where
     ) -> (OneSidedMemoryRegion<I::ElemType>, ArrayRdmaHandle) {
         // println!(" get chunk of len: {:?}", size);
         let mem_region: OneSidedMemoryRegion<I::ElemType> =
-            array.team_rt().alloc_one_sided_mem_region(size);
+            array.team().team.alloc_one_sided_mem_region(size);
         // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
         // but safe with respect to the mem_region as this is the only reference
         let mut req = unsafe { array.internal_get(index, &mem_region) };
