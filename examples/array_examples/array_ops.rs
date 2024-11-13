@@ -460,11 +460,15 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
-    let array_f64 = AtomicArray::<f64>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //non intrinsic atomic, non bitwise
+    let array_f64 =
+        AtomicArray::<f64>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //non intrinsic atomic, non bitwise
     let array_u8 = AtomicArray::<u8>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //intrinsic atomic,  bitwise
-    let array_i128 = AtomicArray::<i128>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //non intrinsic atomic,  bitwise
-    let array_custom = AtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //non intrinsic atomic, non bitwise
-    let _array_bool = AtomicArray::<bool>::new(world.clone(), num_pes * 10, Distribution::Block).block();
+    let array_i128 =
+        AtomicArray::<i128>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //non intrinsic atomic,  bitwise
+    let array_custom =
+        AtomicArray::<Custom>::new(world.clone(), num_pes * 10, Distribution::Block).block(); //non intrinsic atomic, non bitwise
+    let _array_bool =
+        AtomicArray::<bool>::new(world.clone(), num_pes * 10, Distribution::Block).block();
 
     println!("ADD-----------------------");
     test_add(array_f64.clone(), 0.0, 1.0);

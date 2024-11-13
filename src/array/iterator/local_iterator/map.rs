@@ -7,9 +7,9 @@ pub struct Map<I, F> {
 }
 
 impl<I: InnerIter, F: Clone> InnerIter for Map<I, F> {
-fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
-            None
-        }
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
     fn iter_clone(&self, _s: Sealed) -> Self {
         Map {
             iter: self.iter.iter_clone(Sealed),
@@ -36,7 +36,7 @@ where
     type Item = B;
     type Array = <I as LocalIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Map<I, F> {
-        Map::new(self.iter.init(start_i, cnt,_s), self.f.clone())
+        Map::new(self.iter.init(start_i, cnt, _s), self.f.clone())
     }
     fn array(&self) -> Self::Array {
         self.iter.array()

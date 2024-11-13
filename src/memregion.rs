@@ -1214,12 +1214,12 @@ pub trait RemoteMemoryRegion {
     #[doc(alias = "Collective")]
     /// Allocate a shared memory region from the asymmetric heap.
     /// There will be `size` number of `T` elements on each PE.
-    /// 
+    ///
     /// Note: If there is not enough memory in the lamellar heap on the calling PE
     /// this call will trigger a "heap grow" operation (initiated and handled by the runtime),
     /// this behavior can be disabled by setting the env variable "LAMELLAR_HEAP_MODE=static",
     /// in which case this call will cause a panic if there is not enough memory.
-    /// 
+    ///
     /// Alternatively, you can use the `try_alloc_shared_mem_region` method which returns
     /// a `Result` and allows you to handle the error case when there is not enough memory.
     ///
@@ -1243,18 +1243,17 @@ pub trait RemoteMemoryRegion {
         size: usize,
     ) -> FallibleSharedMemoryRegionHandle<T>;
 
-
     #[doc(alias("One-sided", "onesided"))]
     /// Allocate a one-sided memory region from the internal lamellar heap.
     /// This region only exists on the calling PE, but the returned handle can be
     /// sent to other PEs allowing remote access to the region.
     /// There will be `size` number of `T` elements on the calling PE.
-    /// 
+    ///
     /// Note: If there is not enough memory in the lamellar heap on the calling PE
     /// this call will trigger a "heap grow" operation (initiated and handled by the runtime),
     /// this behavior can be disabled by setting the env variable "LAMELLAR_HEAP_MODE=static",
     /// in which case this call will cause a panic if there is not enough memory.
-    /// 
+    ///
     /// Alternatively, you can use the `try_alloc_one_sided_mem_region` method which returns
     /// a `Result` and allows you to handle the error case when there is not enough memory.
     ///

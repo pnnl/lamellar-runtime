@@ -28,7 +28,6 @@ impl<T: Dist + ArrayOps + 'static> PinnedDrop for NativeAtomicArrayHandle<T> {
     }
 }
 
-
 impl<T: Dist + ArrayOps + 'static> Future for NativeAtomicArrayHandle<T> {
     type Output = NativeAtomicArray<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

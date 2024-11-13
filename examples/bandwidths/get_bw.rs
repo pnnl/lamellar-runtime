@@ -12,9 +12,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let mem_reg = world
-        .alloc_shared_mem_region::<u8>(MEMREG_LEN)
-        .block();
+    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN).block();
     let data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN);
     for j in 0..MEMREG_LEN as usize {
         unsafe {

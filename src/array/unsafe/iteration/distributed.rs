@@ -4,9 +4,9 @@ use crate::array::iterator::private::Sealed;
 use crate::array::iterator::Schedule;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
 use crate::array::{ArrayOps, AsyncTeamFrom, Distribution, InnerArray};
+use crate::lamellar_env::LamellarEnv;
 use crate::memregion::Dist;
 use crate::LamellarTeam;
-use crate::lamellar_env::LamellarEnv;
 
 use core::marker::PhantomData;
 use futures_util::Future;

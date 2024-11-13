@@ -7,7 +7,7 @@ use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Dist, LamellarTeamRT};
 
-use futures_util::{ Future};
+use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 
 #[must_use = " SharedMemoryRegion 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
@@ -114,8 +114,7 @@ pub struct SharedMemoryRegionHandle<T: Dist> {
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) launched: bool,
     #[pin]
-    pub(crate) creation_future:
-        Pin<Box<dyn Future<Output = SharedMemoryRegion<T>> + Send>>,
+    pub(crate) creation_future: Pin<Box<dyn Future<Output = SharedMemoryRegion<T>> + Send>>,
 }
 
 #[pinned_drop]

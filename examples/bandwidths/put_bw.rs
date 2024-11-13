@@ -11,12 +11,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world
-        .alloc_shared_mem_region::<u8>(ARRAY_LEN)
-        .block();
-    let data = world
-        .alloc_one_sided_mem_region::<u8>(ARRAY_LEN)
-        ;
+    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
+    let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;

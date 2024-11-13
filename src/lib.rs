@@ -286,8 +286,8 @@ pub use crate::lamellar_task_group::{
 };
 pub use crate::lamellar_team::LamellarTeam;
 // //#[doc(hidden)]
-pub use crate::lamellar_team::{ArcLamellarTeam}; 
-pub(crate) use crate::lamellar_team::{LamellarTeamRT};
+pub use crate::lamellar_team::ArcLamellarTeam;
+pub(crate) use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::ExecutorType;
 

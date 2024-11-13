@@ -13,7 +13,8 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array: UnsafeArray<u8> = UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
+    let array: UnsafeArray<u8> =
+        UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
@@ -58,7 +59,9 @@ fn main() {
 
                 // array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
                 let _ = unsafe {
-                    array.batch_store(ARRAY_LEN * (num_pes - 1), sub_reg.as_slice().unwrap()).spawn()
+                    array
+                        .batch_store(ARRAY_LEN * (num_pes - 1), sub_reg.as_slice().unwrap())
+                        .spawn()
                 };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;

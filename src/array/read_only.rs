@@ -345,7 +345,6 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     }
 }
 
-
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
@@ -353,7 +352,6 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for ReadOnlyArray
         array.async_into().await
     }
 }
-
 
 #[async_trait]
 impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {

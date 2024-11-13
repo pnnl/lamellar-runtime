@@ -44,7 +44,8 @@ fn main() {
     array.barrier();
     array.print();
 
-    let array_2 = AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic).block();
+    let array_2 =
+        AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic).block();
     array_2.dist_iter_mut().for_each(|x| x.store(0.0)).block();
     array_2.barrier();
 

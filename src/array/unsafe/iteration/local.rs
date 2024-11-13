@@ -1,12 +1,12 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::private::*;
+use crate::array::iterator::Schedule;
 use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
 use crate::array::{ArrayOps, AsyncTeamFrom, Distribution};
-use crate::LamellarTeam;
-use crate::array::iterator::Schedule;
-use crate::memregion::Dist;
 use crate::lamellar_env::LamellarEnv;
+use crate::memregion::Dist;
+use crate::LamellarTeam;
 
 use core::marker::PhantomData;
 use futures_util::Future;

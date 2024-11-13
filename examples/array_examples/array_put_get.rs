@@ -31,15 +31,8 @@ fn main() {
             UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block).await;
         let cyclic_array =
             UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).await;
-        let shared_mem_region = world
-            .alloc_shared_mem_region(total_len)
-            .await
-            
-            .into(); //Convert into abstract LamellarMemoryRegion
-        let local_mem_region = world
-            .alloc_one_sided_mem_region(total_len)
-            
-            .into();
+        let shared_mem_region = world.alloc_shared_mem_region(total_len).await.into(); //Convert into abstract LamellarMemoryRegion
+        let local_mem_region = world.alloc_one_sided_mem_region(total_len).into();
         initialize_array(&block_array).await;
         initialize_array(&cyclic_array).await;
         initialize_mem_region(&shared_mem_region);

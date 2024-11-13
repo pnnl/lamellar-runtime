@@ -9,9 +9,9 @@ pub struct Skip<I> {
 }
 
 impl<I: InnerIter> InnerIter for Skip<I> {
-fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
-            None
-        }
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
     fn iter_clone(&self, _s: Sealed) -> Self {
         Skip {
             iter: self.iter.iter_clone(Sealed),

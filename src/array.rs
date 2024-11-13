@@ -1036,7 +1036,6 @@ impl<T: Dist> LamellarEnv for LamellarWriteArray<T> {
     }
 }
 
-
 // private sealed trait
 #[doc(hidden)]
 pub trait InnerArray: Sized {
@@ -1076,7 +1075,8 @@ pub(crate) mod private {
         where
             F: LamellarActiveMessage + LocalAM + 'static,
         {
-            self.team_rt().exec_am_local_tg(am, Some(self.team_counters()))
+            self.team_rt()
+                .exec_am_local_tg(am, Some(self.team_counters()))
         }
         fn exec_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where
@@ -1103,7 +1103,8 @@ pub(crate) mod private {
         where
             F: RemoteActiveMessage + LamellarAM + AmDist,
         {
-            self.team_rt().exec_am_all_tg(am, Some(self.team_counters()))
+            self.team_rt()
+                .exec_am_all_tg(am, Some(self.team_counters()))
         }
     }
 }
@@ -1111,7 +1112,9 @@ pub(crate) mod private {
 /// Represents a distributed array, providing some convenience functions for getting simple information about the array.
 /// This is mostly intended for use within the runtime (specifically for use in Proc Macros) but the available functions may be useful to endusers as well.
 #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArray<T: Dist>: private::LamellarArrayPrivate<T> + ActiveMessaging + LamellarEnv {
+pub trait LamellarArray<T: Dist>:
+    private::LamellarArrayPrivate<T> + ActiveMessaging + LamellarEnv
+{
     // #[doc(alias("One-sided", "onesided"))]
     /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
     ///

@@ -1018,14 +1018,12 @@ impl<T: Dist> NativeAtomicArray<T> {
     }
 }
 
-
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for NativeAtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
         array.async_into().await
     }
 }
-
 
 //#[doc(hidden)]
 #[async_trait]

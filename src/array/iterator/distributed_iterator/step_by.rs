@@ -9,9 +9,9 @@ pub struct StepBy<I> {
 }
 
 impl<I: InnerIter> InnerIter for StepBy<I> {
-fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
-            None
-        }
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
     fn iter_clone(&self, _s: Sealed) -> Self {
         StepBy {
             iter: self.iter.iter_clone(Sealed),

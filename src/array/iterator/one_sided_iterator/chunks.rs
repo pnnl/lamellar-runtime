@@ -1,11 +1,10 @@
 use crate::array::iterator::one_sided_iterator::{private::*, *};
 use crate::array::ArrayRdmaHandle;
+use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::OneSidedMemoryRegion;
-use crate::lamellar_env::LamellarEnv;
 
 use pin_project::pin_project;
-
 
 #[pin_project]
 pub struct Chunks<I>

@@ -351,7 +351,6 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     }
 }
 
-
 #[doc(alias("One-sided", "onesided"))]
 /// The interface for performing remote Shift operations on [UnsafeArray] elements
 ///

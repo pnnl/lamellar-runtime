@@ -1,10 +1,10 @@
-pub use crate::array::atomic::{AtomicArray,AtomicArrayHandle};
-pub use crate::array::generic_atomic::{GenericAtomicArray};
-pub use crate::array::global_lock_atomic::{GlobalLockArray,handle::GlobalLockArrayHandle};
-pub use crate::array::local_lock_atomic::{LocalLockArray,handle::LocalLockArrayHandle};
-pub use crate::array::native_atomic::{NativeAtomicArray};
-pub use crate::array::r#unsafe::{UnsafeArray,UnsafeArrayHandle};
-pub use crate::array::read_only::{ReadOnlyArray,ReadOnlyArrayHandle};
+pub use crate::array::atomic::{AtomicArray, AtomicArrayHandle};
+pub use crate::array::generic_atomic::GenericAtomicArray;
+pub use crate::array::global_lock_atomic::{handle::GlobalLockArrayHandle, GlobalLockArray};
+pub use crate::array::local_lock_atomic::{handle::LocalLockArrayHandle, LocalLockArray};
+pub use crate::array::native_atomic::NativeAtomicArray;
+pub use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayHandle};
+pub use crate::array::read_only::{ReadOnlyArray, ReadOnlyArrayHandle};
 //#[doc(hidden)]
 pub use crate::array::{
     register_reduction,

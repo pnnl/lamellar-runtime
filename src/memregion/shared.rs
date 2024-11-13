@@ -105,7 +105,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
             launched: false,
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
-                let mut mr_t = 
+                let mut mr_t =
                     MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
@@ -113,7 +113,10 @@ impl<T: Dist> SharedMemoryRegion<T> {
                     mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
                 }
 
-                let mr = unsafe { mr_t.expect("enough memory should have been allocated").to_base::<u8>() };
+                let mr = unsafe {
+                    mr_t.expect("enough memory should have been allocated")
+                        .to_base::<u8>()
+                };
                 SharedMemoryRegion {
                     mr: Darc::async_try_new_with_drop(
                         team.clone(),

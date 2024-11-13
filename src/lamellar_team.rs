@@ -1065,7 +1065,7 @@ impl LamellarTeamRT {
         self.arch.team_iter().collect::<Vec<usize>>()
     }
 
-     pub(crate) fn team_pe_id(&self) -> Result<usize, IdError> {
+    pub(crate) fn team_pe_id(&self) -> Result<usize, IdError> {
         self.arch.team_pe(self.world_pe)
     }
 
@@ -1356,7 +1356,7 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-     pub(crate) fn print_arch(&self) {
+    pub(crate) fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
         let mut parent = format!("");
         let mut team = format!("");
@@ -1710,7 +1710,11 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn exec_am_pe<F>(self: &Pin<Arc<LamellarTeamRT>>, pe: usize, am: F) -> AmHandle<F::Output>
+    pub(crate) fn exec_am_pe<F>(
+        self: &Pin<Arc<LamellarTeamRT>>,
+        pe: usize,
+        am: F,
+    ) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
     {
@@ -2120,7 +2124,10 @@ impl LamellarTeamRT {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn exec_am_local<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> LocalAmHandle<F::Output>
+    pub(crate) fn exec_am_local<F>(
+        self: &Pin<Arc<LamellarTeamRT>>,
+        am: F,
+    ) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {

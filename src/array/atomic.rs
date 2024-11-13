@@ -1166,8 +1166,6 @@ impl<T: Dist> AtomicArray<T> {
     }
 }
 
-
-
 // #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {

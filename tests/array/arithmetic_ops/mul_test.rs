@@ -83,104 +83,102 @@ macro_rules! onesided_iter {
     };
 }
 
-macro_rules! mul_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let _my_pe = world.my_pe();
-            let array_total_len = $len;
-            #[allow(unused_mut)]
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+macro_rules! mul_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let _my_pe = world.my_pe();
+        let array_total_len = $len;
+        #[allow(unused_mut)]
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let max_updates = max_updates!($t,num_pes);
-            let max_val =  2u128.pow((max_updates*num_pes) as u32) as $t;
-            let init_val = 1 as $t;
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
-            // array.print();
-            for idx in 0..array.len(){
-                for _i in 0..(max_updates as usize){
-                    #[allow(unused_unsafe)]
-                    let _ = unsafe{array.mul(idx,2 as $t).spawn()};
-                }
+        let max_updates = max_updates!($t, num_pes);
+        let max_val = 2u128.pow((max_updates * num_pes) as u32) as $t;
+        let init_val = 1 as $t;
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
+        // array.print();
+        for idx in 0..array.len() {
+            for _i in 0..(max_updates as usize) {
+                #[allow(unused_unsafe)]
+                let _ = unsafe { array.mul(idx, 2 as $t).spawn() };
             }
-            array.wait_all();
-            array.barrier();
-            // array.print();
-            #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{onesided_iter!($array,array).into_iter().enumerate()}{
-                let val = *elem;
-                check_val!($array,val,max_val,success);
-                if !success{
-                    eprintln!("{:?} {:?} {:?}",i,val,max_val);
-                }
+        }
+        array.wait_all();
+        array.barrier();
+        // array.print();
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
+            let val = *elem;
+            check_val!($array, val, max_val, success);
+            if !success {
+                eprintln!("{:?} {:?} {:?}", i, val, max_val);
             }
+        }
 
-            array.barrier();
-            initialize_array!($array, array, init_val);
+        array.barrier();
+        initialize_array!($array, array, init_val);
 
+        let half_len = array_total_len / 2;
+        let start_i = half_len / 2;
+        let end_i = start_i + half_len;
+        let sub_array = array.sub_array(start_i..end_i);
+        sub_array.barrier();
+        // // sub_array.print();
+        for idx in 0..sub_array.len() {
+            for _i in 0..(max_updates as usize) {
+                #[allow(unused_unsafe)]
+                let _ = unsafe { sub_array.mul(idx, 2 as $t).spawn() };
+            }
+        }
+        sub_array.wait_all();
+        sub_array.barrier();
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
+            let val = *elem;
+            check_val!($array, val, max_val, success);
+            if !success {
+                eprintln!("{:?} {:?} {:?}", i, val, max_val);
+            }
+        }
+        sub_array.barrier();
+        initialize_array!($array, array, init_val);
 
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
+        let pe_len = array_total_len / num_pes;
+        for pe in 0..num_pes {
+            let len = std::cmp::max(pe_len / 2, 1);
+            let start_i = (pe * pe_len) + len / 2;
+            let end_i = start_i + len;
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
-            // // sub_array.print();
-            for idx in 0..sub_array.len(){
-                for _i in 0..(max_updates as usize){
+            for idx in 0..sub_array.len() {
+                for _i in 0..(max_updates as usize) {
                     #[allow(unused_unsafe)]
-                    let _ =  unsafe{sub_array.mul(idx,2 as $t).spawn()};
+                    let _ = unsafe { sub_array.mul(idx, 2 as $t).spawn() };
                 }
             }
             sub_array.wait_all();
             sub_array.barrier();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
+            for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
                 let val = *elem;
-                check_val!($array,val,max_val,success);
-                if !success{
-                    eprintln!("{:?} {:?} {:?}",i,val,max_val);
+                check_val!($array, val, max_val, success);
+                if !success {
+                    eprintln!("{:?} {:?} {:?}", i, val, max_val);
                 }
             }
             sub_array.barrier();
             initialize_array!($array, array, init_val);
-
-
-            let pe_len = array_total_len/num_pes;
-            for pe in 0..num_pes{
-                let len = std::cmp::max(pe_len/2,1);
-                let start_i = (pe*pe_len)+ len/2;
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                sub_array.barrier();
-                for idx in 0..sub_array.len(){
-                    for _i in 0..(max_updates as usize){
-                        #[allow(unused_unsafe)]
-                        let _ = unsafe{sub_array.mul(idx,2 as $t).spawn()};
-                    }
-                }
-                sub_array.wait_all();
-                sub_array.barrier();
-                #[allow(unused_unsafe)]
-                for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                    let val = *elem;
-                    check_val!($array,val,max_val,success);
-                    if !success{
-                        eprintln!("{:?} {:?} {:?}",i,val,max_val);
-                    }
-                }
-                sub_array.barrier();
-                initialize_array!($array, array, init_val);
-            }
-
-            if !success{
-                eprintln!("failed");
-            }
         }
-    }
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 fn main() {

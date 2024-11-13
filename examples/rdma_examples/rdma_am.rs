@@ -32,9 +32,7 @@ impl LamellarAM for RdmaAM {
         }
 
         //get the original nodes data
-        let local = lamellar::world
-            .alloc_one_sided_mem_region::<u8>(ARRAY_LEN)
-            ;
+        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
         let local_slice = unsafe { local.as_mut_slice().unwrap() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
@@ -107,10 +105,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world
-        .alloc_shared_mem_region::<u8>(ARRAY_LEN)
-        .block()
-        ;
+    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
     let local_array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in array.as_mut_slice().unwrap() {
