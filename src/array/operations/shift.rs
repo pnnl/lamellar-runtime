@@ -384,7 +384,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
 /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
-/// array.block_on(array.batch_fetch_shl(indices,2));
+/// unsafe {array.batch_fetch_shl(indices,2).block()};
 ///```
 pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// This call performs an in place left shift of `val` bits on the element specified by `index`.
