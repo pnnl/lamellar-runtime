@@ -326,6 +326,7 @@ fn create_buf_ops(
             quote! { #val },                                    //lhs
             quote! {slice[index].store(val, Ordering::SeqCst)}, //assign
             quote! {
+                // println!("old value: {:?}, index: {:?}",slice[index].load(Ordering::SeqCst),index);
                 res.push(slice[index].fetch_add(val, Ordering::SeqCst));
             }, //fetch_add
             quote! {
@@ -552,7 +553,7 @@ fn create_buf_ops(
     } else if array_type == "LocalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
-            quote! {let mut slice = self.data.write_local_data().await;}, //this is the lock
+            quote! {let mut slice = self.data.write_local_data().await; }, //this is the lock
         )
     } else if array_type == "GlobalLockArray" {
         (
@@ -853,12 +854,14 @@ fn create_buf_ops(
             struct #multi_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
+                #[serde(with = "serde_bytes")]
                 idx_vals: Vec<u8>,
                 index_size: u8,
             }
             #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
+                    // println!("in multi val multi idx exec");
                     #slice
                     match self.index_size{
                         1 => {
@@ -897,7 +900,7 @@ fn create_buf_ops(
             #[allow(non_snake_case)]
             fn #dist_multi_val_multi_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                     Arc::new(#multi_val_multi_idx_am_buf_name{
-                        data: array.into(),
+                        data: Into::into(array),
                         op: op.into(),
                         idx_vals: idx_vals,
                         index_size: index_size,
@@ -917,17 +920,20 @@ fn create_buf_ops(
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
                 val: #typeident,
+                #[serde(with = "serde_bytes")]
                 indices: Vec<u8>,
                 index_size: u8,
             }
             #[#am(AmGroup(false))]
             impl LamellarAM for #single_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
+                    // println!("in single val multi idx exec");
                     #slice
                     let val = self.val;
                     match self.index_size{
                         1 => {
                             let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
+                            // println!("Indices: {:?}",indices);
                             match self.op {
                                 #single_val_multi_idx_match_stmts
                             }
@@ -964,7 +970,7 @@ fn create_buf_ops(
                     let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
                     let val = val_slice[0];
                     Arc::new(#single_val_multi_idx_am_buf_name{
-                        data: array.into(),
+                        data: Into::into(array),
                         op: op.into(),
                         val: val,
                         indices: indicies,
@@ -984,12 +990,14 @@ fn create_buf_ops(
             struct #multi_val_single_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
+                #[serde(with = "serde_bytes")]
                 vals: Vec<u8>,
                 index: usize,
             }
             #[#am(AmGroup(false))]
             impl LamellarAM for #multi_val_single_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
+                    // println!("in multi val single idx exec");
                     #slice
                     let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                     let index = self.index;
@@ -1001,7 +1009,7 @@ fn create_buf_ops(
             #[allow(non_snake_case)]
             fn #dist_multi_val_single_idx_am_buf_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                     Arc::new(#multi_val_single_idx_am_buf_name{
-                        data: array.into(),
+                        data: Into::into(array),
                         op: op.into(),
                         vals: vals,
                         index: index,
@@ -1024,12 +1032,14 @@ fn create_buf_ops(
                 struct #multi_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
+                    #[serde(with = "serde_bytes")]
                     idx_vals: Vec<u8>,
                     index_size: u8,
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                        // println!("in multi val multi idx result exec");
                         #slice
                         let mut res = Vec::new();
                         match self.index_size{
@@ -1070,7 +1080,7 @@ fn create_buf_ops(
                 #[allow(non_snake_case)]
                 fn #dist_multi_val_multi_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                         Arc::new(#multi_val_multi_idx_am_buf_result_name{
-                            data: array.into(),
+                            data: Into::into(array),
                             op: op.into(),
                             idx_vals: idx_vals,
                             index_size: index_size,
@@ -1090,12 +1100,14 @@ fn create_buf_ops(
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
                     val: #typeident,
+                    #[serde(with = "serde_bytes")]
                     indices: Vec<u8>,
                     index_size: u8,
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #single_val_multi_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>> {
+                        // println!("in single val multi idx result exec");
                         #slice
                         let val = self.val;
                         let mut res = Vec::new();
@@ -1131,6 +1143,7 @@ fn create_buf_ops(
                                 }
                             }
                         }
+                        // println!("done in in single val multi idx result exec");
                         res
                     }
                 }
@@ -1139,7 +1152,7 @@ fn create_buf_ops(
                         let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
                         let val = val_slice[0];
                         Arc::new(#single_val_multi_idx_am_buf_result_name{
-                            data: array.into(),
+                            data: Into::into(array),
                             op: op.into(),
                             val: val,
                             indices: indicies,
@@ -1159,12 +1172,14 @@ fn create_buf_ops(
                 struct #multi_val_single_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
+                    #[serde(with = "serde_bytes")]
                     vals: Vec<u8>,
                     index: usize,
                 }
                 #[#am(AmGroup(false))]
                 impl LamellarAM for #multi_val_single_idx_am_buf_result_name{ //eventually we can return fetchs here too...
                     async fn exec(&self) -> Vec<Result<#typeident,#typeident>>  {
+                        // println!("in multi val single idx result exec");
                         #slice
                         let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                         let index = self.index;
@@ -1178,7 +1193,7 @@ fn create_buf_ops(
                 #[allow(non_snake_case)]
                 fn #dist_multi_val_single_idx_am_buf_result_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                         Arc::new(#multi_val_single_idx_am_buf_result_name{
-                            data: array.into(),
+                            data: Into::into(array),
                             op: op.into(),
                             vals: vals,
                             index: index,
@@ -1202,12 +1217,14 @@ fn create_buf_ops(
         struct #multi_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
+            #[serde(with = "serde_bytes")]
             idx_vals: Vec<u8>,
             index_size: u8,
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident> {
+                // println!("in multi val multi idx fetch exec");
                 #slice
                 let mut res = Vec::new();
                 match self.index_size{
@@ -1251,7 +1268,7 @@ fn create_buf_ops(
         #[allow(non_snake_case)]
         fn #dist_multi_val_multi_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>,index_usize: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_multi_idx_am_buf_fetch_name{
-                    data: array.into(),
+                    data: Into::into(array),
                     op: op.into(),
                     idx_vals: idx_vals,
                     index_size: index_usize,
@@ -1271,47 +1288,56 @@ fn create_buf_ops(
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
             val: #typeident,
+            #[serde(with = "serde_bytes")]
             indices: Vec<u8>,
             index_size: u8,
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #single_val_multi_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident>{
+                // println!("in single val multi idx fetch exec");
                 #slice
                 let val = self.val;
-                let mut res = Vec::new();
+                let mut res;
                 match self.index_size{
                     1 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u8, self.indices.len()/std::mem::size_of::<u8>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u8>());
+                        // println!("indices: {:?}", indices);
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     2 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u16, self.indices.len()/std::mem::size_of::<u16>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u16>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     4 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u32, self.indices.len()/std::mem::size_of::<u32>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u32>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     8 => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const u64, self.indices.len()/std::mem::size_of::<u64>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<u64>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                     _ => {
                         let indices = unsafe {std::slice::from_raw_parts(self.indices.as_ptr() as *const usize, self.indices.len()/std::mem::size_of::<usize>())};
+                        res = Vec::with_capacity(self.indices.len()/std::mem::size_of::<usize>());
                         match self.op {
                             #single_val_multi_idx_fetch_match_stmts
                         }
                     }
                 }
+                // println!("done with exec");
                 res
             }
         }
@@ -1320,7 +1346,7 @@ fn create_buf_ops(
                 let val_slice = unsafe {std::slice::from_raw_parts(val.as_ptr() as *const #typeident, std::mem::size_of::<#typeident>())};
                 let val = val_slice[0];
                 Arc::new(#single_val_multi_idx_am_buf_fetch_name{
-                    data: array.into(),
+                    data: Into::into(array),
                     op: op.into(),
                     val: val,
                     indices: indicies,
@@ -1343,12 +1369,14 @@ fn create_buf_ops(
         struct #multi_val_single_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
+            #[serde(with = "serde_bytes")]
             vals: Vec<u8>,
             index: usize,
         }
         #[#am(AmGroup(false))]
         impl LamellarAM for #multi_val_single_idx_am_buf_fetch_name{ //eventually we can return fetchs here too...
             async fn exec(&self) -> Vec<#typeident> {
+                // println!("in multi val single idx fetch exec");
                 #slice
                 let vals = unsafe {std::slice::from_raw_parts(self.vals.as_ptr() as *const #typeident, self.vals.len()/std::mem::size_of::<#typeident>())};
                 let index = self.index;
@@ -1363,7 +1391,7 @@ fn create_buf_ops(
         #[allow(non_snake_case)]
         fn #dist_multi_val_single_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: Vec<u8>, index: usize) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_single_idx_am_buf_fetch_name{
-                    data: array.into(),
+                    data: Into::into(array),
                     op: op.into(),
                     vals: vals,
                     index: index,
@@ -1687,9 +1715,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
             use __lamellar::darc::prelude::*;
             use __lamellar::array::{
                 ArrayOpCmd,
-                OpResultOffsets,
-                PeOpResults,
-                OpResults,
                 IdxVal,
                 ReadOnlyByteArray,
                 UnsafeByteArray,

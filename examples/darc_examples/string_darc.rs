@@ -20,21 +20,24 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     world.clone().block_on(async move {
-        let string_data =
-            LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe)).unwrap();
+        let string_data = LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe))
+            .await
+            .unwrap();
 
         println!("[PE: {}] {}", my_pe, string_data.read().await);
 
         if my_pe == 0 {
-            world.block_on(world.exec_am_pe(
-                1,
-                StringDarcAm {
-                    new_data: String::from("Modified string from 0"),
-                    data: string_data.clone(),
-                },
-            ));
+            world
+                .exec_am_pe(
+                    1,
+                    StringDarcAm {
+                        new_data: String::from("Modified string from 0"),
+                        data: string_data.clone(),
+                    },
+                )
+                .await;
         }
-        world.barrier();
+        world.async_barrier().await;
         println!("[PE: {}] {}", my_pe, string_data.read().await);
     });
 }

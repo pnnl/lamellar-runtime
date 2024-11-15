@@ -26,7 +26,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     world.block_on(
@@ -53,7 +53,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     world.block_on(
@@ -81,7 +81,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     world.block_on(
@@ -109,7 +109,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     world.block_on(
@@ -136,7 +136,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     if my_pe == 0 {
@@ -147,7 +147,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     pub unsafe fn onesided_iter(&self) -> OneSidedIter<'_, T, UnsafeArray<T>> {
-        OneSidedIter::new(self.clone().into(), self.inner.data.team.clone(), 1)
+        OneSidedIter::new(self.clone(), self.inner.data.team.clone(), 1)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -171,7 +171,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic);
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
     ///     if my_pe == 0 {
@@ -186,7 +186,7 @@ impl<T: Dist> UnsafeArray<T> {
         buf_size: usize,
     ) -> OneSidedIter<'_, T, UnsafeArray<T>> {
         OneSidedIter::new(
-            self.clone().into(),
+            self.clone(),
             self.inner.data.team.clone(),
             std::cmp::min(buf_size, self.len()),
         )

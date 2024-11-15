@@ -156,8 +156,8 @@ fn gen_am_group_return_stmt(
                     },
                     quote! {
                             match __local{
-                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap())),
-                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group.unwrap())),
+                            true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.expect("am group should exsit"))),
+                            false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new (__am_group.expect("am group should exsit"))),
                         }
                     },
                 )
@@ -176,7 +176,7 @@ fn gen_am_group_return_stmt(
                         }
                     },
                     quote! {
-                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.unwrap()))
+                        #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new (__am_group.expect("am group should exsit")))
                     },
                 )
             }
@@ -305,7 +305,7 @@ fn impl_am_group_user(
     };
 
     // quote! {
-    //     #[doc(hidden)]
+    //     //#[doc(hidden)]
     //     pub struct #am_group_name_user #impl_generics #where_clause{
     //         team: std::sync::Arc<#lamellar::LamellarTeam>,
     //         batch_cnt: usize,
@@ -317,10 +317,11 @@ fn impl_am_group_user(
     quote! {
         impl #am_user_impl_generics #am_group_name_user #am_user_ty_generics #am_user_where_clause{
             pub fn new(team: std::sync::Arc<#lamellar::LamellarTeam>) -> Self {
-                let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {
-                    Ok(n) => n.parse::<usize>().unwrap(),
-                    Err(_) => 10000,
-                };
+                let num_per_batch = #lamellar::config().am_group_batch_size;
+                // match std::env::var("LAMELLAR_OP_BATCH") {
+                //     Ok(n) => n.parse::<usize>().unwrap(),
+                //     Err(_) => 10000,
+                // };
                 #am_group_name_user {
                     team: team,
                     batch_cnt: 0,
@@ -373,7 +374,7 @@ fn impl_am_group_user(
                 }
 
                 // println!("{} pending reqs", self.pending_reqs.len());
-                let results = #lamellar::futures::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
+                let results = #lamellar::futures_util::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
             }
@@ -397,7 +398,7 @@ fn generate_am_group_user_struct(
     let (_impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
 
     quote! {
-        #[doc(hidden)]
+        //#[doc(hidden)]
         #vis struct #am_group_name_user #am_user_impl_generics #am_user_where_clause{
             team: std::sync::Arc<lamellar::LamellarTeam>,
             batch_cnt: usize,

@@ -22,7 +22,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
     ///     for elem in buf.as_mut_slice()
@@ -88,7 +88,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block);
+    /// let array = ReadOnlyArray::<usize>::new(&world,12,Distribution::Block).block();
     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
     /// unsafe {
     ///     for elem in buf.as_mut_slice()
@@ -131,10 +131,10 @@ impl<T: Dist + 'static> LamellarArrayInternalGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Box<dyn LamellarArrayRequest<Output = ()>> {
+    ) -> ArrayRdmaHandle {
         self.array.internal_get(index, buf)
     }
-    unsafe fn internal_at(&self, index: usize) -> Box<dyn LamellarArrayRequest<Output = T>> {
+    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         self.array.internal_at(index)
     }
 }
@@ -144,10 +144,10 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    ) -> ArrayRdmaHandle {
         self.array.get(index, buf)
     }
-    fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
+    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
         unsafe { self.array.at(index) }
     }
 }

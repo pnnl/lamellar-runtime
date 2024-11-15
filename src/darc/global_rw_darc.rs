@@ -1,4 +1,3 @@
-use async_lock::RwLock;
 use core::marker::PhantomData;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -8,11 +7,15 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::active_messaging::RemotePtr;
-use crate::darc::local_rw_darc::LocalRwDarc;
 use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
 use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::{IdError, LamellarEnv, LamellarTeam};
+
+use super::handle::{
+    GlobalRwDarcCollectiveWriteHandle, GlobalRwDarcHandle, GlobalRwDarcReadHandle,
+    GlobalRwDarcWriteHandle, IntoDarcHandle, IntoLocalRwDarcHandle,
+};
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -35,7 +38,7 @@ pub(crate) struct DistRwLock<T> {
 }
 
 unsafe impl<T: Send> Send for DistRwLock<T> {}
-unsafe impl<T: Sync> Sync for DistRwLock<T> {}
+unsafe impl<T: Send> Sync for DistRwLock<T> {}
 
 /// # Safety
 ///
@@ -56,23 +59,44 @@ impl<T> DistRwLock<T> {
             data: std::cell::UnsafeCell::new(data),
         }
     }
-    fn into_inner(self) -> T {
+    pub(crate) fn into_inner(self) -> T {
         self.data.into_inner()
     }
-}
-impl<T> DistRwLock<T> {
+
+    pub(crate) fn dirty_num_locks(&self) -> usize {
+        let mut locks = 0;
+        locks += self.readers.load(Ordering::SeqCst);
+        if self.writer.load(Ordering::SeqCst) != self.team.num_pes {
+            locks += 1;
+        }
+        if self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes {
+            locks += 1;
+        }
+        locks
+    }
+
     async fn async_reader_lock(&self, _pe: usize) {
         loop {
             while self.writer.load(Ordering::SeqCst) != self.team.num_pes {
                 async_std::task::yield_now().await;
             }
-            // println!("\t{:?} inc read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+            // println!(
+            //     "\t{:?} inc read count {:?} {:?}",
+            //     _pe,
+            //     self.readers.load(Ordering::SeqCst),
+            //     self.writer.load(Ordering::SeqCst)
+            // );
             self.readers.fetch_add(1, Ordering::SeqCst);
             if self.writer.load(Ordering::SeqCst) == self.team.num_pes {
                 break;
             }
             self.readers.fetch_sub(1, Ordering::SeqCst);
-            // println!("\t{:?} writers exist dec read count {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+            // println!(
+            //     "\t{:?} writers exist dec read count {:?} {:?}",
+            //     _pe,
+            //     self.readers.load(Ordering::SeqCst),
+            //     self.writer.load(Ordering::SeqCst)
+            // );
         }
         // println!(
         //     "\t{:?} read locked {:?} {:?}",
@@ -88,7 +112,12 @@ impl<T> DistRwLock<T> {
         {
             async_std::task::yield_now().await;
         }
-        // println!("\t{:?} write lock checking for readers {:?} {:?}",pe,self.readers.load(Ordering::SeqCst),self.writer.load(Ordering::SeqCst));
+        // println!(
+        //     "\t{:?} write lock checking for readers {:?} {:?}",
+        //     pe,
+        //     self.readers.load(Ordering::SeqCst),
+        //     self.writer.load(Ordering::SeqCst)
+        // );
         while self.readers.load(Ordering::SeqCst) != 0 {
             async_std::task::yield_now().await;
         }
@@ -101,10 +130,17 @@ impl<T> DistRwLock<T> {
     }
 
     async fn async_collective_writer_lock(&self, pe: usize, collective_cnt: usize) {
+        // println!("{:?} collective writer lock {:?}", pe, collective_cnt);
         // first lets set the normal writer lock, but will set it to a unique id all the PEs should have (it is initialized to num_pes+1 and is incremented by one after each lock)
         if pe == 0 {
             self.async_writer_lock(collective_cnt).await;
         } else {
+            // println!(
+            //     "\t{:?} write lock checking for readers {:?} {:?}",
+            //     pe,
+            //     self.readers.load(Ordering::SeqCst),
+            //     self.writer.load(Ordering::SeqCst)
+            // );
             while self.writer.load(Ordering::SeqCst) != collective_cnt {
                 async_std::task::yield_now().await;
             }
@@ -180,7 +216,6 @@ impl<T> DistRwLock<T> {
         let _temp = self.collective_writer.fetch_add(1, Ordering::SeqCst);
         // println!("collective unlock PE{:?} {:?} {:?} {:?}",pe,temp,self.collective_writer.load(Ordering::SeqCst),self.team.num_pes);
         while self.collective_writer.load(Ordering::SeqCst) != self.team.num_pes {
-            //
             async_std::task::yield_now().await;
         }
         //we have all entered the unlock
@@ -210,9 +245,11 @@ struct LockAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for LockAm {
     async fn exec() {
-        // println!("In lock am {:?}",self);
+        // println!("In lock am {:?}", self);
         // let lock = {
-        let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
+        let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) };
+        // inner.deserialize_update_cnts(self.orig_pe);
+        let rwlock = inner.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         match self.lock_type {
             LockType::Read => {
                 rwlock.async_reader_lock(self.orig_pe).await;
@@ -225,7 +262,7 @@ impl LamellarAM for LockAm {
             }
         }
         // };
-        // println!("finished lock am");
+        // println!("finished lock am {:?}", self);
     }
 }
 
@@ -239,7 +276,10 @@ struct UnlockAm {
 impl LamellarAM for UnlockAm {
     async fn exec() {
         // println!("In unlock am {:?}", self);
-        let rwlock = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
+        let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
+                                                                                       // inner.deserialize_update_cnts(self.orig_pe);
+        let rwlock = inner.item();
+
         unsafe {
             match self.lock_type {
                 LockType::Read => rwlock.reader_unlock(self.orig_pe),
@@ -249,19 +289,20 @@ impl LamellarAM for UnlockAm {
                 }
             }
         }
+        // println!("Finished in unlock am {:?}", self);
     }
 }
 
 pub struct GlobalRwDarcReadGuard<T: 'static> {
-    rwlock: Darc<DistRwLock<T>>,
-    marker: PhantomData<&'static mut T>,
-    local_cnt: Arc<AtomicUsize>, //this allows us to immediately clone the read guard without launching an AM, and will prevent dropping the global guard until local copies are gone
+    pub(crate) darc: GlobalRwDarc<T>,
+    pub(crate) marker: PhantomData<&'static mut T>,
+    pub(crate) local_cnt: Arc<AtomicUsize>, //this allows us to immediately clone the read guard without launching an AM, and will prevent dropping the global guard until local copies are gone
 }
 
 impl<T> Deref for GlobalRwDarcReadGuard<T> {
     type Target = T;
     fn deref(&self) -> &T {
-        unsafe { &*self.rwlock.data.get() }
+        unsafe { &*self.darc.darc.data.get() }
     }
 }
 
@@ -269,24 +310,24 @@ impl<T> Clone for GlobalRwDarcReadGuard<T> {
     fn clone(&self) -> Self {
         self.local_cnt.fetch_add(1, Ordering::SeqCst);
         GlobalRwDarcReadGuard {
-            rwlock: self.rwlock.clone(),
+            darc: self.darc.clone(),
             marker: PhantomData,
             local_cnt: self.local_cnt.clone(),
         }
     }
 }
 
-impl<T> Drop for GlobalRwDarcReadGuard<T> {
+impl<T: 'static> Drop for GlobalRwDarcReadGuard<T> {
     fn drop(&mut self) {
-        // println!("dropping read guard");
+        // println!("dropping global rwdarc read guard");
         if self.local_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
-            let inner = self.rwlock.inner();
+            let inner = self.darc.inner();
             let team = inner.team();
             let remote_rwlock_addr = team.lamellae.remote_addr(
                 0,
                 inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
             );
-            team.exec_am_pe_tg(
+            let _am = team.spawn_am_pe_tg(
                 0,
                 UnlockAm {
                     rwlock_addr: remote_rwlock_addr,
@@ -295,6 +336,8 @@ impl<T> Drop for GlobalRwDarcReadGuard<T> {
                 },
                 Some(inner.am_counters()),
             );
+            // am.launch();
+            // inner.serialize_update_cnts(1);
         }
     }
 }
@@ -302,40 +345,40 @@ impl<T> Drop for GlobalRwDarcReadGuard<T> {
 //TODO update this so that we print locked if data is locked...
 impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcReadGuard<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe { fmt::Debug::fmt(&self.rwlock.data.get().as_ref(), f) }
+        unsafe { fmt::Debug::fmt(&self.darc.darc.data.get().as_ref(), f) }
     }
 }
 
 pub struct GlobalRwDarcWriteGuard<T: 'static> {
-    rwlock: Darc<DistRwLock<T>>,
-    marker: PhantomData<&'static mut T>,
+    pub(crate) darc: GlobalRwDarc<T>,
+    pub(crate) marker: PhantomData<&'static mut T>,
 }
 
 impl<T> Deref for GlobalRwDarcWriteGuard<T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { &*self.rwlock.data.get() }
+        unsafe { &*self.darc.darc.data.get() }
     }
 }
 
 impl<T> DerefMut for GlobalRwDarcWriteGuard<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.rwlock.data.get() }
+        unsafe { &mut *self.darc.darc.data.get() }
     }
 }
 
-impl<T> Drop for GlobalRwDarcWriteGuard<T> {
+impl<T: 'static> Drop for GlobalRwDarcWriteGuard<T> {
     fn drop(&mut self) {
         // println!("dropping write guard");
-        let inner = self.rwlock.inner();
+        let inner = self.darc.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe_tg(
+        let _am = team.spawn_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -344,46 +387,48 @@ impl<T> Drop for GlobalRwDarcWriteGuard<T> {
             },
             Some(inner.am_counters()),
         );
+        // am.launch();
+        // inner.serialize_update_cnts(1);
     }
 }
 
 impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe { fmt::Debug::fmt(&self.rwlock.data.get().as_ref(), f) }
+        unsafe { fmt::Debug::fmt(&self.darc.darc.data.get().as_ref(), f) }
     }
 }
 
 pub struct GlobalRwDarcCollectiveWriteGuard<T: 'static> {
-    rwlock: Darc<DistRwLock<T>>,
-    collective_cnt: usize,
-    marker: PhantomData<&'static mut T>,
+    pub(crate) darc: GlobalRwDarc<T>,
+    pub(crate) collective_cnt: usize,
+    pub(crate) marker: PhantomData<&'static mut T>,
 }
 
 impl<T> Deref for GlobalRwDarcCollectiveWriteGuard<T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
-        unsafe { &*self.rwlock.data.get() }
+        unsafe { &*self.darc.darc.data.get() }
     }
 }
 
 impl<T> DerefMut for GlobalRwDarcCollectiveWriteGuard<T> {
     #[inline]
     fn deref_mut(&mut self) -> &mut T {
-        unsafe { &mut *self.rwlock.data.get() }
+        unsafe { &mut *self.darc.darc.data.get() }
     }
 }
 
-impl<T> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
+impl<T: 'static> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
     fn drop(&mut self) {
         // println!("dropping collective write guard");
-        let inner = self.rwlock.inner();
+        let inner = self.darc.inner();
         let team = inner.team();
         let remote_rwlock_addr = team.lamellae.remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe_tg(
+        let _am = team.spawn_am_pe_tg(
             0,
             UnlockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -392,12 +437,14 @@ impl<T> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
             },
             Some(inner.am_counters()),
         );
+        // am.launch();
+        // inner.serialize_update_cnts(1);
     }
 }
 
 impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcCollectiveWriteGuard<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe { fmt::Debug::fmt(&self.rwlock.data.get().as_ref(), f) }
+        unsafe { fmt::Debug::fmt(&self.darc.darc.data.get().as_ref(), f) }
     }
 }
 
@@ -423,8 +470,8 @@ pub struct GlobalRwDarc<T: 'static> {
     pub(crate) darc: Darc<DistRwLock<T>>,
 }
 
-unsafe impl<T: Send> Send for GlobalRwDarc<T> {}
-unsafe impl<T: Sync> Sync for GlobalRwDarc<T> {}
+unsafe impl<T: Send> Send for GlobalRwDarc<T> {} //protected internally by rwlock
+unsafe impl<T: Send> Sync for GlobalRwDarc<T> {} //protected internally by rwlock
 
 impl<T> LamellarEnv for GlobalRwDarc<T> {
     fn my_pe(&self) -> usize {
@@ -470,7 +517,7 @@ impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
 }
 
 impl<T> GlobalRwDarc<T> {
-    fn inner(&self) -> &DarcInner<DistRwLock<T>> {
+    pub(crate) fn inner(&self) -> &DarcInner<DistRwLock<T>> {
         self.darc.inner()
     }
 
@@ -511,13 +558,11 @@ impl<T> GlobalRwDarc<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Launches an active message to gather a global read lock associated with this GlobalRwDarc.
+    /// Launches an active message to gather a global read lock associated with this GlobalRwDarc returning a handle representing this operation.
+    /// The returned handle must either be await'd `.read().await` within an async context
+    /// or it must be blocked on `.read().block()` in a non async context to actually acquire the lock
     ///
-    /// The current task will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while any writer currently has access to the lock, but there may be other readers
-    ///
-    /// Returns an RAII guard which will drop the read access of the wrlock when dropped
+    /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the read access of the wrlock when dropped
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
@@ -546,16 +591,16 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    ///
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let guard = world.block_on(counter.read());
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
+    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+    /// let guard = counter.read().block();
     /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
-    /// drop(guard); //release the
+    /// drop(guard); //release the lock
     /// world.wait_all(); // wait for my active message to return
     /// world.barrier(); //at this point all updates will have been performed
+    ///
     ///```
-    pub async fn read(&self) -> GlobalRwDarcReadGuard<T> {
+    pub fn read(&self) -> GlobalRwDarcReadHandle<T> {
         // println!("async read");
         let inner = self.inner();
         let team = inner.team();
@@ -563,7 +608,7 @@ impl<T> GlobalRwDarc<T> {
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
-        team.exec_am_pe_tg(
+        let am = team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -571,26 +616,19 @@ impl<T> GlobalRwDarc<T> {
                 lock_type: LockType::Read,
             },
             Some(inner.am_counters()),
-        )
-        .into_future()
-        .await;
-        // println!("TID: {:?} async got read lock", std::thread::current().id());
-        GlobalRwDarcReadGuard {
-            rwlock: self.darc.clone(),
-            marker: PhantomData,
-            local_cnt: Arc::new(AtomicUsize::new(1)),
+        );
+        GlobalRwDarcReadHandle {
+            darc: self.clone(),
+            lock_am: am,
         }
-        // inner.item().read(remote_rwlock_addr)
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Launches an active message to gather the global write lock associated with this GlobalRwDarc.
+    /// Launches an active message to gather a global write lock associated with this GlobalRwDarc returning a handle representing this operation.
+    /// The returned handle must either be await'd `.write().await` within an async context
+    /// or it must be blocked on `.write().block()` in a non async context to actually acquire the lock
     ///
-    /// The current task will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while another writer or any readers currently have access to the lock
-    ///
-    /// Returns an RAII guard which will drop the write access of the wrlock when dropped
+    /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the write access of the wrlock when dropped
     ///
     /// # One-sided Operation
     /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
@@ -619,15 +657,15 @@ impl<T> GlobalRwDarc<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let mut guard = world.block_on(counter.write());
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
+    /// let _ = world.exec_am_all(DarcAm {counter: counter.clone()}).spawn();
+    /// let mut guard = counter.write().block();  //block until we get the write lock
     /// *guard += my_pe;
     /// drop(guard); //release the
     /// world.wait_all(); // wait for my active message to return
     /// world.barrier(); //at this point all updates will have been performed
     ///```
-    pub async fn write(&self) -> GlobalRwDarcWriteGuard<T> {
+    pub fn write(&self) -> GlobalRwDarcWriteHandle<T> {
         // println!("async write");
         let inner = self.inner();
         let team = inner.team();
@@ -636,7 +674,7 @@ impl<T> GlobalRwDarc<T> {
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
 
-        team.exec_am_pe_tg(
+        let am = team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -644,23 +682,19 @@ impl<T> GlobalRwDarc<T> {
                 lock_type: LockType::Write,
             },
             Some(inner.am_counters()),
-        )
-        .into_future()
-        .await;
-        GlobalRwDarcWriteGuard {
-            rwlock: self.darc.clone(),
-            marker: PhantomData,
+        );
+        GlobalRwDarcWriteHandle {
+            darc: self.clone(),
+            lock_am: am,
         }
     }
 
     #[doc(alias("Collective"))]
-    /// Launches an active message to gather the global collective write lock associated with this GlobalRwDarc.
+    /// Launches an active message to gather a global collective write lock associated with this GlobalRwDarc returning a handle representing this operation.
+    /// The returned handle must either be await'd `.collective_write().await` within an async context
+    /// or it must be blocked on `.collective_write().block()` in a non async context to actually acquire the lock
     ///
-    /// The current task will be blocked until the lock has been acquired.
-    ///
-    /// This function will not return while another writer or any readers currently have access to the lock
-    ///
-    /// Returns an RAII guard which will drop the write access of the wrlock when dropped
+    /// After awaiting or blocking on the handle, a RAII guard is returned which will drop the write access of the wrlock when dropped
     ///
     /// # Collective Operation
     /// All PEs associated with this GlobalRwDarc must enter the lock call otherwise deadlock may occur.
@@ -669,34 +703,15 @@ impl<T> GlobalRwDarc<T> {
     ///
     ///```
     /// use lamellar::darc::prelude::*;
-    /// use lamellar::active_messaging::*;
-    ///
-    /// #[lamellar::AmData(Clone)]
-    /// struct DarcAm {
-    ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
-    /// }
-    ///
-    /// #[lamellar::am]
-    /// impl LamellarAm for DarcAm {
-    ///     async fn exec(self) {
-    ///         let mut counter = self.counter.write().await; // await until we get the write lock
-    ///         *counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
-    ///     }
-    ///  }
-    /// //-------------
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///
-    /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    /// let mut guard = world.block_on(counter.collective_write());
+    /// let counter = GlobalRwDarc::new(&world, 0).block().unwrap();
+    /// let mut guard = counter.collective_write().block(); // this will block until all PEs have acquired the lock
     /// *guard += my_pe;
-    /// drop(guard); //release the lock
-    /// world.wait_all(); // wait for my active message to return
-    /// world.barrier(); //at this point all updates will have been performed
     ///```
-    pub async fn collective_write(&self) -> GlobalRwDarcCollectiveWriteGuard<T> {
+    pub fn collective_write(&self) -> GlobalRwDarcCollectiveWriteHandle<T> {
         // println!("async write");
         let inner = self.inner();
         let team = inner.team();
@@ -705,7 +720,7 @@ impl<T> GlobalRwDarc<T> {
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
         );
         let collective_cnt = inner.item().collective_cnt.fetch_add(1, Ordering::SeqCst);
-        team.exec_am_pe_tg(
+        let am = team.exec_am_pe_tg(
             0,
             LockAm {
                 rwlock_addr: remote_rwlock_addr,
@@ -713,195 +728,16 @@ impl<T> GlobalRwDarc<T> {
                 lock_type: LockType::CollectiveWrite(collective_cnt),
             },
             Some(inner.am_counters()),
-        )
-        .into_future()
-        .await;
-        GlobalRwDarcCollectiveWriteGuard {
-            rwlock: self.darc.clone(),
-            collective_cnt: collective_cnt,
-            marker: PhantomData,
+        );
+        GlobalRwDarcCollectiveWriteHandle {
+            darc: self.clone(),
+            collective_cnt,
+            lock_am: am,
         }
     }
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Launches an active message to gather a global read lock associated with this GlobalRwDarc.
-    // ///
-    // /// The current THREAD will be blocked until the lock has been acquired.
-    // ///
-    // /// This function will not return while any writer currently has access to the lock, but there may be other readers
-    // ///
-    // /// Returns ared this specific instance of the read lock will only be held by the calling PE (until it is dropped)
-    // /// Other PEs may have separately aquired read locks as well.
-    // ///
-    // ///
-    // /// # Noten RAII guard which will drop the read access of the wrlock when dropped
-    // ///
-    // /// # One-sided Operation
-    // /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
-    // /// Once aqui
-    // /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_read]
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::darc::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // ///
-    // /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    // /// // do interesting work
-    // /// let guard = counter.read(); //blocks current thread until aquired
-    // /// println!("the current counter value on pe {} main thread = {}",my_pe,*guard);
-    // ///```
-    // pub fn read(&self) -> GlobalRwDarcReadGuard<T> {
-    //     // println!("read");
-    //     let inner = self.inner();
-    //     let team = inner.team();
-    //     let remote_rwlock_addr = team.lamellae.remote_addr(
-    //         0,
-    //         inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
-    //     );
-    //     team.exec_am_pe_tg(
-    //         0,
-    //         LockAm {
-    //             rwlock_addr: remote_rwlock_addr,
-    //             orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
-    //             lock_type: LockType::Read,
-    //         },
-    //         Some(inner.am_counters()),
-    //     )
-    //     .get();
-    //     GlobalRwDarcReadGuard {
-    //         rwlock: self.darc.clone(),
-    //         marker: PhantomData,
-    //         local_cnt: Arc::new(AtomicUsize::new(1)),
-    //     }
-    // }
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Launches an active message to gather a global write lock associated with this GlobalRwDarc.
-    // ///
-    // /// The current THREAD will be blocked until the lock has been acquired.
-    // ///
-    // /// This function will not return while another writer or any readers currently have access to the lock
-    // ///
-    // /// Returns an RAII guard which will drop the write access of the wrlock when dropped
-    // ///
-    // /// # One-sided Operation
-    // /// The calling PE is responsible for creating and transfering the active message which aquires the lock.
-    // /// Once aquired the lock will only be held by the calling PE (until it is dropped)
-    // ///
-    // /// # Note
-    // /// Do not use this function in an asynchronous context (i.e. a Lamellar Active message), instead use [GlobalRwDarc::async_write]
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::darc::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // ///
-    // /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    // /// // do interesting work
-    // /// let mut guard = counter.write(); //blocks current thread until aquired
-    // /// *guard += my_pe;
-    // ///```
-    // pub fn write(&self) -> GlobalRwDarcWriteGuard<T> {
-    //     // println!("write");
-    //     let inner = self.inner();
-    //     let team = inner.team();
-    //     let remote_rwlock_addr = team.lamellae.remote_addr(
-    //         0,
-    //         inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
-    //     );
-    //     team.exec_am_pe_tg(
-    //         0,
-    //         LockAm {
-    //             rwlock_addr: remote_rwlock_addr,
-    //             orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
-    //             lock_type: LockType::Write,
-    //         },
-    //         Some(inner.am_counters()),
-    //     )
-    //     .get();
-    //     GlobalRwDarcWriteGuard {
-    //         rwlock: self.darc.clone(),
-    //         marker: PhantomData,
-    //     }
-    //     // inner.item().write(remote_rwlock_addr)
-    // }
-
-    // #[doc(alias("Collective"))]
-    // /// Launches an active message to gather the global collective write lock associated with this GlobalRwDarc.
-    // ///
-    // /// The current task will be blocked until the lock has been acquired.
-    // ///
-    // /// This function will not return while another writer or any readers currently have access to the lock
-    // ///
-    // /// Returns an RAII guard which will drop the write access of the wrlock when dropped
-    // ///
-    // /// # Collective Operation
-    // /// All PEs associated with this GlobalRwDarc must enter the lock call otherwise deadlock may occur.
-    // ///
-    // /// # Examples
-    // ///
-    // ///```
-    // /// use lamellar::darc::prelude::*;
-    // /// use lamellar::active_messaging::*;
-    // ///
-    // /// #[lamellar::AmData(Clone)]
-    // /// struct DarcAm {
-    // ///     counter: GlobalRwDarc<usize>, //each pe has a local atomicusize
-    // /// }
-    // ///
-    // /// #[lamellar::am]
-    // /// impl LamellarAm for DarcAm {
-    // ///     async fn exec(self) {
-    // ///         let mut counter = self.counter.async_write().await; // await until we get the write lock
-    // ///         *counter += 1; // although we have the global lock, we are still only modifying the data local to this PE
-    // ///     }
-    // ///  }
-    // /// //-------------
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // ///
-    // /// let counter = GlobalRwDarc::new(&world, 0).unwrap();
-    // /// world.exec_am_all(DarcAm {counter: counter.clone()});
-    // /// let mut guard = world.block_on(counter.collective_write());
-    // /// *guard += my_pe;
-    // /// drop(guard); //release the lock
-    // /// world.wait_all(); // wait for my active message to return
-    // /// world.barrier(); //at this point all updates will have been performed
-    // ///```
-    // pub fn collective_write(&self) -> GlobalRwDarcCollectiveWriteGuard<T> {
-    //     // println!("async write");
-    //     let inner = self.inner();
-    //     let team = inner.team();
-    //     let remote_rwlock_addr = team.lamellae.remote_addr(
-    //         0,
-    //         inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
-    //     );
-    //     let collective_cnt = inner.item().collective_cnt.fetch_add(1, Ordering::SeqCst);
-    //     team.exec_am_pe_tg(
-    //         0,
-    //         LockAm {
-    //             rwlock_addr: remote_rwlock_addr,
-    //             orig_pe: team.team_pe.expect("darcs cant exist on non team members"),
-    //             lock_type: LockType::CollectiveWrite(collective_cnt),
-    //         },
-    //         Some(inner.am_counters()),
-    //     )
-    //     .get();
-    //     GlobalRwDarcCollectiveWriteGuard {
-    //         rwlock: self.darc.clone(),
-    //         collective_cnt: collective_cnt,
-    //         marker: PhantomData,
-    //     }
-    // }
 }
 
-impl<T> GlobalRwDarc<T> {
+impl<T: Send> GlobalRwDarc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `GlobalRwDarc<T>` on the PEs specified by team.
     ///
@@ -919,19 +755,32 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
     /// ```
-    pub fn new<U: Clone + Into<IntoLamellarTeam>>(
-        team: U,
-        item: T,
-    ) -> Result<GlobalRwDarc<T>, IdError> {
-        Ok(GlobalRwDarc {
-            darc: Darc::try_new(
+    pub fn new<U: Clone + Into<IntoLamellarTeam>>(team: U, item: T) -> GlobalRwDarcHandle<T> {
+        // Ok(GlobalRwDarc {
+        //     darc: Darc::try_new_with_drop(
+        //         team.clone(),
+        //         DistRwLock::new(item, team),
+        //         DarcMode::GlobalRw,
+        //         Some(GlobalRwDarc::drop),
+        //     )?,
+        // })
+        let team = team.into().team.clone();
+        let locked_item = DistRwLock::new(item, team.clone());
+        GlobalRwDarcHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(Darc::async_try_new_with_drop(
                 team.clone(),
-                DistRwLock::new(item, team),
+                locked_item,
                 DarcMode::GlobalRw,
-            )?,
-        })
+                Some(GlobalRwDarc::drop),
+            )),
+        }
+    }
+    pub(crate) fn drop(lock: &mut DistRwLock<T>) -> bool {
+        lock.dirty_num_locks() == 0
     }
 
     // pub(crate) fn try_new<U: Clone + Into<IntoLamellarTeam>>(
@@ -950,13 +799,14 @@ impl<T> GlobalRwDarc<T> {
     #[doc(alias = "Collective")]
     /// Converts this GlobalRwDarc into a regular [Darc]
     ///
-    /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
+    /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
+    /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a Darc and a GlobalRwDarc simultaneously (on any PE).
+    /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -964,42 +814,43 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
-    /// let five_as_darc = five.into_darc();
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
+    /// let five_as_darc = five.into_darc().block();
     /// ```
-    pub fn into_darc(self) -> Darc<T> {
-        let inner = self.inner();
-        // println!("into_darc");
-        // self.print();
-        inner.team().block_on(DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                    .expect("invalid darc pointer"),
-            },
-            DarcMode::Darc,
-            0,
-        ));
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-        let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
-        let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<T>,
-            src_pe: self.darc.src_pe,
-            // phantom: PhantomData,
+    pub fn into_darc(self) -> IntoDarcHandle<T> {
+        let wrapped_inner = WrappedInner {
+            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                .expect("invalid darc pointer"),
         };
-        d.inner_mut().update_item(Box::into_raw(Box::new(item)));
-        d
+        let wrapped_lock = WrappedInner {
+            inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
+                .expect("invalid darc pointer"),
+        };
+        let team = self.darc.inner().team().clone();
+        IntoDarcHandle {
+            darc: self.into(),
+            team,
+            launched: false,
+            outstanding_future: Box::pin(async move {
+                while wrapped_lock.item().dirty_num_locks() != 0 {
+                    async_std::task::yield_now().await;
+                }
+                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::Darc, 0).await;
+            }),
+        }
     }
 
     #[doc(alias = "Collective")]
     /// Converts this GlobalRwDarc into a [LocalRwDarc]
     ///
-    /// This is a blocking collective call amongst all PEs in the GlobalRwDarc's team, only returning once every PE in the team has completed the call.
+    /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
+    /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a GlobalRwDarc and a LocalRwDarc simultaneously (on any PE).
+    /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -1007,33 +858,30 @@ impl<T> GlobalRwDarc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = GlobalRwDarc::new(&world,5).expect("PE in world team");
-    /// let five_as_localdarc = five.into_localrw();
+    /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
+    /// let five_as_localdarc = world.block_on(async move {five.into_localrw().await});
     /// ```
-    pub fn into_localrw(self) -> LocalRwDarc<T> {
-        let inner = self.inner();
-        // println!("into_localrw");
-        // self.print();
-        inner.team().block_on(DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                    .expect("invalid darc pointer"),
-            },
-            DarcMode::LocalRw,
-            0,
-        ));
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-        let item = unsafe { Box::from_raw(inner.item as *mut DistRwLock<T>).into_inner() };
-        let d = Darc {
-            inner: self.darc.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
-            src_pe: self.darc.src_pe,
-            // phantom: PhantomData,
+    pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
+        let wrapped_inner = WrappedInner {
+            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+                .expect("invalid darc pointer"),
         };
-        d.inner_mut()
-            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(Box::new(
-                item,
-            ))))));
-        LocalRwDarc { darc: d }
+        let wrapped_lock = WrappedInner {
+            inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
+                .expect("invalid darc pointer"),
+        };
+        let team = self.darc.inner().team().clone();
+        IntoLocalRwDarcHandle {
+            darc: self.into(),
+            team,
+            launched: false,
+            outstanding_future: Box::pin(async move {
+                while wrapped_lock.item().dirty_num_locks() != 0 {
+                    async_std::task::yield_now().await;
+                }
+                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::LocalRw, 0).await;
+            }),
+        }
     }
 }
 
@@ -1046,13 +894,13 @@ impl<T> Clone for GlobalRwDarc<T> {
     }
 }
 
-impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
+impl<T: fmt::Display + Send> fmt::Display for GlobalRwDarc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         unsafe { fmt::Display::fmt(&self.inner().item().data.get().as_ref().unwrap(), f) }
     }
 }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub fn globalrw_serialize<S, T>(localrw: &GlobalRwDarc<T>, s: S) -> Result<S::Ok, S::Error>
 // where
 //     S: Serializer,
@@ -1060,7 +908,7 @@ impl<T: fmt::Display> fmt::Display for GlobalRwDarc<T> {
 //     __NetworkDarc::<T>::from(&localrw.darc).serialize(s)
 // }
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub fn globalrw_from_ndarc<'de, D, T>(deserializer: D) -> Result<GlobalRwDarc<T>, D::Error>
 // where
 //     D: Deserializer<'de>,

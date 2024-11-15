@@ -5,7 +5,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
 
-    let array = ReadOnlyArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Block);
+    let array = ReadOnlyArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
     if my_pe == 0 {
         println!("Block Full Array");
         for pe in 0..array.num_pes() {
@@ -24,7 +24,7 @@ fn main() {
         }
     }
 
-    let array = ReadOnlyArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let array = ReadOnlyArray::<u8>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
     if my_pe == 0 {
         println!("Cyclic Full Array");
         for pe in 0..array.num_pes() {

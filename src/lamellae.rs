@@ -1,4 +1,5 @@
 use crate::active_messaging::Msg;
+use crate::config;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 use std::sync::Arc;
@@ -13,14 +14,14 @@ use comm::Comm;
 
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 mod rofi;
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 pub(crate) mod rofi_lamellae;
 
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 use rofi::rofi_comm::RofiData;
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
 
 pub(crate) mod shmem_lamellae;
@@ -38,12 +39,12 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
-    #[doc(hidden)]
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
+    /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
-    #[doc(hidden)]
+    /// The Local backend -- intended for single process environments
     Local,
-    #[doc(hidden)]
+    /// The Shmem backend -- intended for multi process environments single node environments
     Shmem,
 }
 
@@ -56,16 +57,11 @@ pub(crate) enum AllocationType {
 
 impl Default for Backend {
     fn default() -> Self {
-        default_backend()
-    }
-}
-fn default_backend() -> Backend {
-    match std::env::var("LAMELLAE_BACKEND") {
-        Ok(p) => match p.as_str() {
+        match config().backend.as_str() {
             "rofi" => {
-                #[cfg(feature = "enable-rofi")]
+                #[cfg(feature = "rofi")]
                 return Backend::Rofi;
-                #[cfg(not(feature = "enable-rofi"))]
+                #[cfg(not(feature = "rofi"))]
                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
             }
             "shmem" => {
@@ -74,15 +70,33 @@ fn default_backend() -> Backend {
             _ => {
                 return Backend::Local;
             }
-        },
-        Err(_) => {
-            #[cfg(feature = "enable-rofi")]
-            return Backend::Rofi;
-            #[cfg(not(feature = "enable-rofi"))]
-            return Backend::Local;
         }
-    };
+    }
 }
+// fn default_backend() -> Backend {
+//     match std::env::var("LAMELLAE_BACKEND") {
+//         Ok(p) => match p.as_str() {
+//             "rofi" => {
+//                 #[cfg(feature = "rofi")]
+//                 return Backend::Rofi;
+//                 #[cfg(not(feature = "rofi"))]
+//                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+//             }
+//             "shmem" => {
+//                 return Backend::Shmem;
+//             }
+//             _ => {
+//                 return Backend::Local;
+//             }
+//         },
+//         Err(_) => {
+//             #[cfg(feature = "rofi")]
+//             return Backend::Rofi;
+//             #[cfg(not(feature = "rofi"))]
+//             return Backend::Local;
+//         }
+//     };
+// }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub(crate) struct SerializeHeader {
@@ -92,7 +106,7 @@ pub(crate) struct SerializeHeader {
 #[enum_dispatch(Des, SubData, SerializedDataOps)]
 #[derive(Clone, Debug)]
 pub(crate) enum SerializedData {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     RofiData,
     ShmemData,
     LocalData,
@@ -121,7 +135,7 @@ pub(crate) trait SubData {
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     RofiBuilder,
     ShmemBuilder,
     Local,
@@ -137,11 +151,11 @@ pub(crate) trait LamellaeInit {
 // #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
-    fn serialize<T: serde::Serialize + ?Sized>(
-        &self,
-        header: Option<SerializeHeader>,
-        obj: &T,
-    ) -> Result<SerializedData, anyhow::Error>;
+    // fn serialize<T: serde::Serialize + ?Sized>(
+    //     &self,
+    //     header: Option<SerializeHeader>,
+    //     obj: &T,
+    // ) -> Result<SerializedData, anyhow::Error>;
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
@@ -152,7 +166,7 @@ pub(crate) trait Ser {
 #[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     Rofi,
     Shmem,
     Local,
@@ -168,7 +182,7 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     fn backend(&self) -> Backend;
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
-    fn print_stats(&self);
+    // fn print_stats(&self);
     fn shutdown(&self);
     fn force_shutdown(&self);
     fn force_deinit(&self);
@@ -177,7 +191,6 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
 #[async_trait]
 #[enum_dispatch]
 pub(crate) trait LamellaeAM: Send {
-    async fn send_to_pe_async(&self, pe: usize, data: SerializedData); //should never send to self... this is short circuited before request is serialized in the active message layer
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -195,15 +208,15 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
-    fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
+    // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
     fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
-    fn occupied(&self) -> usize;
-    fn num_pool_allocs(&self) -> usize;
+    // fn occupied(&self) -> usize;
+    // fn num_pool_allocs(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);
 }
 
@@ -211,17 +224,11 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
 
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
-        #[cfg(feature = "enable-rofi")]
+        #[cfg(feature = "rofi")]
         Backend::Rofi => {
-            let provider = match std::env::var("LAMELLAR_ROFI_PROVIDER") {
-                Ok(p) => match p.as_str() {
-                    "verbs" => "verbs",
-                    "shm" => "shm",
-                    _ => "verbs",
-                },
-                Err(_) => "verbs",
-            };
-            LamellaeBuilder::RofiBuilder(RofiBuilder::new(provider))
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::RofiBuilder(RofiBuilder::new(&provider, &domain))
         }
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::Local(Local::new()),

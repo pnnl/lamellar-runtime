@@ -1,286 +1,175 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::local_iterator::*;
 use crate::array::iterator::private::*;
-use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{ArrayOps, Distribution, TeamFrom};
-
 use crate::array::iterator::Schedule;
-use crate::lamellar_team::LamellarTeamRT;
+use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
+use crate::array::{ArrayOps, AsyncTeamFrom, Distribution};
+use crate::lamellar_env::LamellarEnv;
 use crate::memregion::Dist;
+use crate::LamellarTeam;
 
 use core::marker::PhantomData;
-use futures::Future;
-use std::pin::Pin;
+use futures_util::Future;
+use paste::paste;
 use std::sync::Arc;
 
-impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {
+impl<T: Dist> LocalIteratorLauncher for UnsafeArray<T> {}
+
+macro_rules! consumer_impl {
+    ($name:ident<$($generics:ident),*>($($arg:ident : $arg_ty:ty),*); [$return_type:ident$(<$($ret_gen:ty),*>)?]; [$($bounds:tt)+]; [$($am:tt)*]; [$($lock:tt)*] ) => {
+        paste! {
+            fn $name<$($generics),*>(&self, $($arg : $arg_ty),*) -> $return_type$(<$($ret_gen),*>)?
+            where
+            $($bounds)+
+            {
+
+                self.[<$name _with_schedule>](Schedule::Static, $($arg),*)
+            }
+
+
+            fn [<$name _with_schedule >]<$($generics),*>(
+                &self,
+                sched: Schedule,
+                $($arg : $arg_ty),*
+            ) ->   $return_type$(<$($ret_gen),*>)?
+            where
+                $($bounds)+
+            {
+                let am = $($am)*;
+                self.data.team.team_counters.inc_send_req(1);
+                self.data.team.world_counters.inc_send_req(1);
+                self.data.task_group.counters.inc_send_req(1);
+                let lock =  $($lock)*;
+                let inner = self.clone();
+                let reqs_future = Box::pin(async move{
+                    let reqs = match sched {
+                        Schedule::Static => inner.sched_static(am),
+                        Schedule::Dynamic => inner.sched_dynamic(am),
+                        Schedule::Chunk(size) => inner.sched_chunk(am,size),
+                        Schedule::Guided => inner.sched_guided(am),
+                        Schedule::WorkStealing => inner.sched_work_stealing(am),
+                    };
+                    inner.data.team.team_counters.inc_launched(1);
+                    inner.data.team.world_counters.inc_launched(1);
+                    inner.data.task_group.counters.inc_launched(1);
+                    reqs
+                });
+                $return_type::new(lock,reqs_future,self)
+            }
+        }
+    };
+}
+
+impl LocalIteratorLauncher for UnsafeArrayInner {
     fn local_global_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         // println!("global index cs:{:?}",chunk_size);
         if chunk_size == 1 {
-            self.inner.global_index_from_local(index)
+            self.global_index_from_local(index)
         } else {
-            Some(self.inner.global_index_from_local(index * chunk_size)? / chunk_size)
+            Some(self.global_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
 
     fn local_subarray_index_from_local(&self, index: usize, chunk_size: usize) -> Option<usize> {
         if chunk_size == 1 {
-            self.inner.subarray_index_from_local(index)
+            self.subarray_index_from_local(index)
         } else {
-            Some(self.inner.subarray_index_from_local(index * chunk_size)? / chunk_size)
+            Some(self.subarray_index_from_local(index * chunk_size)? / chunk_size)
         }
     }
 
-    fn for_each<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        I: LocalIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static,
-    {
-        self.for_each_with_schedule(Schedule::Static, iter, op)
-    }
+    consumer_impl!(
+        for_each<I, F>(iter: &I, op: F);
+        [LocalIterForEachHandle];
+        [I: LocalIterator + 'static, F: Fn(I::Item) + SyncSend + Clone + 'static];
+        [
+            ForEach {
+                iter: iter.iter_clone(Sealed),
+                op,
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    fn for_each_with_schedule<I, F>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        I: LocalIterator + 'static,
-        F: Fn(I::Item) + SyncSend + Clone + 'static,
-    {
-        let for_each = ForEach {
-            iter: iter.iter_clone(Sealed),
-            op,
-        };
-        match sched {
-            Schedule::Static => self.sched_static(for_each),
-            Schedule::Dynamic => self.sched_dynamic(for_each),
-            Schedule::Chunk(size) => self.sched_chunk(for_each, size),
-            Schedule::Guided => self.sched_guided(for_each),
-            Schedule::WorkStealing => self.sched_work_stealing(for_each),
-        }
-    }
+    consumer_impl!(
+        for_each_async<I, F, Fut>(iter: &I, op: F);
+        [LocalIterForEachHandle];
+        [I: LocalIterator + 'static, F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static, Fut: Future<Output = ()> + Send + 'static];
+        [
+            ForEachAsync {
+                iter: iter.iter_clone(Sealed),
+                op,
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    fn for_each_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        I: LocalIterator + 'static,
-        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        self.for_each_async_with_schedule(Schedule::Static, iter, op)
-    }
+    consumer_impl!(
+        reduce<I, F>( iter: &I, op: F);
+        [LocalIterReduceHandle<I::Item, F>];
+        [I: LocalIterator + 'static, I::Item: SyncSend + Copy, F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static];
+        [
+            Reduce {
+                iter: iter.iter_clone(Sealed),
+                op,
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    fn for_each_async_with_schedule<I, F, Fut>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = ()> + Send>>
-    where
-        I: LocalIterator + 'static,
-        F: Fn(I::Item) -> Fut + SyncSend + Clone + 'static,
-        Fut: Future<Output = ()> + Send + 'static,
-    {
-        let for_each = ForEachAsync {
-            iter: iter.iter_clone(Sealed),
-            op: op.clone(),
-        };
-        match sched {
-            Schedule::Static => self.sched_static(for_each),
-            Schedule::Dynamic => self.sched_dynamic(for_each),
-            Schedule::Chunk(size) => self.sched_chunk(for_each, size),
-            Schedule::Guided => self.sched_guided(for_each),
-            Schedule::WorkStealing => self.sched_work_stealing(for_each),
-        }
-    }
+    consumer_impl!(
+        collect<I, A>( iter: &I, d: Distribution);
+        [LocalIterCollectHandle<I::Item, A>];
+        [I: LocalIterator + 'static, I::Item: Dist + ArrayOps,  A: AsyncTeamFrom<(Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,];
+        [
+            Collect {
+                iter: iter.iter_clone(Sealed).monotonic(),
+                distribution: d,
+                _phantom: PhantomData,
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    fn reduce<I, F>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: SyncSend,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-    {
-        self.reduce_with_schedule(Schedule::Static, iter, op)
-    }
+    consumer_impl!(
+        collect_async<I, A, B>( iter: &I, d: Distribution);
+        [LocalIterCollectHandle<B, A>];
+        [I: LocalIterator + 'static, I::Item: Future<Output = B> + Send + 'static,B: Dist + ArrayOps,A: AsyncTeamFrom<(Vec<B>, Distribution)> + SyncSend + Clone + 'static,];
+        [
+            CollectAsync {
+                iter: iter.iter_clone(Sealed).monotonic(),
+                distribution: d,
+                _phantom: PhantomData,
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    fn reduce_with_schedule<I, F>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        op: F,
-    ) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: SyncSend,
-        F: Fn(I::Item, I::Item) -> I::Item + SyncSend + Clone + 'static,
-    {
-        let reduce = Reduce {
-            iter: iter.iter_clone(Sealed),
-            op,
-        };
-        match sched {
-            Schedule::Static => self.sched_static(reduce),
-            Schedule::Dynamic => self.sched_dynamic(reduce),
-            Schedule::Chunk(size) => self.sched_chunk(reduce, size),
-            Schedule::Guided => self.sched_guided(reduce),
-            Schedule::WorkStealing => self.sched_work_stealing(reduce),
-        }
-    }
+    consumer_impl!(
+        count<I>( iter: &I);
+        [LocalIterCountHandle];
+        [I: LocalIterator + 'static ];
+        [
+            Count {
+                iter: iter.iter_clone(Sealed),
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    // fn reduce_async<I, F, Fut>(&self, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
-    // where
-    //     I: LocalIterator + 'static,
-    //     I::Item: SyncSend,
-    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static
-    // {
-    //     self.reduce_async_with_schedule(Schedule::Static, iter, op)
-    // }
+    consumer_impl!(
+        sum<I>(iter: &I);
+        [LocalIterSumHandle<I::Item>];
+        [I: LocalIterator + 'static, I::Item: SyncSend + for<'a> std::iter::Sum<&'a I::Item> + std::iter::Sum<I::Item>  , ];
+        [
+            Sum {
+                iter: iter.iter_clone(Sealed),
+            }
+        ];
+        [iter.lock_if_needed(Sealed)]
+    );
 
-    // fn reduce_async_with_schedule<I, F, Fut>(&self, sched: Schedule, iter: &I, op: F) -> Pin<Box<dyn Future<Output = Option<I::Item>> + Send>>
-    // where
-    //     I: LocalIterator + 'static,
-    //     I::Item: SyncSend,
-    //     F: Fn(I::Item, I::Item) -> Fut + SyncSend + Clone + 'static,
-    //     Fut: Future<Output = I::Item> + SyncSend + Clone + 'static,
-    // {
-    //     let reduce = ReduceAsync{
-    //         iter: iter.clone(),
-    //         op,
-    //         _phantom: PhantomData,
-    //     };
-    //     match sched {
-    //         Schedule::Static => self.sched_static(reduce ),
-    //         Schedule::Dynamic => self.sched_dynamic(reduce),
-    //         Schedule::Chunk(size) => self.sched_chunk(reduce, size),
-    //         Schedule::Guided => self.sched_guided(reduce),
-    //         Schedule::WorkStealing => self.sched_work_stealing(reduce),
-    //     }
-    // }
-
-    fn collect<I, A>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        self.collect_with_schedule(Schedule::Static, iter, d)
-    }
-
-    fn collect_with_schedule<I, A>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-        d: Distribution,
-    ) -> Pin<Box<dyn Future<Output = A> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: Dist + ArrayOps,
-        A: for<'a> TeamFrom<(&'a Vec<I::Item>, Distribution)> + SyncSend + Clone + 'static,
-    {
-        let collect = Collect {
-            iter: iter.iter_clone(Sealed).monotonic(),
-            distribution: d,
-            _phantom: PhantomData,
-        };
-        match sched {
-            Schedule::Static => self.sched_static(collect),
-            Schedule::Dynamic => self.sched_dynamic(collect),
-            Schedule::Chunk(size) => self.sched_chunk(collect, size),
-            Schedule::Guided => self.sched_guided(collect),
-            Schedule::WorkStealing => self.sched_work_stealing(collect),
-        }
-    }
-
-    // fn collect_async<I, A, B>(&self, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I:  LocalIterator + 'static,
-    //    I::Item: Future<Output = B> + Send  + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
-    // {
-    //     self.collect_async_with_schedule(Schedule::Static,iter,d)
-    // }
-
-    // fn collect_async_with_schedule<I, A, B>(&self, sched: Schedule, iter: &I, d: Distribution) -> Pin<Box<dyn Future<Output = A> + Send>>
-    // where
-    //     I:  LocalIterator + 'static,
-    //    I::Item: Future<Output = B> + Send  + 'static,
-    //     B: Dist + ArrayOps,
-    //     A: From<UnsafeArray<B>> + SyncSend  + Clone +  'static,
-    // {
-    //     let collect = CollectAsync{
-    //         iter: iter.clone(),
-    //         distribution: d,
-    //         _phantom: PhantomData,
-    //     };
-    //     match sched {
-    //         Schedule::Static => self.sched_static(collect ),
-    //         Schedule::Dynamic => self.sched_dynamic(collect),
-    //         Schedule::Chunk(size) => self.sched_chunk(collect, size),
-    //         Schedule::Guided => self.sched_guided(collect),
-    //         Schedule::WorkStealing => self.sched_work_stealing(collect),
-    //     }
-    // }
-
-    fn count<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = usize> + Send>>
-    where
-        I: LocalIterator + 'static,
-    {
-        self.count_with_schedule(Schedule::Static, iter)
-    }
-
-    fn count_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = usize> + Send>>
-    where
-        I: LocalIterator + 'static,
-    {
-        let count = Count {
-            iter: iter.iter_clone(Sealed),
-        };
-        match sched {
-            Schedule::Static => self.sched_static(count),
-            Schedule::Dynamic => self.sched_dynamic(count),
-            Schedule::Chunk(size) => self.sched_chunk(count, size),
-            Schedule::Guided => self.sched_guided(count),
-            Schedule::WorkStealing => self.sched_work_stealing(count),
-        }
-    }
-
-    fn sum<I>(&self, iter: &I) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: SyncSend + std::iter::Sum,
-    {
-        self.sum_with_schedule(Schedule::Static, iter)
-    }
-
-    fn sum_with_schedule<I>(
-        &self,
-        sched: Schedule,
-        iter: &I,
-    ) -> Pin<Box<dyn Future<Output = I::Item> + Send>>
-    where
-        I: LocalIterator + 'static,
-        I::Item: SyncSend + std::iter::Sum,
-    {
-        let sum = Sum {
-            iter: iter.iter_clone(Sealed),
-        };
-        match sched {
-            Schedule::Static => self.sched_static(sum),
-            Schedule::Dynamic => self.sched_dynamic(sum),
-            Schedule::Chunk(size) => self.sched_chunk(sum, size),
-            Schedule::Guided => self.sched_guided(sum),
-            Schedule::WorkStealing => self.sched_work_stealing(sum),
-        }
-    }
-
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.inner.data.team.clone()
+    fn team(&self) -> Arc<LamellarTeam> {
+        self.data.team.team()
     }
 }

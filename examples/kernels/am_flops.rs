@@ -98,15 +98,20 @@ fn main() {
         if my_pe == 0 {
             for _j in 0..num_tasks {
                 let sub_timer = Instant::now();
-                reqs.push(world.exec_am_all(FlopAM {
-                    iterations: num_iterations,
-                }));
+                reqs.push(
+                    world
+                        .exec_am_all(FlopAM {
+                            iterations: num_iterations,
+                        })
+                        .spawn(),
+                );
 
                 sub_time += sub_timer.elapsed().as_secs_f64();
             }
             println!("issue time: {:?}", timer.elapsed().as_secs_f64());
             world.wait_all();
         }
+
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let tot_flop: usize = reqs
@@ -150,7 +155,7 @@ fn main() {
         //     let cur_t = timer.elapsed().as_secs_f64();
         //     let tot_flop: usize = reqs
         //         .iter()
-        //         .map(|r| r.get().iter().map(|r| r.unwrap()).sum::<usize>())
+        //         .map(|r| r.block().iter().map(|r| r.unwrap()).sum::<usize>())
         //         .sum();
         //     let task_granularity = ((cur_t * 24f64) / num_tasks as f64) * 1000.0f64;
         //     if my_pe == 0 {

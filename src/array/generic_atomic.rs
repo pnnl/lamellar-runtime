@@ -1,14 +1,21 @@
+mod handle;
+pub(crate) use handle::GenericAtomicArrayHandle;
+
 pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
-use crate::array::private::LamellarArrayPrivate;
+// use crate::array::private::LamellarArrayPrivate;
+use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
+use crate::barrier::BarrierHandle;
 use crate::darc::Darc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
+use crate::scheduler::LamellarTask;
+
 use parking_lot::{Mutex, MutexGuard};
 use serde::ser::SerializeSeq;
 // use std::ops::{Deref, DerefMut};
@@ -273,7 +280,7 @@ pub struct GenericAtomicByteArray {
 }
 
 impl GenericAtomicByteArray {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
         let index = self
             .array
@@ -283,7 +290,7 @@ impl GenericAtomicByteArray {
         self.locks[index].lock()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn downgrade(array: &GenericAtomicByteArray) -> GenericAtomicByteArrayWeak {
         GenericAtomicByteArrayWeak {
             locks: array.locks.clone(),
@@ -300,7 +307,7 @@ pub struct GenericAtomicByteArrayWeak {
 }
 
 impl GenericAtomicByteArrayWeak {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn upgrade(&self) -> Option<GenericAtomicByteArray> {
         Some(GenericAtomicByteArray {
             locks: self.locks.clone(),
@@ -407,19 +414,30 @@ impl<T: Dist + ArrayOps + std::default::Default> GenericAtomicArray<T> {
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> GenericAtomicArray<T> {
+    ) -> GenericAtomicArrayHandle<T> {
         // println!("new generic_atomic array");
-        let array = UnsafeArray::new(team.clone(), array_size, distribution);
-        array.block_on_outstanding(DarcMode::GenericAtomicArray);
-        let mut vec = vec![];
-        for _i in 0..array.num_elems_local() {
-            vec.push(Mutex::new(()));
-        }
-        let locks = Darc::new(team, vec).unwrap();
 
-        GenericAtomicArray {
-            locks: locks,
-            array: array,
+        let team = team.into().team.clone();
+        GenericAtomicArrayHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                let array = UnsafeArray::async_new(
+                    team.clone(),
+                    array_size,
+                    distribution,
+                    DarcMode::LocalLockArray,
+                )
+                .await;
+                let mut vec = vec![];
+                for _i in 0..array.num_elems_local() {
+                    vec.push(Mutex::new(()));
+                }
+                GenericAtomicArray {
+                    locks: Darc::new(team, vec).await.expect("pe exists in team"),
+                    array,
+                }
+            }),
         }
     }
 }
@@ -437,7 +455,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 }
-
+#[doc(hidden)]
 impl<T: Dist> GenericAtomicArray<T> {
     // pub fn wait_all(&self) {
     //     self.array.wait_all();
@@ -457,7 +475,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.num_elems_local()
     // }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GenericAtomicArray {
             locks: self.locks.clone(),
@@ -469,12 +487,12 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.num_pes()
     // }
 
-    // #[doc(hidden)]
+    // //#[doc(hidden)]
     // pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
     //     self.array.pe_for_dist_index(index)
     // }
 
-    // #[doc(hidden)]
+    // //#[doc(hidden)]
     // pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
     //     self.array.pe_offset_for_dist_index(pe, index)
     // }
@@ -487,7 +505,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     self.array.len()
     // }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
@@ -496,7 +514,7 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn mut_local_data(&self) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.clone(),
@@ -505,11 +523,11 @@ impl<T: Dist> GenericAtomicArray<T> {
         }
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub unsafe fn __local_as_slice(&self) -> &[T] {
         self.array.local_as_mut_slice()
     }
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub unsafe fn __local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
@@ -521,31 +539,36 @@ impl<T: Dist> GenericAtomicArray<T> {
     //     }
     // }
 
-    #[doc(hidden)]
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    //#[doc(hidden)]
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("generic into_unsafe");
-        self.array.into()
+        // self.array.into()
+        IntoUnsafeArrayHandle {
+            team: self.array.inner.data.team.clone(),
+            launched: false,
+            outstanding_future: Box::pin(self.async_into()),
+        }
     }
 
-    #[doc(hidden)]
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    //#[doc(hidden)]
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("generic into_read_only");
-        self.array.into()
+        self.array.into_read_only()
     }
 
-    #[doc(hidden)]
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    //#[doc(hidden)]
+    pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("generic into_local_lock");
-        self.array.into()
+        self.array.into_local_lock()
     }
 
-    #[doc(hidden)]
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    //#[doc(hidden)]
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("generic into_local_lock");
-        self.array.into()
+        self.array.into_global_lock()
     }
 
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
         // if let Some(ref locks) = *self.locks {
         //     let start_index = (index * std::mem::size_of::<T>()) / self.orig_t_size;
@@ -570,30 +593,32 @@ impl<T: Dist> GenericAtomicArray<T> {
 
 impl<T: Dist + 'static> GenericAtomicArray<T> {
     #[doc(hidden)]
-    pub fn into_atomic(self) -> GenericAtomicArray<T> {
+    pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         // println!("generic into_atomic");
-        self.array.into()
+        self.array.into_atomic()
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = input.team_into(team);
-        array.into()
+// #[async_trait]
+impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for GenericAtomicArray<T> {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
+        let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
+        array.async_into().await
     }
 }
 
-impl<T: Dist> From<UnsafeArray<T>> for GenericAtomicArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
+#[async_trait]
+impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GenericAtomicArray<T> {
+    async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("generic from unsafe array");
-        array.block_on_outstanding(DarcMode::GenericAtomicArray);
+        array
+            .await_on_outstanding(DarcMode::GenericAtomicArray)
+            .await;
         let mut vec = vec![];
         for _i in 0..array.num_elems_local() {
             vec.push(Mutex::new(()));
         }
-        let locks = Darc::new(array.team_rt(), vec).unwrap();
+        let locks = Darc::new(array.team_rt(), vec).await.expect("PE in team");
 
         GenericAtomicArray {
             locks: locks,
@@ -657,8 +682,8 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
         self.array.team_counters()
@@ -689,10 +714,64 @@ impl<T: Dist> private::LamellarArrayPrivate<T> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-        self.array.team_rt().clone()
+impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_all_tg(am)
     }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        self.array.exec_am_pe_tg(pe, am)
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.array.exec_am_local_tg(am)
+    }
+    fn wait_all(&self) {
+        self.array.wait_all()
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        self.array.await_all()
+    }
+    fn barrier(&self) {
+        self.array.barrier()
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        self.array.async_barrier()
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.array.spawn(f)
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        self.array.block_on(f)
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        self.array.block_on_all(iter)
+    }
+}
+
+impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
+    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    //     self.array.team_rt()
+    // }
     // fn my_pe(&self) -> usize {
     //     LamellarArray::my_pe(&self.array)
     // }
@@ -705,19 +784,17 @@ impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
     fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
-    fn barrier(&self) {
-        self.array.barrier();
-    }
-    fn wait_all(&self) {
-        self.array.wait_all()
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
-    }
-    fn block_on<F>(&self, f: F) -> F::Output
-    where
-        F: Future,
-    {
-        self.array.block_on(f)
-    }
+    // fn barrier(&self) {
+    //     self.array.barrier();
+    // }
+
+    // fn wait_all(&self) {
+    //     self.array.wait_all()
+    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
+    // }
+    // fn block_on<F: Future>(&self, f: F) -> F::Output {
+    //     self.array.block_on(f)
+    // }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
@@ -776,8 +853,8 @@ impl<T: Dist + std::fmt::Debug> GenericAtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = AtomicArray::<f32>::new(&world,100,Distribution::Block);
+    /// let block_array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = AtomicArray::<f32>::new(&world,100,Distribution::Block).block();
     ///
     /// block_array.print();
     /// println!();
@@ -794,30 +871,29 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for GenericAtomicArray<T> {
-    fn reduce(&self, op: &str) -> Pin<Box<dyn Future<Output = T>>> {
-        self.array
-            .reduce_data(op, self.clone().into())
-            .into_future()
+impl<T: Dist + AmDist + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
+    pub fn reduce(&self, op: &str) -> AmHandle<Option<T>> {
+        self.array.reduce_data(op, self.clone().into())
     }
 }
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-    for GenericAtomicArray<T>
-{
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
+    pub fn sum(&self) -> AmHandle<Option<T>> {
         self.reduce("sum")
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    #[doc(hidden)]
+    pub fn prod(&self) -> AmHandle<Option<T>> {
         self.reduce("prod")
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-    for GenericAtomicArray<T>
-{
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GenericAtomicArray<T> {
+    #[doc(hidden)]
+    pub fn max(&self) -> AmHandle<Option<T>> {
         self.reduce("max")
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+    #[doc(hidden)]
+    pub fn min(&self) -> AmHandle<Option<T>> {
         self.reduce("min")
     }
 }

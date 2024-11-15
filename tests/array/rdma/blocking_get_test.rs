@@ -24,44 +24,44 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
         unsafe {
-            let _ = $array
+            $array
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block()
         }
         $array.wait_all();
     };
     (AtomicArray,$array:ident,$t:ty) => {
-        let _ = $array
+        $array
             .dist_iter()
             .enumerate()
             .for_each(move |(i, x)| x.store(i as $t));
         $array.wait_all();
     };
     (LocalLockArray,$array:ident,$t:ty) => {
-        let _ = $array
+        $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
     };
     (GlobalLockArray,$array:ident,$t:ty) => {
-        let _ = $array
+        $array
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(i, x)| *x = i as $t);
         $array.wait_all();
     };
     (ReadOnlyArray,$array:ident,$t:ty) => {
-        let temp = $array.into_unsafe();
+        let temp = $array.into_unsafe().block();
         unsafe {
-            let _ = temp
-                .dist_iter_mut()
+            temp.dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block();
         }
-        temp.wait_all();
-        $array = temp.into_read_only();
+        $array = temp.into_read_only().block();
     };
 }
 
@@ -69,49 +69,49 @@ macro_rules! initialize_array_range {
     (UnsafeArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
         unsafe {
-            let _ = subarray
+            subarray
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block();
         }
-        subarray.wait_all();
     }};
     (AtomicArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        let _ = subarray
+        subarray
             .dist_iter()
             .enumerate()
-            .for_each(move |(i, x)| x.store(i as $t));
-        subarray.wait_all();
+            .for_each(move |(i, x)| x.store(i as $t))
+            .block();
     }};
     (LocalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        let _ = subarray
+        subarray
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
-        subarray.wait_all();
+            .for_each(move |(i, x)| *x = i as $t)
+            .block();
     }};
     (GlobalLockArray,$array:ident,$t:ty,$range:expr) => {{
         let subarray = $array.sub_array($range);
-        let _ = subarray
+        subarray
             .dist_iter_mut()
             .enumerate()
-            .for_each(move |(i, x)| *x = i as $t);
-        subarray.wait_all();
+            .for_each(move |(i, x)| *x = i as $t)
+            .block();
     }};
     (ReadOnlyArray,$array:ident,$t:ty,$range:expr) => {{
-        let temp = $array.into_unsafe();
+        let temp = $array.into_unsafe().block();
         let subarray = temp.sub_array($range);
         unsafe {
-            let _ = subarray
+            subarray
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = i as $t);
+                .for_each(move |(i, x)| *x = i as $t)
+                .block();
         }
-        subarray.wait_all();
         drop(subarray);
-        $array = temp.into_read_only();
+        $array = temp.into_read_only().block();
     }};
 }
 
@@ -125,9 +125,9 @@ macro_rules! blocking_get_test{
             let mem_seg_len = array_total_len;
             let mut success = true;
             #[allow(unused_mut)]
-            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
+            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
             initialize_array!($array, array, $t);
             array.wait_all();
@@ -146,7 +146,7 @@ macro_rules! blocking_get_test{
                 unsafe{
                     for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
                         }
                     }
@@ -182,7 +182,7 @@ macro_rules! blocking_get_test{
                 unsafe{
                     for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
                         }
                     }
@@ -221,7 +221,7 @@ macro_rules! blocking_get_test{
                     unsafe{
                         for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
                             if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                                println!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                                eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                                 success = false;
                             }
                         }

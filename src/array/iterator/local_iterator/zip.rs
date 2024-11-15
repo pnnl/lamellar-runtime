@@ -1,4 +1,4 @@
-use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
 #[derive(Clone, Debug)]
 pub struct Zip<A, B> {
@@ -6,8 +6,20 @@ pub struct Zip<A, B> {
     b: B,
 }
 
-impl<A: IterClone, B: IterClone> IterClone for Zip<A, B> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<A: InnerIter, B: InnerIter> InnerIter for Zip<A, B> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        let futa = self.a.lock_if_needed(_s);
+        let futb = self.b.lock_if_needed(_s);
+        match (futa, futb) {
+            (None, None) => None,
+            (Some(futa), None) => Some(futa),
+            (None, Some(futb)) => Some(futb),
+            (Some(futa), Some(futb)) => Some(Box::pin(async move {
+                let _ = futures_util::future::join(futa, futb).await;
+            })),
+        }
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Zip {
             a: self.a.iter_clone(Sealed),
             b: self.b.iter_clone(Sealed),
@@ -32,9 +44,9 @@ where
 {
     type Item = (<A as LocalIterator>::Item, <B as LocalIterator>::Item);
     type Array = <A as LocalIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Zip<A, B> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Zip<A, B> {
         // println!("init zip start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
-        Zip::new(self.a.init(start_i, cnt), self.b.init(start_i, cnt))
+        Zip::new(self.a.init(start_i, cnt, _s), self.b.init(start_i, cnt, _s))
     }
     fn array(&self) -> Self::Array {
         self.a.array()

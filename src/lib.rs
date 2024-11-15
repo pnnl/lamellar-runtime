@@ -1,5 +1,6 @@
 #![warn(missing_docs)]
-
+#![warn(unreachable_pub)]
+#![doc(test(attr(deny(unused_must_use))))]
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
 //!
 //! # Some Nomenclature
@@ -53,12 +54,17 @@
 //! - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
 //! - `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
 //!     - By default support for Rofi is disabled as using it relies on both the Rofi C-library and the libfabrics library, which may not be installed on your system.
-//!     - It can be enabled by adding ```features = ["enable-rofi"]``` to the lamellar entry in your `Cargo.toml` file
+//!     - It can be enabled by adding ```features = ["enable-rofi"] or `features = ["enable-rofi-shared"]``` to the lamellar entry in your `Cargo.toml` file
 //!
 //! The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to the `rofi` backend with no changes to your code.
 //! Currently the inverse is true, if it compiles and runs using `rofi` it will compile and run when using `local` and `shmem` with no changes.
 //!
 //! Additional information on using each of the lamellae backends can be found below in the `Running Lamellar Applications` section
+//!
+//! Environment Variables
+//! ---------------------
+//! Lamellar has a number of environment variables that can be used to configure the runtime.
+//! please see the [Environment Variables][crate::env_var] module documentation for more details
 //!
 //! Examples
 //! --------
@@ -111,7 +117,7 @@
 //!     let num_pes = world.num_pes();
 //!     let am = HelloWorld { my_pe: my_pe };
 //!     for pe in 0..num_pes{
-//!         world.exec_am_pe(pe,am.clone()); // explicitly launch on each PE
+//!         let _ = world.exec_am_pe(pe,am.clone()).spawn(); // explicitly launch on each PE
 //!     }
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs
@@ -128,9 +134,8 @@
 //! fn main(){
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
-//!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
-//!     block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
-//!     block_array.wait_all();
+//!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block).block(); //we also support Cyclic distribution.
+//!     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)).block(); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
 //!     block_array.barrier();
 //!     if my_pe == 0{
 //!         for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
@@ -163,11 +168,11 @@
 //!     let mut world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
-//!     let cnt = Darc::new(&world, AtomicUsize::new(0)).expect("Current PE is in world team");
+//!     let cnt = Darc::new(&world, AtomicUsize::new(0)).block().expect("Current PE is in world team");
 //!     for pe in 0..num_pes{
-//!         world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}); // explicitly launch on each PE
+//!         let _ = world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
 //!     }
-//!     world.exec_am_all(DarcAm{cnt: cnt.clone()}); //also possible to execute on every PE with a single call
+//!     let _ = world.exec_am_all(DarcAm{cnt: cnt.clone()}).spawn(); //also possible to execute on every PE with a single call
 //!     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs
@@ -178,17 +183,14 @@
 //! Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 //! For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 //!
-//!``` lamellar = "0.5" ```
+//!``` lamellar = "0.7.0-rc.1" ```
 //!
-//! If planning to use within a distributed HPC system a few more steps may be necessary (this also works on single workstations):
+//! If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 //!
-//! 1. ensure Libfabric (with support for the verbs provider) is installed on your system <https://github.com/ofiwg/libfabric>
-//! 2. set the OFI_DIR environment variable to the install location of Libfabric, this directory should contain both the following directories:
-//!     * lib
-//!     * include
-//! 3. copy the following to your Cargo.toml file:
+//! ``` lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi"]}```
 //!
-//! ```lamellar = { version = "0.5", features = ["enable-rofi"]}```
+//! NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
+//! If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
 //!
 //!
 //! For both environments, build your application as normal
@@ -213,57 +215,42 @@
 //!     - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>```
 //!         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
 //!
-//! # Environment Variables
-//! Lamellar exposes a number of environment variables that can used to control application execution at runtime
-//! - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE
-//!     -  `export LAMELLAR_THREADS=10`
-//! - `LAMELLAE_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
-//!     - possible values
-//!         - `local`
-//!         - `shmem`
-//!         - `rofi`
-//! - `LAMELLAR_MEM_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 1GB
-//!     - `export LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))` 20GB memory pool
-//!     - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues. Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime will print a message at the end of execution with how many additional pools were allocated.
-//!         - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_MEM_SIZE` to a larger value
-//!     - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_MEM_SIZE * number of processes`
-//!
 
 #[macro_use]
 extern crate lazy_static;
 #[macro_use]
 extern crate memoffset;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub extern crate serde;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use serde::*;
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 pub extern crate serde_with;
 // pub use serde_with::*;
 
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub extern crate tracing;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use parking_lot;
-// #[doc(hidden)]
+// //#[doc(hidden)]
 // pub use tracing::*;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use async_trait;
 
-#[doc(hidden)]
-pub use futures;
+//#[doc(hidden)]
+pub use futures_util;
 
 pub mod active_messaging;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use active_messaging::prelude::*;
 pub mod array;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use array::prelude::*;
 mod barrier;
 pub mod darc;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use darc::prelude::*;
 mod lamellae;
 mod lamellar_alloc;
@@ -275,111 +262,148 @@ mod lamellar_task_group;
 mod lamellar_team;
 mod lamellar_world;
 pub mod memregion;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use memregion::prelude::*;
 mod scheduler;
 mod utils;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use utils::*;
+
+pub(crate) mod warnings;
+
+pub mod env_var;
+pub use env_var::config;
 
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
-#[doc(hidden)]
-pub use crate::lamellar_request::LamellarRequest;
+// //#[doc(hidden)]
 pub use crate::lamellar_task_group::{
     AmGroup, AmGroupResult, BaseAmGroupReq, LamellarTaskGroup, TypedAmGroupBatchReq,
     TypedAmGroupBatchResult, TypedAmGroupResult,
 };
 pub use crate::lamellar_team::LamellarTeam;
-#[doc(hidden)]
-pub use crate::lamellar_team::{ArcLamellarTeam, LamellarTeamRT};
+// //#[doc(hidden)]
+pub use crate::lamellar_team::ArcLamellarTeam;
+pub(crate) use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::*;
-pub use crate::scheduler::SchedulerType;
+pub use crate::scheduler::ExecutorType;
 
 extern crate lamellar_impl;
-#[doc(hidden)]
+// //#[doc(hidden)]
 pub use lamellar_impl::Dist;
 // use lamellar_impl;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use inventory;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use bincode;
 use bincode::Options;
 
 // #[macro_use]
 // pub extern crate custom_derive;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use custom_derive;
 
 // #[macro_use]
 // pub extern crate newtype_derive;
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use newtype_derive;
-
-lazy_static! {
-    pub(crate) static ref DEADLOCK_TIMEOUT: f64 = std::env::var("LAMELLAR_DEADLOCK_TIMEOUT")
-        .unwrap_or("600".to_string())
-        .parse::<usize>()
-        .unwrap_or(600) as f64;
-}
 
 lazy_static! {
     pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> =
         bincode::DefaultOptions::new().allow_trailing_bytes();
 }
+// use std::sync::atomic::AtomicUsize;
+// use std::sync::atomic::Ordering::SeqCst;
+// use std::sync::Arc;
+// lazy_static! {
+//     pub(crate) static ref SERIALIZE_TIMER: thread_local::ThreadLocal<Arc<AtomicUsize>> =
+//         thread_local::ThreadLocal::new();
+//     pub(crate) static ref DESERIALIZE_TIMER: thread_local::ThreadLocal<Arc<AtomicUsize>> =
+//         thread_local::ThreadLocal::new();
+//     pub(crate) static ref SERIALIZE_SIZE_TIMER: thread_local::ThreadLocal<Arc<AtomicUsize>> =
+//         thread_local::ThreadLocal::new();
+// }
 
-#[doc(hidden)]
+/// Wrapper function for serializing data
 pub fn serialize<T: ?Sized>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
-    if var {
+    // let start = std::time::Instant::now();
+    let res = if var {
         // Ok(BINCODE.serialize(obj)?)
         Ok(bincode::serialize(obj)?)
     } else {
         Ok(bincode::serialize(obj)?)
-    }
+    };
+    // unsafe {
+    //     SERIALIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
+    res
 }
 
-#[doc(hidden)]
+/// Wrapper function for getting the size of serialized data
 pub fn serialized_size<T: ?Sized>(obj: &T, var: bool) -> usize
 where
     T: serde::Serialize,
 {
-    if var {
+    // let start = std::time::Instant::now();
+    let res = if var {
         // BINCODE.serialized_size(obj).unwrap() as usize
         bincode::serialized_size(obj).unwrap() as usize
     } else {
         bincode::serialized_size(obj).unwrap() as usize
-    }
+    };
+    // unsafe {
+    //     SERIALIZE_SIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
+    res
 }
-#[doc(hidden)]
+
+/// Wrapper function for serializing an object into a buffer
 pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
     T: serde::Serialize,
 {
+    // let start = std::time::Instant::now();
     if var {
         // BINCODE.serialize_into(buf, obj)?;
         bincode::serialize_into(buf, obj)?;
     } else {
         bincode::serialize_into(buf, obj)?;
     }
+    // unsafe {
+    //     SERIALIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
     Ok(())
 }
 
-#[doc(hidden)]
+/// Wrapper function for deserializing data
 pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,
 {
-    if var {
+    // let start = std::time::Instant::now();
+    let res = if var {
         // Ok(BINCODE.deserialize(bytes)?)
         Ok(bincode::deserialize(bytes)?)
     } else {
         Ok(bincode::deserialize(bytes)?)
-    }
+    };
+    // unsafe {
+    //     DESERIALIZE_TIMER
+    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
+    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
+    // }
+    res
 }
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use async_std;

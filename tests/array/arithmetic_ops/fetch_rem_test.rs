@@ -2,28 +2,40 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        unsafe { $array.dist_iter_mut().for_each(move |x| *x = $init_val) };
-        $array.wait_all();
+        unsafe {
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
+        };
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (GenericAtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -84,6 +96,15 @@ macro_rules! max_updates {
     };
 }
 
+macro_rules! onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array.read_lock().block().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.onesided_iter()
+    };
+}
+
 macro_rules! fetch_rem_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -93,7 +114,7 @@ macro_rules! fetch_rem_test{
             let array_total_len = $len;
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let max_updates = max_updates!($t,num_pes);
             let max_val =  2u128.pow((max_updates*num_pes) as u32) as $t;
@@ -106,14 +127,15 @@ macro_rules! fetch_rem_test{
             for idx in 0..array.len(){
                 let mut reqs = vec![];
                 for _i in 0..(max_updates as usize){
-                    reqs.push(array.fetch_rem(idx,2 as $t));
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe{array.fetch_rem(idx,2 as $t)});
                 }
                 #[allow(unused_mut)]
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
                 for req in reqs{
                     let val =  world.block_on(req) as u128;
                     if ! insert_prev!($array,val,prevs){
-                        println!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
+                        eprintln!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
                         success = false;
                         break;
                     }
@@ -123,11 +145,11 @@ macro_rules! fetch_rem_test{
             array.barrier();
             // array.print();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe{onesided_iter!($array,array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,one);
+                    eprintln!("{:?} {:?} {:?}",i,val,one);
                     break;
                 }
             }
@@ -145,14 +167,15 @@ macro_rules! fetch_rem_test{
             for idx in 0..sub_array.len(){
                 let mut reqs = vec![];
                 for _i in 0..(max_updates as usize){
-                    reqs.push(sub_array.fetch_rem(idx,2 as $t));
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe{sub_array.fetch_rem(idx,2 as $t)});
                 }
                 #[allow(unused_mut)]
                 let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
                 for req in reqs{
                     let val =  world.block_on(req) as u128;
                     if ! insert_prev!($array,val,prevs){
-                        println!("half 1: {:?} {:?}",val,prevs);
+                        eprintln!("half 1: {:?} {:?}",val,prevs);
                         success = false;
                         break;
                     }
@@ -161,11 +184,11 @@ macro_rules! fetch_rem_test{
             sub_array.wait_all();
             sub_array.barrier();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("{:?} {:?} {:?}",i,val,one);
+                    eprintln!("{:?} {:?} {:?}",i,val,one);
                     break;
                 }
             }
@@ -183,14 +206,15 @@ macro_rules! fetch_rem_test{
                 for idx in 0..sub_array.len(){
                     let mut reqs = vec![];
                     for _i in 0..(max_updates as usize){
-                        reqs.push(sub_array.fetch_rem(idx,2 as $t));
+                        #[allow(unused_unsafe)]
+                        reqs.push(unsafe{sub_array.fetch_rem(idx,2 as $t)});
                     }
                     #[allow(unused_mut)]
                     let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
                     for req in reqs{
                         let val =  world.block_on(req) as u128;
                         if ! insert_prev!($array,val,prevs){
-                            println!("pe 1: {:?} {:?}",val,prevs);
+                            eprintln!("pe 1: {:?} {:?}",val,prevs);
                             success = false;
                             break;
                         }
@@ -199,11 +223,11 @@ macro_rules! fetch_rem_test{
                 sub_array.wait_all();
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate()}{
+                for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,one,success);
                     if !success{
-                        println!("{:?} {:?} {:?}",i,val,one);
+                        eprintln!("{:?} {:?} {:?}",i,val,one);
                         break;
                     }
                 }

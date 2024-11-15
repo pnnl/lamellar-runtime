@@ -6,8 +6,11 @@ pub struct Zip<A, B> {
     b: B,
 }
 
-impl<A: IterClone, B: IterClone> IterClone for Zip<A, B> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<A: InnerIter, B: InnerIter> InnerIter for Zip<A, B> {
+fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+            None
+        }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Zip {
             a: self.a.clone(),
             b: self.b.clone(),
@@ -72,9 +75,9 @@ where
         <B as DistributedIterator>::Item,
     );
     type Array = <A as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Zip<A, B> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Zip<A, B> {
         // println!("init zip start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
-        Zip::new(self.a.init(start_i, cnt), self.b.init(start_i, cnt))
+        Zip::new(self.a.init(start_i, cnt,_s), self.b.init(start_i, cnt,_s))
     }
     fn array(&self) -> Self::Array {
         self.a.array()

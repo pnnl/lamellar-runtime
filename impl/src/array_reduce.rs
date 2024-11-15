@@ -49,7 +49,7 @@ fn create_reduction(
 
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarByteArray::#array_type(inner) => std::sync::Arc::new(#reduction_name{
-                data: unsafe {inner.clone().into()} , start_pe: 0, end_pe: num_pes-1}),
+                data: unsafe {Into::into(inner.clone())} , start_pe: 0, end_pe: num_pes-1}),
         });
 
         let iter_chain = if array_type == "AtomicArray"
@@ -78,33 +78,37 @@ fn create_reduction(
 
             #[#am]
             impl LamellarAM for #reduction_name{
-                async fn exec(&self) -> #typeident{
+                async fn exec(&self) -> Option<#typeident>{
                     // println!("{}",stringify!(#array_type));
                     if self.start_pe == self.end_pe{
                         // println!("[{:?}] root {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let timer = std::time::Instant::now();
                         #[allow(unused_unsafe)]
                         let data_slice = unsafe { #data_slice};
-                        // let first = data_slice.first().unwrap().clone();
-                        // let res = data_slice[1..].iter().fold(first, #op );
-                        let res = data_slice.iter()#iter_chain.reduce(#op).unwrap();
+                        let res = data_slice.iter()#iter_chain.reduce(#op);//s.expect("length of slice should be greater than 0");
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
-                        // data_slice.first().unwrap().clone()
                     }
                     else{
                         // println!("[{:?}] recurse {:?} {:?}",__lamellar_current_pe,self.start_pe, self.end_pe);
                         let mid_pe = (self.start_pe + self.end_pe)/2;
                         let op = #op;
                         let timer = std::time::Instant::now();
-                        let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe});//.into_future();
-                        let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe});//.into_future();
-                        let res = op(left.await,right.await);
+                        let left = __lamellar_team.exec_am_pe( self.start_pe,  #reduction_name { data: self.data.clone(), start_pe: self.start_pe, end_pe: mid_pe});//;
+                        let right = __lamellar_team.exec_am_pe( mid_pe+1, #reduction_name { data: self.data.clone(), start_pe: mid_pe+1, end_pe: self.end_pe});//;
+                        let left = left.await;
+                        let right = right.await;
+
+                        let res = match (left,right){
+                            (None,None) => None,
+                            (Some(v),None) => Some(v),
+                            (None,Some(v)) => Some(v),
+                            (Some(v1),Some(v2)) => Some(op(v1,v2))
+                        };
+
 
                         // println!("[{:?}] {:?} {:?}",__lamellar_current_pe,res,timer.elapsed().as_secs_f64());
                         res
-                        // let data_slice = unsafe {self.data.local_data()};
-                        // data_slice.first().unwrap().clone()
                     }
                 }
             }

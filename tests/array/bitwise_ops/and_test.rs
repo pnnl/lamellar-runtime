@@ -3,24 +3,32 @@ use lamellar::array::prelude::*;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
         }
-        $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -49,6 +57,15 @@ macro_rules! check_val {
     };
 }
 
+macro_rules! onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array.read_lock().block().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.onesided_iter()
+    };
+}
+
 macro_rules! and_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -58,7 +75,7 @@ macro_rules! and_test{
             let array_total_len = $len;
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let init_val =!(0 as $t);
             let final_val = init_val << num_pes;
@@ -67,18 +84,19 @@ macro_rules! and_test{
             array.barrier();
             let my_val = !(1 as $t << my_pe);
             for idx in 0..array.len(){
-                let _ = array.bit_and(idx,my_val);
+                #[allow(unused_unsafe)]
+                let _ = unsafe{array.bit_and(idx,my_val).spawn()};
 
             }
             array.wait_all();
             array.barrier();
             // array.print();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe{onesided_iter!($array,array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                 }
             }
             array.barrier();
@@ -95,17 +113,18 @@ macro_rules! and_test{
             sub_array.barrier();
             // sub_array.print();
             for idx in 0..sub_array.len(){
-                let _ = sub_array.bit_and(idx,my_val);
+                #[allow(unused_unsafe)]
+                let _ = unsafe{sub_array.bit_and(idx,my_val).spawn()};
             }
             sub_array.wait_all();
             sub_array.barrier();
             // sub_array.print();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,final_val,success);
                 if !success{
-                    println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                    eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                 }
             }
             sub_array.barrier();
@@ -123,17 +142,18 @@ macro_rules! and_test{
                 let sub_array = array.sub_array(start_i..end_i);
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
-                    let _ = sub_array.bit_and(idx,my_val);
+                    #[allow(unused_unsafe)]
+                    let _ = unsafe{sub_array.bit_and(idx,my_val).spawn()};
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
                 // sub_array.print();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
+                for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,final_val,success);
                     if !success{
-                        println!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
+                        eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
                     }
                 }
                 sub_array.barrier();

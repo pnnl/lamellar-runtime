@@ -61,8 +61,28 @@ Currently the inverse is true, if it compiles and runs using `rofi` it will comp
 
 Additional information on using each of the lamellae backends can be found below in the `Running Lamellar Applications` section
 
+# Environment Variables
+
+Please see [env_var.rs] for a description of available environment variables.
+
+Commonly used variables include:
+ - `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE, defaults to [std::thread::available_parallelism] if available or else 4
+ - `LAMELLAR_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
+     - possible values
+         - `local` -- default (if `enable-local` feature is not active)
+         - `shmem`
+         - `rofi`  -- only available with the `enable-rofi` feature in which case it is the default backend
+ - `LAMELLAR_EXECUTOR` - the executor used during execution. Note that if a executor is explicitly set in the world builder, this variable is ignored.
+     - possible values
+         - `lamellar` -- default, work stealing backend
+         - `async_std` -- alternative backend from async_std
+         - `tokio` -- only available with the `tokio-executor` feature in which case it is the default executor
+
+
 Examples 
 --------
+All of the examples in the [documentation](https://docs.rs/lamellar/latest/lamellar) should also be valid Lamellar programs (please open an issue if you encounter an issue).
+
 Our repository also provides numerous examples highlighting various features of the runtime: <https://github.com/pnnl/lamellar-runtime/tree/master/examples>
 
 Additionally, we are compiling a set of benchmarks (some with multiple implementations) that may be helpful to look at as well: <https://github.com/pnnl/lamellar-benchmarks/>
@@ -112,12 +132,12 @@ fn main(){
     let num_pes = world.num_pes();
     let am = HelloWorld { my_pe: my_pe };
     for pe in 0..num_pes{
-        world.exec_am_pe(pe,am.clone()); // explicitly launch on each PE
+        world.exec_am_pe(pe,am.clone()).spawn(); // explicitly launch on each PE
     }
     world.wait_all(); // wait for all active messages to finish
     world.barrier();  // synchronize with other PEs
     let request = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
-    world.block_on(request); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
+    request.block(); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
 }
 ```
 
@@ -129,12 +149,11 @@ use lamellar::array::prelude::*;
 fn main(){
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block); //we also support Cyclic distribution.
-    block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i) ); //simultaneosuly initialize array accross all pes, each pe only updates its local data
-    block_array.wait_all();
+    let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block).block(); //we also support Cyclic distribution.
+    block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i) ).block(); //simultaneosuly initialize array accross all pes, each pe only updates its local data
     block_array.barrier();
     if my_pe == 0{
-        for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+        for (i,elem) in block_onesided_iter!($array,array).into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
             println!("i: {} = {})",i,elem);
         }
     }
@@ -163,11 +182,11 @@ fn main(){
     let mut world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let cnt = Darc::new(&world, AtomicUsize::new());
+    let cnt = Darc::new(&world, AtomicUsize::new()).block().expect("calling pe is in the world);
     for pe in 0..num_pes{
-        world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}); // explicitly launch on each PE
+        world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
     }
-    world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
+    world.exec_am_all(am.clone()).spawn(); //also possible to execute on every PE with a single call
     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
     world.wait_all(); // wait for all active messages to finish
     world.barrier();  // synchronize with other PEs
@@ -178,11 +197,11 @@ fn main(){
 Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 
-``` lamellar = "0.6.1" ```
+``` lamellar = "0.7.0-rc.1" ```
 
 If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 
-```lamellar = { version = "0.6.1", features = ["enable-rofi"]}```
+```lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi"]}```
 
 NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
 If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
@@ -209,23 +228,17 @@ There are a number of ways to run Lamellar applications, mostly dictated by the 
     - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>``` 
         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
 
-# Environment Variables
-Lamellar exposes a number of environment variables that can used to control application execution at runtime
-- `LAMELLAR_THREADS` - The number of worker threads used within a lamellar PE
-    -  `export LAMELLAR_THREADS=10`
-- `LAMELLAE_BACKEND` - the backend used during execution. Note that if a backend is explicitly set in the world builder, this variable is ignored.
-    - possible values
-        - `local` 
-        - `shmem` 
-        - `rofi`
-- `LAMELLAR_MEM_SIZE` - Specify the initial size of the Runtime "RDMAable" memory pool. Defaults to 1GB
-    - `export LAMELLAR_MEM_SIZE=$((20*1024*1024*1024))` 20GB memory pool
-    - Internally, Lamellar utilizes memory pools of RDMAable memory for Runtime data structures (e.g. [Darcs][crate::Darc], [OneSidedMemoryRegion][crate::memregion::OneSidedMemoryRegion],etc), aggregation buffers, and message queues. Additional memory pools are dynamically allocated across the system as needed. This can be a fairly expensive operation (as the operation is synchronous across all PEs) so the runtime will print a message at the end of execution with how many additional pools were allocated. 
-        - if you find you are dynamically allocating new memory pools, try setting `LAMELLAR_MEM_SIZE` to a larger value
-    - Note: when running multiple PEs on a single system, the total allocated memory for the pools would be equal to `LAMELLAR_MEM_SIZE * number of processes`
+
+Repository Organization 
+-----------------------
+
+Generally the 'master' branch corresponds to the latest stable release at [https://crates.io/crates/lamellar] and [https://docs.rs/lamellar/latest/lamellar/].
+The 'dev' branch will contain the most recent 'working' features, where working means all the examples compile and execute properly (but the documentation may not yet be up-to-date).
+All other branches are active feature branches and may or may not be in a working state.
 
 NEWS
 ----
+* November 2024: Alpha release -- v0.7.1
 * February 2023: Alpha release -- v0.6.1
 * November 2023: Alpha release -- v0.6
 * January 2023: Alpha release -- v0.5
@@ -286,6 +299,14 @@ Note: we do an explicit build instead of `cargo run --examples` as they are inte
 
 HISTORY
 -------
+- version 0.7.0
+  - add support for integration with various async executor backends including tokio and async-std
+  - 'handle' based api, allowing for 'spawn()'ing, 'block()'ing, and 'await'ing remote operations.
+  - conversion from `Pin<Box<dyn Future>>` to concrete types for most remote operations.
+  - improved execution time warning framework for potential deadlock, unexecuted remote operations, blocking calls in async code, etc.
+    - can be completely disabled
+    - can panic instead of print warning
+  - various optimizations and bug fixes
 - version 0.6.1
   - Clean up apis for lock based data structures
   - N-way dissemination barrier
@@ -378,15 +399,13 @@ CONTACTS
 
 Current Team Members
 
-Ryan Friese     - ryan.friese@pnnl.gov  
-Roberto Gioiosa - roberto.gioiosa@pnnl.gov
-Erdal Mutlu     - erdal.mutlu@pnnl.gov  
-Joseph Cottam   - joseph.cottam@pnnl.gov
-Greg Roek       - gregory.roek@pnnl.gov
-
-Past Team Members
-
-Mark Raugas     - mark.raugas@pnnl.gov  
+Ryan Friese           - ryan.friese@pnnl.gov  
+Roberto Gioiosa       - roberto.gioiosa@pnnl.gov
+Polykarpos Thomadakis - polykarpos.thomadakis@pnnl.gov
+Erdal Mutlu           - erdal.mutlu@pnnl.gov  
+Joseph Cottam         - joseph.cottam@pnnl.gov
+Greg Roek             - gregory.roek@pnnl.gov
+Mark Raugas           - mark.raugas@pnnl.gov  
 
 ## License
 

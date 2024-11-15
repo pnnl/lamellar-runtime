@@ -64,7 +64,7 @@ impl LamellarAM for AmReturnUsize {
             std::thread::sleep(Duration::from_millis(1000));
             i = self.index.fetch_add(1, Ordering::Relaxed);
         }
-        println!("\t{:?} leaving, sum{:?}", self.my_id, sum);
+        println!("\t{:?} leaving, sum{:?}", self.my_id, sum,);
         sum
     }
 }
@@ -88,39 +88,43 @@ fn main() {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         for i in 0..map.len() {
-            let _ = world.exec_am_local(AmNoReturn {
-                my_id: i,
-                data: map.clone(),
-                index: index.clone(),
-            });
+            let _ = world
+                .exec_am_local(AmNoReturn {
+                    my_id: i,
+                    data: map.clone(),
+                    index: index.clone(),
+                })
+                .spawn();
         }
         world.wait_all();
         println!("-----------------------------------");
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
         for i in 0..map.len() {
-            let _ = world.exec_am_local(AmReturnUsize {
-                my_id: i,
-                data: map.clone(),
-                index: index.clone(),
-            });
+            let _ = world
+                .exec_am_local(AmReturnUsize {
+                    my_id: i,
+                    data: map.clone(),
+                    index: index.clone(),
+                })
+                .spawn();
         }
         world.wait_all();
         println!("-----------------------------------");
         //     println!("---------------------------------------------------------------");
         //     println!("Testing local am no return");
-        //     let res = world.exec_am_pe(my_pe, am.clone()).get();
+        //     let res = world.exec_am_pe(my_pe, am.clone()).block();
         //     assert_eq!(res, None);
         //     println!("no return result: {:?}", res);
         //     println!("-----------------------------------");
         //     println!("Testing remote am no return");
-        //     let res = world.exec_am_pe(num_pes - 1, am.clone()).get();
+        //     let res = world.exec_am_pe(num_pes - 1, am.clone()).block();
         //     assert_eq!(res, None);
         //     println!("no return result: {:?}", res);
         //     println!("-----------------------------------");
         //     println!("Testing all am no return");
         //     println!("[{:?}] exec on all", my_pe);
-        //     let res = world.exec_am_all(am.clone()).get();
+        //     let res = world.exec_am_all(am.clone()).block();
         //     assert!(res.iter().all(|x| x.is_none()));
         //     println!("no return result: {:?}", res);
         //     println!("---------------------------------------------------------------");
@@ -128,7 +132,7 @@ fn main() {
 
     // println!("---------------------------------------------------------------");
     // println!("Testing ring pattern am no return");
-    // let res = world.exec_am_pe((my_pe + 1) % num_pes, am.clone()).get();
+    // let res = world.exec_am_pe((my_pe + 1) % num_pes, am.clone()).block();
     // assert_eq!(res, None);
     // println!("no return result: {:?}", res);
     // println!("-----------------------------------");

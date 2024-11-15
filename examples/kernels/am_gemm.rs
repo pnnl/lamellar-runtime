@@ -10,7 +10,7 @@
 /// matrices use row-wise distribution (i.e. all elements of a row are local to a pe,
 /// conversely this means elements of a column are distributed across pes)
 ///----------------------------------------------------------------------------------
-use futures::future;
+use futures_util::future;
 use lamellar::active_messaging::prelude::*;
 use lamellar::memregion::prelude::*;
 use lazy_static::lazy_static;
@@ -162,9 +162,15 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = world.alloc_shared_mem_region::<f32>((m * n) / num_pes);
-    let b = world.alloc_shared_mem_region::<f32>((n * p) / num_pes);
-    let c = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
+    let a = world
+        .alloc_shared_mem_region::<f32>((m * n) / num_pes)
+        .block();
+    let b = world
+        .alloc_shared_mem_region::<f32>((n * p) / num_pes)
+        .block();
+    let c = world
+        .alloc_shared_mem_region::<f32>((m * p) / num_pes)
+        .block();
     unsafe {
         let mut cnt = (((m * n) / num_pes) * my_pe) as f32;
         for elem in a.as_mut_slice().unwrap() {

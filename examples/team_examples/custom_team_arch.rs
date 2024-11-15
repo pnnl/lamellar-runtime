@@ -79,7 +79,8 @@ impl LamellarArch for BlockStridedArch {
         let block = parent_pe / self.block_size;
         let start_block = self.start_pe / self.block_size;
         let remainder = parent_pe % self.block_size;
-        if (block - start_block) % self.stride == 0
+        if block >= start_block
+            && (block - start_block) % self.stride == 0
             && self.start_pe <= *parent_pe
             && *parent_pe <= self.end_pe
         {
@@ -134,7 +135,7 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             1
         };
         let timer = Instant::now();
-        let _ = team.exec_am_all(TeamAM { secs }); //everynode that has a handle can launch on a given team;
+        let _ = team.exec_am_all(TeamAM { secs }).spawn(); //everynode that has a handle can launch on a given team;
         team.wait_all(); //wait until all requests return
         team.barrier(); // barriers only apply to team members, its a no op for non team members
         timer.elapsed().as_secs_f64()
@@ -168,7 +169,7 @@ fn main() {
     }
     world.barrier();
     let timer = Instant::now();
-    let _ = world.exec_am_all(TeamAM { secs: 1 });
+    let _ = world.exec_am_all(TeamAM { secs: 1 }).spawn();
     world.wait_all();
     world.barrier();
     let elapsed = timer.elapsed().as_secs_f64();

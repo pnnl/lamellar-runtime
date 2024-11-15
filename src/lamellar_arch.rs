@@ -23,9 +23,9 @@ pub trait LamellarArch: Send + Sync {
 /// An error that occurs when trying to access a PE that does not exist on a team/subteam
 #[derive(Debug, Clone, Copy)]
 pub struct IdError {
-    #[doc(hidden)]
+    /// the PE id of the parent team
     pub parent_pe: usize,
-    #[doc(hidden)]
+    /// the PE id of the current team
     pub team_pe: usize,
 }
 
@@ -63,7 +63,7 @@ impl std::fmt::Debug for LamellarArchEnum {
 }
 
 impl LamellarArchEnum {
-    pub fn new<A>(arch: A) -> LamellarArchEnum
+    pub(crate) fn new<A>(arch: A) -> LamellarArchEnum
     where
         A: LamellarArch + 'static,
     {
@@ -135,7 +135,7 @@ pub(crate) struct LamellarArchRT {
 }
 
 impl LamellarArchRT {
-    pub fn new<A>(parent: Arc<LamellarArchRT>, arch: A) -> LamellarArchRT
+    pub(crate) fn new<A>(parent: Arc<LamellarArchRT>, arch: A) -> LamellarArchRT
     where
         A: LamellarArch + 'static,
     {
@@ -159,10 +159,10 @@ impl LamellarArchRT {
             arch: LamellarArchEnum::new(arch),
         }
     }
-    pub fn num_pes(&self) -> usize {
+    pub(crate) fn num_pes(&self) -> usize {
         self.num_pes
     }
-    pub fn world_pe(&self, team_pe: usize) -> ArchResult<usize> {
+    pub(crate) fn world_pe(&self, team_pe: usize) -> ArchResult<usize> {
         let parent_pe = self.arch.parent_pe_id(&team_pe)?;
         if let Some(parent) = &self.parent {
             parent.world_pe(parent_pe)
@@ -171,7 +171,7 @@ impl LamellarArchRT {
         }
     }
 
-    pub fn team_pe(&self, world_pe: usize) -> ArchResult<usize> {
+    pub(crate) fn team_pe(&self, world_pe: usize) -> ArchResult<usize> {
         if let Some(parent) = &self.parent {
             let parent_pe = parent.team_pe(world_pe)?;
             // println!("world_pe {:?}   parent_pe {:?}  self: {:?}",world_pe, parent_pe,self);
@@ -186,7 +186,7 @@ impl LamellarArchRT {
         }
     }
 
-    pub fn team_iter(&self) -> Box<dyn Iterator<Item = usize>> {
+    pub(crate) fn team_iter(&self) -> Box<dyn Iterator<Item = usize>> {
         //return an iterator of the teams global pe ids
         Box::new(LamellarArchRTiter {
             arch: self.clone(),
@@ -195,7 +195,7 @@ impl LamellarArchRT {
         })
     }
     #[allow(dead_code)]
-    pub fn single_iter(&self, pe: usize) -> Box<dyn Iterator<Item = usize>> {
+    pub(crate) fn single_iter(&self, pe: usize) -> Box<dyn Iterator<Item = usize>> {
         //a single element iterator returning the global id of pe
         Box::new(LamellarArchRTiter {
             arch: self.clone(),
@@ -232,14 +232,14 @@ impl Iterator for LamellarArchRTiter {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(Copy, Clone, std::hash::Hash, Debug)]
-pub struct GlobalArch {
+pub(crate) struct GlobalArch {
     pub(crate) num_pes: usize,
 }
 
 impl GlobalArch {
-    pub fn new(num_pes: usize) -> GlobalArch {
+    pub(crate) fn new(num_pes: usize) -> GlobalArch {
         GlobalArch { num_pes: num_pes }
     }
 }

@@ -36,8 +36,10 @@ fn main() {
     let len_per_pe = total_len as f32 / num_pes as f32;
     let my_local_size = len_per_pe.round() as usize; //((len_per_pe * (my_pe+1) as f32).round() - (len_per_pe * my_pe as f32).round()) as usize;
     println!("my local size {:?}", my_local_size);
-    let block_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block);
-    let cyclic_array = UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic);
+    let block_array =
+        UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block).block();
+    let cyclic_array =
+        UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).block();
     let local_mem_region = world.alloc_one_sided_mem_region(total_len);
     world.barrier();
     if my_pe == 0 {
@@ -132,30 +134,28 @@ fn main() {
         "cyclic_sum {:?} cyclic time {:?}, block_sum {:?} block time {:?}",
         cyclic_sum, cyclic_dist_time, block_sum, block_dist_time
     );
-    // for i in 0..total_len {
-    //     block_array.add(i, 10);
-    // }
-    // block_array.for_each_mut(|x| *x += *x);
 
-    world.block_on(unsafe { cyclic_array.dist_iter_mut().for_each(|x| *x += *x) });
-    world.block_on(unsafe {
+    unsafe { cyclic_array.dist_iter_mut().for_each(|x| *x += *x).block() };
+    unsafe {
         cyclic_array
             .dist_iter()
             .enumerate()
             .for_each(|x| println!("x: {:?}", x))
-    });
+            .block();
+    }
 
-    // cyclic_array.dist_iter().for_each(|x| println!("x: {:?}", x));
-
-    world.block_on(unsafe {
+    unsafe {
         block_array
             .dist_iter()
             .enumerate()
             .for_each(|x| println!("x: {:?}", x))
-    });
-    let block_array = block_array.into_read_only();
-    let _ = block_array.sum();
-    // block_array.dist_iter().for_each(|x| println!("x: {:?}", x));
-    // block_array.for_each(|x| println!("x: {:?}", x));
-    // cyclic_array.for_each_mut(|x| *x += *x);
+            .block()
+    };
+    let block_array = block_array.into_read_only().block();
+    let _ = block_array.sum().block();
+
+    let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block).block();
+    let min = unsafe { one_elem_array.min() };
+    let min = one_elem_array.block_on(min);
+    println!("one elem array min: {min:?}");
 }

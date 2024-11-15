@@ -11,7 +11,7 @@ fn main() {
     let local_length = 10; //if you want to ensure each thread processes data make this >= LAMELLAR_THREADS environment variable
     let global_length = num_pes * local_length;
 
-    let array = AtomicArray::<usize>::new(world.team(), global_length, Distribution::Block); //Compare with Distribution::Cyclic
+    let array = AtomicArray::<usize>::new(world.team(), global_length, Distribution::Block).block(); //Compare with Distribution::Cyclic
 
     //examine array before initialization
     if my_pe == 0 {
@@ -25,7 +25,7 @@ fn main() {
     world.barrier(); //wait for PE 0 to finish printing
 
     //initialize array, each PE will set its local elements equal to its ID
-    let request = array
+    array
         .dist_iter_mut() //create a mutable distributed iterator (i.e. data parallel iteration, similar to Rayon par_iter())
         .enumerate() // enumeration with respect to the global array
         .for_each(move |(i, elem)| {
@@ -37,10 +37,8 @@ fn main() {
                 std::thread::current().id()
             );
             elem.store(my_pe); //"store" because this is an AtomicArray
-        });
-
-    //wait for local iteration to complete
-    world.block_on(request);
+        })
+        .block();
 
     //wait for all pes to finish
     world.barrier();

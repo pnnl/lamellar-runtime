@@ -72,10 +72,10 @@ pub(crate) fn impl_lamellar_serde_trait(
                 #lamellar::serialized_size(self,true)
             }
             fn serialize_into(&self,buf: &mut [u8]){
-                #lamellar::serialize_into(buf,self,true).unwrap();
+                #lamellar::serialize_into(buf,self,true).expect("can serialize and enough space in buf");
             }
             fn serialize(&self)->Vec<u8>{
-                #lamellar::serialize(self,true).unwrap()
+                #lamellar::serialize(self,true).expect("can serialize")
             }
         }
     }
@@ -93,10 +93,10 @@ fn impl_return_lamellar_serde_trait(
                 #lamellar::serialized_size(&self.val,true)
             }
             fn serialize_into(&self,buf: &mut [u8]){
-                #lamellar::serialize_into(buf,&self.val,true).unwrap();
+                #lamellar::serialize_into(buf,&self.val,true).expect("can serialize and enough space in buf");
             }
             fn serialize(&self)->Vec<u8>{
-                #lamellar::serialize(self,true).unwrap()
+                #lamellar::serialize(self,true).expect("can serialize")
             }
         }
     }
@@ -112,12 +112,12 @@ pub(crate) fn impl_lamellar_result_serde_trait(
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarResultSerde for #am_name #ty_generics #where_clause {
             fn serialized_result_size(&self,result: & Box<dyn std::any::Any + Sync + Send>)->usize{
-                let result  = result.downcast_ref::<#ret_type>().unwrap();
+                let result  = result.downcast_ref::<#ret_type>().expect("can downcast result box");
                 #lamellar::serialized_size(result,true)
             }
             fn serialize_result_into(&self,buf: &mut [u8],result: & Box<dyn std::any::Any + Sync + Send>){
-                let result  = result.downcast_ref::<#ret_type>().unwrap();
-                #lamellar::serialize_into(buf,result,true).unwrap();
+                let result  = result.downcast_ref::<#ret_type>().expect("can downcast result box");
+                #lamellar::serialize_into(buf,result,true).expect("can serialize and enough size in buf");
             }
         }
     }
@@ -157,7 +157,7 @@ fn impl_unpack_and_register_function(
     let am_name_unpack = quote::format_ident!("{}_unpack", am_name.clone());
     quote! {
         fn #am_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>  {
-            let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).unwrap());
+            let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).expect("can deserialize into remote active message"));
             <#am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
             __lamellar_data
         }
@@ -285,22 +285,25 @@ fn gen_return_stmt(
         AmType::ReturnData(ref ret) => {
             let last_expr = get_expr(&last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
+            let last_expr =
+                quote_spanned! {last_stmt.span()=> let __lamellar_last_expr: #ret = #last_expr; };
             let remote_last_expr = match ret {
                 syn::Type::Array(a) => match &*a.elem {
                     syn::Type::Path(type_path)
                         if type_path.clone().into_token_stream().to_string() == "u8" =>
                     {
                         byte_buf = true;
-                        quote_spanned! {last_stmt.span()=> ByteBuf::from(#last_expr)}
+                        quote_spanned! {last_stmt.span()=> ByteBuf::from(__lamellar_last_expr)}
                     }
-                    _ => quote_spanned! {last_stmt.span()=> #last_expr},
+                    _ => quote_spanned! {last_stmt.span()=> __lamellar_last_expr},
                 },
-                _ => quote_spanned! {last_stmt.span()=> #last_expr},
+                _ => quote_spanned! {last_stmt.span()=> __lamellar_last_expr},
             };
             if !local {
                 quote_spanned! {last_stmt.span()=>
+                    #last_expr
                     let ret = match __local{ //should probably just separate these into exec_local exec_remote to get rid of a conditional...
-                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(#last_expr)),
+                        true => #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__lamellar_last_expr)),
                         false => #lamellar::active_messaging::LamellarReturn::RemoteData(std::sync::Arc::new (#ret_struct_name{
                             val: #remote_last_expr,
                         })),
@@ -309,24 +312,29 @@ fn gen_return_stmt(
                 }
             } else {
                 quote_spanned! {last_stmt.span()=>
-                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(#last_expr))
+                    #last_expr
+                    #lamellar::active_messaging::LamellarReturn::LocalData(Box::new(__lamellar_last_expr))
                 }
             }
         }
-        AmType::ReturnAm(_, _) => {
+        AmType::ReturnAm(ret, _) => {
             let last_expr = get_expr(&last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
+            let last_expr =
+                quote_spanned! {last_stmt.span()=> let __lamellar_last_expr: #ret = #last_expr; };
             if !local {
                 quote_spanned! {last_stmt.span()=>
+                    #last_expr
                     let ret = match __local{
-                        true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(#last_expr)),
-                        false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new(#last_expr)),
+                        true => #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(__lamellar_last_expr)),
+                        false => #lamellar::active_messaging::LamellarReturn::RemoteAm(std::sync::Arc::new(__lamellar_last_expr)),
                     };
                     ret
                 }
             } else {
                 quote_spanned! {last_stmt.span()=>
-                    #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(#last_expr))
+                    #last_expr
+                    #lamellar::active_messaging::LamellarReturn::LocalAm(std::sync::Arc::new(__lamellar_last_expr))
                 }
             }
         }
@@ -343,7 +351,7 @@ pub(crate) fn impl_return_struct(
     bytes_buf: bool,
     local: bool,
 ) -> proc_macro2::TokenStream {
-    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let (impl_generics, _ty_generics, where_clause) = generics.split_for_impl();
 
     let generic_phantoms = generics.type_params().fold(quote! {}, |acc, t| {
         let name = quote::format_ident!("_phantom_{}", t.ident.to_string().to_lowercase());
@@ -355,7 +363,7 @@ pub(crate) fn impl_return_struct(
     let mut the_ret_struct = if bytes_buf {
         quote! {
             #am_data_header
-            struct #ret_struct_name #ty_generics #where_clause{
+            struct #ret_struct_name #impl_generics #where_clause{
                 val: serde_bytes::ByteBuf,
                 #generic_phantoms
             }
@@ -363,7 +371,7 @@ pub(crate) fn impl_return_struct(
     } else {
         quote! {
             #am_data_header
-            struct #ret_struct_name #ty_generics #where_clause{
+            struct #ret_struct_name #impl_generics #where_clause{
                 val: #ret_type,
                 #generic_phantoms
             }

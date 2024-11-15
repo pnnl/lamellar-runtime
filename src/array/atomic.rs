@@ -2,17 +2,25 @@ mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
 
+pub(crate) mod handle;
+pub use handle::AtomicArrayHandle;
+
+use crate::active_messaging::ActiveMessaging;
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
+use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
+use crate::array::iterator::local_iterator::LocalIteratorLauncher;
 use crate::array::native_atomic::NativeAtomicElement;
-use crate::array::private::LamellarArrayPrivate;
 use crate::array::*;
 // use crate::darc::{Darc, DarcMode};
+use crate::barrier::BarrierHandle;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::memregion::Dist;
+use crate::scheduler::LamellarTask;
+
 use std::any::TypeId;
 use std::collections::HashSet;
 // use std::sync::atomic::Ordering;
-// use std::sync::Arc;
+use std::sync::Arc;
 
 lazy_static! {
     pub(crate) static ref NATIVE_ATOMICS: HashSet<TypeId> = {
@@ -36,7 +44,6 @@ use std::ops::{
     ShrAssign, SubAssign,
 };
 
-// #[doc(hidden)]
 /// An abstraction of an atomic element either via language supported Atomic integer types or through the use of an accompanying mutex.
 ///
 /// This type is returned when iterating over an AtomicArray as well as when accessing local elements through an [AtomicLocalData] handle.
@@ -56,12 +63,12 @@ impl<T: Dist> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} elem: {:?}",local_data.at(10).load());
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # println!("PE{my_pe} elem: {:?}",local_data.at(10).load());
     ///```
@@ -82,12 +89,12 @@ impl<T: Dist> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// local_data.at(10).store(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # local_data.at(10).store(19.0);
     ///```
@@ -108,12 +115,12 @@ impl<T: Dist> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).swap(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).swap(19.0);
     ///```
@@ -136,12 +143,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_add(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_add(19.0);
     ///```
@@ -161,12 +168,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_sub(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_sub(19.0);
     ///```
@@ -187,12 +194,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_mul(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_mul(19.0);
     ///```
@@ -213,12 +220,12 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_div(19);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let old_val = local_data.at(10).fetch_div(19.0);
     ///```
@@ -244,7 +251,7 @@ impl<T: Dist + std::cmp::Eq> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let result = local_data.at(10).compare_exchange(19,10);
@@ -275,12 +282,12 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let result = local_data.at(10).compare_exchange_epsilon(19,10,1);
     ///
-    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block); // test genericatomic
+    /// # let array2: AtomicArray<f32>  = AtomicArray::new(&world,100,Distribution::Block).block(); // test genericatomic
     /// # let local_data = array2.local_data();
     /// # let result = local_data.at(10).compare_exchange_epsilon(19.0,10.0,0.1);
     ///```
@@ -309,7 +316,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_and(0b0011);
@@ -330,7 +337,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_or(0b0011);
@@ -354,7 +361,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_shl(2);
@@ -375,7 +382,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,16,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// let old_val = local_data.at(10).fetch_shr(2);
@@ -499,18 +506,6 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
     }
 }
 
-impl<T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum for AtomicElement<T> {
-    fn sum<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = Self>,
-    {
-        LocalGenericAtomicElement {
-            val: Mutex::new(iter.map(|e| e.load()).sum()),
-        }
-        .into()
-    }
-}
-
 ///A safe abstraction of a distributed array, providing read/write access protect by atomic elements
 ///
 /// If the type of the Array is an integer type (U8, usize, i32, i16, etc.) the array will use the appropriate Atomic* type underneath.
@@ -521,7 +516,8 @@ impl<T: Dist + std::fmt::Debug + std::iter::Sum> std::iter::Sum for AtomicElemen
 /// as such there can be many concurrent threads modifying the array at any given time.
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
-#[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>,DistIteratorLauncher,LocalIteratorLauncher)]
+#[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>)]
+// #[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum AtomicArray<T: Dist> {
@@ -530,6 +526,10 @@ pub enum AtomicArray<T: Dist> {
     /// an array containing generic types, each protected by a mutex
     GenericAtomicArray(GenericAtomicArray<T>),
 }
+
+impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {}
+
+impl<T: Dist> LocalIteratorLauncher for AtomicArray<T> {}
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for AtomicArray<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
@@ -562,6 +562,91 @@ impl<T: Dist> SubArray<T> for AtomicArray<T> {
     }
 }
 
+impl<T: Dist> ActiveMessaging for AtomicArray<T> {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.exec_am_all(am),
+            AtomicArray::GenericAtomicArray(array) => array.exec_am_all(am),
+        }
+    }
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.exec_am_pe(pe, am),
+            AtomicArray::GenericAtomicArray(array) => array.exec_am_pe(pe, am),
+        }
+    }
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.exec_am_local(am),
+            AtomicArray::GenericAtomicArray(array) => array.exec_am_local(am),
+        }
+    }
+    fn wait_all(&self) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.wait_all(),
+            AtomicArray::GenericAtomicArray(array) => array.wait_all(),
+        }
+    }
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
+        let fut: Pin<Box<dyn Future<Output = ()> + Send>> = match self {
+            AtomicArray::NativeAtomicArray(array) => Box::pin(array.await_all()),
+            AtomicArray::GenericAtomicArray(array) => Box::pin(array.await_all()),
+        };
+        fut
+    }
+    fn barrier(&self) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.barrier(),
+            AtomicArray::GenericAtomicArray(array) => array.barrier(),
+        }
+    }
+    fn async_barrier(&self) -> BarrierHandle {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.async_barrier(),
+            AtomicArray::GenericAtomicArray(array) => array.async_barrier(),
+        }
+    }
+    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.spawn(f),
+            AtomicArray::GenericAtomicArray(array) => array.spawn(f),
+        }
+    }
+    fn block_on<F: Future>(&self, f: F) -> F::Output {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.block_on(f),
+            AtomicArray::GenericAtomicArray(array) => array.block_on(f),
+        }
+    }
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.block_on_all(iter),
+            AtomicArray::GenericAtomicArray(array) => array.block_on_all(iter),
+        }
+    }
+}
+
 #[doc(hidden)]
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -571,7 +656,7 @@ pub enum AtomicByteArray {
 }
 
 impl AtomicByteArray {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn downgrade(array: &AtomicByteArray) -> AtomicByteArrayWeak {
         match array {
             AtomicByteArray::NativeAtomicByteArray(array) => {
@@ -584,6 +669,12 @@ impl AtomicByteArray {
                     array,
                 ))
             }
+        }
+    }
+    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+        match self {
+            AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.data.team(),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.data.team(),
         }
     }
 }
@@ -613,7 +704,7 @@ pub enum AtomicByteArrayWeak {
 }
 
 impl AtomicByteArrayWeak {
-    #[doc(hidden)]
+    //#[doc(hidden)]
     pub fn upgrade(&self) -> Option<AtomicByteArray> {
         match self {
             AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
@@ -652,7 +743,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -676,7 +767,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -695,7 +786,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -714,7 +805,7 @@ impl<T: Dist> AtomicLocalData<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     ///
@@ -767,12 +858,12 @@ impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     ///
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<f32> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<f32> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     pub fn new<U: Clone + Into<IntoLamellarTeam>>(
         team: U,
         array_size: usize,
         distribution: Distribution,
-    ) -> AtomicArray<T> {
+    ) -> AtomicArrayHandle<T> {
         // println!("new atomic array");
         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
             NativeAtomicArray::new_internal(team, array_size, distribution).into()
@@ -801,7 +892,7 @@ impl<T: Dist> AtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     /// // do something interesting... or not
     /// let block_view = array.clone().use_distribution(Distribution::Block);
     ///```
@@ -813,7 +904,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.   
+    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe access to local elements.
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
@@ -825,7 +916,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} local_data[0]: {:?}",local_data.at(0).load());
@@ -837,7 +928,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.   
+    /// Return the calling PE's local data as an [AtomicLocalData], which allows safe mutable access to local elements.
     ///
     /// Because each element is Atomic, this handle to the local data can be used to both read and write individual elements safely.
     ///
@@ -849,7 +940,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let local_data = array.local_data();
     /// println!("PE{my_pe} local_data[0]: {:?}",local_data.at(0).load());
@@ -894,9 +985,9 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     ///```
     ///
     /// # Warning
@@ -905,7 +996,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = array1.local_data();
@@ -914,15 +1005,15 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after 'slice' is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_unsafe" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let unsafe_array = array.into_unsafe();
+    /// let unsafe_array = array.into_unsafe().block();
     /// unsafe_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_unsafe(self) -> UnsafeArray<T> {
+    pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("atomic into_unsafe");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.into_unsafe(),
+            AtomicArray::GenericAtomicArray(array) => array.into_unsafe(),
         }
     }
     // pub fn into_local_only(self) -> LocalOnlyArray<T> {
@@ -949,9 +1040,9 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -959,7 +1050,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -968,15 +1059,15 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_read_only" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let read_only_array = array.into_read_only();
+    /// let read_only_array = array.into_read_only().block();
     /// read_only_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_read_only(self) -> ReadOnlyArray<T> {
+    pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("atomic into_read_only");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.array.into_read_only(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into_read_only(),
         }
     }
 
@@ -996,9 +1087,9 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -1006,7 +1097,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -1015,15 +1106,15 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_local_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let local_lock_array = array.into_local_lock();
+    /// let local_lock_array = array.into_local_lock().block();
     /// local_lock_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_local_lock(self) -> LocalLockArray<T> {
+    pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("atomic into_local_lock");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.array.into_local_lock(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into_local_lock(),
         }
     }
 
@@ -1043,9 +1134,9 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -1053,7 +1144,7 @@ impl<T: Dist> AtomicArray<T> {
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
-    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic);
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// let array1 = array.clone();
     /// let slice = unsafe {array1.local_data()};
@@ -1062,63 +1153,36 @@ impl<T: Dist> AtomicArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_global_lock" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let global_lock_array = array.into_global_lock();
+    /// let global_lock_array = array.into_global_lock().block();
     /// global_lock_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
-    pub fn into_global_lock(self) -> GlobalLockArray<T> {
+    pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("atomic into_global_lock");
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.array.into(),
-            AtomicArray::GenericAtomicArray(array) => array.array.into(),
+            AtomicArray::NativeAtomicArray(array) => array.array.into_global_lock(),
+            AtomicArray::GenericAtomicArray(array) => array.array.into_global_lock(),
         }
     }
 }
 
-impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
-    fn team_from(input: (Vec<T>, Distribution), team: &Pin<Arc<LamellarTeamRT>>) -> Self {
-        let (vals, distribution) = input;
-        let input = (&vals, distribution);
-        let array: UnsafeArray<T> = input.team_into(team);
-        array.into()
+// #[async_trait]
+impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T> {
+    async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
+        let array: UnsafeArray<T> = AsyncTeamInto::team_into(input, team).await;
+        array.async_into().await
     }
 }
 
-impl<T: Dist + 'static> From<UnsafeArray<T>> for AtomicArray<T> {
-    fn from(array: UnsafeArray<T>) -> Self {
+#[async_trait]
+impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
+    async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("Converting from UnsafeArray to AtomicArray");
         if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
-            NativeAtomicArray::from(array).into()
+            NativeAtomicArray::async_from(array).await.into()
         } else {
-            GenericAtomicArray::from(array).into()
+            GenericAtomicArray::async_from(array).await.into()
         }
-    }
-}
-
-// impl<T: Dist + 'static> From<LocalOnlyArray<T>> for AtomicArray<T> {
-//     fn from(array: LocalOnlyArray<T>) -> Self {
-//         // println!("Converting from LocalOnlyArray to AtomicArray");
-//         unsafe { array.into_inner().into() }
-//     }
-// }
-
-impl<T: Dist + 'static> From<ReadOnlyArray<T>> for AtomicArray<T> {
-    fn from(array: ReadOnlyArray<T>) -> Self {
-        // println!("Converting from ReadOnlyArray to AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
-impl<T: Dist + 'static> From<LocalLockArray<T>> for AtomicArray<T> {
-    fn from(array: LocalLockArray<T>) -> Self {
-        // println!("Converting from LocalLockArray to AtomicArray");
-        unsafe { array.into_inner().into() }
-    }
-}
-
-impl<T: Dist + 'static> From<GlobalLockArray<T>> for AtomicArray<T> {
-    fn from(array: GlobalLockArray<T>) -> Self {
-        // println!("Converting from GlobalLockArray to AtomicArray");
-        unsafe { array.into_inner().into() }
     }
 }
 
@@ -1159,8 +1223,50 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
-    fn reduce(&self, reduction: &str) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// Please see the documentation for the [register_reduction] procedural macro for
+    /// more details and examples on how to create your own reductions.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Reduce` active messages on the other PEs associated with the array.
+    /// the returned reduction result is only available on the calling PE
+    ///
+    ///  # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
+    /// let array_clone = array.clone();
+    /// let _ = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
+    /// }).block();
+    /// world.wait_all();
+    /// world.barrier();
+    /// let sum = array.block_on(array.reduce("sum")).expect("array has length > 0"); // equivalent to calling array.sum()
+    /// assert_eq!(array.len()*num_pes,sum);
+    ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn reduce(&self, reduction: &str) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
@@ -1168,32 +1274,175 @@ impl<T: Dist + AmDist + 'static> LamellarArrayReduce<T> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LamellarArrayArithmeticReduce<T>
-    for AtomicArray<T>
-{
-    fn sum(&self) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("sum")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
+    /// the returned sum reduction result is only available on the calling PE
+    ///
+    ///  # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// use rand::Rng;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
+    /// let array_clone = array.clone();
+    /// let _ = array.local_iter().for_each(move |_| {
+    ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
+    ///     let _ = array_clone.add(index,1).spawn(); //randomly add one to an element in the array.
+    /// }).block();
+    /// world.wait_all();
+    /// world.barrier();
+    /// let sum = array.block_on(array.sum()).expect("array has length > 0");
+    /// assert_eq!(array.len()*num_pes,sum);
+    /// ```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn sum(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
         }
     }
-    fn prod(&self) -> Pin<Box<dyn Future<Output = T>>> {
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
+    ///
+    /// This equivalent to `reduce("prod")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
+    /// the returned prod reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
+    ///     elem.store(i+1);
+    /// }).spawn();
+    /// array.wait_all();
+    /// array.barrier();
+    /// let prod =  array.block_on(array.prod()).expect("array has length > 0");
+    /// assert_eq!((1..=array.len()).product::<usize>(),prod);
+    ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn prod(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
             AtomicArray::GenericAtomicArray(array) => array.prod(),
         }
     }
 }
-impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LamellarArrayCompareReduce<T>
-    for AtomicArray<T>
-{
-    fn max(&self) -> Pin<Box<dyn Future<Output = T>>> {
+impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the max element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("max")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
+    /// the returned max reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
+    /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
+    /// let max = array.block_on(array.max()).expect("array has length > 0");
+    /// assert_eq!((array.len()-1)*2,max);
+    ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn max(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
         }
     }
-    fn min(&self) -> Pin<Box<dyn Future<Output = T>>> {
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Find the min element in the entire destributed array, returning to the calling PE
+    ///
+    /// This equivalent to `reduce("min")`.
+    ///
+    /// # One-sided Operation
+    /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
+    /// the returned min reduction result is only available on the calling PE
+    ///
+    /// # Safety
+    /// One thing to consider is that due to being a one sided reduction, safety is only gauranteed with respect to Atomicity of individual elements,
+    /// not with respect to the entire global array. This means that while one PE is performing a reduction, other PEs can atomically update their local
+    /// elements. While this is technically safe with respect to the integrity of an indivdual element (and with respect to the compiler),
+    /// it may not be your desired behavior.
+    ///
+    /// To be clear this behavior is not an artifact of lamellar, but rather the language itself,
+    /// for example if you have an `Arc<Vec<AtomicUsize>>` shared on multiple threads, you could safely update the elements from each thread,
+    /// but performing a reduction could result in safe but non deterministic results.
+    ///
+    /// In Lamellar converting to a [ReadOnlyArray] before the reduction is a straightforward workaround to enusre the data is not changing during the reduction.
+    ///
+    /// # Note
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    ///
+    /// # Examples
+    /// ```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let num_pes = world.num_pes();
+    /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
+    /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();;
+    /// let min = array.block_on(array.min()).expect("array has length > 0");
+    /// assert_eq!(0,min);
+    ///```
+    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+    pub fn min(&self) -> AmHandle<Option<T>> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),
             AtomicArray::GenericAtomicArray(array) => array.min(),
@@ -1215,8 +1464,8 @@ impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
     ///```
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
-    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
-    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block);
+    /// let block_array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
+    /// let cyclic_array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// block_array.print();
     /// println!();

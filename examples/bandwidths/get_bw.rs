@@ -12,7 +12,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN);
+    let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN).block();
     let data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN);
     for j in 0..MEMREG_LEN as usize {
         unsafe {
@@ -82,7 +82,6 @@ fn main() {
         }
         let cur_t = timer.elapsed().as_secs_f64();
         world.barrier();
-        s = Instant::now();
         // let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();
@@ -116,11 +115,11 @@ fn main() {
         }
 
         world.barrier();
-        println!(
-            "cleanup: {:?}s {:?}us",
-            s.elapsed().as_secs_f64(),
-            s.elapsed().as_secs_f64() * 1_000_000 as f64
-        );
+        // println!(
+        //     "cleanup: {:?}s {:?}us",
+        //     s.elapsed().as_secs_f64(),
+        //     s.elapsed().as_secs_f64() * 1_000_000 as f64
+        // );
     }
     if my_pe == 0 {
         println!(

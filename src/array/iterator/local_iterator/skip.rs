@@ -1,4 +1,4 @@
-use crate::array::iterator::local_iterator::*;
+use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
 //skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
 #[derive(Clone, Debug)]
@@ -8,8 +8,11 @@ pub struct Skip<I> {
     skip_offset: usize,
 }
 
-impl<I: IterClone> IterClone for Skip<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for Skip<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Skip {
             iter: self.iter.iter_clone(Sealed),
             skip_count: self.skip_count,
@@ -38,8 +41,8 @@ where
 {
     type Item = <I as LocalIterator>::Item;
     type Array = <I as LocalIterator>::Array;
-    fn init(&self, in_start_i: usize, in_cnt: usize) -> Skip<I> {
-        let mut iter = self.iter.init(in_start_i, in_cnt);
+    fn init(&self, in_start_i: usize, in_cnt: usize, _s: Sealed) -> Skip<I> {
+        let mut iter = self.iter.init(in_start_i, in_cnt, _s);
         let start_i = std::cmp::max(in_start_i, self.skip_count);
         let advance = std::cmp::min(start_i - in_start_i, in_cnt);
 

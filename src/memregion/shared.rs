@@ -36,7 +36,7 @@ use std::ops::Bound;
 ///
 /// let world = LamellarWorldBuilder::new().build();
 ///
-/// let world_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000);
+/// let world_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
 /// ```
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SharedMemoryRegion<T: Dist> {
@@ -85,35 +85,86 @@ impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> SharedMemoryRegion<T> {
+    // pub(crate) fn new(
+    //     size: usize,
+    //     team: Pin<Arc<LamellarTeamRT>>,
+    //     alloc: AllocationType,
+    // ) -> SharedMemoryRegionHandle<T> {
+    //     SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
+    // }
+
     pub(crate) fn new(
         size: usize,
         team: Pin<Arc<LamellarTeamRT>>,
         alloc: AllocationType,
-    ) -> SharedMemoryRegion<T> {
-        SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
+    ) -> SharedMemoryRegionHandle<T> {
+        // println!("creating new shared mem region {:?} {:?}",size,alloc);
+
+        SharedMemoryRegionHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                team.async_barrier().await;
+                let mut mr_t =
+                    MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
+                while let Err(_e) = mr_t {
+                    async_std::task::yield_now().await;
+                    team.lamellae.alloc_pool(size * std::mem::size_of::<T>());
+                    mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
+                }
+
+                let mr = unsafe {
+                    mr_t.expect("enough memory should have been allocated")
+                        .to_base::<u8>()
+                };
+                SharedMemoryRegion {
+                    mr: Darc::async_try_new_with_drop(
+                        team.clone(),
+                        mr,
+                        crate::darc::DarcMode::Darc,
+                        None,
+                    )
+                    .await
+                    .expect("memregions can only be created on a member of the team"),
+                    sub_region_offset: 0,
+                    sub_region_size: size,
+                    phantom: PhantomData,
+                }
+            }),
+        }
     }
 
     pub(crate) fn try_new(
         size: usize,
         team: Pin<Arc<LamellarTeamRT>>,
         alloc: AllocationType,
-    ) -> Result<SharedMemoryRegion<T>, anyhow::Error> {
+    ) -> FallibleSharedMemoryRegionHandle<T> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
-        Ok(SharedMemoryRegion {
-            mr: Darc::try_new(
-                team.clone(),
-                MemoryRegion::try_new(
-                    size * std::mem::size_of::<T>(),
-                    team.lamellae.clone(),
-                    alloc,
-                )?,
-                crate::darc::DarcMode::Darc,
-            )
-            .expect("memregions can only be created on a member of the team"),
-            sub_region_offset: 0,
-            sub_region_size: size,
-            phantom: PhantomData,
-        })
+
+        FallibleSharedMemoryRegionHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(async move {
+                team.async_barrier().await;
+                let mr_t: MemoryRegion<T> =
+                    MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
+                let mr = unsafe { mr_t.to_base::<u8>() };
+                let res: Result<SharedMemoryRegion<T>, anyhow::Error> = Ok(SharedMemoryRegion {
+                    mr: Darc::async_try_new_with_drop(
+                        team.clone(),
+                        mr,
+                        crate::darc::DarcMode::Darc,
+                        None,
+                    )
+                    .await
+                    .expect("memregions can only be created on a member of the team"),
+                    sub_region_offset: 0,
+                    sub_region_size: size,
+                    phantom: PhantomData,
+                });
+                res
+            }),
+        }
     }
 }
 
@@ -294,7 +345,7 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 }
 
 impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::SharedMemRegion(smr.clone())
     }
 }
@@ -307,7 +358,7 @@ impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    fn team_from(smr: &SharedMemoryRegion<T>, _team: &std::pin::Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: &SharedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::SharedMemRegion(smr.clone())
     }
 }
@@ -315,7 +366,7 @@ impl<T: Dist> TeamFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn team_try_from(
         smr: &SharedMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaOutput::SharedMemRegion(smr.clone()))
     }
@@ -324,7 +375,7 @@ impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaOutput<T>
 impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(
         smr: &SharedMemoryRegion<T>,
-        _team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::SharedMemRegion(smr.clone()))
     }

@@ -1,3 +1,4 @@
+use crate::config;
 use crate::lamellae::comm::*;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::{
@@ -311,10 +312,7 @@ impl ShmemComm {
             Ok(val) => val.parse::<usize>().unwrap(),
             Err(_e) => 0,
         };
-        if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
-            let size = size
-                .parse::<usize>()
-                .expect("invalid memory size, please supply size in bytes");
+        if let Some(size) = config().heap_size {
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
 
@@ -351,6 +349,10 @@ impl ShmemComm {
         };
         shmem.alloc.write()[0].init(addr, mem_per_pe);
         shmem
+    }
+
+    pub(crate) fn heap_size() -> usize {
+        SHMEM_SIZE.load(Ordering::SeqCst)
     }
 }
 
@@ -425,7 +427,7 @@ impl CommOps for ShmemComm {
         // if let Some(addr) = self.alloc.try_malloc(size) {
         //     Some(addr)
         // } else {
-        //     println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_MEM_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
+        //     println!("[WARNING] out of memory: (work in progress on a scalable solution, as a work around try setting the LAMELLAR_HEAP_SIZE envrionment variable (current size = {:?} -- Note: LamellarLocalArrays are currently allocated out of this pool",SHMEM_SIZE.load(Ordering::SeqCst));
         //     None
         // }
     }
@@ -571,9 +573,9 @@ impl CommOps for ShmemComm {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
         self.get(pe, src_addr, dst_addr);
     }
-    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        self.get(pe, src_addr + self.base_addr(), dst_addr);
-    }
+    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    //     self.get(pe, src_addr + self.base_addr(), dst_addr);
+    // }
     fn force_shutdown(&self) {}
 }
 
@@ -587,7 +589,7 @@ impl Drop for ShmemComm {
             println!("dropping rofi -- memory in use {:?}", self.occupied());
         }
         if self.alloc.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
         }
     }
 }
@@ -604,7 +606,7 @@ pub(crate) struct ShmemData {
 }
 
 impl ShmemData {
-    pub fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData, anyhow::Error> {
+    pub(crate) fn new(shmem_comm: Arc<Comm>, size: usize) -> Result<ShmemData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr = shmem_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;

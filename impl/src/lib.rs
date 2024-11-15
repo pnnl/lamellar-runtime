@@ -222,7 +222,6 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
     let args =
         parse_macro_input!(args with Punctuated<syn::Meta, syn::Token![,]>::parse_terminated);
-    // println!("here");
     derive_am_data(input, args, quote! {__lamellar}, false, false, false)
 }
 
@@ -277,7 +276,7 @@ pub fn AmGroupData(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, quote! {__lamellar}, false, true, false)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -287,7 +286,7 @@ pub fn AmDataRT(args: TokenStream, input: TokenStream) -> TokenStream {
     derive_am_data(input, args, quote! {crate}, false, false, true)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[allow(non_snake_case)]
 #[proc_macro_error]
 #[proc_macro_attribute]
@@ -477,7 +476,7 @@ pub fn am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, false, false, true)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -525,21 +524,21 @@ pub fn local_am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, true, false, false)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn rt_am(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, false, true, false)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn rt_am_local(args: TokenStream, input: TokenStream) -> TokenStream {
     parse_am(args, input, true, true, false)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro_derive(Dist)]
 pub fn derive_dist(input: TokenStream) -> TokenStream {
@@ -571,7 +570,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
 //     array_reduce::__generate_reductions_for_type(item)
 // }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
@@ -599,14 +598,14 @@ pub fn generate_reductions_for_type_rt(item: TokenStream) -> TokenStream {
 //     array_ops::__generate_ops_for_type(item)
 // }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     array_ops::__generate_ops_for_type_rt(item)
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[proc_macro_error]
 #[proc_macro]
 pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
@@ -706,7 +705,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///     let world = LamellarWorldBuilder::new().build(); // the world
 ///     
 ///     let array =  // the atomic distributed array
-///         AtomicArray::<Custom>::new(&world,3,Distribution::Block);
+///         AtomicArray::<Custom>::new(&world,3,Distribution::Block).block();
 ///
 ///     println!();
 ///     println!("initialize a length-3 array:\n");  // print the entries
@@ -876,7 +875,7 @@ impl Parse for AmGroups {
 /// [2,2] on all PEs
 /// ```
 /// ### Static Members
-/// In the above code, the `ExampleAm` stuct contains a member that is a [crate::darc::Darc](Darc) (Distributed Arc).
+/// In the above code, the `ExampleAm` stuct contains a member that is a `Darc` (Distributed Arc).
 /// In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
 /// While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
 /// a Darc can become expensive.
@@ -885,7 +884,7 @@ impl Parse for AmGroups {
 /// that every Active Message in the group is using a reference to the same Darc. In this case, we simply would only need
 /// to serialize the Darc once for each PE it gets sent to.
 ///
-/// This can be accomplished by using the [AmData] attribute macro with the `static` keyword passed in as an argument as illustrated below:
+/// This can be accomplished by using the [macro@AmData] attribute macro with the `static` keyword passed in as an argument as illustrated below:
 /// ```
 /// use lamellar::active_messaging::prelude::*;
 /// use lamellar::darc::prelude::*;

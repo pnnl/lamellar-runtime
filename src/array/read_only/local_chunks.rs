@@ -4,7 +4,10 @@ use crate::array::read_only::*;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 
+use self::iterator::IterLockFuture;
 
+/// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [ReadOnlyArray]
+/// This struct is created by calling [ReadOnlyArray::local_chunks]
 #[derive(Clone)]
 pub struct ReadOnlyLocalChunks<T: Dist> {
     chunk_size: usize,
@@ -13,8 +16,11 @@ pub struct ReadOnlyLocalChunks<T: Dist> {
     array: ReadOnlyArray<T>,
 }
 
-impl<T: Dist> IterClone for ReadOnlyLocalChunks<T> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<T: Dist> InnerIter for ReadOnlyLocalChunks<T> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         ReadOnlyLocalChunks {
             chunk_size: self.chunk_size,
             index: self.index,
@@ -24,12 +30,10 @@ impl<T: Dist> IterClone for ReadOnlyLocalChunks<T> {
     }
 }
 
-
-
 impl<T: Dist + 'static> LocalIterator for ReadOnlyLocalChunks<T> {
-    type Item =  &'static [T];
+    type Item = &'static [T];
     type Array = ReadOnlyArray<T>;
-    fn init(&self, start_i: usize, cnt: usize) -> Self {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Self {
         //these are with respect to the single elements, not chunk indexing and cnt
         let end_i = std::cmp::min(
             (start_i + cnt) * self.chunk_size,
@@ -60,10 +64,12 @@ impl<T: Dist + 'static> LocalIterator for ReadOnlyLocalChunks<T> {
             //     "start_i {} end_i {} self.index {} self.end_index {}",
             //     start_i, end_i, self.index, self.end_index
             // );
-            Some(unsafe{std::slice::from_raw_parts_mut(
-                self.array.array.local_as_mut_ptr().offset(start_i as isize),
-                end_i - start_i,
-            )})
+            Some(unsafe {
+                std::slice::from_raw_parts_mut(
+                    self.array.array.local_as_mut_ptr().offset(start_i as isize),
+                    end_i - start_i,
+                )
+            })
         } else {
             None
         }
@@ -88,6 +94,23 @@ impl<T: Dist + 'static> IndexedLocalIterator for ReadOnlyLocalChunks<T> {
 }
 
 impl<T: Dist> ReadOnlyArray<T> {
+    /// immutably iterate over fixed sized chunks(slices) of the local data of this array.
+    /// the returned iterator is a lamellar [LocalIterator]
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::array::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,40,Distribution::Block).block();
+    /// let my_pe = world.my_pe();
+    ///
+    /// let _ = array.local_chunks(5).enumerate().for_each(move|(i,chunk)| {
+    ///     println!("PE: {my_pe} i: {i} chunk: {chunk:?}");
+    /// }).spawn();
+    /// array.wait_all();
+    ///
+    /// ```
     pub fn local_chunks(&self, chunk_size: usize) -> ReadOnlyLocalChunks<T> {
         ReadOnlyLocalChunks {
             chunk_size,

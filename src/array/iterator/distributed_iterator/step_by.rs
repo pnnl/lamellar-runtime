@@ -1,4 +1,4 @@
-use crate::array::iterator::distributed_iterator::*;
+use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
 //skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
 #[derive(Clone, Debug)]
@@ -8,8 +8,11 @@ pub struct StepBy<I> {
     add_one: usize, //if we dont align perfectly we will need to add 1 to our iteration index calculation
 }
 
-impl<I: IterClone> IterClone for StepBy<I> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter> InnerIter for StepBy<I> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        None
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         StepBy {
             iter: self.iter.iter_clone(Sealed),
             step_size: self.step_size,
@@ -38,10 +41,10 @@ where
 {
     type Item = <I as DistributedIterator>::Item;
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, in_start_i: usize, cnt: usize) -> StepBy<I> {
+    fn init(&self, in_start_i: usize, cnt: usize, _s: Sealed) -> StepBy<I> {
         let mut iter = self
             .iter
-            .init(in_start_i * self.step_size, cnt * self.step_size);
+            .init(in_start_i * self.step_size, cnt * self.step_size, _s);
         let mut offset_index = 0;
 
         // make sure we start from a valid step interval element

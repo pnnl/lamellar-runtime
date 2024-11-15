@@ -5,7 +5,7 @@ macro_rules! into_test {
         let _num_pes = world.num_pes();
         let _my_pe = world.my_pe();
 
-        let array = $array1::<u32>::new(world.clone(), 1000, Distribution::Block);
+        let array = $array1::<u32>::new(world.clone(), 1000, Distribution::Block).block();
         let _array2: $array2<u32> = array.into();
     }};
 }

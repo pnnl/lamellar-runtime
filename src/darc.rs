@@ -1,5 +1,5 @@
-//! Distributed Atomic Reference Counter-- a distributed extension of an [`Arc`][std::sync::Arc] called a [Darc][crate::darc].
-//! The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
+//! Distributed Atomic Reference Counter-- a distributed extension of an [`Arc`] called a [Darc][crate::darc].
+//! The atomic reference counter, [`Arc`], is a backbone of safe
 //! concurrent programming in Rust, and, in particular, *shared ownership*.
 //!
 //! The `Darc` provides a similar abstraction within a *distributed* environment.
@@ -36,17 +36,16 @@
 //!     let world = LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let num_pes = world.num_pes();
-//!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
-//!     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+//!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+//!     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
 //!     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 //!     world.wait_all(); // wait for my active message to return
 //!     world.barrier(); //at this point all updates will have been performed
 //!     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 //! }
 ///```
-use async_lock::RwLock;
 use core::marker::PhantomData;
-use futures::Future;
+use futures_util::future::join_all;
 use serde::{Deserialize, Deserializer};
 use std::cmp::PartialEq;
 use std::fmt;
@@ -55,34 +54,40 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 // use std::time::Instant;
 
 // //use tracing::*;
 
 use crate::active_messaging::{AMCounters, RemotePtr};
 use crate::barrier::Barrier;
+use crate::env_var::config;
 use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
+use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::lamellar_world::LAMELLAES;
-// use crate::scheduler::SchedulerQueue;
+use crate::scheduler::LamellarTask;
+use crate::warnings::RuntimeWarning;
 use crate::{IdError, LamellarEnv, LamellarTeam};
 
-#[doc(hidden)]
+/// prelude for the darc module
 pub mod prelude;
 
 pub(crate) mod local_rw_darc;
 pub use local_rw_darc::LocalRwDarc;
 
 pub(crate) mod global_rw_darc;
-use global_rw_darc::DistRwLock;
 pub use global_rw_darc::GlobalRwDarc;
+
+use self::handle::{DarcHandle, IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
+
+pub(crate) mod handle;
 
 static DARC_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[repr(u8)]
 #[derive(PartialEq, Debug, Copy, Clone)]
 pub(crate) enum DarcMode {
-    Dropped,
     Darc,
     LocalRw,
     GlobalRw,
@@ -94,6 +99,9 @@ pub(crate) enum DarcMode {
     NativeAtomicArray,
     LocalLockArray,
     GlobalLockArray,
+    Dropping,
+    Dropped,
+    RestartDrop,
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -134,15 +142,15 @@ pub struct DarcInner<T> {
     am_counters: *const AMCounters,
     team: *const LamellarTeamRT,
     item: *const T,
-    drop: Option<fn(&mut T)>,
+    drop: Option<fn(&mut T) -> bool>,
     valid: AtomicBool,
 }
-unsafe impl<T: Send> Send for DarcInner<T> {}
-unsafe impl<T: Sync> Sync for DarcInner<T> {}
+unsafe impl<T> Send for DarcInner<T> {} //we cant create DarcInners without going through the Darc interface which enforces  Sync+Send
+unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without going through the Darc interface which enforces  Sync+Send
 
 /// Distributed atomic reference counter
 ///
-/// The atomic reference counter, [`Arc`][std::sync::Arc], is a backbone of safe
+/// The atomic reference counter, [`Arc`], is a backbone of safe
 /// concurrent programming in Rust, and, in particular, *shared ownership*.
 ///
 /// The `Darc` provides a similar abstraction within a *distributed* environment.
@@ -180,8 +188,8 @@ unsafe impl<T: Sync> Sync for DarcInner<T> {}
 ///     let world = LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).unwrap();
-///     world.exec_am_all(DarcAm {counter: darc_counter.clone()});
+///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+///     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
 ///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
 ///     world.wait_all(); // wait for my active message to return
 ///     world.barrier(); //at this point all updates will have been performed
@@ -192,8 +200,8 @@ pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
     src_pe: usize,
 }
-unsafe impl<T: Send> Send for Darc<T> {}
-unsafe impl<T: Sync> Sync for Darc<T> {}
+unsafe impl<T: Sync + Send> Send for Darc<T> {}
+unsafe impl<T: Sync + Send> Sync for Darc<T> {}
 
 impl<T> LamellarEnv for Darc<T> {
     fn my_pe(&self) -> usize {
@@ -234,7 +242,53 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
     }
 }
 
-#[doc(hidden)]
+//#[doc(hidden)]
+/// `WeakDarc`` is a version of Darc that holds a non-owning reference to the managed object.
+/// (similar to [`Weak`](std::sync::Weak)).
+/// The managed object can be accessed by calling [`upgrade`](WeakDarc::upgrade), wich returns and ``Option<Darc<T>>``
+///
+/// A `WeakDarc` does not count toward ownership, thus it will not prevent the value stored in the allocation from being dropped,
+/// and it makes no guarantees itself about the value still being present, and thus can return `None` from `upgrade()`.
+/// Note that a `WeakDarc` does prevent the allocation itself from being deallocated.
+///
+/// The typical way to obtian a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
+///
+/// # Examples
+///```
+/// use lamellar::active_messaging::prelude::*;
+/// use lamellar::darc::prelude::*;
+/// use std::sync::atomic::{AtomicUsize, Ordering};
+/// use std::sync::Arc;
+///
+/// #[lamellar::AmData(Clone)]
+/// struct DarcAm {
+///     counter: Darc<AtomicUsize>, //each pe has a local atomicusize
+/// }
+///
+/// #[lamellar::am]
+/// impl LamellarAm for DarcAm {
+///     async fn exec(self) {
+///         self.counter.fetch_add(1, Ordering::SeqCst); //this only updates atomic on the executing pe
+///     }
+///  }
+///
+/// fn main(){
+///     let world = LamellarWorldBuilder::new().build();
+///     let my_pe = world.my_pe();
+///     let num_pes = world.num_pes();
+///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+///     let weak = Darc::downgrade(&darc_counter);
+///     match weak.upgrade(){
+///         Some(counter) => {
+///             counter.fetch_add(my_pe, Ordering::SeqCst);
+///         }
+///         None => {
+///             println!("counter is gone");
+///         }   
+///     }
+/// }
+///```
+///
 #[derive(Debug)]
 pub struct WeakDarc<T: 'static> {
     inner: *mut DarcInner<T>,
@@ -244,6 +298,8 @@ unsafe impl<T: Send> Send for WeakDarc<T> {}
 unsafe impl<T: Sync> Sync for WeakDarc<T> {}
 
 impl<T> WeakDarc<T> {
+    /// attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped
+    /// returns `None` if the value has been dropped
     pub fn upgrade(&self) -> Option<Darc<T>> {
         let inner = unsafe { &*self.inner };
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -300,7 +356,7 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
     }
 }
 
-impl<T> DarcInner<T> {
+impl<T: 'static> DarcInner<T> {
     fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         unsafe {
             Arc::increment_strong_count(self.team);
@@ -351,7 +407,7 @@ impl<T> DarcInner<T> {
         unsafe { &(*self.item) }
     }
 
-    fn send_finished(&self) -> Vec<Pin<Box<dyn Future<Output = ()> + Send>>> {
+    fn send_finished(&self) -> Vec<LamellarTask<()>> {
         let ref_cnts = unsafe {
             std::slice::from_raw_parts_mut(self.ref_cnt_addr as *mut AtomicUsize, self.num_pes)
         };
@@ -376,7 +432,7 @@ impl<T> DarcInner<T> {
                 // );
                 // println!("[{:?}] {:?}", std::thread::current().id(), self);
                 reqs.push(
-                    team.exec_am_pe_tg(
+                    team.spawn_am_pe_tg(
                         pe,
                         FinishedAm {
                             cnt: cnt,
@@ -385,7 +441,7 @@ impl<T> DarcInner<T> {
                         },
                         Some(self.am_counters()),
                     )
-                    .into_future(),
+                    .spawn(),
                 );
             }
         }
@@ -416,10 +472,83 @@ impl<T> DarcInner<T> {
     //     );
     // }
 
+    async fn wait_on_state(
+        inner: WrappedInner<T>,
+        mode_refs: &[u8],
+        state: u8,
+        extra_cnt: usize,
+        reset: bool,
+    ) -> bool {
+        for pe in mode_refs.iter() {
+            let timer = std::time::Instant::now();
+            while *pe != state as u8 {
+                if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
+                    join_all(inner.send_finished()).await;
+                }
+                if !reset && timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+                    let ref_cnts_slice = unsafe {
+                        std::slice::from_raw_parts_mut(
+                            inner.ref_cnt_addr as *mut usize,
+                            inner.num_pes,
+                        )
+                    };
+                    println!("[{:?}][{:?}][WARNING] -- Potential deadlock detected.\n\
+                        The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
+                        The object is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
+                        An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
+                        The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        To view backtrace set RUST_LIB_BACKTRACE=1\n\
+                        {}",
+                        inner.my_pe,
+                        std::thread::current().id(),
+                        unsafe {
+                            &std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes)
+                        },
+                        inner.local_cnt.load(Ordering::SeqCst),
+                        inner.dist_cnt.load(Ordering::SeqCst),
+                        config().deadlock_timeout,
+                        std::backtrace::Backtrace::capture()
+                    );
+                }
+                if reset && timer.elapsed().as_secs_f64() > config().deadlock_timeout / 2.0 {
+                    return false;
+                }
+                if reset && mode_refs.iter().any(|x| *x == DarcMode::RestartDrop as u8) {
+                    return false;
+                }
+                async_std::task::yield_now().await;
+            }
+        }
+        true
+    }
+
+    fn broadcast_state(
+        inner: WrappedInner<T>,
+        team: Pin<Arc<LamellarTeamRT>>,
+        mode_refs: &mut [u8],
+        state: u8,
+    ) {
+        unsafe {
+            (*(((&mut mode_refs[inner.my_pe]) as *mut u8) as *mut AtomicU8)) //this should be fine given that DarcMode uses Repr(u8)
+                .store(state as u8, Ordering::SeqCst)
+        };
+        let rdma = &team.lamellae;
+        for pe in team.arch.team_iter() {
+            // println!("darc block_on_outstanding put 3");
+            rdma.iput(
+                pe,
+                &mode_refs[inner.my_pe..=inner.my_pe],
+                inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
+            );
+        }
+    }
+
     async fn block_on_outstanding(inner: WrappedInner<T>, state: DarcMode, extra_cnt: usize) {
         let team = inner.team();
         let mode_refs =
             unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
+        let orig_state = mode_refs[inner.my_pe];
+        inner.await_all().await;
         if team.num_pes() == 1 {
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                 async_std::task::yield_now().await;
@@ -450,10 +579,18 @@ impl<T> DarcInner<T> {
 
             // let rel_addr = inner.inner.as_ptr() as *const _ as usize - team.lamellae.base_addr();
 
+            while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
+                async_std::task::yield_now().await;
+            }
+            join_all(inner.send_finished()).await;
+
             // println!(
             //     "[{:?}] entering initial block_on barrier()",
             //     std::thread::current().id()
             // );
+            if !Self::wait_on_state(inner.clone(), mode_refs, orig_state, extra_cnt, false).await {
+                panic!("deadlock waiting for original state");
+            }
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
             barrier_fut.await;
             // println!(
@@ -462,12 +599,56 @@ impl<T> DarcInner<T> {
             // );
 
             while outstanding_refs {
+                if mode_refs.iter().any(|x| *x == DarcMode::RestartDrop as u8) {
+                    Self::broadcast_state(
+                        inner.clone(),
+                        team.clone(),
+                        mode_refs,
+                        DarcMode::RestartDrop as u8,
+                    );
+                    if !(Self::wait_on_state(
+                        inner.clone(),
+                        mode_refs,
+                        DarcMode::RestartDrop as u8,
+                        extra_cnt,
+                        false,
+                    )
+                    .await)
+                    {
+                        panic!("deadlock");
+                    }
+                    Self::broadcast_state(inner.clone(), team.clone(), mode_refs, orig_state);
+                    // team.scheduler.submit_task(async move {
+                    Box::pin(DarcInner::block_on_outstanding(
+                        inner.clone(),
+                        state,
+                        extra_cnt,
+                    ))
+                    .await;
+                    // });
+                    return;
+                }
                 outstanding_refs = false;
+                // these hopefully all get set to non zero later otherwise we still need to wait
+                for id in &mut *barrier_slice {
+                    *id = 0;
+                }
                 let old_barrier_id = barrier_id; //we potentially will set barrier_id to 0 but want to maintiain the previously highest value
                 while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                     async_std::task::yield_now().await;
                 }
-                inner.send_finished();
+                // println!("before send finished");
+                join_all(inner.send_finished()).await;
+                // println!("after send finished");
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
+                // println!("after barrier2");
+                // println!(
+                //     "[{:?}].0 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
 
                 let mut old_ref_cnts = ref_cnts_slice.to_vec();
                 let old_local_cnt = inner.total_local_cnt.load(Ordering::SeqCst);
@@ -493,7 +674,8 @@ impl<T> DarcInner<T> {
                         //     inner.my_pe * std::mem::size_of::<usize>(),
                         //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
                         // );
-                        rdma.put(
+                        // println!("darc block_on_outstanding put 1");
+                        rdma.iput(
                             send_pe,
                             ref_cnt_u8,
                             inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>(), //this is barrier_ref_cnt_slice
@@ -506,6 +688,12 @@ impl<T> DarcInner<T> {
                 rdma.flush();
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
+                // println!(
+                //     "[{:?}].1 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
                 outstanding_refs |= old_local_cnt != inner.total_local_cnt.load(Ordering::SeqCst);
                 // if outstanding_refs {
                 //     println!(
@@ -542,13 +730,38 @@ impl<T> DarcInner<T> {
                 //         old_ref_cnts
                 //     );
                 // }
+                // println!(
+                //     "[{:?}].2 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
                 if outstanding_refs {
                     // println!("reseting barrier_id");
                     barrier_id = 0;
                 }
+                // println!(
+                //     "[{:?}].3 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
                 rdma.flush();
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
+                // println!(
+                //     "[{:?}].4 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
+
+                let barrier_id_slice = unsafe {
+                    std::slice::from_raw_parts_mut(
+                        &mut barrier_id as *mut usize as *mut u8,
+                        std::mem::size_of::<usize>(),
+                    )
+                };
 
                 for pe in 0..inner.num_pes {
                     let send_pe = team.arch.single_iter(pe).next().unwrap();
@@ -556,28 +769,41 @@ impl<T> DarcInner<T> {
                     //     "[{:?}] {rel_addr:x} sending {barrier_id} ({barrier_id_slice:?}) to pe {pe} ",
                     //     std::thread::current().id(),
                     // );
-                    let barrier_id_slice = unsafe {
-                        std::slice::from_raw_parts_mut(
-                            &mut barrier_id as *mut usize as *mut u8,
-                            std::mem::size_of::<usize>(),
-                        )
-                    };
-                    rdma.put(
+
+                    // println!("darc block_on_outstanding put 2");
+                    rdma.iput(
                         send_pe,
                         barrier_id_slice,
                         inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
                     );
                 }
+                //maybe we need to change the above to a get?
                 rdma.flush();
+                // println!(
+                //     "[{:?}].5 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
+                // println!(
+                //     "[{:?}].6 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
                 for id in &*barrier_slice {
                     outstanding_refs |= *id == 0;
                 }
                 // if outstanding_refs {
                 //     println!("[{:?}] {rel_addr:x}  not all pes ready mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
                 //     barrier_slice: {barrier_slice:?} ref_cnts_slice: {ref_cnts_slice:?} old_ref_cnts: {old_ref_cnts:?} old_local_cnt: {old_local_cnt:?} local_cnt: {:?} old_dist_cnt: {old_dist_cnt:?} dist_cnt: {:?}
-                //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(),inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
+                //     barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(),inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
+                // } else {
+                //     println!("[{:?}] {rel_addr:x} i think all pes ready! mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
+                //     barrier_slice: {barrier_slice:?} ref_cnts_slice: {ref_cnts_slice:?} old_ref_cnts: {old_ref_cnts:?} old_local_cnt: {old_local_cnt:?} local_cnt: {:?} old_dist_cnt: {old_dist_cnt:?} dist_cnt: {:?}
+                //     barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(),inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
                 // }
                 // if dist_cnts_changed || !outstanding_refs {
                 //     println!("[{:?}] {rel_addr:x}  mode_refs: {mode_refs:?} prev_ref_cnts: {prev_ref_cnts:?} barrier_id: {barrier_id:?} barrier_id_slice: {barrier_id_slice:?} barrier_ref_cnt_slice: {barrier_ref_cnt_slice:?}
@@ -585,68 +811,72 @@ impl<T> DarcInner<T> {
                 //     dist_cnts_changed: {dist_cnts_changed:?} barrier_sum: {barrier_sum:?} old_barrier_id: {old_barrier_id:?} ", std::thread::current().id(), inner.total_local_cnt.load(Ordering::SeqCst), inner.total_dist_cnt.load(Ordering::SeqCst));
                 // }
                 barrier_id = old_barrier_id + 1;
-                if outstanding_refs {
-                    // println!(
-                    //     "[{:?}] still outstanding, exec a task!",
-                    //     std::thread::current().id()
-                    // );
-                    // team.scheduler.exec_task();
-                    async_std::task::yield_now().await;
-                }
+
+                // if outstanding_refs {
+                //     // println!(
+                //     //     "[{:?}] still outstanding, exec a task!",
+                //     //     std::thread::current().id()
+                //     // );
+                //     // team.scheduler.exec_task();
+                //     async_std::task::yield_now().await;
+                // }
                 prev_ref_cnts = old_ref_cnts;
+                // println!(
+                //     "[{:?}].7 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
+                let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
+                barrier_fut.await;
+                // println!(
+                //     "[{:?}].8 barrier id = {:?} barrier_slice = {:?}",
+                //     std::thread::current().id(),
+                //     barrier_id,
+                //     barrier_slice
+                // );
             }
             // println!(
-            //     "[{:?}] {rel_addr:x}  all outstanding refs are resolved",
+            //     "[{:?}]  all outstanding refs are resolved",
             //     std::thread::current().id()
+            // );
+            // println!(
+            //     "[{:?}].9 barrier id = {:?} barrier_slice = {:?}",
+            //     std::thread::current().id(),
+            //     barrier_id,
+            //     barrier_slice
             // );
             // inner.debug_print();
             // println!("[{:?}] {:?}", std::thread::current().id(), inner);
-
-            unsafe {
-                (*(((&mut mode_refs[inner.my_pe]) as *mut u8) as *mut AtomicU8)) //this should be fine given that DarcMode uses Repr(u8)
-                    .store(state as u8, Ordering::SeqCst)
-            };
-            let rdma = &team.lamellae;
-            for pe in team.arch.team_iter() {
-                rdma.put(
-                    pe,
-                    &mode_refs[inner.my_pe..=inner.my_pe],
-                    inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
+            Self::broadcast_state(inner.clone(), team.clone(), mode_refs, state as u8);
+            if !Self::wait_on_state(inner.clone(), mode_refs, state as u8, extra_cnt, true).await {
+                Self::broadcast_state(
+                    inner.clone(),
+                    team.clone(),
+                    mode_refs,
+                    DarcMode::RestartDrop as u8,
                 );
-            }
-            for pe in mode_refs.iter() {
-                let mut timer = std::time::Instant::now();
-                while *pe != state as u8 {
-                    if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
-                        inner.send_finished();
-                    }
-                    if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-                        let ref_cnts_slice = unsafe {
-                            std::slice::from_raw_parts_mut(
-                                inner.ref_cnt_addr as *mut usize,
-                                inner.num_pes,
-                            )
-                        };
-                        println!("[{:?}][WARNING] -- Potential deadlock detected.\n\
-                    The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-                    The object is likely a {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-                    An example where this can occur can be found at https://docs.rs/lamellar/latest/lamellar/array/struct.ReadOnlyArray.html#method.into_local_lock\n\
-                    The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
-                    To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                    {}",
-                    std::thread::current().id(),
-                    unsafe {
-                        &std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes)
-                    },
-                    inner.local_cnt.load(Ordering::SeqCst),
-                    inner.dist_cnt.load(Ordering::SeqCst),
-                    *crate::DEADLOCK_TIMEOUT,
-                    std::backtrace::Backtrace::capture()
-                );
-                        timer = std::time::Instant::now();
-                    }
-                    async_std::task::yield_now().await;
+                if !(Self::wait_on_state(
+                    inner.clone(),
+                    mode_refs,
+                    DarcMode::RestartDrop as u8,
+                    extra_cnt,
+                    false,
+                )
+                .await)
+                {
+                    panic!("deadlock");
                 }
+                Self::broadcast_state(inner.clone(), team.clone(), mode_refs, orig_state);
+                // team.scheduler.submit_task(async move {
+                Box::pin(DarcInner::block_on_outstanding(
+                    inner.clone(),
+                    state,
+                    extra_cnt,
+                ))
+                .await;
+                // });
+                return;
             }
 
             // self.debug_print();
@@ -658,33 +888,44 @@ impl<T> DarcInner<T> {
         // self.debug_print();
     }
 
-    // fn wait_all(&self) {
-    //     let mut temp_now = Instant::now();
-    //     // let mut first = true;
-    //     let team = self.team();
-    //     // team.flush();
-    //     let am_counters = self.am_counters();
-    //     while am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0 {
-    //         // std::thread::yield_now();
-    //         team.scheduler.exec_task(); //mmight as well do useful work while we wait
-    //         if temp_now.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-    //             //|| first{
-    //             // println!(
-    //             //     "[{:?}] in darc wait_all mype: {:?} cnt: {:?} {:?}",
-    //             //     std::thread::current().id(),
-    //             //     team.world_pe,
-    //             //     am_counters.send_req_cnt.load(Ordering::SeqCst),
-    //             //     am_counters.outstanding_reqs.load(Ordering::SeqCst),
-    //             // );
-    //             temp_now = Instant::now();
-    //             // first = false;
-    //         }
-    //     }
-    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
-    // }
+    pub(crate) async fn await_all(&self) {
+        let mut temp_now = Instant::now();
+        let am_counters = self.am_counters();
+        while self.team().panic.load(Ordering::SeqCst) == 0
+            && (am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
+        {
+            // std::thread::yield_now();
+            // self.flush();
+            async_std::task::yield_now().await;
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                println!(
+                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    self.team().world_pe,
+                    am_counters.send_req_cnt.load(Ordering::SeqCst),
+                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                );
+                temp_now = Instant::now();
+            }
+        }
+        if am_counters.send_req_cnt.load(Ordering::SeqCst)
+            != am_counters.launched_req_cnt.load(Ordering::SeqCst)
+        {
+            println!(
+                "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                self.team().world_pe,
+                am_counters.send_req_cnt.load(Ordering::SeqCst),
+                am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                am_counters.launched_req_cnt.load(Ordering::SeqCst)
+            );
+            RuntimeWarning::UnspawnedTask(
+                "`await_all` before all tasks/active messages have been spawned",
+            )
+            .print();
+        }
+    }
 }
 
-impl<T> fmt::Debug for DarcInner<T> {
+impl<T: 'static> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -707,7 +948,8 @@ impl<T> fmt::Debug for DarcInner<T> {
 }
 
 impl<T> Darc<T> {
-    #[doc(hidden)]
+    //#[doc(hidden)]
+    /// downgrade a darc to a weak darc
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
         // println!("downgrading darc ");
         // the_darc.print();
@@ -722,7 +964,7 @@ impl<T> Darc<T> {
         // the_darc.print();
         weak
     }
-    fn inner(&self) -> &DarcInner<T> {
+    pub(crate) fn inner(&self) -> &DarcInner<T> {
         unsafe { self.inner.as_ref().expect("invalid darc inner ptr") }
     }
     fn inner_mut(&self) -> &mut DarcInner<T> {
@@ -809,7 +1051,16 @@ impl<T> Darc<T> {
     }
 }
 
-impl<T> Darc<T> {
+fn calc_padding(addr: usize, align: usize) -> usize {
+    let rem = addr % align;
+    if rem == 0 {
+        0
+    } else {
+        align - rem
+    }
+}
+
+impl<T: Send + Sync> Darc<T> {
     #[doc(alias = "Collective")]
     /// Constructs a new `Darc<T>` on the PEs specified by team.
     ///
@@ -827,25 +1078,46 @@ impl<T> Darc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = Darc::new(&world,5).expect("PE in world team");
+    /// let five = Darc::new(&world,5).block().expect("PE in world team");
     /// ```
-    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
-        Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
+    pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> DarcHandle<T> {
+        let team = team.into().team.clone();
+        DarcHandle {
+            team: team.clone(),
+            launched: false,
+            creation_future: Box::pin(Darc::async_try_new_with_drop(
+                team,
+                item,
+                DarcMode::Darc,
+                None,
+            )),
+        }
     }
+    // pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> Result<Darc<T>, IdError> {
+    //     Darc::try_new_with_drop(team, item, DarcMode::Darc, None)
+    // }
 
-    pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(
+    // pub(crate) async fn async_try_new<U: Into<IntoLamellarTeam>>(
+    //     team: U,
+    //     item: T,
+    //     state: DarcMode,
+    // ) -> Result<Darc<T>, IdError> {
+    //     Darc::async_try_new_with_drop(team, item, state, None).await
+    // }
+
+    // pub(crate) fn try_new<U: Into<IntoLamellarTeam>>(
+    //     team: U,
+    //     item: T,
+    //     state: DarcMode,
+    // ) -> Result<Darc<T>, IdError> {
+    //     Darc::try_new_with_drop(team, item, state, None)
+    // }
+
+    pub(crate) async fn async_try_new_with_drop<U: Into<IntoLamellarTeam>>(
         team: U,
         item: T,
         state: DarcMode,
-    ) -> Result<Darc<T>, IdError> {
-        Darc::try_new_with_drop(team, item, state, None)
-    }
-
-    pub(crate) fn try_new_with_drop<U: Into<IntoLamellarTeam>>(
-        team: U,
-        item: T,
-        state: DarcMode,
-        drop: Option<fn(&mut T)>,
+        drop: Option<fn(&mut T) -> bool>,
     ) -> Result<Darc<T>, IdError> {
         let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
@@ -856,15 +1128,37 @@ impl<T> Darc<T> {
             AllocationType::Sub(team_rt.get_pes())
         };
 
-        let size = std::mem::size_of::<DarcInner<T>>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-            + team_rt.num_pes * std::mem::size_of::<usize>()
-            + team_rt.num_pes * std::mem::size_of::<usize>();
+        //The DarcInner data structure
+        let mut size = std::mem::size_of::<DarcInner<T>>();
+
+        // Ref Cnt Array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        // total ref cnt array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let total_ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        // mode array
+        let padding = calc_padding(size, std::mem::align_of::<DarcMode>());
+        let mode_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<DarcMode>();
+
+        //mode ref cnt array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let mode_ref_cnt_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+        //mode_barrier array
+        let padding = calc_padding(size, std::mem::align_of::<usize>());
+        let mode_barrier_offset = size + padding;
+        size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
         // println!("creating new darc");
 
-        team_rt.tasking_barrier();
+        team_rt.async_barrier().await;
         // println!("creating new darc after barrier");
         let addr = team_rt
             .lamellae
@@ -897,25 +1191,30 @@ impl<T> Darc<T> {
             weak_local_cnt: AtomicUsize::new(0),
             dist_cnt: AtomicUsize::new(0),
             total_dist_cnt: AtomicUsize::new(0),
-            ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
-            total_ref_cnt_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
-            mode_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
-            mode_ref_cnt_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
-            mode_barrier_addr: addr
-                + std::mem::size_of::<DarcInner<T>>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<usize>()
-                + team_rt.num_pes * std::mem::size_of::<DarcMode>()
-                + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
+            // total_ref_cnt_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // mode_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            // mode_ref_cnt_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
+            // mode_barrier_addr: addr
+            //     + std::mem::size_of::<DarcInner<T>>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>()
+            //     + team_rt.num_pes * std::mem::size_of::<DarcMode>()
+            //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+            ref_cnt_addr: addr + ref_cnt_offset,
+            total_ref_cnt_addr: addr + total_ref_cnt_offset,
+            mode_addr: addr + mode_offset,
+            mode_ref_cnt_addr: addr + mode_ref_cnt_offset,
+            mode_barrier_addr: addr + mode_barrier_offset,
             barrier: barrier_ptr,
             // mode_barrier_rounds: num_rounds,
             am_counters: am_counters_ptr,
@@ -951,32 +1250,170 @@ impl<T> Darc<T> {
         //     DARC_ID.load(Ordering::Relaxed)
         // );
         // d.print();
-        team_rt.tasking_barrier();
+        team_rt.async_barrier().await;
         // team_rt.print_cnt();
         Ok(d)
     }
 
-    pub(crate) async fn block_on_outstanding(&self, state: DarcMode, extra_cnt: usize) {
-        DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
-            },
-            state,
-            extra_cnt,
-        )
-        .await;
+    // pub(crate) fn try_new_with_drop<U: Into<IntoLamellarTeam>>(
+    //     team: U,
+    //     item: T,
+    //     state: DarcMode,
+    //     drop: Option<fn(&mut T) -> bool>,
+    // ) -> Result<Darc<T>, IdError> {
+    //     let team_rt = team.into().team.clone();
+    //     let my_pe = team_rt.team_pe?;
+
+    //     let alloc = if team_rt.num_pes == team_rt.num_world_pes {
+    //         AllocationType::Global
+    //     } else {
+    //         AllocationType::Sub(team_rt.get_pes())
+    //     };
+
+    //     //The DarcInner data structure
+    //     let mut size = std::mem::size_of::<DarcInner<T>>();
+
+    //     // Ref Cnt Array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let ref_cnt_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+    //     // total ref cnt array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let total_ref_cnt_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+    //     // mode array
+    //     let padding = calc_padding(size, std::mem::align_of::<DarcMode>());
+    //     let mode_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<DarcMode>();
+
+    //     //mode ref cnt array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let mode_ref_cnt_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+
+    //     //mode_barrier array
+    //     let padding = calc_padding(size, std::mem::align_of::<usize>());
+    //     let mode_barrier_offset = size + padding;
+    //     size += padding + team_rt.num_pes * std::mem::size_of::<usize>();
+    //     // println!("creating new darc");
+
+    //     team_rt.tasking_barrier();
+    //     // println!("creating new darc after barrier");
+    //     let addr = team_rt
+    //         .lamellae
+    //         .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
+    //         .expect("out of memory");
+    //     // let temp_team = team_rt.clone();
+    //     // team_rt.print_cnt();
+    //     let team_ptr = unsafe {
+    //         let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
+    //         Arc::into_raw(pinned_team)
+    //     };
+    //     // team_rt.print_cnt();
+    //     let am_counters = Arc::new(AMCounters::new());
+    //     let am_counters_ptr = Arc::into_raw(am_counters);
+    //     let barrier = Box::new(Barrier::new(
+    //         team_rt.world_pe,
+    //         team_rt.num_world_pes,
+    //         team_rt.lamellae.clone(),
+    //         team_rt.arch.clone(),
+    //         team_rt.scheduler.clone(),
+    //         team_rt.panic.clone(),
+    //     ));
+    //     let barrier_ptr = Box::into_raw(barrier);
+    //     let darc_temp = DarcInner {
+    //         id: DARC_ID.fetch_add(1, Ordering::Relaxed),
+    //         my_pe: my_pe,
+    //         num_pes: team_rt.num_pes,
+    //         local_cnt: AtomicUsize::new(1),
+    //         total_local_cnt: AtomicUsize::new(1),
+    //         weak_local_cnt: AtomicUsize::new(0),
+    //         dist_cnt: AtomicUsize::new(0),
+    //         total_dist_cnt: AtomicUsize::new(0),
+    //         // ref_cnt_addr: addr + std::mem::size_of::<DarcInner<T>>(),
+    //         // total_ref_cnt_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+    //         // mode_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+    //         // mode_ref_cnt_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<DarcMode>(),
+    //         // mode_barrier_addr: addr
+    //         //     + std::mem::size_of::<DarcInner<T>>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<DarcMode>()
+    //         //     + team_rt.num_pes * std::mem::size_of::<usize>(),
+    //         ref_cnt_addr: addr + ref_cnt_offset,
+    //         total_ref_cnt_addr: addr + total_ref_cnt_offset,
+    //         mode_addr: addr + mode_offset,
+    //         mode_ref_cnt_addr: addr + mode_ref_cnt_offset,
+    //         mode_barrier_addr: addr + mode_barrier_offset,
+    //         barrier: barrier_ptr,
+    //         // mode_barrier_rounds: num_rounds,
+    //         am_counters: am_counters_ptr,
+    //         team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
+    //         item: Box::into_raw(Box::new(item)),
+    //         drop: drop,
+    //         valid: AtomicBool::new(true),
+    //     };
+    //     unsafe {
+    //         std::ptr::copy_nonoverlapping(&darc_temp, addr as *mut DarcInner<T>, 1);
+    //     }
+    //     // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
+
+    //     let d = Darc {
+    //         inner: addr as *mut DarcInner<T>,
+    //         src_pe: my_pe,
+    //     };
+    //     for elem in d.ref_cnts_as_mut_slice() {
+    //         *elem = 0;
+    //     }
+    //     for elem in d.mode_as_mut_slice() {
+    //         *elem = state;
+    //     }
+    //     for elem in d.mode_barrier_as_mut_slice() {
+    //         *elem = 0;
+    //     }
+    //     for elem in d.mode_ref_cnt_as_mut_slice() {
+    //         *elem = 0;
+    //     }
+    //     // println!(
+    //     //     " [{:?}] created new darc , next_id: {:?}",
+    //     //     std::thread::current().id(),
+    //     //     DARC_ID.load(Ordering::Relaxed)
+    //     // );
+    //     // d.print();
+    //     team_rt.tasking_barrier();
+    //     // team_rt.print_cnt();
+    //     Ok(d)
+    // }
+
+    pub(crate) async fn block_on_outstanding(self, state: DarcMode, extra_cnt: usize) {
+        let wrapped = WrappedInner {
+            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
+        };
+        DarcInner::block_on_outstanding(wrapped, state, extra_cnt).await;
     }
 
     #[doc(alias = "Collective")]
     /// Converts this Darc into a [LocalRwDarc]
     ///
-    /// This is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
+    /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
+    /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
     /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -984,43 +1421,38 @@ impl<T> Darc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = Darc::new(&world,5).expect("PE in world team");
-    /// let five_as_localdarc = five.into_localrw();
+    /// let five_handle = Darc::new(&world,5);
+    /// let five_as_localdarc = world.block_on(async move {
+    ///     let five = five_handle.await.expect("PE in world team");
+    ///     five.into_localrw().await
+    /// });
     /// ```
-    pub fn into_localrw(self) -> LocalRwDarc<T> {
-        let inner = self.inner();
-        let _cur_pe = inner.team().world_pe;
-        inner.team().block_on(DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
-            },
-            DarcMode::LocalRw,
-            0,
-        ));
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-        inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);
-        // println! {"[{:?}] darc[{:?}] into_localrw {:?} {:?} {:?}",std::thread::current().id(),self.inner().id,self.inner,self.inner().local_cnt.load(Ordering::SeqCst),self.inner().total_local_cnt.load(Ordering::SeqCst)};
-        let item = unsafe { Box::from_raw(inner.item as *mut T) };
-        let d = Darc {
-            inner: self.inner as *mut DarcInner<Arc<RwLock<Box<T>>>>,
-            src_pe: self.src_pe,
+    pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
+        let wrapped_inner = WrappedInner {
+            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
         };
-        d.inner_mut()
-            .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
-        // d.print();
-        LocalRwDarc { darc: d }
+        let team = self.inner().team().clone();
+        IntoLocalRwDarcHandle {
+            darc: self.into(),
+            team,
+            launched: false,
+            outstanding_future: Box::pin(async move {
+                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::LocalRw, 0).await;
+            }),
+        }
     }
 
     #[doc(alias = "Collective")]
     /// Converts this Darc into a [GlobalRwDarc]
     ///
-    /// This is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
+    /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
+    /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
     ///
-    /// Furthermore, this call will block while any additional references outside of the one making this call exist on each PE. It is not possible for the
-    /// pointed to object to wrapped by both a GlobalRwDarc and a Darc simultaneously (on any PE).
+    /// Furthermore, the handle will not return while any additional references outside of the one making this call exist on each PE. It is not possible for the
+    /// pointed to object to wrapped by both a Darc and a LocalRwDarc simultaneously (on any PE).
     ///
     /// # Collective Operation
-    /// Requires all PEs associated with the `darc` to enter the call otherwise deadlock will occur (i.e. team barriers are being called internally)
+    /// Requires all PEs associated with the `darc` to await/block the handle otherwise deadlock will occur (i.e. team barriers are being called internally)
     ///
     /// # Examples
     /// ```
@@ -1028,34 +1460,22 @@ impl<T> Darc<T> {
     ///
     /// let world = LamellarWorldBuilder::new().build();
     ///
-    /// let five = Darc::new(&world,5).expect("PE in world team");
-    /// let five_as_globaldarc = five.into_globalrw();
+    /// let five = Darc::new(&world,5).block().expect("PE in world team");
+    /// let five_as_globaldarc = five.into_globalrw().block();
     /// ```
-    pub fn into_globalrw(self) -> GlobalRwDarc<T> {
-        let inner = self.inner();
-        let _cur_pe = inner.team().world_pe;
-        inner.team().block_on(DarcInner::block_on_outstanding(
-            WrappedInner {
-                inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
-            },
-            DarcMode::GlobalRw,
-            0,
-        ));
-        inner.local_cnt.fetch_add(1, Ordering::SeqCst); //we add this here because to account for moving inner into d
-        inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);
-        // println! {"[{:?}] darc[{:?}] into_globalrw {:?} {:?} {:?}",std::thread::current().id(),self.inner().id,self.inner,self.inner().local_cnt.load(Ordering::SeqCst),self.inner().total_local_cnt.load(Ordering::SeqCst)};
-
-        let item = unsafe { Box::from_raw(inner.item as *mut T) };
-        let d = Darc {
-            inner: self.inner as *mut DarcInner<DistRwLock<T>>,
-            src_pe: self.src_pe,
+    pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {
+        let wrapped_inner = WrappedInner {
+            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
         };
-        d.inner_mut()
-            .update_item(Box::into_raw(Box::new(DistRwLock::new(
-                *item,
-                self.inner().team(),
-            ))));
-        GlobalRwDarc { darc: d }
+        let team = self.inner().team().clone();
+        IntoGlobalRwDarcHandle {
+            darc: self.into(),
+            team,
+            launched: false,
+            outstanding_future: Box::pin(async move {
+                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::GlobalRw, 0).await;
+            }),
+        }
     }
 }
 
@@ -1115,7 +1535,7 @@ macro_rules! local_mode {
             (*(((&mut $mode_refs[$inner.my_pe]) as *mut DarcMode) as *mut AtomicU8))
                 .compare_exchange(
                     $mode as u8,
-                    DarcMode::Dropped as u8,
+                    DarcMode::Dropping as u8,
                     Ordering::SeqCst,
                     Ordering::SeqCst,
                 )
@@ -1128,8 +1548,21 @@ macro_rules! launch_drop {
     ($mode:ty, $inner:ident, $inner_addr:expr) => {
         // println!("launching drop task as {}", stringify!($mode));
         let team = $inner.team();
+        let mode_refs =
+            unsafe { std::slice::from_raw_parts_mut($inner.mode_addr as *mut u8, $inner.num_pes) };
+        let rdma = &team.lamellae;
+        for pe in team.arch.team_iter() {
+            // println!("darc block_on_outstanding put 3");
+            rdma.put(
+                pe,
+                &mode_refs[$inner.my_pe..=$inner.my_pe],
+                $inner.mode_addr + $inner.my_pe * std::mem::size_of::<DarcMode>(),
+            );
+        }
         // team.print_cnt();
-        team.exec_am_local(DroppedWaitAM {
+        team.team_counters.inc_outstanding(1);
+        team.world_counters.inc_outstanding(1); //ensure we don't trigger any warnings in wait all
+        let mut am = team.exec_am_local(DroppedWaitAM {
             inner_addr: $inner_addr as *const u8 as usize,
             mode_addr: $inner.mode_addr,
             my_pe: $inner.my_pe,
@@ -1137,6 +1570,9 @@ macro_rules! launch_drop {
             team: team.clone(),
             phantom: PhantomData::<T>,
         });
+        am.launch();
+        team.team_counters.dec_outstanding(1);
+        team.world_counters.dec_outstanding(1);
     };
 }
 
@@ -1158,6 +1594,9 @@ impl<T: 'static> Drop for Darc<T> {
             if pe_ref_cnts.iter().any(|&x| x > 0) {
                 //if we have received and accesses from remote pes, send we are finished
                 inner.send_finished();
+                // .into_iter().for_each(|x| {
+                //     let _ = x.spawn();
+                // });
             }
         }
         // println!("in drop");
@@ -1221,15 +1660,15 @@ unsafe impl<T> Sync for DroppedWaitAM<T> {}
 pub(crate) struct WrappedInner<T> {
     inner: NonNull<DarcInner<T>>,
 }
-unsafe impl<T> Send for WrappedInner<T> {}
+unsafe impl<T: 'static> Send for WrappedInner<T> {}
 
-impl<T> Clone for WrappedInner<T> {
+impl<T: 'static> Clone for WrappedInner<T> {
     fn clone(&self) -> Self {
         WrappedInner { inner: self.inner }
     }
 }
 
-impl<T> std::fmt::Debug for WrappedInner<T> {
+impl<T: 'static> std::fmt::Debug for WrappedInner<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "WrappedInner {{ inner: {:?} }}", unsafe {
             self.inner.as_ref()
@@ -1237,7 +1676,7 @@ impl<T> std::fmt::Debug for WrappedInner<T> {
     }
 }
 
-impl<T> std::ops::Deref for WrappedInner<T> {
+impl<T: 'static> std::ops::Deref for WrappedInner<T> {
     type Target = DarcInner<T>;
     fn deref(&self) -> &Self::Target {
         unsafe { self.inner.as_ref() }
@@ -1267,46 +1706,6 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
         let block_on_fut =
             { DarcInner::block_on_outstanding(wrapped.clone(), DarcMode::Dropped, 0) };
         block_on_fut.await;
-        // wrapped.wait_all();
-        // // let inner = unsafe {&*wrapped.inner}; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc (but still allow async wait cause T is not send)
-        // while wrapped.dist_cnt.load(Ordering::SeqCst) != 0
-        //     || wrapped.local_cnt.load(Ordering::SeqCst) != 0
-        // {
-        //     if wrapped.local_cnt.load(Ordering::SeqCst) == 0 {
-        //         wrapped.send_finished();
-        //     }
-        //     if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
-        //         let ref_cnts_slice = std::slice::from_raw_parts_mut(
-        //             wrapped.ref_cnt_addr as *mut usize,
-        //             wrapped.num_pes,
-        //         );
-
-        //         println!("[WARNING] - Potential deadlock detected when trying to free distributed object.\n\
-        //             The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
-        //             The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-        //             the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
-        //             To view backtrace set RUST_LIB_BACKTRACE=1\n\
-        //             {}",
-        //             mode_refs,
-        //             wrapped.local_cnt.load(Ordering::SeqCst),
-        //             wrapped.dist_cnt.load(Ordering::SeqCst),
-        //             *crate::DEADLOCK_TIMEOUT,
-        //             std::backtrace::Backtrace::capture()
-        //         );
-        //         timeout = std::time::Instant::now();
-        //     }
-        //     async_std::task::yield_now().await;
-        // }
-        // // let team = wrapped.team();
-        // let rdma = &self.team.lamellae;
-        // for pe in self.team.arch.team_iter() {
-        //     // println!("putting {:?} to {:?} @ {:x}",&mode_refs[self.my_pe..=self.my_pe],pe,self.mode_addr + self.my_pe * std::mem::size_of::<u8>());
-        //     rdma.put(
-        //         pe,
-        //         &mode_refs_u8[self.my_pe..=self.my_pe],
-        //         self.mode_addr + self.my_pe * std::mem::size_of::<DarcMode>(),
-        //     );
-        // }
 
         // println!(
         //     "[{:?}] past block_on_outstanding {:x}",
@@ -1318,10 +1717,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 async_std::task::yield_now().await;
 
                 if wrapped.local_cnt.load(Ordering::SeqCst) == 0 {
-                    wrapped.send_finished();
+                    join_all(wrapped.send_finished()).await;
                 }
 
-                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timeout.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let ref_cnts_slice = unsafe {
                         std::slice::from_raw_parts_mut(
                             wrapped.ref_cnt_addr as *mut usize,
@@ -1332,20 +1731,21 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[{:?}][WARNING] -- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         std::thread::current().id(),
                         mode_refs,
                         wrapped.local_cnt.load(Ordering::SeqCst),
                         wrapped.dist_cnt.load(Ordering::SeqCst),
-                        *crate::DEADLOCK_TIMEOUT,
+                        config().deadlock_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
                 }
             }
         }
+        // println!("after DarcMode::Dropped");
         // let inner =self.inner_addr as *mut DarcInner<T>;
         let wrapped = WrappedInner {
             inner: NonNull::new(self.inner_addr as *mut DarcInner<T>)
@@ -1359,9 +1759,10 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                 || wrapped.local_cnt.load(Ordering::SeqCst) != 0
             {
                 if wrapped.local_cnt.load(Ordering::SeqCst) == 0 {
-                    wrapped.send_finished();
+                    // wrapped.send_finished()
+                    join_all(wrapped.send_finished()).await;
                 }
-                if timeout.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+                if timeout.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let ref_cnts_slice = std::slice::from_raw_parts_mut(
                         wrapped.ref_cnt_addr as *mut usize,
                         wrapped.num_pes,
@@ -1370,29 +1771,33 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     println!("[{:?}][WARNING] --- Potential deadlock detected when trying to free distributed object.\n\
                         The runtime is currently waiting for all remaining references to this distributed object to be dropped.\n\
                         The current status of the object on each pe is {:?} with {:?} remaining local references and {:?} remaining remote references, ref cnts by pe {ref_cnts_slice:?}\n\
-                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                        the deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",
                         std::thread::current().id(),
                         mode_refs,
                         wrapped.local_cnt.load(Ordering::SeqCst),
                         wrapped.dist_cnt.load(Ordering::SeqCst),
-                        *crate::DEADLOCK_TIMEOUT,
+                        config().deadlock_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
                 }
                 async_std::task::yield_now().await;
             }
-            {
-                let mut _item = Box::from_raw(wrapped.item as *mut T);
-                if let Some(my_drop) = wrapped.drop {
-                    // println!("Dropping darc {:x}", self.inner_addr);
-                    my_drop(&mut _item);
-                } else {
-                    // println!("no drop function for item {:x}", self.inner_addr);
+
+            // println!("going to drop object");
+
+            if let Some(my_drop) = wrapped.drop {
+                let mut dropped_done = false;
+                while !dropped_done {
+                    dropped_done = my_drop(&mut *(wrapped.item as *mut T));
+                    async_std::task::yield_now().await;
                 }
             }
+            let _ = Box::from_raw(wrapped.item as *mut T);
+            // println!("afterdrop object");
+
             while wrapped.weak_local_cnt.load(Ordering::SeqCst) != 0 {
                 //we can't actually free the darc memory until all weak pointers are gone too
                 async_std::task::yield_now().await;
@@ -1404,8 +1809,9 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             let _barrier = Box::from_raw(wrapped.barrier);
             self.team.lamellae.free(self.inner_addr);
             // println!(
-            //     "[{:?}]leaving DroppedWaitAM {:x}",
+            //     "[{:?}]leaving DroppedWaitAM {:?} {:x}",
             //     std::thread::current().id(),
+            //     self,
             //     self.inner_addr
             // );
         }

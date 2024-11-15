@@ -1,4 +1,4 @@
-use crate::array::iterator::distributed_iterator::*;
+use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
 #[derive(Clone, Debug)]
 pub struct Map<I, F> {
@@ -6,8 +6,11 @@ pub struct Map<I, F> {
     f: F,
 }
 
-impl<I: IterClone, F: Clone> IterClone for Map<I, F> {
-    fn iter_clone(&self, _: Sealed) -> Self {
+impl<I: InnerIter, F: Clone> InnerIter for Map<I, F> {
+    fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
+        self.iter.lock_if_needed(_s)
+    }
+    fn iter_clone(&self, _s: Sealed) -> Self {
         Map {
             iter: self.iter.iter_clone(Sealed),
             f: self.f.clone(),
@@ -33,9 +36,9 @@ where
 {
     type Item = B;
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Map<I, F> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Map<I, F> {
         // println!("init enumerate start_i: {:?} cnt {:?} end_i {:?}",start_i, cnt, start_i+cnt );
-        Map::new(self.iter.init(start_i, cnt), self.f.clone())
+        Map::new(self.iter.init(start_i, cnt, _s), self.f.clone())
     }
     fn array(&self) -> Self::Array {
         self.iter.array()

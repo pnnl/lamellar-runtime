@@ -1,15 +1,24 @@
-pub use crate::array::atomic::AtomicArray;
+pub use crate::array::atomic::{AtomicArray, AtomicArrayHandle};
 pub use crate::array::generic_atomic::GenericAtomicArray;
-pub use crate::array::global_lock_atomic::GlobalLockArray;
-pub use crate::array::local_lock_atomic::LocalLockArray;
+pub use crate::array::global_lock_atomic::{handle::GlobalLockArrayHandle, GlobalLockArray};
+pub use crate::array::local_lock_atomic::{handle::LocalLockArrayHandle, LocalLockArray};
 pub use crate::array::native_atomic::NativeAtomicArray;
-pub use crate::array::r#unsafe::UnsafeArray;
-pub use crate::array::read_only::ReadOnlyArray;
-#[doc(hidden)]
+pub use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayHandle};
+pub use crate::array::read_only::{ReadOnlyArray, ReadOnlyArrayHandle};
+//#[doc(hidden)]
 pub use crate::array::{
-    register_reduction, ArrayOps, Distribution, LamellarArray, LamellarArrayArithmeticReduce,
-    LamellarArrayCompareReduce, LamellarArrayGet, LamellarArrayPut, LamellarArrayReduce,
-    LamellarReadArray, LamellarWriteArray, SubArray,
+    register_reduction,
+    ArrayOps,
+    Distribution,
+    LamellarArray,
+    //LamellarArrayArithmeticReduce,
+    //LamellarArrayCompareReduce,
+    LamellarArrayGet,
+    LamellarArrayPut,
+    //LamellarArrayReduce,
+    LamellarReadArray,
+    LamellarWriteArray,
+    SubArray,
 };
 
 pub use crate::array::iterator::distributed_iterator::{
@@ -23,16 +32,17 @@ pub use crate::array::operations::{
     AccessOps, ArithmeticOps, ArrayOps as _ArrayOps, BitWiseOps, CompareExchangeEpsilonOps,
     CompareExchangeOps, ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps,
     ElementComparePartialEqOps, ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps,
-    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps,
+    LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps, UnsafeAccessOps,
+    UnsafeArithmeticOps, UnsafeBitWiseOps, UnsafeCompareExchangeEpsilonOps,
+    UnsafeCompareExchangeOps, UnsafeReadOnlyOps, UnsafeShiftOps,
 };
 // pub use crate::array::operations::*;
 
-#[doc(hidden)]
+//#[doc(hidden)]
 pub use crate::active_messaging::ActiveMessaging;
 pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;
-#[doc(hidden)]
-pub use crate::lamellar_team::LamellarTeamRT;
+//#[doc(hidden)]
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
 pub use crate::memregion::{Dist, RegisteredMemoryRegion};

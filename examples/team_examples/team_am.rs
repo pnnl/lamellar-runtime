@@ -38,10 +38,12 @@ fn test_team(world: &LamellarWorld, team: Option<Arc<LamellarTeam>>, label: &str
             1
         };
         let timer = Instant::now();
-        let _ = team.exec_am_all(TeamAM {
-            secs: secs,
-            orig_pe: my_pe,
-        }); //everynode that has a handle can launch on a given team;
+        let _ = team
+            .exec_am_all(TeamAM {
+                secs: secs,
+                orig_pe: my_pe,
+            })
+            .spawn(); //everynode that has a handle can launch on a given team;
         world.wait_all();
         println!("after world wait_all {:?}", timer.elapsed().as_secs_f64());
         team.wait_all(); //wait until all requests return
@@ -76,10 +78,12 @@ fn main() {
     }
     world.barrier();
     let timer = Instant::now();
-    let _ = world.exec_am_all(TeamAM {
-        secs: 1,
-        orig_pe: my_pe,
-    });
+    let _ = world
+        .exec_am_all(TeamAM {
+            secs: 1,
+            orig_pe: my_pe,
+        })
+        .spawn();
     world.wait_all();
     world.barrier();
     let elapsed = timer.elapsed().as_secs_f64();

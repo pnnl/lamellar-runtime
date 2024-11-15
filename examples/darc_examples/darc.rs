@@ -49,45 +49,36 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    println!("here 0");
-
     let even_team = world.create_team_from_arch(StridedArch::new(
         0,                                      // start pe
         2,                                      // stride
         (num_pes as f64 / 2.0).ceil() as usize, //num pes in team
     ));
 
-    println!("here 1");
-
-    let global_darc = GlobalRwDarc::new(world.team(), 0).unwrap();
-    println!("here 2");
-    let read_lock = world.block_on(global_darc.read());
+    let global_darc = GlobalRwDarc::new(world.team(), 0).block().unwrap();
+    let read_lock = global_darc.read().block();
     println!("I have the read lock!!!! {:?}", my_pe);
     drop(read_lock);
-    let write_lock = world.block_on(global_darc.write());
+    let write_lock = global_darc.write().block();
     println!("I have the write lock!!!! {:?}", my_pe);
     std::thread::sleep(std::time::Duration::from_secs(1));
     drop(write_lock);
-    println!("here3");
     //----
-    let local_darc = LocalRwDarc::new(world.team(), 10).unwrap();
+    let local_darc = LocalRwDarc::new(world.team(), 10).block().unwrap();
     println!("created new local rw");
     // local_darc.print();
 
     let wrapped = WrappedWrappedWrappedDarc {
         wrapped: WrappedWrappedDarc {
             wrapped: WrappedDarc {
-                wrapped: Darc::new(world.team(), 3).unwrap(),
+                wrapped: Darc::new(world.team(), 3).block().unwrap(),
             },
         },
     };
-    // println!("here 4");
-    let darc1 = Darc::new(world.team(), 10).unwrap();
-    // println!("here 5");
-    let darc2 = Darc::new(world.team(), 20).unwrap();
-    // println!("here 6");
+    let darc1 = Darc::new(world.team(), 10).block().unwrap();
+    let darc2 = Darc::new(world.team(), 20).block().unwrap();
     if let Some(team) = even_team {
-        let team_darc = Darc::new(team.clone(), AtomicUsize::new(10));
+        let team_darc = Darc::new(team.clone(), AtomicUsize::new(10)).block();
         let mut tg = typed_am_group!(DarcAm, team.clone());
         println!("{:?} created team darc", std::thread::current().id());
         if let Ok(team_darc) = team_darc {
@@ -101,28 +92,24 @@ fn main() {
                 wrapped: wrapped.clone(),
                 wrapped_tuple: (wrapped.clone(), wrapped.clone()),
                 darc_tuple: (darc1.clone(), darc2.clone()),
-                my_arc: Darc::new(team.clone(), Arc::new(0)).unwrap(),
+                my_arc: Darc::new(team.clone(), Arc::new(0)).block().unwrap(),
             };
-            println!("here 7");
-            let _ = team.exec_am_pe(0, darc_am.clone());
-            let _ = team.exec_am_all(darc_am.clone());
+            let _ = team.exec_am_pe(0, darc_am.clone()).spawn();
+            let _ = team.exec_am_all(darc_am.clone()).spawn();
             tg.add_am_pe(0, darc_am.clone());
             tg.add_am_all(darc_am);
             team.block_on(tg.exec());
-            println!("here 8");
         } else {
-            // println!("here");
-            *(*world.block_on(local_darc.write())) += 1;
+            *local_darc.write().block() += 1;
         }
     }
     // --------
-    println!("here 9");
 
     // drop(darc1);
     // drop(darc2);
     // drop(wrapped);
     println!("changing darc type");
-    let ro_darc = global_darc.into_localrw().into_darc(); // we can call into_darc directly on global_Darc, but string the operations for testing purposes
+    let ro_darc = global_darc.into_localrw().block().into_darc().block(); // we can call into_darc directly on global_Darc, but string the operations for testing purposes
     println!("read only darc");
     ro_darc.print();
     println!("done");

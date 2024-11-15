@@ -23,32 +23,34 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block); //row major
-    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block); //col major
-    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block); //row major
-                                                                         //initialize matrices
+    let a = LocalLockArray::<f32>::new(&world, m * n, Distribution::Block).block(); //row major
+    let b = LocalLockArray::<f32>::new(&world, n * p, Distribution::Block).block(); //col major
+    let c = AtomicArray::<f32>::new(&world, m * p, Distribution::Block).block(); //row major
+                                                                                 //initialize matrices
 
-    let _ = a
-        .dist_iter_mut()
+    a.dist_iter_mut()
         .enumerate()
-        .for_each(|(i, x)| *x = i as f32);
-    let _ = b.dist_iter_mut().enumerate().for_each(move |(i, x)| {
-        //identity matrix
-        let row = i / dim;
-        let col = i % dim;
-        if row == col {
-            *x = 1 as f32
-        } else {
-            *x = 0 as f32;
-        }
-    });
-    let _ = c.dist_iter_mut().for_each(|x| x.store(0.0));
+        .for_each(|(i, x)| *x = i as f32)
+        .block();
+    b.dist_iter_mut()
+        .enumerate()
+        .for_each(move |(i, x)| {
+            //identity matrix
+            let row = i / dim;
+            let col = i % dim;
+            if row == col {
+                *x = 1 as f32
+            } else {
+                *x = 0 as f32;
+            }
+        })
+        .block();
+    c.dist_iter_mut().for_each(|x| x.store(0.0)).block();
 
-    world.wait_all();
     world.barrier();
 
-    let a = a.into_read_only();
-    let b = b.into_read_only();
+    let a = a.into_read_only().block();
+    let b = b.into_read_only().block();
 
     let num_gops = ((2 * dim * dim * dim) - dim * dim) as f64 / 1_000_000_000.0; // accurate for square matrices
 
@@ -74,7 +76,7 @@ fn main() {
                         let b_val = b_c.at(j + k * n);
                         sum += a_val.await * b_val.await;
                     }
-                    let _ = c_c.store(j + i * m, sum); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
+                    let _ = c_c.store(j + i * m, sum).spawn(); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster
                 }
             }
         });

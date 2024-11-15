@@ -105,7 +105,7 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN);
+    let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
     let local_array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in array.as_mut_slice().unwrap() {
@@ -144,11 +144,13 @@ fn main() {
     world.barrier();
     let mut index = 0;
     while index * num_pes < ARRAY_LEN {
-        let _ = world.exec_am_all(RdmaLocalMRAM {
-            array: local_array.clone(),
-            orig_pe: my_pe,
-            index: index,
-        });
+        let _ = world
+            .exec_am_all(RdmaLocalMRAM {
+                array: local_array.clone(),
+                orig_pe: my_pe,
+                index: index,
+            })
+            .spawn();
         index += 1;
     }
 

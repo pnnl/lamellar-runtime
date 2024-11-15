@@ -99,6 +99,17 @@ impl<T: Dist> From<UnsafeArray<T>> for LocalOnlyArray<T> {
     }
 }
 
+#[async_trait]
+impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalOnlyArray<T> {
+    async fn async_from(array: UnsafeArray<T>) -> Self {
+        array.await_on_outstanding(DarcMode::LocalOnlyArray).await;
+        LocalOnlyArray {
+            array: array,
+            _unsync: PhantomData,
+        }
+    }
+}
+
 impl<T: Dist> From<ReadOnlyArray<T>> for LocalOnlyArray<T> {
     fn from(array: ReadOnlyArray<T>) -> Self {
         unsafe { array.into_inner().into() }
@@ -124,7 +135,7 @@ impl<T: Dist> From<GlobalLockArray<T>> for LocalOnlyArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for LocalOnlyArray<T> {
-    fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team().clone()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

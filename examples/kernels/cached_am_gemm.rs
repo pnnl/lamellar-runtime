@@ -174,9 +174,15 @@ fn main() {
     let n = dim; // a cols b rows
     let p = dim; // b & c cols
 
-    let a = world.alloc_shared_mem_region::<f32>((m * n) / num_pes);
-    let b = world.alloc_shared_mem_region::<f32>((n * p) / num_pes);
-    let c = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
+    let a = world
+        .alloc_shared_mem_region::<f32>((m * n) / num_pes)
+        .block();
+    let b = world
+        .alloc_shared_mem_region::<f32>((n * p) / num_pes)
+        .block();
+    let c = world
+        .alloc_shared_mem_region::<f32>((m * p) / num_pes)
+        .block();
     // let c2 = world.alloc_shared_mem_region::<f32>((m * p) / num_pes);
     unsafe {
         let mut cnt = my_pe as f32 * ((m * n) / num_pes) as f32;
@@ -245,17 +251,21 @@ fn main() {
                     j,
                     block_size,
                 );
-                reqs.push(world.exec_am_local(MatMulAM {
-                    a: a_block,
-                    b: b_block,
-                    c: c_block.clone(),
-                    a_pe_rows: a_pe_rows,
-                    block_size: block_size,
-                }));
+                reqs.push(
+                    world
+                        .exec_am_local(MatMulAM {
+                            a: a_block,
+                            b: b_block,
+                            c: c_block.clone(),
+                            a_pe_rows: a_pe_rows,
+                            block_size: block_size,
+                        })
+                        .spawn(),
+                );
                 tasks += 1;
             }
             // for req in reqs {
-            //     req.get();
+            //     req.block();
             // }
         }
 

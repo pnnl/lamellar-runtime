@@ -14,17 +14,17 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let array: LocalLockArray<u8> =
-        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
+        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;
         }
     }
-    let _ = array
+    array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8);
-    array.wait_all();
+        .for_each(move |elem| *elem = 255 as u8)
+        .block();
     array.barrier();
 
     world.barrier();
@@ -55,7 +55,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(..num_bytes as usize);
-                let _ = unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg) };
+                let _ = unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg).spawn() };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -67,7 +67,7 @@ fn main() {
         let cur_t = timer.elapsed().as_secs_f64();
         if my_pe == num_pes - 1 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                let local_data = array.block_on(array.read_local_data());
+                let local_data = array.read_local_data().block();
                 while *(&local_data[(j + num_bytes as usize) - 1]) == 255 as u8 {
                     println!(
                         "this should not happen {:?}",
@@ -96,10 +96,10 @@ fn main() {
         );
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
-        let _ = array
+        array
             .dist_iter_mut()
-            .for_each(move |elem| *elem = 255 as u8);
-        array.wait_all();
+            .for_each(move |elem| *elem = 255 as u8)
+            .block();
         array.barrier();
     }
     if my_pe == 0 {

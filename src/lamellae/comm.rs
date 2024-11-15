@@ -1,4 +1,4 @@
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
 use crate::lamellae::shmem::shmem_comm::*;
 use crate::lamellae::{AllocationType, SerializedData};
@@ -28,7 +28,7 @@ pub(crate) enum CmdQStatus {
 // const PANIC: u8 = 3;
 
 #[derive(Debug, Clone, Copy)]
-pub enum AllocError {
+pub(crate) enum AllocError {
     OutOfMemoryError(usize),
     IdError(usize),
 }
@@ -50,12 +50,12 @@ impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 #[derive(Debug, Clone, Copy)]
-pub enum TxError {
+pub(crate) enum TxError {
     GetError,
 }
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 impl std::fmt::Display for TxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -65,9 +65,9 @@ impl std::fmt::Display for TxError {
         }
     }
 }
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 impl std::error::Error for TxError {}
-#[cfg(feature = "enable-rofi")]
+#[cfg(feature = "rofi")]
 pub(crate) type TxResult<T> = Result<T, TxError>;
 
 pub(crate) trait Remote: Copy {}
@@ -76,7 +76,7 @@ impl<T: Copy> Remote for T {}
 #[enum_dispatch(CommOps)]
 #[derive(Debug)]
 pub(crate) enum Comm {
-    #[cfg(feature = "enable-rofi")]
+    #[cfg(feature = "rofi")]
     Rofi(RofiComm),
     Shmem(ShmemComm),
 }
@@ -87,7 +87,7 @@ impl Comm {
         size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         match self.as_ref() {
-            #[cfg(feature = "enable-rofi")]
+            #[cfg(feature = "rofi")]
             Comm::Rofi(_) => Ok(RofiData::new(self.clone(), size)?.into()),
             Comm::Shmem(_) => Ok(ShmemData::new(self.clone(), size)?.into()),
         }
@@ -118,8 +118,9 @@ pub(crate) trait CommOps {
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
+    #[allow(dead_code)]
     fn MB_sent(&self) -> f64;
     fn force_shutdown(&self);
 }

@@ -95,6 +95,30 @@ fn main() {
 
         println!("Task Group---------------------------------------------------------------");
 
+        let task_group = LamellarTaskGroup::new(world.clone());
+        for i in 0..10 {
+            task_group
+                .exec_am_pe(
+                    i % num_pes,
+                    AmNoReturn {
+                        my_pe: i,
+                        test_var: 10 * (i as u16),
+                    },
+                )
+                .block();
+            task_group
+                .exec_am_all(AmNoReturn {
+                    my_pe: i,
+                    test_var: 10 * (i as u16),
+                })
+                .block();
+        }
+        // let res = world.block_on(am_group.exec());
+        for r in res.iter() {
+            println!("PE[{:?}] return result: {:?}", my_pe, r);
+        }
+        println!("Typed Am Group---------------------------------------------------------------");
+
         // let mut am_group = typed_am_group!(AmNoReturn,world.clone());
         // am_group.add_am_all(am.clone());
         // am_group.add_am_pe(0,am.clone());

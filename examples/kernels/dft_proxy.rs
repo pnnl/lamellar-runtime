@@ -1,5 +1,5 @@
-// use futures::FutureExt;
-use futures::StreamExt;
+// use futures_util::FutureExt;
+use futures_util::StreamExt;
 use lamellar::active_messaging::prelude::*;
 /// ------------Lamellar Bandwidth: DFT Proxy  -------------------------
 /// This example is inspired from peforming a naive DFT
@@ -143,29 +143,35 @@ fn dft_lamellar(
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
     let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
-    let add_spec = world.alloc_shared_mem_region::<f64>(spectrum_slice.len());
+    let add_spec = world
+        .alloc_shared_mem_region::<f64>(spectrum_slice.len())
+        .block();
 
     let timer = Instant::now();
     for pe in 0..num_pes {
         for k in 0..spectrum_slice.len() {
-            let _ = world.exec_am_local(LocalSumAM {
-                spectrum: add_spec.clone(),
-                signal: signal.clone(),
-                global_sig_len: global_sig_len,
-                k: k,
-                pe: pe,
-            });
+            let _ = world
+                .exec_am_local(LocalSumAM {
+                    spectrum: add_spec.clone(),
+                    signal: signal.clone(),
+                    global_sig_len: global_sig_len,
+                    k: k,
+                    pe: pe,
+                })
+                .spawn();
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
         add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice().unwrap() });
-        let _ = world.exec_am_pe(
-            pe,
-            RemoteSumAM {
-                spectrum: spectrum.clone(),
-                add_spec: add_spec_vec,
-            },
-        );
+        let _ = world
+            .exec_am_pe(
+                pe,
+                RemoteSumAM {
+                    spectrum: spectrum.clone(),
+                    add_spec: add_spec_vec,
+                },
+            )
+            .spawn();
         world.wait_all();
     }
     world.wait_all();
@@ -187,7 +193,7 @@ fn dft_lamellar_am_group(
 
     let timer = Instant::now();
 
-    let mut pe_groups = futures::stream::FuturesOrdered::new();
+    let mut pe_groups = futures_util::stream::FuturesOrdered::new();
     for pe in 0..num_pes {
         let mut local_sum_group = typed_am_group!(LocalSumAM2, world);
         for k in 0..local_len {
@@ -246,7 +252,7 @@ fn dft_lamellar_am_group_static(
 
     let timer = Instant::now();
 
-    let mut pe_groups = futures::stream::FuturesOrdered::new();
+    let mut pe_groups = futures_util::stream::FuturesOrdered::new();
     for pe in 0..num_pes {
         let mut local_sum_group = typed_am_group!(LocalSumAM2Static, world);
         for k in 0..local_len {
@@ -335,7 +341,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
     let timer = Instant::now();
     let signal_clone = signal.clone();
     unsafe {
-        let _ = spectrum
+        spectrum
             .dist_iter_mut()
             .enumerate()
             .for_each(move |(k, spec_bin)| {
@@ -351,9 +357,9 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
                     sum = sum + twiddle * x;
                 }
                 *spec_bin = sum
-            });
+            })
+            .block();
     }
-    spectrum.wait_all();
     spectrum.barrier();
     timer.elapsed().as_secs_f64()
 }
@@ -382,8 +388,8 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
                 sum = sum + twiddle * x;
             }
             spec_bin.store(sum);
-        });
-    spectrum.wait_all();
+        })
+        .block();
     spectrum.barrier();
     timer.elapsed().as_secs_f64()
 }
@@ -405,9 +411,10 @@ fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f6
                     let twiddle = angle * (angle.cos() + angle * angle.sin());
                     let _lock = LOCK.lock();
                     *spec_bin += twiddle * x;
-                });
+                })
+                .spawn();
         }
-    }
+    };
     spectrum.wait_all();
     spectrum.barrier();
     timer.elapsed().as_secs_f64()
@@ -432,6 +439,7 @@ fn dft_lamellar_array_opt(
             .enumerate()
             .for_each(|(i, chunk)| {
                 let signal = chunk.clone();
+
                 let _ = spectrum
                     .dist_iter_mut()
                     .enumerate()
@@ -450,7 +458,8 @@ fn dft_lamellar_array_opt(
 
                         // let _lock = LOCK.lock();
                         *spec_bin += sum;
-                    });
+                    })
+                    .spawn();
             });
     }
     spectrum.wait_all();
@@ -474,9 +483,10 @@ fn dft_lamellar_array_opt_test(
             .enumerate()
             .for_each(|(i, chunk)| {
                 let signal = chunk.clone();
-                let _ = spectrum.dist_iter_mut().enumerate().for_each_with_schedule(
-                    Schedule::Dynamic,
-                    move |(k, spec_bin)| {
+                let _ = spectrum
+                    .dist_iter_mut()
+                    .enumerate()
+                    .for_each_with_schedule(Schedule::Dynamic, move |(k, spec_bin)| {
                         let mut sum = 0f64;
                         for (j, &x) in signal
                             .iter()
@@ -491,8 +501,8 @@ fn dft_lamellar_array_opt_test(
 
                         // let _lock = LOCK.lock();
                         *spec_bin += sum;
-                    },
-                );
+                    })
+                    .spawn();
             });
     }
     spectrum.wait_all();
@@ -516,6 +526,7 @@ fn dft_lamellar_array_opt_2(
         .enumerate()
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
+
             let _ = spectrum
                 .dist_iter_mut()
                 .enumerate()
@@ -534,7 +545,8 @@ fn dft_lamellar_array_opt_2(
                         }
                     }
                     spec_bin += sum;
-                });
+                })
+                .spawn();
         });
     spectrum.wait_all();
     spectrum.barrier();
@@ -557,6 +569,7 @@ fn dft_lamellar_array_opt_3(
         .enumerate()
         .for_each(|(i, chunk)| {
             let signal = chunk.clone();
+
             let _ = spectrum
                 .dist_iter_mut() //this locks the LocalLockArray
                 .enumerate()
@@ -576,7 +589,8 @@ fn dft_lamellar_array_opt_3(
                         }
                     }
                     *spec_bin += sum;
-                });
+                })
+                .spawn();
         });
     spectrum.wait_all();
     spectrum.barrier();
@@ -622,28 +636,28 @@ fn main() {
         let global_len = num_pes * array_len;
 
         println!("my_pe {:?} num_pes {:?}", my_pe, num_pes);
-        let partial_sum = world.alloc_shared_mem_region::<f64>(num_pes);
-        let partial_spectrum = world.alloc_shared_mem_region::<f64>(array_len);
-        let partial_signal = world.alloc_shared_mem_region::<f64>(array_len);
+        let partial_sum = world.alloc_shared_mem_region::<f64>(num_pes).block();
+        let partial_spectrum = world.alloc_shared_mem_region::<f64>(array_len).block();
+        let partial_signal = world.alloc_shared_mem_region::<f64>(array_len).block();
         let full_signal = world.alloc_one_sided_mem_region::<f64>(global_len);
         let full_spectrum = world.alloc_one_sided_mem_region::<f64>(global_len);
         let magic = world.alloc_one_sided_mem_region::<f64>(num_pes);
 
         let full_spectrum_array =
-            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
+            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
         let full_signal_array =
-            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block);
+            UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
 
         unsafe {
             for i in full_signal.as_mut_slice().unwrap() {
                 *i = rng.gen_range(0.0..1.0);
             }
             let full_signal_clone = full_signal.clone();
-            let _ = full_signal_array
+            full_signal_array
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = full_signal_clone.as_mut_slice().unwrap()[i]);
-            full_signal_array.wait_all();
+                .for_each(move |(i, x)| *x = full_signal_clone.as_mut_slice().unwrap()[i])
+                .block();
             full_signal_array.barrier();
 
             partial_spectrum.put(my_pe, 0, full_spectrum.sub_region(0..array_len));
@@ -756,9 +770,10 @@ fn main() {
 
             //--------------lamellar array--------------------------
             unsafe {
-                let _ = full_spectrum_array
+                full_spectrum_array
                     .dist_iter_mut()
-                    .for_each(|elem| *elem = 0.0);
+                    .for_each(|elem| *elem = 0.0)
+                    .block();
             }
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
@@ -773,7 +788,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().get(),
+            //         full_spectrum_array.sum().block(),
             //         time
             //     );
             // }
@@ -794,7 +809,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().get(),
+            //         full_spectrum_array.sum().block(),
             //         time
             //     );
             // }
@@ -804,9 +819,10 @@ fn main() {
 
             //------------optimized lamellar array----------------
             unsafe {
-                let _ = full_spectrum_array
+                full_spectrum_array
                     .dist_iter_mut()
-                    .for_each(|elem| *elem = 0.0);
+                    .for_each(|elem| *elem = 0.0)
+                    .block();
             }
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
@@ -823,9 +839,10 @@ fn main() {
 
             //--------------lamellar array--------------------------
             unsafe {
-                let _ = full_spectrum_array
+                full_spectrum_array
                     .dist_iter_mut()
-                    .for_each(|elem| *elem = 0.0);
+                    .for_each(|elem| *elem = 0.0)
+                    .block();
             }
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
@@ -842,7 +859,7 @@ fn main() {
             //     println!(
             //         "{:?} array sum: {:?} time: {:?}",
             //         my_pe,
-            //         full_spectrum_array.sum().get(),
+            //         full_spectrum_array.sum().block(),
             //         time
             //     );
             // }
@@ -860,8 +877,8 @@ fn main() {
         //     .for_each(|elem| *elem = 0.0);
         // full_spectrum_array.wait_all();
         // full_spectrum_array.barrier();
-        let full_signal_array = full_signal_array.into_read_only();
-        let full_spectrum_array = full_spectrum_array.into_atomic();
+        let full_signal_array = full_signal_array.into_read_only().block();
+        let full_spectrum_array = full_spectrum_array.into_atomic().block();
 
         for _i in 0..num_trials {
             // let timer = Instant::now();
@@ -871,9 +888,10 @@ fn main() {
             // ));
 
             world.barrier();
-            let _ = full_spectrum_array
+            full_spectrum_array
                 .dist_iter_mut()
-                .for_each(|elem| elem.store(0.0));
+                .for_each(|elem| elem.store(0.0))
+                .block();
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             // let timer = Instant::now();
@@ -888,7 +906,7 @@ fn main() {
         }
         ti += 1;
 
-        let full_spectrum_array = full_spectrum_array.into_local_lock();
+        let full_spectrum_array = full_spectrum_array.into_local_lock().block();
         for _i in 0..num_trials {
             // let timer = Instant::now();
             times[ti].push(dft_lamellar_array_opt_3(
@@ -898,9 +916,10 @@ fn main() {
             ));
 
             world.barrier();
-            let _ = full_spectrum_array
+            full_spectrum_array
                 .dist_iter_mut()
-                .for_each(|elem| *elem = 0.0);
+                .for_each(|elem| *elem = 0.0)
+                .block();
             full_spectrum_array.wait_all();
             full_spectrum_array.barrier();
             if my_pe == 0 {

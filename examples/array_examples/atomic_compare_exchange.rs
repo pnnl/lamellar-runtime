@@ -23,9 +23,8 @@ fn main() {
     let num_pes = world.num_pes();
     let my_pe = world.my_pe();
 
-    let array = AtomicArray::<usize>::new(world.team(), num_pes * 2, Distribution::Block);
-    let _ = array.dist_iter_mut().for_each(|x| x.store(0)); //initialize array -- use atomic store
-    array.wait_all();
+    let array = AtomicArray::<usize>::new(world.team(), num_pes * 2, Distribution::Block).block();
+    array.dist_iter_mut().for_each(|x| x.store(0)).block(); //initialize array -- use atomic store
     array.barrier();
 
     // array.print();
@@ -45,9 +44,9 @@ fn main() {
     array.barrier();
     array.print();
 
-    let array_2 = AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic);
-    let _ = array_2.dist_iter_mut().for_each(|x| x.store(0.0));
-    array_2.wait_all();
+    let array_2 =
+        AtomicArray::<f32>::new(world.team(), num_pes * 100000, Distribution::Cyclic).block();
+    array_2.dist_iter_mut().for_each(|x| x.store(0.0)).block();
     array_2.barrier();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(my_pe as u64);
@@ -56,7 +55,9 @@ fn main() {
     let old = 0.0;
     let new = (my_pe + 1) as f32;
     let epsilon = 0.00001;
+    println!("here 1");
     let res = world.block_on(array_2.batch_compare_exchange_epsilon(indices, old, new, epsilon)); //should not fail
+    println!("here 2");
     array_2.barrier();
 
     let (num_failed, num_ok) = res.iter().fold((0, 0), |acc, x| {
@@ -82,23 +83,26 @@ fn main() {
         }
     });
 
-    let l = array.dist_iter().enumerate().for_each_async(move |(i, e)| {
-        let a2c = array_2.clone();
-        async move {
-            let res = a2c
-                .compare_exchange_epsilon(i, e.load() as f32, 0.0, epsilon)
-                .await;
-            match res {
-                Ok(_) => {
-                    println!("success");
-                }
-                Err(_) => {
-                    println!("failed");
+    array
+        .dist_iter()
+        .enumerate()
+        .for_each_async(move |(i, e)| {
+            let a2c = array_2.clone();
+            async move {
+                let res = a2c
+                    .compare_exchange_epsilon(i, e.load() as f32, 0.0, epsilon)
+                    .await;
+                match res {
+                    Ok(_) => {
+                        println!("success");
+                    }
+                    Err(_) => {
+                        println!("failed");
+                    }
                 }
             }
-        }
-    });
-    world.block_on(l);
+        })
+        .block();
     println!("num_failed {num_failed} num_ok {num_ok}");
     // array2.print();
 }

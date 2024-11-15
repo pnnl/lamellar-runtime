@@ -1,21 +1,21 @@
-use crate::active_messaging::*;
+use crate::barrier::BarrierHandle;
 use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
 use crate::lamellar_arch::LamellarArch;
 use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, RemoteMemoryRegion,
-};
-use crate::scheduler::{create_scheduler, SchedulerQueue, SchedulerType};
+use crate::memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle};
+use crate::memregion::{one_sided::OneSidedMemoryRegion, Dist, RemoteMemoryRegion};
+use crate::scheduler::{create_scheduler, ExecutorType, LamellarTask};
+use crate::{active_messaging::*, config};
 // use log::trace;
 
 //use tracing::*;
 
-use futures::Future;
+use futures_util::future::join_all;
+use futures_util::Future;
 use parking_lot::RwLock;
 use pin_weak::sync::PinWeak;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -44,15 +44,18 @@ pub struct LamellarWorld {
 }
 
 impl ActiveMessaging for LamellarWorld {
+    type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
+    type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
+    type LocalAmHandle<L> = LocalAmHandle<L>;
     //#[tracing::instrument(skip_all)]
-    fn exec_am_all<F>(&self, am: F) -> Pin<Box<dyn Future<Output = Vec<F::Output>> + Send>>
+    fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
     //#[tracing::instrument(skip_all)]
-    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
@@ -60,7 +63,7 @@ impl ActiveMessaging for LamellarWorld {
         self.team.exec_am_pe(pe, am)
     }
     //#[tracing::instrument(skip_all)]
-    fn exec_am_local<F>(&self, am: F) -> Pin<Box<dyn Future<Output = F::Output> + Send>>
+    fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
@@ -70,9 +73,30 @@ impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         self.team.wait_all();
     }
+    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+        self.team.await_all()
+    }
     //#[tracing::instrument(skip_all)]
     fn barrier(&self) {
         self.team.barrier();
+    }
+
+    fn async_barrier(&self) -> BarrierHandle {
+        self.team.async_barrier()
+    }
+
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        self.team_rt.scheduler.spawn_task(
+            f,
+            vec![
+                self.team_rt.world_counters.clone(),
+                self.team_rt.team_counters.clone(),
+            ],
+        )
     }
 
     fn block_on<F>(&self, f: F) -> F::Output
@@ -83,13 +107,49 @@ impl ActiveMessaging for LamellarWorld {
         self.team_rt.scheduler.block_on(f)
         // )
     }
+
+    fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send + 'static,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        // trace_span!("block_on_all").in_scope(||
+        self.team_rt
+            .scheduler
+            .block_on(join_all(iter.into_iter().map(|task| {
+                self.team_rt.scheduler.spawn_task(
+                    task,
+                    vec![
+                        self.team_rt.world_counters.clone(),
+                        self.team_rt.team_counters.clone(),
+                    ],
+                )
+            })))
+        // )
+    }
 }
 
 impl RemoteMemoryRegion for LamellarWorld {
     //#[tracing::instrument(skip_all)]
-    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegion<T> {
-        self.barrier();
+    fn try_alloc_shared_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> FallibleSharedMemoryRegionHandle<T> {
+        self.team.try_alloc_shared_mem_region::<T>(size)
+    }
+
+    //#[tracing::instrument(skip_all)]
+    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         self.team.alloc_shared_mem_region::<T>(size)
+    }
+
+    //#[tracing::instrument(skip_all)]
+    fn try_alloc_one_sided_mem_region<T: Dist>(
+        &self,
+        size: usize,
+    ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
+        self.team.try_alloc_one_sided_mem_region::<T>(size)
     }
 
     //#[tracing::instrument(skip_all)]
@@ -181,8 +241,15 @@ impl LamellarWorld {
         }
     }
 
-    #[doc(hidden)]
-    //#[tracing::instrument(skip_all)]
+    #[doc(alias("One-sided", "onesided"))] //#[tracing::instrument(skip_all)]
+    /// Returns the underlying [LamellarTeam] for this world
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let team = world.team();
+    ///```
     pub fn team(&self) -> Arc<LamellarTeam> {
         self.team.clone()
     }
@@ -203,6 +270,10 @@ impl LamellarWorld {
     pub fn num_threads_per_pe(&self) -> usize {
         self.team.num_threads_per_pe()
     }
+
+    // pub fn flush(&self) {
+    //     self.team_rt.flush();
+    // }
 }
 
 impl LamellarEnv for LamellarWorld {
@@ -248,6 +319,11 @@ impl Drop for LamellarWorld {
         if cnt == 1 {
             // println!("[{:?}] world dropping", self.my_pe);
             // println!(
+            //     "lamellae cnt {:?} sched cnt {:?}",
+            //     Arc::strong_count(&self.team_rt.lamellae),
+            //     Arc::strong_count(&self.team_rt.scheduler)
+            // );
+            // println!(
             //     "in team destroy mype: {:?} cnt: {:?} {:?}",
             //     self.my_pe,
             //     self._counters.send_req_cnt.load(Ordering::SeqCst),
@@ -273,6 +349,7 @@ impl Drop for LamellarWorld {
                 //     self._counters.send_req_cnt.load(Ordering::SeqCst),
                 //     self._counters.outstanding_reqs.load(Ordering::SeqCst),
                 // );
+                self.barrier();
                 self.wait_all();
                 // println!(
                 //     "in team destroy mype: {:?} cnt: {:?} {:?}",
@@ -309,10 +386,15 @@ impl Drop for LamellarWorld {
             // println!(
             //     "team: {:?} team_rt: {:?}",
             //     Arc::strong_count(&self.team),
-            //     unsafe { Arc::strong_count(&team_rt) }
+            //     unsafe { Arc::strong_count(&self.team_rt) }
             // );
 
             // println!("counters: {:?}", Arc::strong_count(&self._counters));
+            // println!(
+            //     "sechduler_new: {:?}",
+            //     Arc::strong_count(&self.team_rt.scheduler)
+            // );
+            // println!("[{:?}] world dropped", self.my_pe);
         }
         // println!("[{:?}] world dropped", self.my_pe);
     }
@@ -327,7 +409,7 @@ impl Drop for LamellarWorld {
 /// # Examples
 ///
 ///```
-/// use lamellar::{LamellarWorldBuilder,Backend,SchedulerType};
+/// use lamellar::{LamellarWorldBuilder,Backend,ExecutorType};
 /// // can also use and of the module preludes
 /// // use lamellar::active_messaging::prelude::*;
 /// // use lamellar::array::prelude::*;
@@ -336,14 +418,14 @@ impl Drop for LamellarWorld {
 ///
 /// let world = LamellarWorldBuilder::new()
 ///                             .with_lamellae(Backend::Local)
-///                             .with_scheduler(SchedulerType::WorkStealing)
+///                             .with_executor(ExecutorType::LamellarWorkStealing)
 ///                             .build();
 ///```
 #[derive(Debug)]
 pub struct LamellarWorldBuilder {
     primary_lamellae: Backend,
     // secondary_lamellae: HashSet<Backend>,
-    scheduler: SchedulerType,
+    executor: ExecutorType,
     num_threads: usize,
 }
 
@@ -359,7 +441,7 @@ impl LamellarWorldBuilder {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{LamellarWorldBuilder,Backend,SchedulerType};
+    /// use lamellar::{LamellarWorldBuilder,Backend,ExecutorType};
     /// // can also use and of the module preludes
     /// // use lamellar::active_messaging::prelude::*;
     /// // use lamellar::array::prelude::*;
@@ -368,50 +450,34 @@ impl LamellarWorldBuilder {
     ///
     /// let world = LamellarWorldBuilder::new()
     ///                             .with_lamellae(Backend::Local)
-    ///                             .with_scheduler(SchedulerType::WorkStealing)
+    ///                             .with_executor(ExecutorType::LamellarWorkStealing)
     ///                             .build();
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
-        let scheduler = match std::env::var("LAMELLAR_SCHEDULER") {
-            Ok(val) => {
-                let scheduler = val.parse::<usize>().unwrap();
-                if scheduler == 0 {
-                    SchedulerType::WorkStealing
+        let executor = match config().executor.as_str(){
+            "tokio" => {
+                #[cfg(not(feature = "tokio-executor"))]
+                {
+                    panic!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled, either recompile lamellar with --features tokio-executor, or set LAMELLAR_EXECUTOR to one of 'lamellar' or 'async_std'");
                 }
-                // else if scheduler == 1 {
-                //     SchedulerType::NumaWorkStealing
-                // } else if scheduler == 2 {
-                //     SchedulerType::NumaWorkStealing2
-                // }
-                else {
-                    SchedulerType::WorkStealing
-                }
+                #[cfg(feature = "tokio-executor")]
+                ExecutorType::Tokio
             }
-            Err(_) => SchedulerType::WorkStealing,
+            "async_std" => ExecutorType::AsyncStd,
+            "lamellar" => ExecutorType::LamellarWorkStealing,
+            "lamellar2" => ExecutorType::LamellarWorkStealing2,
+            "lamellar3" => ExecutorType::LamellarWorkStealing3,
+            _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'async_std', or (if tokio-executor feature is enabled, 'tokio'.")
         };
-        let num_threads = match std::env::var("LAMELLAR_THREADS") {
-            Ok(n) => {
-                if let Ok(num_threads) = n.parse::<usize>() {
-                    if num_threads == 0 {
-                        panic!("LAMELLAR_THREADS must be greater than 0");
-                    } else if num_threads == 1 {
-                        num_threads
-                    } else {
-                        num_threads - 1
-                    }
-                } else {
-                    panic!("LAMELLAR_THREADS must be an integer greater than 0");
-                }
-            }
-            Err(_) => 4,
-        };
+
+        let num_threads = config().threads;
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
-            scheduler: scheduler,
+            executor: executor,
             num_threads: num_threads,
         }
     }
@@ -444,24 +510,24 @@ impl LamellarWorldBuilder {
     // }
 
     #[doc(alias = "Collective")]
-    /// Specify the scheduler to use for this execution
+    /// Specify the executor to use for this execution
     ///
     /// # Collective Operation
-    /// While simply calling `with_scheduler` is not collective by itself (i.e. there is no internal barrier that would deadlock,
+    /// While simply calling `with_executor` is not collective by itself (i.e. there is no internal barrier that would deadlock,
     /// as the remote fabric is not initiated until after a call to `build`), it is necessary that the same
     /// parameters are used by all PEs that will exist in the world.
     ///
     /// # Examples
     ///
     ///```
-    /// use lamellar::{LamellarWorldBuilder,SchedulerType};
+    /// use lamellar::{LamellarWorldBuilder,ExecutorType};
     ///
     /// let builder = LamellarWorldBuilder::new()
-    ///                             .with_scheduler(SchedulerType::WorkStealing);
+    ///                             .with_executor(ExecutorType::LamellarWorkStealing);
     ///```
-    //#[tracing::instrument(skip_all)]
-    pub fn with_scheduler(mut self, sched: SchedulerType) -> LamellarWorldBuilder {
-        self.scheduler = sched;
+    // #[tracing::instrument(skip_all)]
+    pub fn with_executor(mut self, sched: ExecutorType) -> LamellarWorldBuilder {
+        self.executor = sched;
         self
     }
 
@@ -475,10 +541,10 @@ impl LamellarWorldBuilder {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{LamellarWorldBuilder,SchedulerType};
+    /// use lamellar::{LamellarWorldBuilder,ExecutorType};
     ///
     /// let builder = LamellarWorldBuilder::new()
-    ///                             .set_num_workers(10);
+    ///                             .set_num_threads(10);
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn set_num_threads(mut self, num_threads: usize) -> LamellarWorldBuilder {
@@ -495,11 +561,11 @@ impl LamellarWorldBuilder {
     /// # Examples
     ///
     ///```
-    /// use lamellar::{LamellarWorldBuilder,Backend,SchedulerType};
+    /// use lamellar::{LamellarWorldBuilder,Backend,ExecutorType};
     ///
     /// let world = LamellarWorldBuilder::new()
     ///                             .with_lamellae(Backend::Local)
-    ///                             .with_scheduler(SchedulerType::WorkStealing)
+    ///                             .with_executor(ExecutorType::LamellarWorkStealing)
     ///                             .build();
     ///```
     //#[tracing::instrument(skip_all)]
@@ -520,16 +586,21 @@ impl LamellarWorldBuilder {
         // println!("{:?}: init_fabric", timer.elapsed());
 
         // timer = std::time::Instant::now();
+
+        // we delay building the scheduler until we know the number of PEs (which is used for message aggregation)
+        // this could be lazyily provided but this is easy enough to do here
         let panic = Arc::new(AtomicU8::new(0));
         let sched_new = Arc::new(create_scheduler(
-            self.scheduler,
+            self.executor,
             num_pes,
             self.num_threads,
             panic.clone(),
-            my_pe,
-            // teams.clone(),
         ));
-        // println!("{:?}: create_scheduler", timer.elapsed());
+        // println!(
+        //     " create_scheduler  cnt {:?}",
+        //     // timer.elapsed(),
+        //     Arc::strong_count(&sched_new)
+        // );
 
         // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());

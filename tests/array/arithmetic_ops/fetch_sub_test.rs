@@ -6,24 +6,32 @@ use rand::distributions::Uniform;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
         }
-        $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -78,211 +86,235 @@ macro_rules! max_updates {
     };
 }
 
-macro_rules! fetch_sub_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let _my_pe = world.my_pe();
-            let array_total_len = $len;
+macro_rules! onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array.read_lock().block().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.onesided_iter()
+    };
+}
 
-            let mut rng = rand::thread_rng();
-            let rand_idx = Uniform::from(0..array_total_len);
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+macro_rules! fetch_sub_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let _my_pe = world.my_pe();
+        let array_total_len = $len;
 
-            let pe_max_val: $t = 10 as $t;
-            let max_val = pe_max_val * num_pes as $t;
-            let init_val = max_val as $t;
-            #[allow(unused)]
-            let zero = 0 as $t;
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
-            for idx in 0..array.len(){
-                let mut reqs = vec![];
-                for _i in 0..(pe_max_val as usize){
-                    reqs.push(array.fetch_sub(idx,1 as $t));
-                }
-                #[allow(unused_mut)]
-                let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
-                for req in reqs{
-                    let val =  world.block_on(req) as u128;
-                    if ! insert_prev!($array,val,prevs){
-                        println!("full 1: {:?} {:?} {:?}",init_val,val,prevs);
-                        success = false;
-                        break;
-                    }
-                }
-            }
-            array.barrier();
-            #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{array.onesided_iter().into_iter().enumerate()}{
-                let val = *elem;
-                check_val!($array,val,zero,success);
-                if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
-                }
-            }
-            array.barrier();
-            let num_updates=max_updates!($t,num_pes);
-            let tot_updates = (num_updates*num_pes) as $t;
-            initialize_array!($array, array, tot_updates);
-            array.wait_all();
-            array.barrier();
-            // let mut prev_vals = vec![tot_updates as $t;array.len()];
+        let mut rng = rand::thread_rng();
+        let rand_idx = Uniform::from(0..array_total_len);
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
 
+        let pe_max_val: $t = 10 as $t;
+        let max_val = pe_max_val * num_pes as $t;
+        let init_val = max_val as $t;
+        #[allow(unused)]
+        let zero = 0 as $t;
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
+        for idx in 0..array.len() {
             let mut reqs = vec![];
-            // println!("2------------");
-            for _i in 0..num_updates{
-                let idx = rand_idx.sample(&mut rng);
-                reqs.push((array.fetch_sub(idx,1 as $t),idx))
-            }
-            for (req,_idx) in reqs{
-                let _val =  world.block_on(req);
-            }
-
-            array.barrier();
-            #[allow(unused_unsafe)]
-            let sum = unsafe {array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
-            let calced_sum = tot_updates as usize  * (array.len()-1);
-            check_val!($array,sum,calced_sum,success);
-            if !success{
-                println!("{:?} {:?} {:?}",sum,calced_sum,(array.len()-1));
-            }
-            world.wait_all();
-            world.barrier();
-            initialize_array!($array, array, init_val);
-
-
-
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
-            let rand_idx = Uniform::from(0..half_len);
-            let sub_array = array.sub_array(start_i..end_i);
-            sub_array.barrier();
-            for idx in 0..sub_array.len(){
-                let mut reqs = vec![];
-                for _i in 0..(pe_max_val as usize){
-                    reqs.push(sub_array.fetch_sub(idx,1 as $t));
-                }
-                #[allow(unused_mut)]
-                let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
-                for req in reqs{
-                    let val =  world.block_on(req) as u128;
-                    if ! insert_prev!($array,val,prevs){
-                        println!("half 1: {:?} {:?}",val,prevs);
-                        success = false;
-                        break;
-                    }
-                }
-            }
-            sub_array.barrier();
-            #[allow(unused_unsafe)]
-            for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
-                let val = *elem;
-                check_val!($array,val,zero,success);
-                if !success{
-                    println!("{:?} {:?} {:?}",i,val,max_val);
-                }
-            }
-            sub_array.barrier();
-            let num_updates=max_updates!($t,num_pes);
-            let tot_updates = (num_updates*num_pes) as $t;
-            initialize_array!($array, array, tot_updates);
-            sub_array.wait_all();
-            sub_array.barrier();
-            // let mut prev_vals = vec![tot_updates ;sub_array.len()];
-            let mut reqs = vec![];
-            // println!("2------------");
-            for _i in 0..num_updates{
-                let idx = rand_idx.sample(&mut rng);
-                reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
-            }
-            for (req,_idx) in reqs{
-                let _val =  world.block_on(req);
-            }
-            sub_array.barrier();
-            #[allow(unused_unsafe)]
-            let sum = unsafe{sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
-            let calced_sum = tot_updates as usize  * (sub_array.len()-1);
-            check_val!($array,sum,calced_sum,success);
-            if !success{
-                println!("{:?} {:?} {:?}",sum,calced_sum,(sub_array.len()-1));
-            }
-            sub_array.wait_all();
-            sub_array.barrier();
-            initialize_array!($array, array, init_val);
-
-
-            let pe_len = array_total_len/num_pes;
-            for pe in 0..num_pes{
-                let len = std::cmp::max(pe_len/2,1);
-                let start_i = (pe*pe_len)+ len/2;
-                let end_i = start_i+len;
-                let rand_idx = Uniform::from(0..len);
-                let sub_array = array.sub_array(start_i..end_i);
-                sub_array.barrier();
-                for idx in 0..sub_array.len(){
-                    let mut reqs = vec![];
-                    for _i in 0..(pe_max_val as usize){
-                        reqs.push(sub_array.fetch_sub(idx,1 as $t));
-                    }
-                    #[allow(unused_mut)]
-                    let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
-                    for req in reqs{
-                        let val =  world.block_on(req) as u128;
-                        if ! insert_prev!($array,val,prevs){
-                            println!("pe 1: {:?} {:?}",val,prevs);
-                            success = false;
-                            break;
-                        }
-                    }
-                }
-                sub_array.barrier();
+            for _i in 0..(pe_max_val as usize) {
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe{sub_array.onesided_iter().into_iter().enumerate()}{
-                    let val = *elem;
-                    check_val!($array,val,zero,success);
-                    if !success{
-                        println!("{:?} {:?} {:?}",i,val,max_val);
-                    }
-                }
-                sub_array.barrier();
-                let num_updates=max_updates!($t,num_pes);
-                let tot_updates = (num_updates*num_pes) as $t;
-                initialize_array!($array, array, tot_updates);
-                sub_array.wait_all();
-                sub_array.barrier();
-                let mut reqs = vec![];
-                // println!("2------------");
-                for _i in 0..num_updates{
-                    let idx = rand_idx.sample(&mut rng);
-                    reqs.push((sub_array.fetch_sub(idx,1 as $t),idx))
-                }
-                for (req,_idx) in reqs{
-                    let _val =  world.block_on(req);
-                }
-
-                sub_array.barrier();
-                #[allow(unused_unsafe)]
-                let sum = unsafe{sub_array.onesided_iter().into_iter().fold(0,|acc,x| acc+ *x as usize)};
-                let calced_sum = tot_updates as usize  * (sub_array.len()-1);
-                check_val!($array,sum,calced_sum,success);
-                if !success{
-                    println!("{:?} {:?} {:?}",sum,calced_sum,(sub_array.len()-1));
-                }
-                sub_array.wait_all();
-                sub_array.barrier();
-                initialize_array!($array, array, init_val);
+                reqs.push(unsafe { array.fetch_sub(idx, 1 as $t) });
             }
-
-            if !success{
-                eprintln!("failed");
+            #[allow(unused_mut)]
+            let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
+            for req in reqs {
+                let val = world.block_on(req) as u128;
+                if !insert_prev!($array, val, prevs) {
+                    eprintln!("full 1: {:?} {:?} {:?}", init_val, val, prevs);
+                    success = false;
+                    break;
+                }
             }
         }
-    }
+        array.barrier();
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
+            let val = *elem;
+            check_val!($array, val, zero, success);
+            if !success {
+                eprintln!("{:?} {:?} {:?}", i, val, max_val);
+            }
+        }
+        array.barrier();
+        let num_updates = max_updates!($t, num_pes);
+        let tot_updates = (num_updates * num_pes) as $t;
+        initialize_array!($array, array, tot_updates);
+        array.wait_all();
+        array.barrier();
+        // let mut prev_vals = vec![tot_updates as $t;array.len()];
+
+        let mut reqs = vec![];
+        // println!("2------------");
+        for _i in 0..num_updates {
+            let idx = rand_idx.sample(&mut rng);
+            #[allow(unused_unsafe)]
+            reqs.push((unsafe { array.fetch_sub(idx, 1 as $t) }, idx))
+        }
+        for (req, _idx) in reqs {
+            let _val = world.block_on(req);
+        }
+
+        array.barrier();
+        #[allow(unused_unsafe)]
+        let sum = unsafe {
+            onesided_iter!($array, array)
+                .into_iter()
+                .fold(0, |acc, x| acc + *x as usize)
+        };
+        let calced_sum = tot_updates as usize * (array.len() - 1);
+        check_val!($array, sum, calced_sum, success);
+        if !success {
+            eprintln!("{:?} {:?} {:?}", sum, calced_sum, (array.len() - 1));
+        }
+        world.wait_all();
+        world.barrier();
+        initialize_array!($array, array, init_val);
+
+        let half_len = array_total_len / 2;
+        let start_i = half_len / 2;
+        let end_i = start_i + half_len;
+        let rand_idx = Uniform::from(0..half_len);
+        let sub_array = array.sub_array(start_i..end_i);
+        sub_array.barrier();
+        for idx in 0..sub_array.len() {
+            let mut reqs = vec![];
+            for _i in 0..(pe_max_val as usize) {
+                #[allow(unused_unsafe)]
+                reqs.push(unsafe { sub_array.fetch_sub(idx, 1 as $t) });
+            }
+            #[allow(unused_mut)]
+            let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
+            for req in reqs {
+                let val = world.block_on(req) as u128;
+                if !insert_prev!($array, val, prevs) {
+                    eprintln!("half 1: {:?} {:?}", val, prevs);
+                    success = false;
+                    break;
+                }
+            }
+        }
+        sub_array.barrier();
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
+            let val = *elem;
+            check_val!($array, val, zero, success);
+            if !success {
+                eprintln!("{:?} {:?} {:?}", i, val, max_val);
+            }
+        }
+        sub_array.barrier();
+        let num_updates = max_updates!($t, num_pes);
+        let tot_updates = (num_updates * num_pes) as $t;
+        initialize_array!($array, array, tot_updates);
+        sub_array.wait_all();
+        sub_array.barrier();
+        // let mut prev_vals = vec![tot_updates ;sub_array.len()];
+        let mut reqs = vec![];
+        // println!("2------------");
+        for _i in 0..num_updates {
+            let idx = rand_idx.sample(&mut rng);
+            #[allow(unused_unsafe)]
+            reqs.push((unsafe { sub_array.fetch_sub(idx, 1 as $t) }, idx))
+        }
+        for (req, _idx) in reqs {
+            let _val = world.block_on(req);
+        }
+        sub_array.barrier();
+        #[allow(unused_unsafe)]
+        let sum = unsafe {
+            onesided_iter!($array, sub_array)
+                .into_iter()
+                .fold(0, |acc, x| acc + *x as usize)
+        };
+        let calced_sum = tot_updates as usize * (sub_array.len() - 1);
+        check_val!($array, sum, calced_sum, success);
+        if !success {
+            eprintln!("{:?} {:?} {:?}", sum, calced_sum, (sub_array.len() - 1));
+        }
+        sub_array.wait_all();
+        sub_array.barrier();
+        initialize_array!($array, array, init_val);
+
+        let pe_len = array_total_len / num_pes;
+        for pe in 0..num_pes {
+            let len = std::cmp::max(pe_len / 2, 1);
+            let start_i = (pe * pe_len) + len / 2;
+            let end_i = start_i + len;
+            let rand_idx = Uniform::from(0..len);
+            let sub_array = array.sub_array(start_i..end_i);
+            sub_array.barrier();
+            for idx in 0..sub_array.len() {
+                let mut reqs = vec![];
+                for _i in 0..(pe_max_val as usize) {
+                    #[allow(unused_unsafe)]
+                    reqs.push(unsafe { sub_array.fetch_sub(idx, 1 as $t) });
+                }
+                #[allow(unused_mut)]
+                let mut prevs: std::collections::HashSet<u128> = std::collections::HashSet::new();
+                for req in reqs {
+                    let val = world.block_on(req) as u128;
+                    if !insert_prev!($array, val, prevs) {
+                        eprintln!("pe 1: {:?} {:?}", val, prevs);
+                        success = false;
+                        break;
+                    }
+                }
+            }
+            sub_array.barrier();
+            #[allow(unused_unsafe)]
+            for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
+                let val = *elem;
+                check_val!($array, val, zero, success);
+                if !success {
+                    eprintln!("{:?} {:?} {:?}", i, val, max_val);
+                }
+            }
+            sub_array.barrier();
+            let num_updates = max_updates!($t, num_pes);
+            let tot_updates = (num_updates * num_pes) as $t;
+            initialize_array!($array, array, tot_updates);
+            sub_array.wait_all();
+            sub_array.barrier();
+            let mut reqs = vec![];
+            // println!("2------------");
+            for _i in 0..num_updates {
+                let idx = rand_idx.sample(&mut rng);
+                #[allow(unused_unsafe)]
+                reqs.push((unsafe { sub_array.fetch_sub(idx, 1 as $t) }, idx))
+            }
+            for (req, _idx) in reqs {
+                let _val = world.block_on(req);
+            }
+
+            sub_array.barrier();
+            #[allow(unused_unsafe)]
+            let sum = unsafe {
+                onesided_iter!($array, sub_array)
+                    .into_iter()
+                    .fold(0, |acc, x| acc + *x as usize)
+            };
+            let calced_sum = tot_updates as usize * (sub_array.len() - 1);
+            check_val!($array, sum, calced_sum, success);
+            if !success {
+                eprintln!("{:?} {:?} {:?}", sum, calced_sum, (sub_array.len() - 1));
+            }
+            sub_array.wait_all();
+            sub_array.barrier();
+            initialize_array!($array, array, init_val);
+        }
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 fn main() {

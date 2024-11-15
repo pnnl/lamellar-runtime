@@ -14,7 +14,7 @@ fn main() {
     let num_pes = world.num_pes();
 
     let array: GlobalLockArray<u8> =
-        GlobalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
+        GlobalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
@@ -24,10 +24,10 @@ fn main() {
         //     *i = num_pes as u8;
         // }
     }
-    let _ = array
+    array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = num_pes as u8);
-    array.wait_all();
+        .for_each(move |elem| *elem = num_pes as u8)
+        .block();
     array.barrier();
 
     world.barrier();
@@ -59,7 +59,7 @@ fn main() {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
                 unsafe {
-                    let _ = array.get(ARRAY_LEN * (num_pes - 1), &sub_reg);
+                    let _ = array.get(ARRAY_LEN * (num_pes - 1), &sub_reg).spawn();
                 }
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };

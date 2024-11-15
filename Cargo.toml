@@ -1,6 +1,6 @@
 [package]
 name = "lamellar"
-version = "0.6.1"
+version = "0.7.0-rc.1"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>",  "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>", "Joseph Cottam <joseph.cottam@pnnl.gov>","Greg Roek <gregory.roek@pnnl.gov>","Erdal Mutlu <erdal.mutlu@pnnl.gov>"]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
@@ -12,48 +12,42 @@ keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
 categories = ["asynchronous","concurrency", "network-programming","science"]
 
 [dependencies]
-lamellar-impl = { version = "0.6.0", path = "impl" }
+lamellar-impl = { version = "0.7.0-rc.1", path = "impl" }
 rofisys = { version ="0.3", optional = true }
 #rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
-inventory = "0.3" 
+inventory = "0.3"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
+serde_with = "3.0.0"
 bincode = "1.3.3"
 anyhow = "1.0.66"
-futures = "0.3.25"
-futures-lite= "1.12.0"
+futures-util = "0.3.30"
+pin-project = "1.1.4"
+pin-weak = "1.1.0"
 lazy_static = "1.4.0"
 crossbeam = "0.8.2"
 rand = "0.8.5"
 parking_lot = {version = "0.12.1", features = ["arc_lock", "send_guard", "serde"] }
 indexmap = "1.9.1" #lamellar_alloc
 core_affinity = "0.5.10"
-#log = "0.4.19"
-#simple_logger = "4.0.0"
 async-task = "4.3.0"
 async-trait = "0.1.58"
 async-std = "1.12.0"
 async-recursion = "1.0.0"
-libc = { version = "0.2.137", optional = true }
+async-lock = "2.8.0"
 enum_dispatch = "0.3.8"
 memoffset = "0.7.1"
 shared_memory = "0.12.4"
-#raw_sync = "0.1.5"
 paste = "1.0.9"
 newtype_derive = "0.1.6"
 custom_derive = "0.1.7"
 glob = "0.3.0"
 thread_local = "1.1.4"
-#tracing = "0.1.37"
-#tracing-futures = "0.2.5"
-#tracing-flame = "0.2.0"
-pin-project = "1.0.12"
-#enum-as-inner = "0.5.1"
-#itertools = "0.10.5"
-serde_with = "3.0.0"
-pin-weak = "1.1.0"
-async-lock = "2.8.0"
-itertools = "0.12.1"
+tokio = { version = "1.35.1", features = ["full"] , optional = true}
+libc = { version = "0.2.137", optional = true }
+async-global-executor = "2.4.1"
+envy = "0.4.2"
+
 
 
 [dev-dependencies]
@@ -70,20 +64,27 @@ tracing-subscriber = "0.3"
 [workspace]
 members = ["impl"]
 
-
+# Set the settings for build scripts and proc-macros.
+[profile.dev.build-override]
+opt-level = 3
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
-enable-rofi=["rofisys", "libc"]
+enable-rofi=["rofi","rofisys", "libc"]
+enable-rofi-shared=["rofi","rofisys/shared","libc"]
+rofi=[]
+tokio-executor=["tokio"]
 slurm-test=[]
+disable-runtime-warnings=[]
+runtime-warnings-panic=[]
 default=[]
 
 
 [profile.release]
 opt-level=3
-lto=true
+lto=false
 codegen-units=1
-debug = true   
+debug = true
 
 
 [lib]
@@ -168,10 +169,6 @@ path = "tests/array/atomic_ops/swap_test.rs"
 [[example]]
 name = "compare_exchange_test"
 path = "tests/array/atomic_ops/compare_exchange_test.rs"
-
-[[example]]
-name = "array_into_test"
-path = "tests/array/array_into_test.rs"
 
 ##------------ Bandwidth Examples -----------------##
 
@@ -367,6 +364,10 @@ path="examples/array_examples/global_lock_array.rs"
 name="histo"
 path="examples/array_examples/histo.rs"
 
+#[[example]]
+#name="single_pe_array"
+#path="examples/array_examples/single_pe_array.rs"
+
 ##------------ RDMA Examples -----------------##
 [[example]]
 name="rdma_put"
@@ -441,6 +442,14 @@ path="examples/misc/simple_ptp.rs"
 name="lamellar_env"
 path="examples/misc/lamellar_env.rs"
 
+[[example]]
+name="ping_pong"
+path="examples/misc/ping_pong.rs"
+
+[[example]]
+name="dist_hashmap"
+path="examples/misc/dist_hashmap.rs"
+
 
 ##------------ Darc examples ------------------##
 [[example]]
@@ -467,6 +476,3 @@ path="examples/hello_world/hello_world_array.rs"
 [[example]]
 name="hello_world_array_iteration"
 path="examples/hello_world/hello_world_array_iteration.rs"
-
-
-

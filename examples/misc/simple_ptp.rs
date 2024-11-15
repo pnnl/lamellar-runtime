@@ -62,7 +62,7 @@ fn main() {
     let mut reqs = Vec::new();
     let num_tasks = 100;
     for _i in 0..num_tasks {
-        reqs.push(world.exec_am_pe(0, SyncAM {}));
+        reqs.push(world.exec_am_pe(0, SyncAM {}).spawn());
     }
     world.wait_all();
     world.barrier();

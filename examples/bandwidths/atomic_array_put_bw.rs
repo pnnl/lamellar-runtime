@@ -13,17 +13,18 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let array: LocalLockArray<u8> =
-        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block);
+        LocalLockArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
         for i in data.as_mut_slice().unwrap() {
             *i = my_pe as u8;
         }
     }
-    let _ = array
+    array
         .dist_iter_mut()
-        .for_each(move |elem| *elem = 255 as u8); //this is can be pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, local lock tends to perform better
-    let mut array = array.into_atomic(); //so we simply convert the LocalLockArray array to atomic after initalization
+        .for_each(move |elem| *elem = 255 as u8)
+        .block(); //this is can be pretty slow for atomic arrays as we perform an atomic store for 2^30 elements, local lock tends to perform better
+    let mut array = array.into_atomic().block(); //so we simply convert the LocalLockArray array to atomic after initalization
 
     world.barrier();
     let s = Instant::now();
@@ -53,7 +54,7 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(..num_bytes as usize);
-                let _ = unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg) };
+                let _ = unsafe { array.put(ARRAY_LEN * (num_pes - 1) + j, sub_reg).spawn() };
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
                 sub_time += sub_timer.elapsed().as_secs_f64();
@@ -90,7 +91,7 @@ fn main() {
             (sum as f64 / 1048576.0) / cur_t, // throughput of user payload
             ((sum*(num_pes-1) as u64) as f64 / 1048576.0) / cur_t,
             cur - old, //total bytes sent including overhead
-            (cur - old) as f64 / cur_t, //throughput including overhead 
+            (cur - old) as f64 / cur_t, //throughput including overhead
             (mbs_c -mbs_o )/ cur_t,
             (cur_t/cnt as f64) * 1_000_000 as f64 ,
         );
@@ -102,9 +103,11 @@ fn main() {
         //         i.store(255 as u8);
         //     }
         // };
-        let temp = array.into_local_lock();
-        let _ = temp.dist_iter_mut().for_each(move |elem| *elem = 255 as u8); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
-        array = temp.into_atomic();
+        let temp = array.into_local_lock().block();
+        temp.dist_iter_mut()
+            .for_each(move |elem| *elem = 255 as u8)
+            .block(); //this is pretty slow for atomic arrays as we perform an atomic store for 2^30 elements
+        array = temp.into_atomic().block();
         world.barrier();
     }
     if my_pe == 0 {

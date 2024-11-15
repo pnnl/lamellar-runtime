@@ -29,11 +29,14 @@ where
 {
     type Item = Chunk<I>;
     type Array = <I as DistributedIterator>::Array;
-    fn init(&self, start_i: usize, cnt: usize) -> Chunks<I> {
+    fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Chunks<I> {
         // println!("init chunks start_i: {:?} cnt {:?} end_i: {:?} chunk_size: {:?} chunk_size(): {:?}",start_i,cnt, start_i+cnt,self.chunk_size,self.chunk_size());
         Chunks::new(
-            self.iter
-                .init(start_i * self.chunk_size, (start_i + cnt) * self.chunk_size),
+            self.iter.init(
+                start_i * self.chunk_size,
+                (start_i + cnt) * self.chunk_size,
+                _s,
+            ),
             start_i,
             cnt,
             self.chunk_size,
@@ -47,7 +50,10 @@ where
         if self.cur_i < self.end_i {
             // let size = std::cmp::min(self.chunk_size, self.end_i-self.cur_i);
             let start_i = self.cur_i * self.chunk_size;
-            let iter = self.iter.iter_clone(Sealed).init(start_i, self.chunk_size);
+            let iter = self
+                .iter
+                .iter_clone(Sealed)
+                .init(start_i, self.chunk_size, _s);
             // println!("new Chunk {:?} {:?} {:?} {:?}",self.cur_i, self.end_i, start_i,start_i+self.chunk_size);
             let chunk = Chunk { iter: iter };
             self.cur_i += 1;

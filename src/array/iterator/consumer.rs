@@ -3,20 +3,20 @@
 //!
 
 use crate::active_messaging::{LamellarArcLocalAm, SyncSend};
-use crate::array::iterator::IterRequest;
-use crate::lamellar_request::LamellarRequest;
+use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 
 use parking_lot::Mutex;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
+use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 // trait Consumer{
 //     type Item;
-//     fn init(&self, start: usize, cnt: usize) -> Self;
+//     fn init(&self, start: usize, cnt: usize, _s: Sealed) -> Self;
 //     fn monotonic(&self) -> Self;
 //     fn next(&self) -> Self::Item;
 // }
@@ -92,22 +92,6 @@ impl IterSchedule {
             }
         }
     }
-    // pub(crate) fn monotonic_iter<I: MonotonicIterConsumer,J: IterConsumer>(&self, iter: I) -> IterScheduleIter<I> {
-    //     match self {
-    //         IterSchedule::Static(start, end) => {
-    //             IterScheduleIter::Static(iter.monotonic::<J>().init(*start,end-start))
-    //         }
-    //         IterSchedule::Dynamic(cur_i, max_i) => {
-    //             IterScheduleIter::Dynamic(iter.monotonic::<J>(), cur_i.clone(), *max_i)
-    //         }
-    //         IterSchedule::Chunk(ranges, range_i) => {
-    //             IterScheduleIter::Chunk(iter.monotonic::<J>().init(0,0), ranges.clone(),range_i.clone())
-    //         }
-    //         IterSchedule::WorkStealing(range, siblings) => {
-    //             let (start, end) = *range.range.lock();
-    //             IterScheduleIter::WorkStealing(iter.monotonic::<J>().init(start, end-start), range.clone(), siblings.clone())            }
-    //     }
-    // }
 }
 
 pub(crate) enum IterScheduleIter<I: IterConsumer> {
@@ -183,17 +167,14 @@ pub(crate) trait IterConsumer: SyncSend {
     type AmOutput;
     type Output;
     type Item;
+    type Handle;
     fn init(&self, start: usize, cnt: usize) -> Self;
     fn next(&mut self) -> Option<Self::Item>;
     fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm;
     fn create_handle(
         self,
         team: Pin<Arc<LamellarTeamRT>>,
-        reqs: Vec<Box<dyn LamellarRequest<Output = Self::AmOutput>>>,
-    ) -> Box<dyn IterRequest<Output = Self::Output>>;
+        reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
+    ) -> Self::Handle;
     fn max_elems(&self, in_elems: usize) -> usize;
 }
-
-// pub(crate) trait MonotonicIterConsumer: IterConsumer{
-//     fn monotonic<I: IterConsumer>(&self) -> I;
-// }

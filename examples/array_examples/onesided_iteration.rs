@@ -1,12 +1,16 @@
+use futures_util::stream::StreamExt;
 use lamellar::array::prelude::*;
+
 const ARRAY_LEN: usize = 100;
 
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
-    let _num_pes = world.num_pes();
-    let block_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    let cyclic_array = AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic);
+    let num_pes = world.num_pes();
+    let block_array =
+        AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
+    let cyclic_array =
+        AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
 
     //we are going to initialize the data on each PE by directly accessing its local data
 
@@ -28,18 +32,19 @@ fn main() {
     // we do not currently provide a mutable one sided iterator.
 
     if my_pe == 0 {
+        println!("Here");
         for elem in block_array.onesided_iter().into_iter() {
             //we can convert from a oneside iterator into a rust iterator
             print!("{:?} ", elem);
         }
         println!("");
-
+        println!("Here2");
         for elem in cyclic_array.onesided_iter().into_iter() {
             print!("{:?} ", elem);
         }
         println!("");
     }
-
+    println!("Here3");
     println!("--------------------------------------------------------");
 
     // The lamellar array iterator used above is lazy, meaning that it only accesses and returns a value as its used,
@@ -102,8 +107,8 @@ fn main() {
 
     println!("--------------------------------------------------------");
 
-    // let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block);
-    // for elem in block_array.onesided_iter().into_iter().step_by(4) {...}
+    // let block_array = UnsafeArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Block).block();
+    // for elem in block_onesided_iter!($array,array).into_iter().step_by(4) {...}
     // for elem in block_array.buffered_onesided_iter(10) {...}
 
     // //rust step_by pseudo code
@@ -115,4 +120,28 @@ fn main() {
 
     // //--------------
     // for elem in block_array.onesided_iter().step_by(4).into_iter() {...}
+    // }
+
+    // fn main() {
+    //     let world = LamellarWorldBuilder::new().build();
+    //     let array = LocalLockArray::<usize>::new(&world, 8, Distribution::Block).block();
+    //     let my_pe = world.my_pe();
+    //     let num_pes = world.num_pes();
+    let block_array = block_array.into_local_lock().block();
+    block_array
+        .dist_iter_mut()
+        .for_each(move |e| *e = my_pe)
+        .block(); //initialize array using a distributed iterator
+
+    world.block_on(async move {
+        if my_pe == 0 {
+            let result = block_array
+                .onesided_iter()
+                .into_stream()
+                .take(4)
+                .map(|elem| *elem as f64)
+                .all(|elem| async move { elem < num_pes as f64 });
+            assert_eq!(result.await, true);
+        }
+    });
 }

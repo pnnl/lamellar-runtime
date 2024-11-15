@@ -1,3 +1,4 @@
+use crate::config;
 use crate::lamellae::comm::*;
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::rofi::rofi_api::*;
@@ -29,7 +30,7 @@ static ROFI_MAGIC_4: u32 = 0b10001111100100110010011111001100;
 static ROFI_MAGIC_2: u16 = 0b1100100110010011;
 static ROFI_MAGIC_1: u8 = 0b10011001;
 
-static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
+pub(crate) static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 #[derive(Debug)]
 pub(crate) struct RofiComm {
@@ -50,14 +51,11 @@ pub(crate) struct RofiComm {
 
 impl RofiComm {
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn new(provider: &str) -> RofiComm {
-        if let Ok(size) = std::env::var("LAMELLAR_MEM_SIZE") {
-            let size = size
-                .parse::<usize>()
-                .expect("invalid memory size, please supply size in bytes");
+    pub(crate) fn new(provider: &str, domain: &str) -> RofiComm {
+        if let Some(size) = config().heap_size {
             ROFI_MEM.store(size, Ordering::SeqCst);
         }
-        rofi_init(provider).expect("error in rofi init");
+        rofi_init(provider, domain).expect("error in rofi init");
         // trace!("rofi initialized");
         rofi_barrier();
         let num_pes = rofi_get_size();
@@ -92,13 +90,10 @@ impl RofiComm {
 
     //#[tracing::instrument(skip_all)]
     unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
-        // println!("{:?} {:?} {:?} {:?} {:?}",std::mem::size_of::<T>(),std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>()),(dst_addr.len()*std::mem::size_of::<T>())/std::mem::size_of::<R>(),(dst_addr.len()*std::mem::size_of::<T>())%std::mem::size_of::<R>());
-        let bytes = std::slice::from_raw_parts_mut(
-            dst_addr.as_ptr() as *mut T as *mut R,
-            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
-        );
-        for elem in bytes.iter_mut() {
-            *elem = val;
+        let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
+        let r_ptr = dst_addr.as_ptr() as *mut T as *mut R;
+        for i in 0..num_r {
+            r_ptr.offset(i as isize).write_unaligned(val);
         }
     }
     //#[tracing::instrument(skip_all)]
@@ -118,24 +113,28 @@ impl RofiComm {
         }
     }
     //#[tracing::instrument(skip_all)]
-    unsafe fn check_buffer_elems<R: std::cmp::PartialEq, T>(
+    unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
         &self,
         dst_addr: &mut [T],
         val: R,
     ) -> TxResult<()> {
-        let bytes = std::slice::from_raw_parts_mut(
-            dst_addr.as_ptr() as *mut T as *mut R,
-            (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>(),
-        );
+        let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
+        let r_ptr = dst_addr.as_ptr() as *mut T as *mut R;
+
+        // println!("num_r {:?}", num_r);
+
         let mut timer = std::time::Instant::now();
-        for i in 0..(bytes.len() as isize - 2) {
-            while bytes[i as usize] == val && bytes[i as usize + 1] == val {
+        for i in 0..num_r - 2 {
+            while r_ptr.offset(i as isize).read_unaligned() == val
+                && r_ptr.offset(i as isize + 1).read_unaligned() == val
+            {
                 if timer.elapsed().as_secs_f64() > 1.0 {
                     // println!(
-                    //     "{:?}: {:?} {:?} {:?}",
+                    //     "{:?}/{:?}: {:?} {:?} {:?}",
                     //     i,
-                    //     bytes[i as usize],
-                    //     bytes[i as usize + 1],
+                    //     num_r,
+                    //     r_ptr.offset(i as isize).read_unaligned(),
+                    //     r_ptr.offset(i as isize + 1).read_unaligned(),
                     //     val
                     // );
                     return Err(TxError::GetError);
@@ -143,9 +142,10 @@ impl RofiComm {
                 //hopefully magic number doesnt appear twice in a row
                 std::thread::yield_now();
             }
+            timer = std::time::Instant::now();
         }
         timer = std::time::Instant::now();
-        while bytes[bytes.len() - 1] == val {
+        while r_ptr.offset(num_r as isize - 1).read_unaligned() == val {
             if timer.elapsed().as_secs_f64() > 1.0 {
                 // println!("{:?}", bytes[bytes.len() - 1]);
                 return Err(TxError::GetError);
@@ -158,12 +158,16 @@ impl RofiComm {
     //#[tracing::instrument(skip_all)]
     fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()> {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+        // if bytes_len > 0 {
+
+        // find largest int size that evenly divides bytes_len
+        // we multiply by 2 because we check two ints at a time
         unsafe {
-            if bytes_len % std::mem::size_of::<u64>() == 0 {
+            if bytes_len % (2 * std::mem::size_of::<u64>()) == 0 {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_8)?;
-            } else if bytes_len % std::mem::size_of::<u32>() == 0 {
+            } else if bytes_len % (2 * std::mem::size_of::<u32>()) == 0 {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_4)?;
-            } else if bytes_len % std::mem::size_of::<u16>() == 0 {
+            } else if bytes_len % (2 * std::mem::size_of::<u16>()) == 0 {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_2)?;
             } else {
                 self.check_buffer_elems(dst_addr, ROFI_MAGIC_1)?;
@@ -191,6 +195,9 @@ impl RofiComm {
             }
             Ok(_) => {}
         }
+    }
+    pub(crate) fn heap_size() -> usize {
+        ROFI_MEM.load(Ordering::SeqCst)
     }
 }
 
@@ -258,6 +265,7 @@ impl CommOps for RofiComm {
     }
     //#[tracing::instrument(skip_all)]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        // println!("rt_alloc size {size} align {align}");
         // let size = size + size%8;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -355,12 +363,16 @@ impl CommOps for RofiComm {
             // }
         } else {
             unsafe {
-                // println!("[{:?}]-({:?}) memcopy {:?} into {:x}",pe,src_addr.as_ptr(),src_addr.len(),dst_addr);
-                std::ptr::copy_nonoverlapping(
-                    src_addr.as_ptr(),
-                    dst_addr as *mut T,
-                    src_addr.len(),
-                );
+                // println!(
+                //     "[{:?}]-({:?}) memcopy {:?} into {:x} src align {:?} dst align {:?}",
+                //     pe,
+                //     src_addr.as_ptr(),
+                //     src_addr.len(),
+                //     dst_addr,
+                //     src_addr.as_ptr().align_offset(std::mem::align_of::<T>()),
+                //     (dst_addr as *mut T).align_offset(std::mem::align_of::<T>()),
+                // );
+                std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
             }
         }
         // req
@@ -389,11 +401,7 @@ impl CommOps for RofiComm {
         } else {
             unsafe {
                 // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
-                std::ptr::copy_nonoverlapping(
-                    src_addr.as_ptr(),
-                    dst_addr as *mut T,
-                    src_addr.len(),
-                );
+                std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
             }
         }
         // req
@@ -426,7 +434,7 @@ impl CommOps for RofiComm {
         }
         // drop(lock);
         unsafe {
-            std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
+            std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
         }
         self.put_amt.fetch_add(
             src_addr.len() * (self.num_pes - 1) * std::mem::size_of::<T>(),
@@ -482,11 +490,7 @@ impl CommOps for RofiComm {
         } else {
             // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    src_addr as *const T,
-                    dst_addr.as_mut_ptr(),
-                    dst_addr.len(),
-                );
+                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
             }
         }
         // req
@@ -562,67 +566,59 @@ impl CommOps for RofiComm {
             }
         } else {
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    src_addr as *const T,
-                    dst_addr.as_mut_ptr(),
-                    dst_addr.len(),
-                );
+                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
             }
         }
     }
 
     //src address is relative to rofi base addr
     //#[tracing::instrument(skip_all)]
-    fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        //-> RofiReq {
-        // let mut req = RofiReq{
-        //     txids: Vec::new(),
-        //     _drop_set: self.drop_set.clone(),
-        //     _any_dropped: self.any_dropped.clone(),
-        // };
-        if pe != self.my_pe {
-            // unsafe {
-            // let _lock = self.comm_mutex.write();
-            // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
+    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    //     //-> RofiReq {
+    //     // let mut req = RofiReq{
+    //     //     txids: Vec::new(),
+    //     //     _drop_set: self.drop_set.clone(),
+    //     //     _any_dropped: self.any_dropped.clone(),
+    //     // };
+    //     if pe != self.my_pe {
+    //         // unsafe {
+    //         // let _lock = self.comm_mutex.write();
+    //         // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
 
-            match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe) {
-                //.expect("error in rofi get")
-                Err(_ret) => {
-                    println!(
-                        "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
-                        self.my_pe,
-                        pe,
-                        src_addr,
-                        src_addr+*self.rofi_base_address.read() ,
-                        dst_addr.as_ptr(),
-                        *self.rofi_base_address.read(),
-                        dst_addr.len()
-                    );
-                    panic!();
-                }
-                Ok(_ret) => {
-                    self.get_cnt.fetch_add(1, Ordering::SeqCst);
-                    self.get_amt
-                        .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-                    // if ret != 0{
-                    //     req.txids.push(ret);
-                    // }
-                }
-            }
-            // };
-        } else {
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    src_addr as *const T,
-                    dst_addr.as_mut_ptr(),
-                    dst_addr.len(),
-                );
-            }
-        }
-        // req
-        // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
-        // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
-    }
+    //         match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe) {
+    //             //.expect("error in rofi get")
+    //             Err(_ret) => {
+    //                 println!(
+    //                     "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
+    //                     self.my_pe,
+    //                     pe,
+    //                     src_addr,
+    //                     src_addr+*self.rofi_base_address.read() ,
+    //                     dst_addr.as_ptr(),
+    //                     *self.rofi_base_address.read(),
+    //                     dst_addr.len()
+    //                 );
+    //                 panic!();
+    //             }
+    //             Ok(_ret) => {
+    //                 self.get_cnt.fetch_add(1, Ordering::SeqCst);
+    //                 self.get_amt
+    //                     .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+    //                 // if ret != 0{
+    //                 //     req.txids.push(ret);
+    //                 // }
+    //             }
+    //         }
+    //         // };
+    //     } else {
+    //         unsafe {
+    //             std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+    //         }
+    //     }
+    //     // req
+    //     // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
+    //     // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
+    // }
 
     fn force_shutdown(&self) {
         let _res = rofi_finit();
@@ -641,7 +637,7 @@ impl Drop for RofiComm {
             println!("dropping rofi -- memory in use {:?}", self.occupied());
         }
         if self.alloc.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_MEM_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, ROFI_MEM.load(Ordering::SeqCst));
         }
         // let _lock = self.comm_mutex.write();
         rofi_barrier();
@@ -677,7 +673,7 @@ pub(crate) struct RofiData {
 
 impl RofiData {
     //#[tracing::instrument(skip_all)]
-    pub fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData, anyhow::Error> {
+    pub(crate) fn new(rofi_comm: Arc<Comm>, size: usize) -> Result<RofiData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr = rofi_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;

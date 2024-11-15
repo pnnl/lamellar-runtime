@@ -2,24 +2,32 @@ use lamellar::array::prelude::*;
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
         unsafe {
-            $array.dist_iter_mut().for_each(move |x| *x = $init_val);
+            $array
+                .dist_iter_mut()
+                .for_each(move |x| *x = $init_val)
+                .block();
         }
-        $array.wait_all();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -58,6 +66,15 @@ macro_rules! max_updates {
     };
 }
 
+macro_rules! onesided_iter {
+    (GlobalLockArray,$array:ident) => {
+        $array.read_lock().block().onesided_iter()
+    };
+    ($arraytype:ident,$array:ident) => {
+        $array.onesided_iter()
+    };
+}
+
 macro_rules! rem_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
@@ -67,7 +84,7 @@ macro_rules! rem_test{
             let array_total_len = $len;
             #[allow(unused_mut)]
             let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
             let max_updates = max_updates!($t,num_pes);
             let max_val =  2u128.pow((max_updates*num_pes) as u32) as $t;
@@ -79,18 +96,19 @@ macro_rules! rem_test{
             // array.print();
             for idx in 0..array.len(){
                 for _i in 0..(max_updates as usize){
-                    array.rem(idx,2 as $t);
+                    #[allow(unused_unsafe)]
+                    unsafe{array.rem(idx,2 as $t)};
                 }
             }
             array.wait_all();
             array.barrier();
             // array.print();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe {array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe {onesided_iter!($array,array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("full {:?} {:?} {:?}",i,val,one);
+                    eprintln!("full {:?} {:?} {:?}",i,val,one);
                 }
             }
 
@@ -106,17 +124,18 @@ macro_rules! rem_test{
             // // sub_array.print();
             for idx in 0..sub_array.len(){
                 for _i in 0..(max_updates as usize){
-                    sub_array.rem(idx,2 as $t);
+                    #[allow(unused_unsafe)]
+                    unsafe{sub_array.rem(idx,2 as $t)};
                 }
             }
             sub_array.wait_all();
             sub_array.barrier();
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate()}{
+            for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate()}{
                 let val = *elem;
                 check_val!($array,val,one,success);
                 if !success{
-                    println!("half {:?} {:?} {:?}",i,val,one);
+                    eprintln!("half {:?} {:?} {:?}",i,val,one);
                 }
             }
             sub_array.barrier();
@@ -132,17 +151,18 @@ macro_rules! rem_test{
                 sub_array.barrier();
                 for idx in 0..sub_array.len(){
                     for _i in 0..(max_updates as usize){
-                        sub_array.rem(idx,2 as $t);
+                        #[allow(unused_unsafe)]
+                        unsafe{sub_array.rem(idx,2 as $t)};
                     }
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe {sub_array.onesided_iter().into_iter().enumerate()}{
+                for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate()}{
                     let val = *elem;
                     check_val!($array,val,one,success);
                     if !success{
-                        println!("pe {:?} {:?} {:?}",i,val,one);
+                        eprintln!("pe {:?} {:?} {:?}",i,val,one);
                     }
                 }
                 sub_array.barrier();

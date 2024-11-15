@@ -7,7 +7,7 @@ struct ArrayWrapper<T: Dist> {
 impl<T: Dist + ArrayOps + Default> ArrayWrapper<T> {
     fn new(world: LamellarWorld, len: usize) -> Self {
         ArrayWrapper {
-            _array: AtomicArray::<T>::new(world, len, Distribution::Block),
+            _array: AtomicArray::<T>::new(world, len, Distribution::Block).block(),
         }
     }
 }

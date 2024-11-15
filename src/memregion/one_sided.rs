@@ -26,7 +26,7 @@ lazy_static! {
 
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-#[doc(hidden)]
+//#[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct NetMemRegionHandle {
     mr_addr: usize,
@@ -215,14 +215,22 @@ impl Drop for MemRegionHandle {
                             parent_id: self.inner.grand_parent_id,
                         };
                         // println!("sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
-                        self.inner.team.exec_am_pe(self.inner.parent_id.1, temp);
+                        let _ = self
+                            .inner
+                            .team
+                            .exec_am_pe(self.inner.parent_id.1, temp)
+                            .spawn();
                     }
                 }
             } else {
                 //need to wait for references I sent to return
-                self.inner.team.exec_am_local(MemRegionDropWaitAm {
-                    inner: self.inner.clone(),
-                });
+                let _ = self
+                    .inner
+                    .team
+                    .exec_am_local(MemRegionDropWaitAm {
+                        inner: self.inner.clone(),
+                    })
+                    .spawn();
             }
         }
     }
@@ -285,7 +293,11 @@ impl LamellarAM for MemRegionDropWaitAm {
                                 parent_id: self.inner.grand_parent_id,
                             };
                             // println!("waited sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
-                            self.inner.team.exec_am_pe(self.inner.parent_id.1, temp);
+                            let _ = self
+                                .inner
+                                .team
+                                .exec_am_pe(self.inner.parent_id.1, temp)
+                                .spawn();
                         }
                     }
                     break;
@@ -355,11 +367,8 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        let mr = MemoryRegion::try_new(
-            size * std::mem::size_of::<T>(),
-            lamellae,
-            AllocationType::Local,
-        )?;
+        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, lamellae, AllocationType::Local)?;
+        let mr = unsafe { mr_t.to_base::<u8>() };
         let pe = mr.pe;
 
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -434,7 +443,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).spawn();
     ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
@@ -494,7 +503,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion "){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).spawn();
     ///
     /// unsafe {
     ///     for (i,elem) in mem_region.iter().enumerate(){
@@ -540,15 +549,16 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// #[am]
     /// impl LamellarAm for MemRegionAm{
     ///     async fn exec(self){
-    ///         let temp_buffer = OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(mem_region.len());
+    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
     ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer)};
+    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
     ///         unsafe {
     ///             for elem in temp_buffer.iter(){
     ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_secs(self.secs)).await;
+    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
     ///                 }
-    ///                 assert_eq!(lamellar::num_pes,*elem);
+    ///                 let num_pes = lamellar::num_pes;
+    ///                 assert_eq!(num_pes,*elem);
     ///             }
     ///         }
     ///     }
@@ -561,7 +571,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
     pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
@@ -595,15 +605,16 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// #[am]
     /// impl LamellarAm for MemRegionAm{
     ///     async fn exec(self){
-    ///         let temp_buffer = OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(mem_region.len());
+    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
     ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer)};
+    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
     ///         unsafe {
     ///             for elem in temp_buffer.iter(){
     ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_secs(self.secs)).await;
+    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
     ///                 }
-    ///                 assert_eq!(lamellar::num_pes,*elem);
+    ///                 let num_pes = lamellar::num_pes;
+    ///                 assert_eq!(num_pes,*elem);
     ///             }
     ///         }
     ///     }
@@ -616,7 +627,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
     pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
         MemoryRegionRDMA::<T>::blocking_get(self, self.pe, index, data);
@@ -678,7 +689,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
     /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
     ///
-    /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
+    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
     pub fn data_local(&self) -> bool {
         if self.pe == self.mr.inner.my_id.1 {
@@ -689,6 +700,18 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
             }
         } else {
             false
+        }
+    }
+
+    pub(crate) unsafe fn to_base<B: Dist>(self) -> OneSidedMemoryRegion<B> {
+        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
+        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
+        OneSidedMemoryRegion {
+            mr: self.mr.clone(),
+            pe: self.pe,
+            sub_region_offset: u8_offset / std::mem::size_of::<B>(),
+            sub_region_size: u8_size / std::mem::size_of::<B>(),
+            phantom: PhantomData,
         }
     }
 }
@@ -964,13 +987,13 @@ impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
 }
 
 impl<T: Dist> TeamFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    fn team_from(smr: &OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: &OneSidedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::LocalMemRegion(smr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
-    fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaInput::LocalMemRegion(smr)
     }
 }
@@ -982,13 +1005,13 @@ impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 }
 
 impl<T: Dist> TeamFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    fn team_from(smr: &OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: &OneSidedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::LocalMemRegion(smr.clone())
     }
 }
 
 impl<T: Dist> TeamFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
-    fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Pin<Arc<LamellarTeamRT>>) -> Self {
+    fn team_from(smr: OneSidedMemoryRegion<T>, _team: &Arc<LamellarTeam>) -> Self {
         LamellarArrayRdmaOutput::LocalMemRegion(smr)
     }
 }
@@ -996,7 +1019,7 @@ impl<T: Dist> TeamFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
 impl<T: Dist> TeamTryFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(
         smr: &OneSidedMemoryRegion<T>,
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::LocalMemRegion(smr.clone()))
     }
@@ -1005,7 +1028,7 @@ impl<T: Dist> TeamTryFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T
 impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(
         smr: OneSidedMemoryRegion<T>,
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::LocalMemRegion(smr))
     }
@@ -1014,7 +1037,7 @@ impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaInput<T>
 impl<T: Dist> TeamTryFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn team_try_from(
         smr: &OneSidedMemoryRegion<T>,
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaOutput::LocalMemRegion(smr.clone()))
     }
@@ -1023,7 +1046,7 @@ impl<T: Dist> TeamTryFrom<&OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<
 impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T> {
     fn team_try_from(
         smr: OneSidedMemoryRegion<T>,
-        _team: &Pin<Arc<LamellarTeamRT>>,
+        _team: &Arc<LamellarTeam>,
     ) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaOutput::LocalMemRegion(smr))
     }

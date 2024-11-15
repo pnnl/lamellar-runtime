@@ -1,13 +1,11 @@
 use crate::array::iterator::one_sided_iterator::*;
 use crate::array::LamellarArrayRequest;
-// use crate::LamellarArray;
-// use crate::scheduler::SchedulerQueue;
 use crate::memregion::OneSidedMemoryRegion;
 use std::collections::VecDeque;
 use std::ops::Deref;
 
 use async_trait::async_trait;
-// use futures::Future;
+// use futures_util::Future;
 use pin_project::pin_project;
 #[pin_project]
 pub struct Buffered<I>
@@ -19,13 +17,14 @@ where
     index: usize,
     buf_index: usize,
     buf_size: usize,
-    reqs: VecDeque<
-        Option<(
-            usize,
-            Box<dyn LamellarArrayRequest<Output = ()>>,
-            OneSidedMemoryRegion<u8>,
-        )>,
-    >,
+    reqs: VecDeque<Option<(usize, ArrayRdmaHandle, OneSidedMemoryRegion<u8>)>>,
+    state: BufferedState,
+}
+
+enum BufferedState {
+    Ready,
+    Pending,
+    Finished,
 }
 
 impl<I> Buffered<I>
@@ -43,6 +42,7 @@ where
             buf_size: buf_size,
             // buf: mem_region,
             reqs: VecDeque::new(),
+            state: BufferedState::Pending,
         };
         for _ in 0..buf.buf_size {
             buf.initiate_buffer();
@@ -91,8 +91,6 @@ impl<U> Deref for BufferedItem<U> {
     }
 }
 
-
-
 impl<I> OneSidedIterator for Buffered<I>
 where
     I: OneSidedIterator + Send,
@@ -120,6 +118,10 @@ where
             None
         }
     }
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Poll::Ready(None)
+    }
     fn advance_index(&mut self, count: usize) {
         // println!("advance_index {:?} {:?} {:?} {:?}",self.index, count, count*self.chunk_size,self.array.len());
         self.iter.advance_index(count);
@@ -131,10 +133,7 @@ where
         self.iter.item_size()
     }
     //im not actually sure what to do if another buffered iter is called after this one
-    fn buffered_next(
-        &mut self,
-        mem_region: OneSidedMemoryRegion<u8>,
-    ) -> Option<Box<dyn LamellarArrayRequest<Output = ()>>> {
+    fn buffered_next(&mut self, mem_region: OneSidedMemoryRegion<u8>) -> Option<ArrayRdmaHandle> {
         self.iter.buffered_next(mem_region)
     }
 
@@ -157,8 +156,8 @@ where
 //     }
 // }
 
-// use futures::task::{Context, Poll};
-// use futures::Stream;
+// use futures_util::task::{Context, Poll};
+// use futures_util::Stream;
 // use std::pin::Pin;
 
 // impl<I> Stream for Buffered<I>

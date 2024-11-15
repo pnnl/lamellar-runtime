@@ -76,14 +76,16 @@ fn main() {
         if my_pe == num_pes - 1 {
             for _j in (0..(2_u64.pow(exp))).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                let _ = world.exec_am_pe(
-                    0,
-                    DataAM {
-                        array: array.clone(),
-                        index: 0 as usize,
-                        length: num_bytes as usize,
-                    },
-                );
+                let _ = world
+                    .exec_am_pe(
+                        0,
+                        DataAM {
+                            array: array.clone(),
+                            index: 0 as usize,
+                            length: num_bytes as usize,
+                        },
+                    )
+                    .spawn();
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

@@ -1,3 +1,5 @@
+use crate::env_var::config;
+
 use core::marker::PhantomData;
 use indexmap::IndexSet;
 // use log::trace;
@@ -9,6 +11,7 @@ use std::sync::Arc;
 pub(crate) trait LamellarAlloc {
     fn new(id: String) -> Self;
     fn init(&mut self, start_addr: usize, size: usize); //size in bytes
+    #[allow(dead_code)]
     fn malloc(&self, size: usize, align: usize) -> usize;
     fn try_malloc(&self, size: usize, align: usize) -> Option<usize>;
     fn fake_malloc(&self, size: usize, align: usize) -> bool;
@@ -18,6 +21,7 @@ pub(crate) trait LamellarAlloc {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct Vma {
     addr: usize,
     padding: usize,
@@ -25,6 +29,7 @@ struct Vma {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct LinearAlloc {
     entries: Arc<(Mutex<Vec<Vma>>, Condvar)>,
     start_addr: usize,
@@ -274,11 +279,11 @@ impl LamellarAlloc for BTreeAlloc {
         let mut timer = std::time::Instant::now();
         while let None = val {
             val = self.try_malloc(size, align);
-            if timer.elapsed().as_secs_f64() > *crate::DEADLOCK_TIMEOUT {
+            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!("[WARNING]  Potential deadlock detected when trying to allocate more memory.\n\
-                The deadlock timeout can be set via the LAMELLAR_DEADLOCK_TIMEOUT environment variable, the current timeout is {} seconds\n\
+                The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                 To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                {}",*crate::DEADLOCK_TIMEOUT,std::backtrace::Backtrace::capture());
+                {}",config().deadlock_timeout,std::backtrace::Backtrace::capture());
                 timer = std::time::Instant::now();
             }
         }
@@ -360,8 +365,15 @@ impl LamellarAlloc for BTreeAlloc {
             //     a + padding,
             //     self.free_space.load(Ordering::SeqCst)
             // );
-
-            Some(a + padding)
+            let new_addr = a + padding;
+            // let rem = new_addr % align;
+            // let rem_16 = new_addr % 16;
+            // println!(
+            //     "alloc addr {:x?} {:x?} {new_addr} {a} {padding} {rem} {align} {rem_16}",
+            //     a + padding,
+            //     new_addr,
+            // );
+            Some(new_addr)
         } else {
             None
         };
@@ -388,7 +400,7 @@ impl LamellarAlloc for BTreeAlloc {
     fn free(&self, addr: usize) -> Result<(), usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
-
+        // println!("trying to free: {:x?} {:?}", addr, addr);
         if let Some((size, padding)) = allocated_addrs.remove(&addr) {
             // println!("allocated_addrs: {:?}", allocated_addrs);
             let full_size = size + padding;
@@ -494,6 +506,7 @@ impl LamellarAlloc for BTreeAlloc {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,

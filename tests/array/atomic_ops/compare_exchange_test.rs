@@ -2,23 +2,31 @@ use lamellar::array::prelude::*;
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (AtomicArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter().for_each(move |x| x.store($init_val));
-        $array.wait_all();
+        $array
+            .dist_iter()
+            .for_each(move |x| x.store($init_val))
+            .block();
         $array.barrier();
     };
     (LocalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
     (GlobalLockArray,$array:ident,$init_val:ident) => {
-        let _ = $array.dist_iter_mut().for_each(move |x| *x = $init_val);
-        $array.wait_all();
+        $array
+            .dist_iter_mut()
+            .for_each(move |x| *x = $init_val)
+            .block();
         $array.barrier();
     };
 }
@@ -47,329 +55,365 @@ macro_rules! check_val {
     };
 }
 
-macro_rules! compare_exchange_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
-            let array_total_len = $len;
-            #[allow(unused_mut)]
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+macro_rules! compare_exchange_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let my_pe = world.my_pe();
+        let array_total_len = $len;
+        #[allow(unused_mut)]
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let init_val =(num_pes as $t);
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
+        let init_val = (num_pes as $t);
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
 
-            let mut reqs = vec![];
-            for idx in 0..array.len(){
-                if idx%num_pes == my_pe{
-                    reqs.push((array.compare_exchange(idx,init_val, my_pe as $t),idx));
-                }
+        let mut reqs = vec![];
+        for idx in 0..array.len() {
+            if idx % num_pes == my_pe {
+                #[allow(unused_unsafe)]
+                reqs.push((
+                    unsafe { array.compare_exchange(idx, init_val, my_pe as $t) },
+                    idx,
+                ));
             }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
-                    Ok(val) => {
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
-                        }
-                    }
-                    Err(val) => {
-                        println!("returned error {:?} {:?} {:?}",idx,val,init_val);
-                    }
-                }
-            }
-            array.wait_all();
-            array.barrier();
-            let mut reqs = vec![];
-            for idx in 0..array.len(){ //these should all fail
-                reqs.push((array.compare_exchange(idx,init_val,my_pe as $t),idx));
-            }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
-                    Ok(val) => {
-                        println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
-                    }
-                    Err(_) => {
-
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    check_val!($array, val, init_val, success);
+                    if !success {
+                        eprintln!("{:?} {:?} {:?}", idx, val, init_val);
                     }
                 }
+                Err(val) => {
+                    println!("returned error {:?} {:?} {:?}", idx, val, init_val);
+                }
             }
-            array.barrier();
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
+        }
+        array.wait_all();
+        array.barrier();
+        let mut reqs = vec![];
+        for idx in 0..array.len() {
+            //these should all fail
+            #[allow(unused_unsafe)]
+            reqs.push((
+                unsafe { array.compare_exchange(idx, init_val, my_pe as $t) },
+                idx,
+            ));
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    println!("returned ok {:?} {:?} {:?}", idx, val, init_val);
+                }
+                Err(_) => {}
+            }
+        }
+        array.barrier();
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
 
+        let half_len = array_total_len / 2;
+        let start_i = half_len / 2;
+        let end_i = start_i + half_len;
+        let sub_array = array.sub_array(start_i..end_i);
+        sub_array.barrier();
+        let mut reqs = vec![];
+        for idx in 0..sub_array.len() {
+            if idx % num_pes == my_pe {
+                #[allow(unused_unsafe)]
+                reqs.push((
+                    unsafe { sub_array.compare_exchange(idx, init_val, my_pe as $t) },
+                    idx,
+                ));
+            }
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    check_val!($array, val, init_val, success);
+                    if !success {
+                        eprintln!("{:?} {:?} {:?}", idx, val, init_val);
+                    }
+                }
+                Err(val) => {
+                    println!("returned error {:?} {:?} {:?}", idx, val, init_val);
+                }
+            }
+        }
+        sub_array.wait_all();
+        sub_array.barrier();
+        let mut reqs = vec![];
+        for idx in 0..sub_array.len() {
+            #[allow(unused_unsafe)]
+            reqs.push((
+                unsafe { sub_array.compare_exchange(idx, init_val, my_pe as $t) },
+                idx,
+            ));
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    println!("returned ok {:?} {:?} {:?}", idx, val, init_val);
+                }
+                Err(_) => {}
+            }
+        }
+        sub_array.barrier();
+        initialize_array!($array, array, init_val);
+        sub_array.wait_all();
+        sub_array.barrier();
 
-
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
+        let pe_len = array_total_len / num_pes;
+        for pe in 0..num_pes {
+            let len = std::cmp::max(pe_len / 2, 1);
+            let start_i = (pe * pe_len) + len / 2;
+            let end_i = start_i + len;
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             let mut reqs = vec![];
-            for idx in 0..sub_array.len(){
-                if idx%num_pes == my_pe{
-                    reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
+            for idx in 0..sub_array.len() {
+                if idx % num_pes == my_pe {
+                    #[allow(unused_unsafe)]
+                    reqs.push((
+                        unsafe { sub_array.compare_exchange(idx, init_val, my_pe as $t) },
+                        idx,
+                    ));
                 }
             }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
+            for (req, idx) in reqs {
+                match world.block_on(req) {
                     Ok(val) => {
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
+                        check_val!($array, val, init_val, success);
+                        if !success {
+                            eprintln!("{:?} {:?} {:?}", idx, val, init_val);
                         }
                     }
                     Err(val) => {
-                        println!("returned error {:?} {:?} {:?}",idx,val,init_val);
+                        println!("returned error {:?} {:?} {:?}", idx, val, init_val);
                     }
                 }
             }
             sub_array.wait_all();
             sub_array.barrier();
             let mut reqs = vec![];
-            for idx in 0..sub_array.len(){
-                reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
+            for idx in 0..sub_array.len() {
+                if idx % num_pes == my_pe {
+                    #[allow(unused_unsafe)]
+                    reqs.push((
+                        unsafe { sub_array.compare_exchange(idx, init_val, my_pe as $t) },
+                        idx,
+                    ));
+                }
             }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
+            for (req, idx) in reqs {
+                match world.block_on(req) {
                     Ok(val) => {
-                        println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
+                        println!("returned ok {:?} {:?} {:?}", idx, val, init_val);
                     }
-                    Err(_) => {
-
-                    }
+                    Err(_) => {}
                 }
             }
             sub_array.barrier();
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
             sub_array.barrier();
-
-
-
-            let pe_len = array_total_len/num_pes;
-            for pe in 0..num_pes{
-                let len = std::cmp::max(pe_len/2,1);
-                let start_i = (pe*pe_len)+ len/2;
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                sub_array.barrier();
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
-                    }
-                }
-                for (req,idx) in reqs{
-                    match  world.block_on(req){
-                        Ok(val) => {
-                            check_val!($array,val,init_val,success);
-                            if !success{
-                                println!("{:?} {:?} {:?}",idx,val,init_val);
-                            }
-                        }
-                        Err(val) => {
-                            println!("returned error {:?} {:?} {:?}",idx,val,init_val);
-                        }
-                    }
-                }
-                sub_array.wait_all();
-                sub_array.barrier();
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange(idx,init_val,my_pe as $t),idx));
-                    }
-                }
-                for (req,idx) in reqs{
-                    match  world.block_on(req){
-                        Ok(val) => {
-                            println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
-                        }
-                        Err(_) => {
-
-                        }
-                    }
-                }
-                sub_array.barrier();
-                initialize_array!($array, array, init_val);
-                sub_array.wait_all();
-                sub_array.barrier();
-            }
-
-            if !success{
-                eprintln!("failed");
-            }
         }
-    }
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
-macro_rules! compare_exchange_epsilon_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
-            let array_total_len = $len;
-            #[allow(unused_mut)]
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
+macro_rules! compare_exchange_epsilon_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let my_pe = world.my_pe();
+        let array_total_len = $len;
+        #[allow(unused_mut)]
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let init_val =(num_pes as $t);
-            let epsilon = 0.0001 as $t;
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
+        let init_val = (num_pes as $t);
+        let epsilon = 0.0001 as $t;
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
 
-            let mut reqs = vec![];
-            for idx in 0..array.len(){
-                if idx%num_pes == my_pe{
-                    reqs.push((array.compare_exchange_epsilon(idx,init_val, my_pe as $t,epsilon),idx));
-                }
+        let mut reqs = vec![];
+        for idx in 0..array.len() {
+            if idx % num_pes == my_pe {
+                #[allow(unused_unsafe)]
+                reqs.push((
+                    unsafe { array.compare_exchange_epsilon(idx, init_val, my_pe as $t, epsilon) },
+                    idx,
+                ));
             }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
-                    Ok(val) => {
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
-                        }
-                    }
-                    Err(val) => {
-                        println!("returned error {:?} {:?} {:?}",idx,val,init_val);
-                    }
-                }
-            }
-            array.wait_all();
-            array.barrier();
-            let mut reqs = vec![];
-            for idx in 0..array.len(){ //these should all fail
-                reqs.push((array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
-            }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
-                    Ok(val) => {
-                        println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
-                    }
-                    Err(_) => {
-
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    check_val!($array, val, init_val, success);
+                    if !success {
+                        eprintln!("{:?} {:?} {:?}", idx, val, init_val);
                     }
                 }
+                Err(val) => {
+                    println!("returned error {:?} {:?} {:?}", idx, val, init_val);
+                }
             }
-            array.barrier();
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
+        }
+        array.wait_all();
+        array.barrier();
+        let mut reqs = vec![];
+        for idx in 0..array.len() {
+            //these should all fail
+            #[allow(unused_unsafe)]
+            reqs.push((
+                unsafe { array.compare_exchange_epsilon(idx, init_val, my_pe as $t, epsilon) },
+                idx,
+            ));
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    println!("returned ok {:?} {:?} {:?}", idx, val, init_val);
+                }
+                Err(_) => {}
+            }
+        }
+        array.barrier();
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
 
+        let half_len = array_total_len / 2;
+        let start_i = half_len / 2;
+        let end_i = start_i + half_len;
+        let sub_array = array.sub_array(start_i..end_i);
+        sub_array.barrier();
+        let mut reqs = vec![];
+        for idx in 0..sub_array.len() {
+            if idx % num_pes == my_pe {
+                #[allow(unused_unsafe)]
+                reqs.push((
+                    unsafe {
+                        sub_array.compare_exchange_epsilon(idx, init_val, my_pe as $t, epsilon)
+                    },
+                    idx,
+                ));
+            }
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    check_val!($array, val, init_val, success);
+                    if !success {
+                        eprintln!("{:?} {:?} {:?}", idx, val, init_val);
+                    }
+                }
+                Err(val) => {
+                    println!("returned error {:?} {:?} {:?}", idx, val, init_val);
+                }
+            }
+        }
+        sub_array.wait_all();
+        sub_array.barrier();
+        let mut reqs = vec![];
+        for idx in 0..sub_array.len() {
+            #[allow(unused_unsafe)]
+            reqs.push((
+                unsafe { sub_array.compare_exchange_epsilon(idx, init_val, my_pe as $t, epsilon) },
+                idx,
+            ));
+        }
+        for (req, idx) in reqs {
+            match world.block_on(req) {
+                Ok(val) => {
+                    println!("returned ok {:?} {:?} {:?}", idx, val, init_val);
+                }
+                Err(_) => {}
+            }
+        }
+        sub_array.barrier();
+        initialize_array!($array, array, init_val);
+        sub_array.wait_all();
+        sub_array.barrier();
 
-
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
+        let pe_len = array_total_len / num_pes;
+        for pe in 0..num_pes {
+            let len = std::cmp::max(pe_len / 2, 1);
+            let start_i = (pe * pe_len) + len / 2;
+            let end_i = start_i + len;
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             let mut reqs = vec![];
-            for idx in 0..sub_array.len(){
-                if idx%num_pes == my_pe{
-                    reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+            for idx in 0..sub_array.len() {
+                if idx % num_pes == my_pe {
+                    #[allow(unused_unsafe)]
+                    reqs.push((
+                        unsafe {
+                            sub_array.compare_exchange_epsilon(idx, init_val, my_pe as $t, epsilon)
+                        },
+                        idx,
+                    ));
                 }
             }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
+            for (req, idx) in reqs {
+                match world.block_on(req) {
                     Ok(val) => {
-                        check_val!($array,val,init_val,success);
-                        if !success{
-                            println!("{:?} {:?} {:?}",idx,val,init_val);
+                        check_val!($array, val, init_val, success);
+                        if !success {
+                            eprintln!("{:?} {:?} {:?}", idx, val, init_val);
                         }
                     }
                     Err(val) => {
-                        println!("returned error {:?} {:?} {:?}",idx,val,init_val);
+                        println!("returned error {:?} {:?} {:?}", idx, val, init_val);
                     }
                 }
             }
             sub_array.wait_all();
             sub_array.barrier();
             let mut reqs = vec![];
-            for idx in 0..sub_array.len(){
-                reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
+            for idx in 0..sub_array.len() {
+                if idx % num_pes == my_pe {
+                    #[allow(unused_unsafe)]
+                    reqs.push((
+                        unsafe {
+                            sub_array.compare_exchange_epsilon(idx, init_val, my_pe as $t, epsilon)
+                        },
+                        idx,
+                    ));
+                }
             }
-            for (req,idx) in reqs{
-                match  world.block_on(req){
+            for (req, idx) in reqs {
+                match world.block_on(req) {
                     Ok(val) => {
-                        println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
+                        println!("returned ok {:?} {:?} {:?}", idx, val, init_val);
                     }
-                    Err(_) => {
-
-                    }
+                    Err(_) => {}
                 }
             }
             sub_array.barrier();
             initialize_array!($array, array, init_val);
             sub_array.wait_all();
             sub_array.barrier();
-
-
-
-            let pe_len = array_total_len/num_pes;
-            for pe in 0..num_pes{
-                let len = std::cmp::max(pe_len/2,1);
-                let start_i = (pe*pe_len)+ len/2;
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                sub_array.barrier();
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
-                    }
-                }
-                for (req,idx) in reqs{
-                    match  world.block_on(req){
-                        Ok(val) => {
-                            check_val!($array,val,init_val,success);
-                            if !success{
-                                println!("{:?} {:?} {:?}",idx,val,init_val);
-                            }
-                        }
-                        Err(val) => {
-                            println!("returned error {:?} {:?} {:?}",idx,val,init_val);
-                        }
-                    }
-                }
-                sub_array.wait_all();
-                sub_array.barrier();
-                let mut reqs = vec![];
-                for idx in 0..sub_array.len(){
-                    if idx%num_pes == my_pe{
-                        reqs.push((sub_array.compare_exchange_epsilon(idx,init_val,my_pe as $t,epsilon),idx));
-                    }
-                }
-                for (req,idx) in reqs{
-                    match  world.block_on(req){
-                        Ok(val) => {
-                            println!("returned ok {:?} {:?} {:?}",idx,val,init_val);
-                        }
-                        Err(_) => {
-
-                        }
-                    }
-                }
-                sub_array.barrier();
-                initialize_array!($array, array, init_val);
-                sub_array.wait_all();
-                sub_array.barrier();
-            }
-
-            if !success{
-                eprintln!("failed");
-            }
         }
-    }
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 macro_rules! check_input {
@@ -386,11 +430,11 @@ macro_rules! check_input {
         for (i, r) in res.drain(..).enumerate() {
             if i % $num_pes == $my_pe {
                 if let Err(val) = r {
-                    println!("error i: {i} val: {val:?}");
+                    eprintln!("error i: {i} val: {val:?}");
                 }
             } else {
                 match r {
-                    Ok(val) => println!("error i: {i} val: {val:?}"),
+                    Ok(val) => println!("ok i: {i} val: {val:?}"),
                     Err(val) => {
                         if val != i {
                             println!("error i: {i} val: {val:?}");
@@ -402,28 +446,28 @@ macro_rules! check_input {
     };
 }
 
-macro_rules! input_test{
-    ($array:ident,  $len:expr, $dist:ident) =>{
-       {
-            std::env::set_var("LAMELLAR_OP_BATCH","10");
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
-            let array_total_len = $len;
+macro_rules! input_test {
+    ($array:ident,  $len:expr, $dist:ident) => {{
+        std::env::set_var("LAMELLAR_BATCH_OP_SIZE", "10");
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let my_pe = world.my_pe();
+        let array_total_len = $len;
 
-            // let mut success = true;
-            let array: $array::<usize> = $array::<usize>::new(world.team(), array_total_len, $dist).into(); //convert into abstract LamellarArray, distributed len is total_len
-            let init_val = num_pes;
-            initialize_array!($array, array, init_val);
-            let idxs = (my_pe..array.len()).step_by(num_pes).collect::<Vec<_>>();
-            let full_idxs = (0..array.len()).collect::<Vec<_>>();
-            let req = array.batch_compare_exchange(idxs,num_pes,my_pe);
-            check_input!(array,req);
-            let req = array.batch_compare_exchange(full_idxs,my_pe,my_pe);
-            check_input!(array,req,$array,num_pes,my_pe);
-            initialize_array!($array, array, init_val);
-       }
-    }
+        // let mut success = true;
+        let array: $array<usize> = $array::<usize>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
+        let init_val = num_pes;
+        initialize_array!($array, array, init_val);
+        let idxs = (my_pe..array.len()).step_by(num_pes).collect::<Vec<_>>();
+        let full_idxs = (0..array.len()).collect::<Vec<_>>();
+        let req = array.batch_compare_exchange(idxs, num_pes, my_pe);
+        check_input!(array, req);
+        let req = array.batch_compare_exchange(full_idxs, my_pe, my_pe);
+        check_input!(array, req, $array, num_pes, my_pe);
+        initialize_array!($array, array, init_val);
+    }};
 }
 
 fn main() {
