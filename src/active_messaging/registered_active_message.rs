@@ -402,6 +402,8 @@ impl RegisteredActiveMessages {
         team: Arc<LamellarTeam>,
     ) {
         // println!("[{:?}] exec_local_am", std::thread::current().id());
+        world.team.world_counters.inc_outstanding(1);
+         team.team.team_counters.inc_outstanding(1);
         match am
             .exec(
                 req_data.team.world_pe,
@@ -422,7 +424,7 @@ impl RegisteredActiveMessages {
             }
             LamellarReturn::LocalAm(am) => {
                 // println!("[{:?}] local am am return", std::thread::current().id());
-                self.exec_local_am(req_data, am.as_local(), world, team)
+                self.exec_local_am(req_data, am.as_local(), world.clone(), team.clone())
                     .await;
             }
             LamellarReturn::Unit => {
@@ -433,6 +435,8 @@ impl RegisteredActiveMessages {
                 panic!("should not be returning remote data or am from local am");
             }
         }
+        world.team.world_counters.dec_outstanding(1);
+         team.team.team_counters.dec_outstanding(1);
     }
 
     //#[tracing::instrument(skip_all)]
@@ -463,6 +467,8 @@ impl RegisteredActiveMessages {
             team_addr: team.team.remote_ptr_addr,
         };
 
+        world.team.world_counters.inc_outstanding(1);
+         team.team.team_counters.inc_outstanding(1);
         let am = match am
             .exec(
                 team.team.world_pe,
@@ -484,6 +490,8 @@ impl RegisteredActiveMessages {
         self.executor.submit_task(async move {
             ame.process_msg(am, 0, false).await;
         });
+        world.team.world_counters.dec_outstanding(1);
+         team.team.team_counters.dec_outstanding(1);
         //compare against:
         // ame.process_msg(am, 0, true).await;
     }

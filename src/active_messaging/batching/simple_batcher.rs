@@ -553,6 +553,8 @@ impl SimpleBatcher {
         //     std::thread::current().id()
         // );
         let ame = ame.clone();
+        world.team.world_counters.inc_outstanding(1);
+        team.team.team_counters.inc_outstanding(1);
         self.executor.submit_task(async move {
             let am = match am
                 .exec(
@@ -571,6 +573,8 @@ impl SimpleBatcher {
                     panic!("Should not be returning local data or AM from remote  am");
                 }
             };
+            world.team.world_counters.dec_outstanding(1);
+            team.team.team_counters.dec_outstanding(1);
             ame.process_msg(am, 0, false).await;
         });
     }
