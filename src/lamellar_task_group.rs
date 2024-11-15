@@ -268,12 +268,26 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
     fn add_result(&self, pe: usize, sub_id: usize, data: InternalResult) {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
         let mut map = self.data.lock(); //.insert(pe, data);
-        map.entry(sub_id)
-            .or_insert_with(|| HashMap::new())
-            .insert(pe, data);
 
-        if let Some(waker) = self.wakers.lock().remove(&sub_id) {
-            waker.wake();
+        let reqs = map.entry(sub_id).or_insert_with(|| HashMap::new());
+        reqs.insert(pe, data);
+
+        if reqs.len() == self.arch.num_pes() {
+            if let Some(waker) = self.wakers.lock().remove(&sub_id) {
+                // println!("0. waker found for sub_id {}", sub_id);
+                waker.wake();
+            } 
+            // else {
+            //     println!("0. no waker found for sub_id {}", sub_id);
+            // }
+        } else {
+            if let Some(waker) = self.wakers.lock().get(&sub_id) {
+                // println!("1. waker found for sub_id {}", sub_id);
+                waker.wake_by_ref();
+            } 
+            // else {
+            //     println!("1. no waker found for sub_id {}", sub_id);
+            // }
         }
     }
     fn update_counters(&self, _sub_id: usize) {
@@ -404,6 +418,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
         if let Some(req) = data.get(&self.sub_id) {
             req.len() == self.inner.arch.num_pes()
         } else {
+            // println!("setting waker for sub_id {}", self.sub_id);
             self.inner.wakers.lock().insert(self.sub_id, waker.clone());
             self.inner
                 .wakers
