@@ -276,7 +276,7 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
             if let Some(waker) = self.wakers.lock().remove(&sub_id) {
                 // println!("0. waker found for sub_id {}", sub_id);
                 waker.wake();
-            } 
+            }
             // else {
             //     println!("0. no waker found for sub_id {}", sub_id);
             // }
@@ -284,8 +284,8 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
             if let Some(waker) = self.wakers.lock().get(&sub_id) {
                 // println!("1. waker found for sub_id {}", sub_id);
                 waker.wake_by_ref();
-            } 
-            // else {
+            }
+            //  else {
             //     println!("1. no waker found for sub_id {}", sub_id);
             // }
         }
@@ -415,9 +415,11 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let data = self.inner.data.lock();
+        let mut ready = false;
         if let Some(req) = data.get(&self.sub_id) {
-            req.len() == self.inner.arch.num_pes()
-        } else {
+            ready = req.len() == self.inner.arch.num_pes();
+        }
+        if !ready {
             // println!("setting waker for sub_id {}", self.sub_id);
             self.inner.wakers.lock().insert(self.sub_id, waker.clone());
             self.inner
@@ -432,8 +434,8 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
                     w.clone_from(waker);
                 })
                 .or_insert(waker.clone());
-            false
         }
+        ready
     }
 
     fn val(&self) -> Self::Output {
