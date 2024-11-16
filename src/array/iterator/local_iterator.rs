@@ -320,7 +320,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
-    /// 
+    ///
     ///     array
     ///         .local_iter()
     ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))

@@ -403,7 +403,7 @@ impl RegisteredActiveMessages {
     ) {
         // println!("[{:?}] exec_local_am", std::thread::current().id());
         world.team.world_counters.inc_outstanding(1);
-         team.team.team_counters.inc_outstanding(1);
+        team.team.team_counters.inc_outstanding(1);
         match am
             .exec(
                 req_data.team.world_pe,
@@ -436,7 +436,7 @@ impl RegisteredActiveMessages {
             }
         }
         world.team.world_counters.dec_outstanding(1);
-         team.team.team_counters.dec_outstanding(1);
+        team.team.team_counters.dec_outstanding(1);
     }
 
     //#[tracing::instrument(skip_all)]
@@ -468,7 +468,7 @@ impl RegisteredActiveMessages {
         };
 
         world.team.world_counters.inc_outstanding(1);
-         team.team.team_counters.inc_outstanding(1);
+        team.team.team_counters.inc_outstanding(1);
         let am = match am
             .exec(
                 team.team.world_pe,
@@ -491,7 +491,7 @@ impl RegisteredActiveMessages {
             ame.process_msg(am, 0, false).await;
         });
         world.team.world_counters.dec_outstanding(1);
-         team.team.team_counters.dec_outstanding(1);
+        team.team.team_counters.dec_outstanding(1);
         //compare against:
         // ame.process_msg(am, 0, true).await;
     }
