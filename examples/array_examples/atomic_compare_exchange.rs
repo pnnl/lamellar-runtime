@@ -32,7 +32,7 @@ fn main() {
         let mut fail_cnt = 0;
         let old = my_pe;
         let new = my_pe + 1;
-        while world.block_on(array.compare_exchange(i, old, new)).is_err() {
+        while array.compare_exchange(i, old, new).block().is_err() {
             //compare_exchange reutrns Option<Vec<Result<T,T>>>
             // the outer option should never be none,
             // vec is cause we can apply to multiple inidices in one call (see below),
@@ -56,7 +56,9 @@ fn main() {
     let new = (my_pe + 1) as f32;
     let epsilon = 0.00001;
     println!("here 1");
-    let res = world.block_on(array_2.batch_compare_exchange_epsilon(indices, old, new, epsilon)); //should not fail
+    let res = array_2
+        .batch_compare_exchange_epsilon(indices, old, new, epsilon)
+        .block(); //should not fail
     println!("here 2");
     array_2.barrier();
 

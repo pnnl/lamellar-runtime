@@ -190,7 +190,7 @@ fn main() {
         // );
         // }
     });
-    world.block_on(gemm);
+    gemm.block();
     println!(
         "[{:?}] block_on done {:?}",
         my_pe,

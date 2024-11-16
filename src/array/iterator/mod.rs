@@ -82,9 +82,9 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// world.block_on(
+    /// 
     ///     array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"))
-    /// );
+    /// .block();
     ///```
     fn dist_iter(&self) -> Self::DistIter;
 
@@ -102,9 +102,9 @@ pub trait LamellarArrayIterators<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// world.block_on(
+    /// 
     ///     array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {}",elem.load())) // "load" is specific to AtomicArray elements, other types can deref the element directly"
-    /// );
+    /// .block();
     ///```
     fn local_iter(&self) -> Self::LocalIter;
 
@@ -181,9 +181,9 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// world.block_on(
+    /// 
     ///     array.dist_iter_mut().for_each(move |elem| *elem = my_pe)
-    /// );
+    /// .block();
     ///```
     fn dist_iter_mut(&self) -> Self::DistIter;
 
@@ -201,8 +201,8 @@ pub trait LamellarArrayMutIterators<T: Dist> {
     /// let my_pe = world.my_pe();
     /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// world.block_on(
+    /// 
     ///    array.local_iter_mut().for_each(move |elem| *elem = my_pe)
-    /// );
+    /// .block();
     fn local_iter_mut(&self) -> Self::LocalIter;
 }

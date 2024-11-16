@@ -122,7 +122,7 @@
 //!     world.wait_all(); // wait for all active messages to finish
 //!     world.barrier();  // synchronize with other PEs
 //!     let request = world.exec_am_all(am.clone()); //also possible to execute on every PE with a single call
-//!     world.block_on(request); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
+//!     request.block(); //both exec_am_all and exec_am_pe return futures that can be used to wait for completion and access any returned result
 //! }
 //! ```
 //!

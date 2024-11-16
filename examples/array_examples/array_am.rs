@@ -76,7 +76,7 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        world.block_on(unsafe { array.put(0, &local_mem_region) });
+        unsafe { array.put(0, &local_mem_region).block() };
     }
 
     array.print();
@@ -125,7 +125,7 @@ fn main() {
     world.barrier();
 
     if my_pe == 0 {
-        let sum = world.block_on(unsafe { array.sum() });
+        let sum = unsafe { array.sum().block() };
         println!("sum: {:?}", sum);
         println!("------------------------------------------------------------");
     }

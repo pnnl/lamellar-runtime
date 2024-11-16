@@ -69,7 +69,7 @@ pub trait ElementArithmeticOps:
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
-/// array.block_on(array.batch_fetch_add(indices,val));
+/// array.batch_fetch_add(indices,val).block();
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -81,7 +81,7 @@ pub trait ElementArithmeticOps:
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
-/// array.block_on(array.batch_sub(index,vals));
+/// array.batch_sub(index,vals).block();
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -95,7 +95,7 @@ pub trait ElementArithmeticOps:
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
-/// array.block_on(array.batch_fetch_mul(indices,vals));
+/// array.batch_fetch_mul(indices,vals).block();
 ///```
 pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayPrivate<T> {
     /// This call adds the supplied `val` into the element specified by `index`
@@ -119,7 +119,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.add(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn add(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -154,7 +154,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_add(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_add<'a>(
@@ -193,7 +193,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_add(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_add(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -231,7 +231,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_add(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_add<'a>(
@@ -268,7 +268,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.sub(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -303,7 +303,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_sub(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_sub<'a>(
@@ -342,7 +342,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_sub(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -380,7 +380,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_sub(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_sub<'a>(
@@ -417,7 +417,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.mul(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -452,7 +452,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_mul(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_mul<'a>(
@@ -491,7 +491,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_mul(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -529,7 +529,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_mul(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_mul<'a>(
@@ -566,7 +566,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.div(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -601,7 +601,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_div(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_div<'a>(
@@ -640,7 +640,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_div(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -678,7 +678,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_div(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_div<'a>(
@@ -715,7 +715,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.rem(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -750,7 +750,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_rem(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_rem<'a>(
@@ -789,7 +789,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_rem(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -827,7 +827,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_rem(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_rem<'a>(
@@ -878,7 +878,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
-/// array.block_on(unsafe{array.batch_fetch_add(indices,val)});
+/// unsafe{array.batch_fetch_add(indices,val).block()};
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -890,7 +890,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
-/// array.block_on(unsafe{array.batch_sub(index,vals)});
+/// unsafe{array.batch_sub(index,vals).block()};
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -904,7 +904,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
-/// array.block_on(unsafe{array.batch_fetch_mul(indices,vals)});
+/// unsafe{array.batch_fetch_mul(indices,vals).block()};
 ///```
 pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     private::LamellarArrayPrivate<T>
@@ -930,7 +930,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.add(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn add(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -965,7 +965,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_add(indices,10) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_add<'a>(
@@ -1004,7 +1004,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_add(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_add(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -1042,7 +1042,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_add(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_add<'a>(
@@ -1079,7 +1079,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.sub(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -1114,7 +1114,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_sub(indices,10) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_sub<'a>(
@@ -1153,7 +1153,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_sub(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -1191,7 +1191,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_sub(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_sub<'a>(
@@ -1228,7 +1228,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.mul(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -1263,7 +1263,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_mul(indices,10) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_mul<'a>(
@@ -1302,7 +1302,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_mul(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -1340,7 +1340,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_mul(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_mul<'a>(
@@ -1377,7 +1377,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.div(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -1412,7 +1412,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_div(indices,10) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_div<'a>(
@@ -1451,7 +1451,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_div(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -1489,7 +1489,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_div(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_div<'a>(
@@ -1526,7 +1526,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.rem(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -1561,7 +1561,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_rem(indices,10) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_rem<'a>(
@@ -1600,7 +1600,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_rem(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -1638,7 +1638,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_rem(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_rem<'a>(

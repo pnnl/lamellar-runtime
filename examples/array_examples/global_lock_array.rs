@@ -31,7 +31,7 @@ fn main() {
     array.print();
     println!("2 .PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 
-    let mut local_data = world.block_on(array.collective_write_local_data());
+    let mut local_data = array.collective_write_local_data().block();
     println!(
         "3. PE{my_pe} time: {:?} got collective write lock",
         s.elapsed().as_secs_f64()
@@ -67,7 +67,7 @@ fn main() {
         .dist_iter_mut()
         .enumerate()
         .for_each(|(i, elem)| *elem += i);
-    world.block_on(task);
+    task.block();
     world.barrier();
     println!("7. PE{my_pe} time: {:?} done", s.elapsed().as_secs_f64());
 

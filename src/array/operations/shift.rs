@@ -49,7 +49,7 @@ pub trait ElementShiftOps: std::ops::ShlAssign + std::ops::ShrAssign + Dist + Si
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let indices = vec![3,54,12,88,29,68];
-/// array.block_on(array.batch_fetch_shl(indices,2));
+/// array.batch_fetch_shl(indices,2).block();
 ///```
 pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// This call performs an in place left shift of `val` bits on the element specified by `index`.
@@ -73,7 +73,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = array.shl(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn shl(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -108,7 +108,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_shl(indices,3);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_shl<'a>(
@@ -147,7 +147,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = array.fetch_shl(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_shl(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -185,7 +185,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_shl(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_shl<'a>(
@@ -222,7 +222,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = array.shl(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -257,7 +257,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_shr(indices,3);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_shr<'a>(
@@ -296,7 +296,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = array.fetch_shl(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_shr<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -334,7 +334,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_shr(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_shr<'a>(
@@ -408,7 +408,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = unsafe{ array.shl(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn shl(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -443,7 +443,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_shl(indices,3) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_shl<'a>(
@@ -482,7 +482,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = unsafe{ array.fetch_shl(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_shl(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -520,7 +520,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_shl(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_shl<'a>(
@@ -557,7 +557,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = unsafe{ array.shl(idx,val) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -592,7 +592,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_shr(indices,3) };
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_shr<'a>(
@@ -631,7 +631,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 2;
     /// let req = unsafe{ array.fetch_shl(idx,val) };
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_shr<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -669,7 +669,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_shr(indices,10) };
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_shr<'a>(

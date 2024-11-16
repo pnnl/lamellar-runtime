@@ -41,13 +41,13 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block sum");
-    let sum = block_array.block_on(block_array.dist_iter().map(|e| *e).sum());
+    let sum = block_array.dist_iter().map(|e| *e).sum().block();
     println!("result: {sum}");
     world.barrier();
     println!("--------------------------------------------------------");
     println!("--------------------------------------------------------");
     println!("cyclic sum");
-    let sum = cyclic_array.block_on(cyclic_array.dist_iter().map(|e| e.load()).sum());
+    let sum = cyclic_array.dist_iter().map(|e| e.load()).sum().block();
     println!("result: {sum}");
     world.barrier();
     println!("--------------------------------------------------------");
@@ -125,19 +125,18 @@ fn main() {
     println!("--------------------------------------------------------");
     println!("cyclic enumerate map async collect");
     let barray = block_array.clone();
-    let new_array = world.block_on(
-        cyclic_array
-            .dist_iter()
-            .enumerate()
-            .map(move |(i, elem)| {
-                let barray = barray.clone();
-                async move {
-                    barray.add(i, elem.load()).await;
-                    barray.fetch_sub(i, elem.load()).await
-                }
-            })
-            .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block),
-    );
+    let new_array = cyclic_array
+        .dist_iter()
+        .enumerate()
+        .map(move |(i, elem)| {
+            let barray = barray.clone();
+            async move {
+                barray.add(i, elem.load()).await;
+                barray.fetch_sub(i, elem.load()).await
+            }
+        })
+        .collect_async::<ReadOnlyArray<usize>, _>(Distribution::Block)
+        .block();
     new_array.print();
     block_array.print();
 
@@ -182,20 +181,19 @@ fn main() {
         .block();
     println!("--------------------------------------------------------");
     println!("filter_map collect");
-    let new_block_array = block_array.block_on(
-        block_array
-            .dist_iter()
-            .filter_map(|elem| {
-                let e = *elem;
-                if e % 8 == 0 {
-                    println!("e: {:?}", e);
-                    Some(e as u8)
-                } else {
-                    None
-                }
-            })
-            .collect::<ReadOnlyArray<u8>>(Distribution::Block),
-    );
+    let new_block_array = block_array
+        .dist_iter()
+        .filter_map(|elem| {
+            let e = *elem;
+            if e % 8 == 0 {
+                println!("e: {:?}", e);
+                Some(e as u8)
+            } else {
+                None
+            }
+        })
+        .collect::<ReadOnlyArray<u8>>(Distribution::Block)
+        .block();
 
     new_block_array.print();
 
@@ -273,6 +271,10 @@ fn main() {
 
     println!("--------------------------------------------------------");
     println!("block filter count");
-    let count = block_array.block_on(block_array.dist_iter().filter(|e| *e % 2 == 0).count());
+    let count = block_array
+        .dist_iter()
+        .filter(|e| *e % 2 == 0)
+        .count()
+        .block();
     println!("result: {count}");
 }

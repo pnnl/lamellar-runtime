@@ -230,7 +230,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///     if *e%2 == 0{ Some((i,*e as f32)) }
     ///     else { None }
     /// });
-    /// world.block_on(filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")));
+    /// filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -298,7 +298,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///                             else { None }
     ///                         })
     ///                        .monotonic();
-    /// world.block_on(filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")));
+    /// filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -327,11 +327,11 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
-    /// world.block_on(
+    
     ///     array
     ///         .dist_iter()
     ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
-    /// );
+    /// .block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each<F>(&self, op: F) -> DistIterForEachHandle
@@ -363,7 +363,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
-    /// world.block_on(iter);
+    /// iter.block();
     /// ```
     /// essentially the for_each_async call gets converted into (on each thread)
     ///```ignore
@@ -394,7 +394,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
-    /// array.block_on(array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id())));
+    /// array.dist_iter().for_each_with_schedule(Schedule::WorkStealing, |elem| println!("{:?} {elem}",std::thread::current().id())).block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
@@ -428,7 +428,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
-    /// array.block_on(iter);
+    /// iter.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn for_each_async_with_schedule<F, Fut>(&self, sched: Schedule, op: F) -> DistIterForEachHandle
@@ -454,7 +454,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).reduce(|acc,elem| acc+elem);
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn reduce<F>(&self, op: F) -> DistIterReduceHandle<Self::Item, F>
@@ -480,7 +480,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).reduce_with_schedule(Schedule::Static,|acc,elem| acc+elem);
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn reduce_with_schedule<F>(&self, sched: Schedule, op: F) -> DistIterReduceHandle<Self::Item, F>
@@ -517,7 +517,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
     ///                .filter(|elem|  *elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
-    /// let new_array = array.block_on(req); //wait on the collect request to get the new array
+    /// let new_array = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect<A>(&self, d: Distribution) -> DistIterCollectHandle<Self::Item, A>
@@ -552,7 +552,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///                .map(|elem| *elem) //because of constraints of collect we need to convert from &usize to usize
     ///                .filter(|elem| * elem < 10) // (if we didnt do the previous map  we would have needed to do **elem)
     ///                .collect::<AtomicArray<usize>>(Distribution::Block);
-    /// let new_array = array.block_on(req); //wait on the collect request to get the new array
+    /// let new_array = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_with_schedule<A>(
@@ -603,7 +603,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
     ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    /// let _new_array = array.block_on(req);
+    /// let _new_array = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_async<A, T>(&self, d: Distribution) -> DistIterCollectHandle<T, A>
@@ -651,7 +651,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
     ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic);
-    /// let _new_array = array.block_on(req);
+    /// let _new_array = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn collect_async_with_schedule<A, T>(
@@ -683,7 +683,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().filter(|elem|  **elem < 10).count();
-    /// let cnt = array.block_on(req); //wait on the collect request to get the new array
+    /// let cnt = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn count(&self) -> DistIterCountHandle {
@@ -705,7 +705,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().filter(|elem|  **elem < 10).count_with_schedule(Schedule::Dynamic);
-    /// let cnt = array.block_on(req); //wait on the collect request to get the new array
+    /// let cnt = req.block(); //wait on the collect request to get the new array
     ///```
     fn count_with_schedule(&self, sched: Schedule) -> DistIterCountHandle {
         self.array().count_with_schedule(sched, self)
@@ -730,7 +730,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).sum();
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> DistIterSumHandle<Self::Item>
@@ -759,7 +759,7 @@ pub trait DistributedIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.dist_iter().map(|elem| *elem).sum_with_schedule(Schedule::Guided);
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     fn sum_with_schedule(&self, sched: Schedule) -> DistIterSumHandle<Self::Item>
@@ -886,7 +886,7 @@ pub trait IndexedDistributedIterator: DistributedIterator + SyncSend + InnerIter
 /// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let dist_iter = array.dist_iter().for_each(move |e| println!("{e}"));
-/// world.block_on(dist_iter);
+/// dist_iter.block();
 ///```
 #[derive(Clone)]
 pub struct DistIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
@@ -1002,7 +1002,7 @@ impl<
 /// let array = LocalLockArray::<usize>::new(&world,100,Distribution::Block).block();
 /// let my_pe = world.my_pe();
 /// let dist_iter = array.dist_iter_mut().for_each(move |e| *e = my_pe );
-/// world.block_on(dist_iter);
+/// dist_iter.block();
 ///```
 pub struct DistIterMut<'a, T: Dist, A: LamellarArray<T>> {
     data: A,

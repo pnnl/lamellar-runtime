@@ -325,7 +325,7 @@ impl<T> Future for IntoUnsafeArrayHandle<T> {
 /// let atomic_array = array.into_atomic().block();
 /// /* alternatively something like the following is valid as well
 /// let atomic_array = world.block_on(async move{
-///     array.into_unsafe().await
+///     array.into_atomic().await
 /// })
 ///  */
 /// ```
@@ -423,7 +423,7 @@ impl<T: Dist> Future for IntoAtomicArrayHandle<T> {
 /// let local_lock_array = array.into_local_lock().block();
 /// /* alternatively something like the following is valid as well
 /// let local_lock_array = world.block_on(async move{
-///     array.into_unsafe().await
+///     array.into_local_lock().await
 /// })
 ///  */
 /// ```
@@ -521,7 +521,7 @@ impl<T: Dist> Future for IntoLocalLockArrayHandle<T> {
 /// let global_lock_array = array.into_global_lock().block();
 /// /* alternatively something like the following is valid as well
 /// let global_lock_array = world.block_on(async move{
-///     array.into_unsafe().await
+///     array.into_global_lock().await
 /// })
 ///  */
 /// ```
@@ -619,7 +619,7 @@ impl<T: Dist> Future for IntoGlobalLockArrayHandle<T> {
 /// let read_only_array = array.into_read_only().block();
 /// /* alternatively something like the following is valid as well
 /// let read_only_array = world.block_on(async move{
-///     array.into_unsafe().await
+///     array.into_read_only().await
 /// })
 ///  */
 /// ```

@@ -8,7 +8,7 @@ output_dir=/home/scratch/$USER
 root=$PWD
 # . $root/../junction-prep.rc
 
-local_results_dir=async_backends
+local_results_dir=v0.7.0
 results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}
 ### test using rofi verbs lamellae
 rm -r ${results_dir}

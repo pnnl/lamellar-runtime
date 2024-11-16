@@ -430,11 +430,6 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
     type OnesidedIter = OneSidedIter<'static, T, Self>;
 
     fn dist_iter(&self) -> Self::DistIter {
-        // let the_array: LocalLockArray<T> = self.clone();
-        // let lock: LocalRwDarc<()> = self.lock.clone();
-        // let lock = Arc::new(self.array.block_on(async move { lock.read().await }));
-        // let lock = Arc::new(self.lock.read().block());
-        // self.barrier();
         LocalLockDistIter {
             data: self.clone(),
             lock: Arc::new(Mutex::new(None)),
@@ -445,9 +440,6 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
     }
 
     fn local_iter(&self) -> Self::LocalIter {
-        // let lock: LocalRwDarc<()> = self.lock.clone();
-        // let lock = Arc::new(self.array.block_on(async move { lock.read().await }));
-        // let lock = Arc::new(self.lock.read().block());
         LocalLockLocalIter {
             data: self.clone(),
             lock: Arc::new(Mutex::new(None)),
@@ -475,11 +467,6 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     type LocalIter = LocalLockLocalIterMut<'static, T>;
 
     fn dist_iter_mut(&self) -> Self::DistIter {
-        // let lock: LocalRwDarc<()> = self.lock.clone();
-        // let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
-        // let lock = Arc::new(self.lock.write().block());
-        // self.barrier();
-        // println!("dist_iter thread {:?} got lock",std::thread::current().id());
         LocalLockDistIterMut {
             data: self.clone(),
             lock: Arc::new(Mutex::new(None)),
@@ -490,11 +477,6 @@ impl<T: Dist> LamellarArrayMutIterators<T> for LocalLockArray<T> {
     }
 
     fn local_iter_mut(&self) -> Self::LocalIter {
-        // println!("trying to get write lock for iter");
-        // let lock: LocalRwDarc<()> = self.lock.clone();
-        // // let lock = Arc::new(self.array.block_on(async move { lock.write().await }));
-        // let lock = Arc::new(self.lock.write().block());
-
         // println!("got write lock for iter");
         LocalLockLocalIterMut {
             data: self.clone(),

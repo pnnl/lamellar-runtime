@@ -49,7 +49,7 @@ fn main() {
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
-        println!("{:?}", world.block_on(array.sum()));
+        println!("{:?}", array.sum().block());
         world.barrier();
 
         array.barrier();
@@ -64,7 +64,7 @@ fn main() {
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
-        println!("{:?}", world.block_on(array.sum()));
+        println!("{:?}", array.sum().block());
         array.barrier();
         timer = std::time::Instant::now();
         let mut bufs = vec![Vec::with_capacity(num_per_batch); num_pes];
@@ -110,7 +110,7 @@ fn main() {
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
-        println!("{:?}", world.block_on(array.sum()));
+        println!("{:?}", array.sum().block());
         let array = array.into_unsafe().block();
 
         world.barrier();
@@ -125,6 +125,6 @@ fn main() {
         if my_pe == 0 {
             println!("{:?}", timer.elapsed());
         }
-        println!("{:?}", world.block_on(array.sum()));
+        println!("{:?}", array.sum().block());
     }
 }

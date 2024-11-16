@@ -837,31 +837,12 @@ impl<T: Dist> ActiveMessaging for LocalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for LocalLockArray<T> {
-    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-    //     self.array.team_rt()
-    // }
-    // fn my_pe(&self) -> usize {
-    //     LamellarArray::my_pe(&self.array)
-    // }
-    // fn num_pes(&self) -> usize {
-    //     LamellarArray::num_pes(&self.array)
-    // }
     fn len(&self) -> usize {
         self.array.len()
     }
     fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
-    // fn barrier(&self) {
-    //     self.array.barrier();
-    // }
-    // fn wait_all(&self) {
-    //     self.array.wait_all()
-    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
-    // }
-    // fn block_on<F: Future>(&self, f: F) -> F::Output {
-    //     self.array.block_on(f)
-    // }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }
@@ -1022,9 +1003,9 @@ impl<T: Dist + AmDist + 'static> LocalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let prod = array.block_on(read_guard.reduce("prod"));
+    /// let prod = read_guard.reduce("prod").block();
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn reduce(self, op: &str) -> LocalLockArrayReduceHandle<T> {
@@ -1057,9 +1038,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let sum = array.block_on(read_guard.sum());
+    /// let sum = read_guard.sum().block();
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn sum(self) -> LocalLockArrayReduceHandle<T> {
@@ -1087,9 +1068,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> LocalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1).block();
     /// let read_guard = array.read_lock().block();
-    /// let prod = array.block_on(read_guard.prod()).expect("array len > 0");
+    /// let prod = read_guard.prod().block().expect("array len > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1119,9 +1100,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let max = array.block_on(read_guard.max()).expect("array len > 0");
+    /// let max = read_guard.max().block().expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1150,9 +1131,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> LocalLockReadGuard
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = LocalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let min = array.block_on(read_guard.min()).expect("array len > 0");
+    /// let min = read_guard.min().block().expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

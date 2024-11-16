@@ -56,7 +56,7 @@ pub trait ElementBitWiseOps:
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 0b100101001;
-/// array.block_on(array.batch_fetch_bit_and(indices,val));
+/// array.batch_fetch_bit_and(indices,val).block();
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -68,7 +68,7 @@ pub trait ElementBitWiseOps:
 ///
 /// let vals = vec![0x3,0x54,0b11101,88,29,0x68];
 /// let index = 10;
-/// array.block_on(array.batch_bit_or(index,vals));
+/// array.batch_bit_or(index,vals).block();
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -82,7 +82,7 @@ pub trait ElementBitWiseOps:
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![0x12,2,1,0b10000,12,0x13];
-/// array.block_on(array.batch_fetch_bit_or(indices,vals));
+/// array.batch_fetch_bit_or(indices,vals).block();
 ///```
 pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// This call performs a bitwise `and` with the element specified by `index` and the supplied `val`.
@@ -106,7 +106,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 0b100101001;
     /// let req = array.bit_and(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -141,7 +141,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_and(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_bit_and<'a>(
@@ -180,7 +180,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_bit_and(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -218,7 +218,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_and(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_bit_and<'a>(
@@ -255,7 +255,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 0b100101001;
     /// let req = array.bit_or(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -290,7 +290,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_or(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_bit_or<'a>(
@@ -329,7 +329,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_bit_or(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -367,7 +367,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_or(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_bit_or<'a>(
@@ -404,7 +404,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 0b100101001;
     /// let req = array.bit_xor(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -439,7 +439,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_bit_xor(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_bit_xor<'a>(
@@ -478,7 +478,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.fetch_bit_xor(idx,val);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -516,7 +516,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_fetch_bit_xor(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_fetch_bit_xor<'a>(
@@ -567,7 +567,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 0b100101001;
-/// array.block_on(unsafe{array.batch_fetch_bit_and(indices,val)});
+/// unsafe{array.batch_fetch_bit_and(indices,val).block()};
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -579,7 +579,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let vals = vec![0x3,0x54,0b11101,88,29,0x68];
 /// let index = 10;
-/// array.block_on(unsafe{array.batch_bit_or(index,vals)});
+/// unsafe{array.batch_bit_or(index,vals).block()};
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -593,7 +593,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![0x12,2,1,0b10000,12,0x13];
-/// array.block_on(unsafe{array.batch_fetch_bit_or(indices,vals)});
+/// unsafe{array.batch_fetch_bit_or(indices,vals).block()};
 ///```
 pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// This call performs a bitwise `and` with the element specified by `index` and the supplied `val`.
@@ -617,7 +617,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let idx = 53;
     /// let val = 0b100101001;
     /// let req = unsafe{ array.bit_and(idx,val)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -652,7 +652,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_bit_and(indices,10)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_bit_and<'a>(
@@ -691,7 +691,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_bit_and(idx,val)};
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -729,7 +729,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_bit_and(indices,10)};
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_bit_and<'a>(
@@ -766,7 +766,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let idx = 53;
     /// let val = 0b100101001;
     /// let req = unsafe{ array.bit_or(idx,val)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -801,7 +801,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_bit_or(indices,10)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_bit_or<'a>(
@@ -840,7 +840,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_bit_or(idx,val)};
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -878,7 +878,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_bit_or(indices,10)};
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_bit_or<'a>(
@@ -915,7 +915,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let idx = 53;
     /// let val = 0b100101001;
     /// let req = unsafe{ array.bit_xor(idx,val)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -950,7 +950,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_bit_xor(indices,10)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_bit_xor<'a>(
@@ -989,7 +989,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{ array.fetch_bit_xor(idx,val)};
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -1027,7 +1027,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_fetch_bit_xor(indices,10)};
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_fetch_bit_xor<'a>(

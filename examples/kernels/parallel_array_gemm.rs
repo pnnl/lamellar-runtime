@@ -90,7 +90,7 @@ fn main() {
     world.wait_all();
     world.barrier();
     let elapsed = start.elapsed().as_secs_f64();
-    let sum = world.block_on(c.sum());
+    let sum = c.sum().block();
 
     println!("Elapsed: {:?}", elapsed);
     if my_pe == 0 {
@@ -101,13 +101,4 @@ fn main() {
             sum
         );
     }
-    // unsafe {
-    //     world.block_on(c.dist_iter_mut().enumerate().for_each(|(i, x)| {
-    //         //check that c == a
-    //         if *x != i as f32 {
-    //             println!("error {:?} {:?}", x, i);
-    //         }
-    //         *x = 0.0
-    //     }));
-    // }
 }

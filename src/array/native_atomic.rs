@@ -1194,31 +1194,12 @@ impl<T: Dist> ActiveMessaging for NativeAtomicArray<T> {
 
 //#[doc(hidden)]
 impl<T: Dist> LamellarArray<T> for NativeAtomicArray<T> {
-    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-    //     self.array.team_rt()
-    // }
-    // fn my_pe(&self) -> usize {
-    //     LamellarArray::my_pe(&self.array)
-    // }
-    // fn num_pes(&self) -> usize {
-    //     LamellarArray::num_pes(&self.array)
-    // }
     fn len(&self) -> usize {
         self.array.len()
     }
     fn num_elems_local(&self) -> usize {
         self.array.num_elems_local()
     }
-    // fn barrier(&self) {
-    //     self.array.barrier();
-    // }
-    // fn wait_all(&self) {
-    //     self.array.wait_all()
-    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
-    // }
-    // fn block_on<F: Future>(&self, f: F) -> F::Output {
-    //     self.array.block_on(f)
-    // }
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         self.array.pe_and_offset_for_global_index(index)
     }

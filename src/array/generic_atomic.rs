@@ -457,24 +457,6 @@ impl<T: Dist> GenericAtomicArray<T> {
 }
 #[doc(hidden)]
 impl<T: Dist> GenericAtomicArray<T> {
-    // pub fn wait_all(&self) {
-    //     self.array.wait_all();
-    // }
-    // pub fn barrier(&self) {
-    //     self.array.barrier();
-    // }
-
-    // pub fn block_on<F>(&self, f: F) -> F::Output
-    // where
-    //     F: Future,
-    // {
-    //     self.array.block_on(f)
-    // }
-
-    // pub(crate) fn num_elems_local(&self) -> usize {
-    //     self.array.num_elems_local()
-    // }
-
     //#[doc(hidden)]
     pub fn use_distribution(self, distribution: Distribution) -> Self {
         GenericAtomicArray {
@@ -482,28 +464,6 @@ impl<T: Dist> GenericAtomicArray<T> {
             array: self.array.use_distribution(distribution),
         }
     }
-
-    // pub fn num_pes(&self) -> usize {
-    //     self.array.num_pes()
-    // }
-
-    // //#[doc(hidden)]
-    // pub fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
-    //     self.array.pe_for_dist_index(index)
-    // }
-
-    // //#[doc(hidden)]
-    // pub fn pe_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
-    //     self.array.pe_offset_for_dist_index(pe, index)
-    // }
-
-    // // pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
-    // //     self.array.inner.subarray_index_from_local(index)
-    // // }
-
-    // pub fn len(&self) -> usize {
-    //     self.array.len()
-    // }
 
     //#[doc(hidden)]
     pub fn local_data(&self) -> GenericAtomicLocalData<T> {
@@ -531,13 +491,6 @@ impl<T: Dist> GenericAtomicArray<T> {
     pub unsafe fn __local_as_mut_slice(&self) -> &mut [T] {
         self.array.local_as_mut_slice()
     }
-
-    // pub fn sub_array<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
-    //     GenericAtomicArray {
-    //         locks: self.locks.clone(),
-    //         array: self.array.sub_array(range),
-    //     }
-    // }
 
     //#[doc(hidden)]
     pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {

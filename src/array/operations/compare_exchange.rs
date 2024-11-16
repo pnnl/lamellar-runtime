@@ -63,7 +63,7 @@ pub trait ElementComparePartialEqOps:
 /// let indices = vec![3,54,12,88,29,68];
 /// let current = 0;
 /// let new = 10;
-/// array.block_on(array.batch_compare_exchange(indices,current,new));
+/// array.batch_compare_exchange(indices,current,new).block();
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -76,7 +76,7 @@ pub trait ElementComparePartialEqOps:
 /// let new_vals = vec![3,54,11101,88,29,68];
 /// let current = 0;
 /// let index = 10;
-/// array.block_on(array.batch_compare_exchange(index,current,new_vals));
+/// array.batch_compare_exchange(index,current,new_vals).block();
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -91,7 +91,7 @@ pub trait ElementComparePartialEqOps:
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12,2,1,10000,12,13];
 /// let current = 0;
-/// array.block_on(array.batch_compare_exchange(indices,current,new_vals));
+/// array.batch_compare_exchange(indices,current,new_vals).block();
 ///```
 pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPrivate<T> {
     /// This call stores the `new` value into the element specified by `index` if the current value is the same as `current`.
@@ -119,7 +119,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let val = 10;
     /// let current = 0;
     /// let req = array.compare_exchange(idx,current,val);
-    /// let result = array.block_on(req);
+    /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn compare_exchange<'a>(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
@@ -159,7 +159,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0;
     /// let req = array.batch_compare_exchange(indices,current,10);
-    /// let results = array.block_on(req);
+    /// let results = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_compare_exchange<'a>(
@@ -222,7 +222,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// let current = 0.0;
 /// let new = 10.5;
 /// let epsilon = 0.1;
-/// array.block_on(array.batch_compare_exchange_epsilon(indices,current,new,epsilon));
+/// array.batch_compare_exchange_epsilon(indices,current,new,epsilon).block();
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -236,7 +236,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// let current = 0.0;
 /// let index = 10;
 /// let epsilon = 0.1;
-/// array.block_on(array.batch_compare_exchange_epsilon(index,current,new_vals,epsilon));
+/// array.batch_compare_exchange_epsilon(index,current,new_vals,epsilon).block();
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -252,7 +252,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
 /// let new_vals = vec![12.1,2.321,1.7,10000.0,12.4,13.7];
 /// let current = 0.0;
 /// let epsilon = 0.1;
-/// array.block_on(array.batch_compare_exchange_epsilon(indices,current,new_vals,epsilon));
+/// array.batch_compare_exchange_epsilon(indices,current,new_vals,epsilon).block();
 ///```
 pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     private::LamellarArrayPrivate<T>
@@ -285,7 +285,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let current = 0.0;
     /// let epsilon = 0.1;
     /// let req = array.compare_exchange_epsilon(idx,current,val,epsilon);
-    /// let result = array.block_on(req);
+    /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn compare_exchange_epsilon<'a>(
@@ -332,7 +332,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let current = 0.0;
     /// let epsilon = 0.001;
     /// let req = array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon);
-    /// let results = array.block_on(req);
+    /// let results = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_compare_exchange_epsilon<'a>(
@@ -389,7 +389,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// let indices = vec![3,54,12,88,29,68];
 /// let current = 0;
 /// let new = 10;
-/// array.block_on(unsafe{array.batch_compare_exchange(indices,current,new)});
+/// unsafe{array.batch_compare_exchange(indices,current,new).block()};
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -402,7 +402,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// let new_vals = vec![3,54,11101,88,29,68];
 /// let current = 0;
 /// let index = 10;
-/// array.block_on(unsafe{array.batch_compare_exchange(index,current,new_vals)});
+/// unsafe{array.batch_compare_exchange(index,current,new_vals).block()};
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -417,7 +417,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
 /// let indices = vec![3,54,12,88,29,68];
 /// let new_vals = vec![12,2,1,10000,12,13];
 /// let current = 0;
-/// array.block_on(unsafe{array.batch_compare_exchange(indices,current,new_vals)});
+/// unsafe{array.batch_compare_exchange(indices,current,new_vals).block()};
 ///```
 pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     private::LamellarArrayPrivate<T>
@@ -447,7 +447,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let val = 10;
     /// let current = 0;
     /// let req = unsafe{ array.compare_exchange(idx,current,val)};
-    /// let result = array.block_on(req);
+    /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn compare_exchange<'a>(
@@ -492,7 +492,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let indices = vec![3,54,12,88,29,68];
     /// let current = 0;
     /// let req = unsafe{ array.batch_compare_exchange(indices,current,10)};
-    /// let results = array.block_on(req);
+    /// let results = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_compare_exchange<'a>(
@@ -552,7 +552,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// let current = 0.0;
 /// let new = 10.5;
 /// let epsilon = 0.1;
-/// array.block_on(unsafe{array.batch_compare_exchange_epsilon(indices,current,new,epsilon)});
+/// unsafe{array.batch_compare_exchange_epsilon(indices,current,new,epsilon).block()};
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -566,7 +566,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// let current = 0.0;
 /// let index = 10;
 /// let epsilon = 0.1;
-/// array.block_on(unsafe{array.batch_compare_exchange_epsilon(index,current,new_vals,epsilon)});
+/// unsafe{array.batch_compare_exchange_epsilon(index,current,new_vals,epsilon).block()};
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -582,7 +582,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
 /// let new_vals = vec![12.1,2.321,1.7,10000.0,12.4,13.7];
 /// let current = 0.0;
 /// let epsilon = 0.1;
-/// array.block_on(unsafe{array.batch_compare_exchange_epsilon(indices,current,new_vals,epsilon)});
+/// unsafe{array.batch_compare_exchange_epsilon(indices,current,new_vals,epsilon).block()};
 ///```
 pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     private::LamellarArrayPrivate<T>
@@ -615,7 +615,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let current = 0.0;
     /// let epsilon = 0.1;
     /// let req = unsafe{ array.compare_exchange_epsilon(idx,current,val,epsilon)};
-    /// let result = array.block_on(req);
+    /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn compare_exchange_epsilon<'a>(
@@ -662,7 +662,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let current = 0.0;
     /// let epsilon = 0.001;
     /// let req = unsafe{ array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon)};
-    /// let results = array.block_on(req);
+    /// let results = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_compare_exchange_epsilon<'a>(

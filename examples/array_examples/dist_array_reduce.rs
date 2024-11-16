@@ -52,8 +52,8 @@ fn main() {
             println!("{:?}", local_mem_region.as_slice().unwrap());
             // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
-            world.block_on(block_array.put(0, &local_mem_region));
-            world.block_on(cyclic_array.put(0, &local_mem_region));
+            block_array.put(0, &local_mem_region).block();
+            cyclic_array.put(0, &local_mem_region).block();
         }
     }
     world.barrier();
@@ -70,7 +70,7 @@ fn main() {
             *elem = 0;
         }
     }
-    world.block_on(unsafe { block_array.get(0, &local_mem_region) });
+    unsafe { block_array.get(0, &local_mem_region).block() };
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
@@ -84,7 +84,7 @@ fn main() {
             *elem = 0;
         }
     }
-    world.block_on(unsafe { cyclic_array.get(0, &local_mem_region) });
+    unsafe { cyclic_array.get(0, &local_mem_region).block() };
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {
@@ -97,10 +97,10 @@ fn main() {
     if my_pe == 0 {
         println!("starting dist");
         let mut timer = Instant::now();
-        let cyclic_sum = world.block_on(unsafe { cyclic_array.sum() });
+        let cyclic_sum = unsafe { cyclic_array.sum().block() };
         let cyclic_dist_time = timer.elapsed().as_secs_f64();
         timer = Instant::now();
-        let block_sum = world.block_on(unsafe { block_array.sum() }); //need to figure out why this calculation is wrong...
+        let block_sum = unsafe { block_array.sum().block() }; //need to figure out why this calculation is wrong...
         let block_dist_time = timer.elapsed().as_secs_f64();
         let calculated_sum = (total_len / 2) * (0 + 99);
         println!(
@@ -108,26 +108,28 @@ fn main() {
             cyclic_sum, cyclic_dist_time, block_sum, block_dist_time, calculated_sum
         );
 
-        let block_min = world.block_on(unsafe { block_array.reduce("my_min") });
-        let cyclic_min = world.block_on(unsafe { block_array.reduce("my_min") });
+        let block_min = unsafe { block_array.reduce("my_min").block() };
+        let cyclic_min = unsafe { block_array.reduce("my_min").block() };
         println!("block min: {:?} cyclic min: {:?}", block_min, cyclic_min);
     }
 
     let mut timer = Instant::now();
-    let cyclic_sum = world.block_on(unsafe {
+    let cyclic_sum = unsafe {
         cyclic_array
             .dist_iter()
             .map(|val| *val)
             .reduce(|sum, val| sum + val)
-    });
+            .block()
+    };
     let cyclic_dist_time = timer.elapsed().as_secs_f64();
     timer = Instant::now();
-    let block_sum = world.block_on(unsafe {
+    let block_sum = unsafe {
         block_array
             .dist_iter()
             .map(|val| *val)
             .reduce(|sum, val| sum + val)
-    });
+            .block()
+    };
     let block_dist_time = timer.elapsed().as_secs_f64();
 
     println!(
@@ -155,7 +157,6 @@ fn main() {
     let _ = block_array.sum().block();
 
     let one_elem_array = UnsafeArray::<usize>::new(world.team(), 1, Distribution::Block).block();
-    let min = unsafe { one_elem_array.min() };
-    let min = one_elem_array.block_on(min);
+    let min = unsafe { one_elem_array.min().block() };
     println!("one elem array min: {min:?}");
 }

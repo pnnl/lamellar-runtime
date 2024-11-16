@@ -68,8 +68,6 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         // .with_lamellae( Backend::Local )
         .build();
-    // let world_c = world.clone();
-    // world_c.block_on(async move {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     world.barrier();
@@ -116,7 +114,7 @@ fn main() {
         let cur_t = timer.elapsed().as_secs_f64();
         let tot_flop: usize = reqs
             .drain(0..)
-            .map(|r| world.block_on(r).drain(0..).sum::<usize>())
+            .map(|r| r.block().drain(0..).sum::<usize>())
             .sum();
         let task_granularity = ((cur_t * num_cores) / (num_tasks * num_pes) as f64) * 1000.0f64;
         if my_pe == 0 {

@@ -224,7 +224,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///     if *e%2 == 0{ Some((i,*e as f32)) }
     ///     else { None }
     /// });
-    /// world.block_on(filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e:?}")));
+    /// filter_iter.for_each(move|(i,e)| println!("PE: {my_pe} i: {i} elem: {e:?}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -292,7 +292,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///                             else { None }
     ///                         })
     ///                        .monotonic();
-    /// world.block_on(filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")));
+    /// filter_iter.for_each(move|(j,(i,e))| println!("PE: {my_pe} j: {j} i: {i} elem: {e}")).block();
     ///```
     /// Possible output on a 4 PE (1 thread/PE) execution (ordering is likey to be random with respect to PEs)
     ///```text
@@ -320,11 +320,11 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let world = LamellarWorldBuilder::new().build();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
-    /// world.block_on(
+    /// 
     ///     array
     ///         .local_iter()
     ///         .for_each(move |elem| println!("{:?} {elem}",std::thread::current().id()))
-    /// );
+    /// .block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn for_each<F>(&self, op: F) -> LocalIterForEachHandle
@@ -380,7 +380,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///     async_std::task::yield_now().await;
     ///     println!("{:?} {elem}",std::thread::current().id())
     /// });
-    /// world.block_on(iter);
+    /// iter.block();
     /// ```
     /// essentially the for_each_async call gets converted into (on each thread)
     ///```ignore
@@ -441,7 +441,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.local_iter().map(|elem| *elem).reduce(|acc,elem| acc+elem);
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn reduce<F>(&self, op: F) -> LocalIterReduceHandle<Self::Item, F>
@@ -466,7 +466,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.local_iter().map(|elem| *elem).reduce_with_schedule(Schedule::Chunk(10),|acc,elem| acc+elem);
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn reduce_with_schedule<F>(
@@ -496,7 +496,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///
     /// let array_clone = array.clone();
     /// let req = array.local_iter().map(|elem|elem.load()).filter(|elem| elem % 2 == 0).collect::<ReadOnlyArray<usize>>(Distribution::Cyclic);
-    /// let new_array = array.block_on(req);
+    /// let new_array = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect<A>(&self, d: Distribution) -> LocalIterCollectHandle<Self::Item, A>
@@ -522,7 +522,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///
     /// let array_clone = array.clone();
     /// let req = array.local_iter().map(|elem|elem.load()).filter(|elem| elem % 2 == 0).collect_with_schedule::<ReadOnlyArray<usize>>(Schedule::WorkStealing,Distribution::Cyclic);
-    /// let new_array = array.block_on(req);
+    /// let new_array = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect_with_schedule<A>(
@@ -573,7 +573,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
     ///             .collect_async::<ReadOnlyArray<usize>,_>(Distribution::Cyclic);
-    /// let _new_array = array.block_on(req);
+    /// let _new_array = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect_async<A, T>(&self, d: Distribution) -> LocalIterCollectHandle<T, A>
@@ -621,7 +621,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     ///         array_clone
     ///             .fetch_add(elem.load(),1000))
     ///             .collect_async_with_schedule::<ReadOnlyArray<usize>,_>(Schedule::Dynamic, Distribution::Cyclic);
-    /// let _new_array = array.block_on(req);
+    /// let _new_array = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn collect_async_with_schedule<A, T>(
@@ -651,7 +651,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.local_iter().count();
-    /// let cnt = array.block_on(req);
+    /// let cnt = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn count(&self) -> LocalIterCountHandle {
@@ -671,7 +671,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.local_iter().count_with_schedule(Schedule::Dynamic);
-    /// let cnt = array.block_on(req);
+    /// let cnt = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn count_with_schedule(&self, sched: Schedule) -> LocalIterCountHandle {
@@ -695,7 +695,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.local_iter().map(|elem| *elem).sum().spawn();
-    /// let sum = array.block_on(req); //wait on the collect request to get the new array
+    /// let sum = req.block(); //wait on the collect request to get the new array
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum(&self) -> LocalIterSumHandle<Self::Item>
@@ -722,7 +722,7 @@ pub trait LocalIterator: SyncSend + InnerIter + 'static {
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.local_iter().map(|elem| *elem).sum_with_schedule(Schedule::Guided);
-    /// let sum = array.block_on(req);
+    /// let sum = req.block();
     ///```
     #[must_use = "this iteration adapter is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it."]
     fn sum_with_schedule(&self, sched: Schedule) -> LocalIterSumHandle<Self::Item>
@@ -971,7 +971,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + InnerIter + 'static {
 /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
 ///
 /// let local_iter = array.local_iter().for_each(move|e| println!("{}",e.load()));
-/// world.block_on(local_iter);
+/// local_iter.block();
 ///```
 #[derive(Clone)]
 pub struct LocalIter<'a, T: Dist + 'static, A: LamellarArray<T>> {
@@ -1091,7 +1091,7 @@ impl<
 /// let my_pe = world.my_pe();
 ///
 /// let local_iter = array.local_iter_mut().for_each(move|e| e.store(my_pe) );
-/// world.block_on(local_iter);
+/// local_iter.block();
 ///```
 pub struct LocalIterMut<'a, T: Dist, A: LamellarArray<T>> {
     data: A,

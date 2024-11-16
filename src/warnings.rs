@@ -105,6 +105,7 @@ impl<'a> RuntimeWarning<'a> {
                 "{msg}
                 Note that this warning is informative only, and will not terminate your application.
                 To disable runtime warnings completely, recompile lamellar with the `disable-runtime-warnings` feature.
+                Alternatively, you can force runtime warnings to cause a panic by recompiling with the  `runtime-warnings-panic` feature.
                 To view backtrace set RUST_LIB_BACKTRACE=1.
                 {}",
                 std::backtrace::Backtrace::capture()

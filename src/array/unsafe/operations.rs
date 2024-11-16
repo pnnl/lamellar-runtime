@@ -600,7 +600,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         let num_per_batch =
             (config().am_size_threshold as f32 / std::mem::size_of::<T>() as f32).ceil() as usize;
 
-        println!("multi_val_one_index");
+        // println!("multi_val_one_index");
         let cnt = Arc::new(AtomicUsize::new(0));
         let futures = Arc::new(Mutex::new(VecDeque::new()));
         let (pe, local_index) = match self.pe_and_offset_for_global_index(index) {

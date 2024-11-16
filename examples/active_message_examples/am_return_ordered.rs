@@ -39,23 +39,6 @@ fn main() {
     if my_pe == 0 {
         let num_ams = 1000000;
         // println!("---------------------------------------------------------------");
-        // println!("Testing local am");
-        // let res = world.block_on(world.exec_am_pe(my_pe, am.clone()));
-        // assert_eq!(res, my_pe);
-        // println!("PE[{:?}] return result: {:?}", my_pe, res);
-        // println!("-----------------------------------");
-        // println!("Testing remote am");
-        // let res = world.block_on(world.exec_am_pe(num_pes - 1, am.clone()));
-        // assert_eq!(res, num_pes - 1);
-        // println!("PE[{:?}] return result: {:?}", my_pe, res);
-        // println!("-----------------------------------");
-        // println!("Testing all am");
-        // let res = world.block_on(world.exec_am_all(am));
-        // assert_eq!(res, (0..num_pes).collect::<Vec<usize>>());
-        // println!("PE[{:?}] return result: {:?}", my_pe, res);
-        // println!("---------------------------------------------------------------");
-        // let res = world.block_on(world.exec_am_all(AmReturnUsize{val1: 5}));
-        // println!("res: {res:?}");
         let mut ams = typed_am_group!(AmReturnUsize, &world);
         let mut check = vec![];
         for i in 0..num_ams {
@@ -67,7 +50,6 @@ fn main() {
             }
             check.push((pe, i));
         }
-        // println!("check: {check:?}");
         let results = world.block_on(ams.exec());
         for (pe, i) in check {
             // println!("{:?}", results.at(i));

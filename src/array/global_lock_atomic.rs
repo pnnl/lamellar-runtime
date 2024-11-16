@@ -1055,9 +1055,9 @@ impl<T: Dist + AmDist + 'static> GlobalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let prod = array.block_on(read_guard.reduce("prod")).expect("array has > 0 elements");
+    /// let prod = read_guard.reduce("prod").block().expect("array has > 0 elements");
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn reduce(self, op: &str) -> GlobalLockArrayReduceHandle<T> {
@@ -1088,9 +1088,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let sum = array.block_on(read_guard.sum()).expect("array has > 0 elements");
+    /// let sum = read_guard.sum().block().expect("array has > 0 elements");
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
     pub fn sum(self) -> GlobalLockArrayReduceHandle<T> {
@@ -1116,9 +1116,9 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> GlobalLockReadGuard<T> {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i+1).block();
     /// let read_guard = array.read_lock().block();
-    /// let prod = array.block_on(read_guard.prod()).expect("array has > 0 elements");
+    /// let prod = read_guard.prod().block().expect("array has > 0 elements");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1146,9 +1146,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let max = array.block_on(read_guard.max()).expect("array has > 0 elements");
+    /// let max = read_guard.max().block().expect("array has > 0 elements");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1175,9 +1175,9 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> GlobalLockReadGuar
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     /// let array = GlobalLockArray::<usize>::new(&world,10,Distribution::Block).block();
-    /// array.block_on(array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2));
+    /// array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = i*2).block();
     /// let read_guard = array.read_lock().block();
-    /// let min = array.block_on(read_guard.min()).expect("array has > 0 elements");
+    /// let min = read_guard.min().block().expect("array has > 0 elements");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

@@ -252,21 +252,21 @@ fn main() {
     println!("--------------------------------------------------------");
 
     println!("--------------------------------------------------------");
-    block_array.block_on(
-        block_array
-            .dist_iter_mut()
-            .enumerate()
-            .for_each(|(i, elem)| {
-                elem.store(i);
-            }),
-    );
+
+    block_array
+        .dist_iter_mut()
+        .enumerate()
+        .for_each(|(i, elem)| {
+            elem.store(i);
+        })
+        .block();
     println!("block map reduce");
     let req = block_array
         .local_iter()
         .map(|elem| elem.load())
         .reduce(|acc, elem| acc + elem);
 
-    let sum = block_array.block_on(req);
+    let sum = req.block();
 
     println!("{my_pe} reduce sum: {:?}", sum);
     block_array.barrier();

@@ -73,7 +73,7 @@ fn main() {
     if my_pe == 0 {
         println!("---------------------------------------------------------------");
         println!("Testing local am no return");
-        let res = world.block_on(world.exec_am_pe(my_pe, am.clone()));
+        let res = world.exec_am_pe(my_pe, am.clone()).block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
@@ -82,13 +82,13 @@ fn main() {
         //     world.exec_am_pe(num_pes - 1, am.clone());
         // }
         // world.wait_all();
-        let res = world.block_on(world.exec_am_pe(num_pes - 1, am.clone()));
+        let res = world.exec_am_pe(num_pes - 1, am.clone()).block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing all am no return");
         println!("[{:?}] exec on all", my_pe);
-        let res = world.block_on(world.exec_am_all(am.clone()));
+        let res =world.exec_am_all(am.clone()).block();
         assert!(res.iter().all(|x| *x == ()));
         println!("no return result: {:?}", res);
         println!("---------------------------------------------------------------");
@@ -113,16 +113,10 @@ fn main() {
                 })
                 .block();
         }
-        // let res = world.block_on(am_group.exec());
         for r in res.iter() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
         println!("Typed Am Group---------------------------------------------------------------");
-
-        // let mut am_group = typed_am_group!(AmNoReturn,world.clone());
-        // am_group.add_am_all(am.clone());
-        // am_group.add_am_pe(0,am.clone());
-        // world.block_on(am_group.exec());
 
         let mut am_group = typed_am_group!(AmNoReturn, world.clone());
         for i in 0..10 {
@@ -143,11 +137,4 @@ fn main() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
     }
-
-    // println!("---------------------------------------------------------------");
-    // println!("Testing ring pattern am no return");
-    // let res = world.block_on(world.exec_am_pe((my_pe + 1) % num_pes, am.clone()));
-    // assert_eq!(res, ());
-    // println!("no return result: {:?}", res);
-    // println!("-----------------------------------");
 }

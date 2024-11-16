@@ -431,60 +431,55 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     pub(crate) async fn await_all(&self) {
-        if self
-            .inner
-            .data
-            .array_counters
-            .send_req_cnt
-            .load(Ordering::SeqCst)
-            != self
-                .inner
-                .data
-                .array_counters
-                .launched_req_cnt
-                .load(Ordering::SeqCst)
-        {
-            RuntimeWarning::UnspawnedTask(
-                "`await_all` on an array before all operations, iterators, etc, created by the array have been spawned",
-            )
-            .print();
-        }
+        let am_counters = self.inner.data.array_counters.clone();
+
         let mut temp_now = Instant::now();
-        // let mut first = true;
-        while self
-            .inner
-            .data
-            .array_counters
-            .outstanding_reqs
-            .load(Ordering::SeqCst)
-            > 0
-            || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
-        {
-            // std::thread::yield_now();
-            // self.inner.data.team.flush();
-            // self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            async_std::task::yield_now().await;
-            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
-                //|| first{
-                println!(
-                    "in array await_all mype: {:?} cnt: {:?} {:?} {:?}",
-                    self.inner.data.team.world_pe,
-                    self.inner
-                        .data
-                        .array_counters
-                        .send_req_cnt
-                        .load(Ordering::SeqCst),
-                    self.inner
-                        .data
-                        .array_counters
-                        .outstanding_reqs
-                        .load(Ordering::SeqCst),
-                    self.inner.data.req_cnt.load(Ordering::SeqCst)
-                );
-                temp_now = Instant::now();
-                // first = false;
+        let mut orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
+        let mut orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
+        let mut done = false;
+        while !done {
+            while self.team().panic.load(Ordering::SeqCst) == 0
+                && ((am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0)
+                    || orig_reqs != am_counters.send_req_cnt.load(Ordering::SeqCst)
+                    || orig_launched != am_counters.launched_req_cnt.load(Ordering::SeqCst))
+            {
+                orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
+                orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
+                async_std::task::yield_now().await;
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                    println!(
+                        "in darc await_all mype: {:?} cnt: {:?} {:?}",
+                        self.team_rt().world_pe,
+                        am_counters.send_req_cnt.load(Ordering::SeqCst),
+                        am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                    );
+                    temp_now = Instant::now();
+                }
             }
+            if am_counters.send_req_cnt.load(Ordering::SeqCst)
+                != am_counters.launched_req_cnt.load(Ordering::SeqCst)
+            {
+                if am_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                    || orig_reqs != am_counters.send_req_cnt.load(Ordering::SeqCst)
+                    || orig_launched != am_counters.launched_req_cnt.load(Ordering::SeqCst)
+                {
+                    continue;
+                }
+                println!(
+                    "in darc await_all mype: {:?} cnt: {:?} {:?} {:?}",
+                    self.team_rt().world_pe,
+                    am_counters.send_req_cnt.load(Ordering::SeqCst),
+                    am_counters.outstanding_reqs.load(Ordering::SeqCst),
+                    am_counters.launched_req_cnt.load(Ordering::SeqCst)
+                );
+                RuntimeWarning::UnspawnedTask(
+                    "`await_all` before all tasks/active messages have been spawned",
+                )
+                .print();
+            }
+            done = true;
         }
+
         self.inner.data.task_group.await_all().await;
         // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
@@ -1129,18 +1124,6 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
-    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
-    //     self.inner.data.team.clone()
-    // }
-
-    // fn my_pe(&self) -> usize {
-    //     self.inner.data.my_pe
-    // }
-
-    // fn num_pes(&self) -> usize {
-    //     self.inner.data.num_pes
-    // }
-
     fn len(&self) -> usize {
         self.inner.size
     }
@@ -1148,55 +1131,6 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     fn num_elems_local(&self) -> usize {
         self.inner.num_elems_local()
     }
-
-    // fn barrier(&self) {
-    //     self.inner.data.team.tasking_barrier();
-    // }
-
-    // fn wait_all(&self) {
-    //     let mut temp_now = Instant::now();
-    //     // let mut first = true;
-    //     while self
-    //         .inner
-    //         .data
-    //         .array_counters
-    //         .outstanding_reqs
-    //         .load(Ordering::SeqCst)
-    //         > 0
-    //         || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
-    //     {
-    //         // std::thread::yield_now();
-    //         // self.inner.data.team.flush();
-    //         self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-    //         if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
-    //             //|| first{
-    //             println!(
-    //                 "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-    //                 self.inner.data.team.world_pe,
-    //                 self.inner
-    //                     .data
-    //                     .array_counters
-    //                     .send_req_cnt
-    //                     .load(Ordering::SeqCst),
-    //                 self.inner
-    //                     .data
-    //                     .array_counters
-    //                     .outstanding_reqs
-    //                     .load(Ordering::SeqCst),
-    //                 self.inner.data.req_cnt.load(Ordering::SeqCst)
-    //             );
-    //             temp_now = Instant::now();
-    //             // first = false;
-    //         }
-    //     }
-    //     self.inner.data.task_group.wait_all();
-    //     // println!("done in wait all {:?}",std::time::SystemTime::now());
-    // }
-
-    // fn block_on<F: Future>(&self, f: F) -> F::Output {
-    //     self.inner.data.team.scheduler.block_on(f)
-    // }
-
     //#[tracing::instrument(skip_all)]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         if self.inner.sub {
@@ -1391,7 +1325,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// use rand::Rng;
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
-    /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
+    /// let array = UnsafeArray::<usize>::new(&world,1000000,Distribution::Block).block();
     /// let array_clone = array.clone();
     /// unsafe { // THIS IS NOT SAFE -- we are randomly updating elements, no protections, updates may be lost... DONT DO THIS
     ///     let req = array.local_iter().for_each(move |_| {
@@ -1401,7 +1335,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// let sum = array.block_on(array.reduce("sum")); // equivalent to calling array.sum()
+    /// let sum = unsafe {array.reduce("sum").block()}; // equivalent to calling array.sum()
     /// //assert_eq!(array.len()*num_pes,sum); // may or may not fail
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1439,7 +1373,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// }
     /// array.wait_all();
     /// array.barrier();
-    /// let sum = array.block_on(unsafe{array.sum()}); //Safe in this instance as we have ensured no updates are currently happening
+    /// let sum = unsafe{array.sum().block()}; //Safe in this instance as we have ensured no updates are currently happening
     /// // assert_eq!(array.len()*num_pes,sum);//this may or may not fail
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1476,7 +1410,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// array.print();
     /// array.wait_all();
     /// array.print();
-    /// let prod = unsafe{ array.block_on(array.prod()).expect("array len > 0")};
+    /// let prod = unsafe{ array.prod().block().expect("array len > 0")};
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1509,7 +1443,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// array.wait_all();
     /// array.barrier();
     /// let max_req = unsafe{array.max()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// let max = array.block_on(max_req).expect("array len > 0");
+    /// let max = max_req.block().expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1542,7 +1476,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     /// array.wait_all();
     /// array.barrier();
     /// let min_req = unsafe{array.min()}; //Safe in this instance as we have ensured no updates are currently happening
-    /// let min = array.block_on(min_req).expect("array len > 0");
+    /// let min = min_req.block().expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

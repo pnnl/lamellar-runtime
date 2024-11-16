@@ -1155,7 +1155,7 @@ pub trait LamellarArray<T: Dist>:
     ///
     /// # Examples
     /// Assume a 4 PE system
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     /// let array = ReadOnlyArray::<usize>::new(&world,100,Distribution::Cyclic).block();
@@ -1174,7 +1174,7 @@ pub trait LamellarArray<T: Dist>:
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
@@ -1184,7 +1184,7 @@ pub trait LamellarArray<T: Dist>:
     /// assert_eq!((pe,offset) ,(1,2));
     ///```
     /// ## Cyclic
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
@@ -1205,7 +1205,7 @@ pub trait LamellarArray<T: Dist>:
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
@@ -1221,7 +1221,7 @@ pub trait LamellarArray<T: Dist>:
     /// assert_eq!(index , 12);
     ///```
     /// ## Cyclic
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
@@ -1249,7 +1249,7 @@ pub trait LamellarArray<T: Dist>:
     /// # Examples
     /// assume we have 4 PEs
     /// ## Block
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
@@ -1265,7 +1265,7 @@ pub trait LamellarArray<T: Dist>:
     /// assert_eq!(index , 15);
     ///```
     /// ## Cyclic
-    ///```no_run //assert is for 4 PEs
+    ///```no_run
     /// use lamellar::array::prelude::*;
     /// let world = LamellarWorldBuilder::new().build();
     ///
@@ -1387,7 +1387,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
     ///     println!();
-    ///      unsafe { world.block_on(array.get(0,&buf))}; //safe because we have not shared buf, and we block immediately on the request
+    ///      unsafe { array.get(0,&buf).block()}; //safe because we have not shared buf, and we block immediately on the request
     /// }
     /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     ///
@@ -1441,8 +1441,9 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// array.barrier();
     /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
     /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
-    /// let at_req = array.at(index);
-    /// let val = array.block_on(at_req);
+    /// let at_req = array.at(index).spawn();
+    /// //do some other work
+    /// let val = at_req.block();
     /// println!("PE{my_pe} array[{index}] = {val}");
     ///```
     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
@@ -1530,7 +1531,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// array.barrier();
     /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
     /// if my_pe == 0 { //only perfrom the transfer from one PE
-    ///     array.block_on( unsafe {  array.put(0,&buf) } );
+    ///     unsafe {array.put(0,&buf).block( )};
     ///     println!();
     /// }
     /// array.barrier(); //block other PEs until PE0 has finised "putting" the data
@@ -1648,7 +1649,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
-/// let sum = array.block_on(array.sum()).expect("array len > 0"); // atomic updates still possibly happening, output non deterministic
+/// let sum = array.sum().block().expect("array len > 0"); // atomic updates still possibly happening, output non deterministic
 /// println!("sum {sum}");
 ///```
 /// Waiting for local operations to finish not enough by itself
@@ -1661,10 +1662,10 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
-/// });
-/// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
+/// }).spawn();
+/// req.block();// this is not sufficient, we also need to "wait_all" as each "add" call is another request
 /// array.wait_all();
-/// let sum = array.block_on(array.sum()).expect("array len > 0"); // atomic updates still possibly happening (on remote nodes), output non deterministic
+/// let sum = array.sum().block().expect("array len > 0"); // atomic updates still possibly happening (on remote nodes), output non deterministic
 /// println!("sum {sum}");
 ///```
 /// Need to add a barrier after local operations on all PEs have finished
@@ -1678,11 +1679,11 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// let req = array.local_iter().for_each(move |_| {
 ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
-/// });
-/// array.block_on(req);// this is not sufficient, we also need to "wait_all" as each "add" call is another request
+/// }).spawn();
+/// req.block();// this is not sufficient, we also need to "wait_all" as each "add" call is another request
 /// array.wait_all();
 /// array.barrier();
-/// let sum = array.block_on(array.sum()).expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
+/// let sum = array.sum().block().expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
 /// Alternatively we can convert our AtomicArray into a ReadOnlyArray before the reduction
@@ -1698,7 +1699,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
 /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-/// let sum = array.block_on(array.sum()).expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
+/// let sum = array.sum().block().expect("array len > 0"); // No updates occuring anywhere anymore so we have a deterministic result
 /// assert_eq!(array.len()*num_pes,sum);
 ///```
 /// Finally we are inlcuding a `Arc<Vec<AtomicUsize>>` highlightin the same issue
@@ -1762,119 +1763,11 @@ where
     ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
     /// }).block();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
+    /// let sum = array.reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     fn reduce(&self, reduction: &str) -> Self::Handle;
 }
-
-/// Interface for common arithmetic based reductions
-// pub trait LamellarArrayArithmeticReduce<T>: LamellarArrayReduce<T>
-// where
-//     T: Dist + AmDist + ElementArithmeticOps + 'static,
-// {
-//     #[doc(alias("One-sided", "onesided"))]
-//     /// Perform a sum reduction on the entire distributed array, returning the value to the calling PE.
-//     ///
-//     /// This equivalent to `reduce("sum")`.
-//     ///
-//     /// # One-sided Operation
-//     /// The calling PE is responsible for launching `Sum` active messages on the other PEs associated with the array.
-//     /// the returned sum reduction result is only available on the calling PE
-//     ///
-//     /// # Examples
-//     /// ```
-//     /// use lamellar::array::prelude::*;
-//     /// use rand::Rng;
-//     /// let world = LamellarWorldBuilder::new().build();
-//     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,1000000,Distribution::Block).block();
-//     /// let array_clone = array.clone();
-//     /// let req = array.local_iter().for_each(move |_| {
-//     ///     let index = rand::thread_rng().gen_range(0..array_clone.len());
-//     ///     array_clone.add(index,1); //randomly at one to an element in the array.
-//     /// });
-//     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-//     /// let sum = array.block_on(array.sum());
-//     /// assert_eq!(array.len()*num_pes,sum);
-//     ///```
-//     fn sum(&self) -> Self::Handle;
-
-//     #[doc(alias("One-sided", "onesided"))]
-//     /// Perform a production reduction on the entire distributed array, returning the value to the calling PE.
-//     ///
-//     /// This equivalent to `reduce("prod")`.
-//     ///
-//     /// # One-sided Operation
-//     /// The calling PE is responsible for launching `Prod` active messages on the other PEs associated with the array.
-//     /// the returned prod reduction result is only available on the calling PE
-//     ///
-//     /// # Examples
-//     /// ```
-//     /// use lamellar::array::prelude::*;
-//     /// let world = LamellarWorldBuilder::new().build();
-//     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
-//     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| {
-//     ///     elem.store(i+1);
-//     /// });
-//     /// array.wait_all();
-//     /// array.barrier();
-//     /// let prod =  array.block_on(array.prod());
-//     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
-//     ///```
-//     fn prod(&self) -> Self::Handle;
-// }
-
-/// Interface for common compare based reductions
-// pub trait LamellarArrayCompareReduce<T>: LamellarArrayReduce<T>
-// where
-//     T: Dist + AmDist + ElementComparePartialEqOps + 'static,
-// {
-//     #[doc(alias("One-sided", "onesided"))]
-//     /// Find the max element in the entire destributed array, returning to the calling PE
-//     ///
-//     /// This equivalent to `reduce("max")`.
-//     ///
-//     /// # One-sided Operation
-//     /// The calling PE is responsible for launching `Max` active messages on the other PEs associated with the array.
-//     /// the returned max reduction result is only available on the calling PE
-//     ///
-//     /// # Examples
-//     /// ```
-//     /// use lamellar::array::prelude::*;
-//     /// let world = LamellarWorldBuilder::new().build();
-//     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
-//     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
-//     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-//     /// let max = array.block_on(array.max());
-//     /// assert_eq!((array.len()-1)*2,max);
-//     ///```
-//     fn max(&self) -> Self::Handle;
-
-//     #[doc(alias("One-sided", "onesided"))]
-//     /// Find the min element in the entire destributed array, returning to the calling PE
-//     ///
-//     /// This equivalent to `reduce("min")`.
-//     ///
-//     /// # One-sided Operation
-//     /// The calling PE is responsible for launching `Min` active messages on the other PEs associated with the array.
-//     /// the returned min reduction result is only available on the calling PE
-//     ///
-//     /// # Examples
-//     /// ```
-//     /// use lamellar::array::prelude::*;
-//     /// let world = LamellarWorldBuilder::new().build();
-//     /// let num_pes = world.num_pes();
-//     /// let array = AtomicArray::<usize>::new(&world,10,Distribution::Block).block();
-//     /// let req = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2));
-//     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-//     /// let min = array.block_on(array.min());
-//     /// assert_eq!(0,min);
-//     ///```
-//     fn min(&self) -> Self::Handle;
-// }
 
 /// This procedural macro is used to enable the execution of user defined reductions on LamellarArrays.
 ///
@@ -1913,8 +1806,8 @@ where
 ///     let _ = array_clone.add(index,1).spawn(); //randomly at one to an element in the array.
 /// }).block();
 /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-/// let sum = array.block_on(array.sum());
-/// let my_sum = array.block_on(array.reduce("my_sum")); //pass a &str containing the reduction to use
+/// let sum =array.sum().block();
+/// let my_sum = array.reduce("my_sum").block(); //pass a &str containing the reduction to use
 /// assert_eq!(sum,my_sum);
 ///```
 pub use lamellar_impl::register_reduction;

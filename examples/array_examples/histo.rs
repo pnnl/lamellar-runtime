@@ -22,7 +22,7 @@ fn main() {
         1,
     );
 
-    world.block_on(histo);
+    histo.block();
     world.barrier();
     println!(
         "PE{} time: {:?} done",

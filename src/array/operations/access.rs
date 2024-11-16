@@ -41,7 +41,7 @@ use super::handle::{
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
-/// array.block_on(array.batch_store(indices,val));
+/// array.batch_store(indices,val).block();
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -53,7 +53,7 @@ use super::handle::{
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
-/// array.block_on(array.batch_store(index,vals));
+/// array.batch_store(index,vals).block();
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -67,7 +67,7 @@ use super::handle::{
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
-/// array.block_on(array.batch_store(indices,vals));
+/// array.batch_store(indices,vals).block();
 ///```
 pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// This call stores the supplied `val` into the element specified by `index`
@@ -91,7 +91,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 10;
     /// let req = array.store(idx,val);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -123,7 +123,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_store(indices,10);
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_store<'a>(
@@ -161,7 +161,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let new = 10;
     /// let req = array.swap(idx,new);
-    /// let old = array.block_on(req);
+    /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -194,7 +194,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_swap(indices,10);
-    /// let old_vals = array.block_on(req);
+    /// let old_vals = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn batch_swap<'a>(
@@ -245,7 +245,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let val = 10;
-/// array.block_on(unsafe{array.batch_store(indices,val)});
+/// unsafe{array.batch_store(indices,val).block()};
 ///```
 /// ## Many Values - One Index
 /// In this type, multiple values will be applied to the given index
@@ -257,7 +257,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let vals = vec![3,54,12,88,29,68];
 /// let index = 10;
-/// array.block_on(unsafe{array.batch_store(index,vals)});
+/// unsafe{array.batch_store(index,vals).block()};
 ///```
 /// ## Many Values - Many Indicies
 /// In this type, values and indices have a one-to-one correspondance.
@@ -271,7 +271,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///
 /// let indices = vec![3,54,12,88,29,68];
 /// let vals = vec![12,2,1,10000,12,13];
-/// array.block_on(unsafe{array.batch_store(indices,vals)});
+/// unsafe{array.batch_store(indices,vals).block()};
 ///```
 pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// This call stores the supplied `val` into the element specified by `index`
@@ -295,7 +295,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let idx = 53;
     /// let val = 10;
     /// let req = unsafe{array.store(idx,val)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
@@ -327,7 +327,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{array.batch_store(indices,10)};
-    /// array.block_on(req);
+    /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn batch_store<'a>(

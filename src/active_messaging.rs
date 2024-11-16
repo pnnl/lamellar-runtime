@@ -101,7 +101,7 @@
 //!         }
 //!     );
 //!     //wait for the request to complete
-//!     world.block_on(request);
+//!     request.block();
 //! }
 //!```
 //! In this example we simply send a `HelloWorld` from every PE to every other PE using `exec_am_all` (please see the [ActiveMessaging] trait documentation for further details).
@@ -152,7 +152,7 @@
 //! #         }
 //! #     );
 //! #     //wait for the request to complete
-//! #     world.block_on(request);
+//! #     request.block();
 //! # }
 //!```
 //! the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
@@ -196,7 +196,7 @@
 //! #         }
 //! #     );
 //! #     //wait for the request to complete
-//! #     world.block_on(request);
+//! #     request.block();
 //! # }
 //!```
 //! Retrieving the result is as simple as assigning a variable to the awaited request
@@ -228,7 +228,7 @@
 //!         }
 //!     );
 //!     //wait for the request to complete
-//!     let results = world.block_on(request);
+//!     let results = request.block();
 //!     println!("PE {my_pe} {results:?}");
 //! }
 //!```
@@ -307,7 +307,7 @@
 //! #         }
 //! #     );
 //! #     //wait for the request to complete
-//! #     let results = world.block_on(request);
+//! #     let results = request.block();
 //! #     println!("PE {my_pe} {results:?}");
 //! # }
 //!```
@@ -392,7 +392,7 @@
 //! #         }
 //! #     );
 //! #     //wait for the request to complete
-//! #     let results = world.block_on(request);
+//! #     let results = request.block();
 //! #     println!("PE {my_pe} {results:?}");
 //! # }
 //!```
@@ -451,7 +451,7 @@
 //!         }
 //!     );
 //!     //wait for the request to complete
-//!     let results = world.block_on(request);
+//!     let results = request.block();
 //!     println!("PE {my_pe} {results:?}");
 //! }
 //!```
@@ -1001,7 +1001,7 @@ pub trait ActiveMessaging {
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
     /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am on all pes
-    /// let results = world.block_on(request); //block until am has executed and retrieve the data
+    /// let results = request.block(); //block until am has executed and retrieve the data
     /// for i in 0..world.num_pes(){
     ///     assert_eq!(i,results[i]);
     /// }
@@ -1048,7 +1048,7 @@ pub trait ActiveMessaging {
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
     /// let request = world.exec_am_pe(world.num_pes()-1, MyAm{val: world.my_pe()}); //launch am on all pes
-    /// let result = world.block_on(request); //block until am has executed
+    /// let result = request.block(); //block until am has executed
     /// assert_eq!(world.num_pes()-1,result);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1096,7 +1096,7 @@ pub trait ActiveMessaging {
     ///
     /// let world = lamellar::LamellarWorldBuilder::new().build();
     /// let request = world.exec_am_local(MyAm{val: Arc::new(Mutex::new(0.0))}); //launch am locally
-    /// let result = world.block_on(request); //block until am has executed
+    /// let result = request.block(); //block until am has executed
     /// assert_eq!(world.my_pe(),result);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -1227,7 +1227,6 @@ pub trait ActiveMessaging {
     /// # Examples
     ///```no_run  
     /// # use lamellar::active_messaging::prelude::*;
-    /// use async_std::fs::File;
     /// use async_std::prelude::*;
     /// # #[lamellar::AmData(Debug,Clone)]
     /// # struct MyAm{
@@ -1246,19 +1245,22 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am locally
-    /// let result = world.block_on(request); //block until am has executed
+    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}).spawn(); //launch am locally
+    /// let _result = request.block(); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
-    /// world.block_on(async move {
+    /// let task = world.spawn(async move {
     ///     let mut file = async_std::fs::File::open("a.txt").await.unwrap();
     ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
     ///         let data = file.read(&mut buf).await.unwrap();
-    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).await;
+    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).spawn();
     ///     }
-    ///     world_clone.exec_am_all(MyAm{val: buf[0] as usize}).await;
+    ///     let _ = world_clone.exec_am_all(MyAm{val: buf[0] as usize}).spawn();
+    ///     world_clone.await_all().await;
     /// });
+    /// // we can then await the result of the future at some other point
+    /// task.block();
     ///```
     fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
     where
@@ -1278,7 +1280,6 @@ pub trait ActiveMessaging {
     /// # Examples
     ///```no_run  
     /// # use lamellar::active_messaging::prelude::*;
-    /// use async_std::fs::File;
     /// use async_std::prelude::*;
     /// # #[lamellar::AmData(Debug,Clone)]
     /// # struct MyAm{
@@ -1297,8 +1298,8 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am locally
-    /// let result = world.block_on(request); //block until am has executed
+    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}).spawn(); //launch am locally
+    /// let _result = request.block(); //block until am has executed
     /// // you can also directly pass an async block
     /// let world_clone = world.clone();
     /// world.block_on(async move {
@@ -1324,10 +1325,8 @@ pub trait ActiveMessaging {
     /// this is not a distributed synchronization primitive and only blocks the calling thread until the given future has completed on the calling PE
     ///
     /// # Examples
-    ///```no_run  
+    ///```
     /// # use lamellar::active_messaging::prelude::*;
-    /// use async_std::fs::File;
-    /// use async_std::prelude::*;
     /// # #[lamellar::AmData(Debug,Clone)]
     /// # struct MyAm{
     /// # // can contain anything that impls Sync, Send  
@@ -1345,19 +1344,11 @@ pub trait ActiveMessaging {
     /// #
     /// # let world = lamellar::LamellarWorldBuilder::new().build();
     /// # let num_pes = world.num_pes();
-    /// let request = world.exec_am_all(MyAm{val: world.my_pe()}); //launch am locally
-    /// let result = world.block_on(request); //block until am has executed
-    /// // you can also directly pass an async block
-    /// let world_clone = world.clone();
-    /// world.block_on(async move {
-    ///     let mut file = async_std::fs::File::open("a.txt").await.unwrap();
-    ///     let mut buf = vec![0u8;1000];
-    ///     for pe in 0..num_pes{
-    ///         let data = file.read(&mut buf).await.unwrap();
-    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).await;
-    ///     }
-    ///     world_clone.exec_am_all(MyAm{val: buf[0] as usize}).await;
-    /// });
+    ///
+    /// let futures = (0..num_pes).map(|(pe)|{
+    ///     world.exec_am_pe(pe, MyAm{val: world.my_pe()}).spawn()
+    /// }).collect::<Vec<_>>();
+    /// let results = world.block_on_all(futures);
     ///```
     fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
     where

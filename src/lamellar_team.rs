@@ -81,7 +81,7 @@ use std::marker::PhantomData;
 /// };
 /// // we can launch and await the results of active messages on a given team
 /// let req = even_pes.exec_am_all(MyAm{world_pe,team_pe});
-/// let result = even_pes.block_on(req);
+/// let result = req.block();
 /// // we can also create a distributed array so that its data only resides on the members of the team.
 /// let array: AtomicArray<usize> = AtomicArray::new(&even_pes, 100,Distribution::Block).block();
 /// ```
@@ -1448,7 +1448,7 @@ impl LamellarTeamRT {
                 world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
                 // std::thread::yield_now();
                 // self.flush();
-                if std::thread::current().id() != *crate::MAIN_THREAD {
+                if std::thread::current().id() == *crate::MAIN_THREAD {
                     self.scheduler.exec_task()
                 }; //mmight as well do useful work while we wait }
                 if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
@@ -1501,36 +1501,86 @@ impl LamellarTeamRT {
         // );
     }
     pub(crate) async fn await_all(&self) {
+        // println!("await_all called on pe: {}", self.world_pe);
+
         let mut temp_now = Instant::now();
-        while self.panic.load(Ordering::SeqCst) == 0
-            && (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+        let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
+        let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
+        let mut world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
+        let mut world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
+
+        // println!(
+        //     "in team await_all mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
+        let mut done = false;
+        while !done {
+            while self.panic.load(Ordering::SeqCst) == 0
+                && ((self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                    || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                    || orig_launched != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
+                    || (self.parent.is_none()
+                        && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                            || world_orig_reqs
+                                != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                            || world_orig_launched
+                                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))))
+            {
+                orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
+                orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
+                world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
+                world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
+                async_std::task::yield_now().await;
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                    println!(
+                        "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                        self.world_pe,
+                        self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+                        self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                    );
+                    temp_now = Instant::now();
+                }
+            }
+            if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
                 || (self.parent.is_none()
-                    && self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0))
-        {
-            // std::thread::yield_now();
-            // self.flush();
-            async_std::task::yield_now().await;
-            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                    && self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                        != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
+            {
+                if (self.team_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                    || orig_reqs != self.team_counters.send_req_cnt.load(Ordering::SeqCst)
+                    || orig_launched != self.team_counters.launched_req_cnt.load(Ordering::SeqCst))
+                    || (self.parent.is_none()
+                        && (self.world_counters.outstanding_reqs.load(Ordering::SeqCst) > 0
+                            || world_orig_reqs
+                                != self.world_counters.send_req_cnt.load(Ordering::SeqCst)
+                            || world_orig_launched
+                                != self.world_counters.launched_req_cnt.load(Ordering::SeqCst)))
+                {
+                    continue;
+                }
                 println!(
-                    "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                    "in team await_all mype: {:?} cnt: {:?} {:?} {:?}",
                     self.world_pe,
                     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
                     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                    self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
                 );
-                temp_now = Instant::now();
+                RuntimeWarning::UnspawnedTask(
+                    "`await_all` before all tasks/active messages have been spawned",
+                )
+                .print();
             }
+            done = true;
         }
-        if self.team_counters.send_req_cnt.load(Ordering::SeqCst)
-            != self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
-            || (self.parent.is_none()
-                && self.world_counters.send_req_cnt.load(Ordering::SeqCst)
-                    != self.world_counters.launched_req_cnt.load(Ordering::SeqCst))
-        {
-            RuntimeWarning::UnspawnedTask(
-                "`await_all` before all tasks/active messages have been spawned",
-            )
-            .print();
-        }
+        // println!(
+        //     "in team wait_all mype: {:?} cnt: {:?} {:?}",
+        //     self.world_pe,
+        //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
+        //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+        // );
     }
 
     pub(crate) fn block_on<F>(&self, f: F) -> F::Output

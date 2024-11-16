@@ -422,7 +422,7 @@ impl<T: Dist + AmDist + 'static> ReadOnlyArray<T> {
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.block_on(array.reduce("sum")).expect("array len > 0"); // equivalent to calling array.sum()
+    /// let sum = array.reduce("sum").block().expect("array len > 0"); // equivalent to calling array.sum()
     /// assert_eq!(array.len()*num_pes,sum);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -455,7 +455,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let sum = array.block_on(array.sum()).expect("array len > 0");
+    /// let sum = array.sum().block().expect("array len > 0");
     /// assert_eq!(array.len()*num_pes,sum);
     /// ```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -484,7 +484,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> ReadOnlyArray<T> {
     /// }).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let prod =  array.block_on(array.prod()).expect("array len > 0");
+    /// let prod = array.prod().block().expect("array len > 0");
     /// assert_eq!((1..=array.len()).product::<usize>(),prod);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -512,7 +512,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let max = array.block_on(array.max()).expect("array len > 0");
+    /// let max = array.max().block().expect("array len > 0");
     /// assert_eq!((array.len()-1)*2,max);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
@@ -539,7 +539,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
     /// let _ = array.dist_iter().enumerate().for_each(move |(i,elem)| elem.store(i*2)).block();
     /// array.wait_all();
     /// let array = array.into_read_only().block(); //only returns once there is a single reference remaining on each PE
-    /// let min = array.block_on(array.min()).expect("array len > 0");
+    /// let min = array.min().block().expect("array len > 0");
     /// assert_eq!(0,min);
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]

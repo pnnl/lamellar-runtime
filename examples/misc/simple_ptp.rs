@@ -67,10 +67,7 @@ fn main() {
     world.wait_all();
     world.barrier();
 
-    let mut sum = 0 as i128;
-    for req in reqs.drain(0..) {
-        let res = world.block_on(req);
-        sum += res;
-    }
+    let sum = world.block_on_all(reqs).iter().sum::<i128>();
+
     println!("[{:?}] adj: {:?}", _my_pe, sum / 10 as i128);
 }

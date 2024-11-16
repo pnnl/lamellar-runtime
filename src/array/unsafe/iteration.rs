@@ -29,9 +29,8 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
-    ///     world.block_on(
     ///         array.dist_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}") )
-    ///     );
+    ///     .block();
     /// }
     ///```
     pub unsafe fn dist_iter(&self) -> DistIter<'static, T, UnsafeArray<T>> {
@@ -56,9 +55,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
-    ///     world.block_on(
+    ///     
     ///         array.dist_iter_mut().for_each(move |elem| *elem = my_pe)
-    ///     );
+    ///     .block();
     /// }
     ///```
     pub unsafe fn dist_iter_mut(&self) -> DistIterMut<'static, T, UnsafeArray<T>> {
@@ -84,9 +83,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
-    ///     world.block_on(
+    ///     
     ///         array.local_iter().for_each(move |elem| println!("PE{my_pe} elem {elem}"))
-    ///     );
+    ///    .block( );
     /// }
     ///```
     pub unsafe fn local_iter(&self) -> LocalIter<'static, T, UnsafeArray<T>> {
@@ -112,9 +111,9 @@ impl<T: Dist> UnsafeArray<T> {
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
     /// unsafe {
-    ///     world.block_on(
+    ///     
     ///         array.local_iter_mut().for_each(move |elem| *elem = my_pe)
-    ///     );
+    ///     .block();
     /// }
     pub unsafe fn local_iter_mut(&self) -> LocalIterMut<'static, T, UnsafeArray<T>> {
         LocalIterMut::new(self.clone().into(), 0, 0)

@@ -213,7 +213,7 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 ///     });
 ///
 ///     //wait for the request to complete
-///     world.block_on(request);
+///     request.block();
 /// } //when world drops there is an implicit world.barrier() that occurs
 ///```
 #[allow(non_snake_case)]
@@ -255,7 +255,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     });
 ///
 ///     //wait for the request to complete
-///     world.block_on(request);
+///     request.block();
 /// } //when world drops there is an implicit world.barrier() that occurs
 ///```
 #[allow(non_snake_case)]
@@ -467,7 +467,7 @@ fn parse_am(
 ///     });
 ///
 ///     //wait for the request to complete
-///     world.block_on(request);
+///     request.block();
 /// } //when world drops there is an implicit world.barrier() that occurs
 ///```
 #[proc_macro_error]
@@ -515,7 +515,7 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     });
 ///
 ///     //wait for the request to complete
-///     world.block_on(request);
+///     request.block();
 /// } //when world drops there is an implicit world.barrier() that occurs
 ///```
 #[proc_macro_error]
@@ -717,7 +717,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///     // call various operations on the array!
 ///     // -------------------------------------
 ///
-///     world.block_on( async move {  // we will just use the world as our future driver so we dont have to deal with cloneing array
+///     world.block_on( async move {  // we will just use the world as our future driver so we dont have to deal with cloning array
 ///
 ///         println!();
 ///         println!("add (1, 0.01) to the first entry:\n");

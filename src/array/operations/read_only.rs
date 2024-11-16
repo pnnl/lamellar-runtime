@@ -42,7 +42,7 @@ use super::handle::{ArrayFetchBatchOpHandle, ArrayFetchOpHandle};
 ///     join_all(reqs).await
 /// });
 /// let req = array.batch_load(indices);
-/// let vals_2 = array.block_on(req);
+/// let vals_2 = req.block();
 /// for (v1,v2) in vals_1.iter().zip(vals_2.iter()){
 ///     assert_eq!(v1,v2);
 /// }
@@ -68,7 +68,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let array = AtomicArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let req = array.load(53);
-    /// let val = array.block_on(req);
+    /// let val = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
@@ -109,7 +109,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = array.batch_load(indices.clone());
-    /// let vals = array.block_on(req);
+    /// let vals = req.block();
     /// assert_eq!(vals.len(),indices.len());
     ///```
     //#[tracing::instrument(skip_all)]
@@ -163,7 +163,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 ///     join_all(reqs).await
 /// });
 /// let req = unsafe{array.batch_load(indices)};
-/// let vals_2 = array.block_on(req);
+/// let vals_2 = req.block();
 /// for (v1,v2) in vals_1.iter().zip(vals_2.iter()){
 ///     assert_eq!(v1,v2);
 /// }
@@ -189,7 +189,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let array = UnsafeArray::<usize>::new(&world,100,Distribution::Block).block();
     ///
     /// let req = unsafe{ array.load(53)};
-    /// let val = array.block_on(req);
+    /// let val = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
     unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
@@ -230,7 +230,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     ///
     /// let indices = vec![3,54,12,88,29,68];
     /// let req = unsafe{ array.batch_load(indices.clone())};
-    /// let vals = array.block_on(req);
+    /// let vals = req.block();
     /// assert_eq!(vals.len(),indices.len());
     ///```
     //#[tracing::instrument(skip_all)]
