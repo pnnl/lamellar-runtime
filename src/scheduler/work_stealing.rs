@@ -120,6 +120,7 @@ impl WorkStealingThread {
 
 #[derive(Debug)]
 pub(crate) struct WorkStealing {
+    orig_num_threads: usize,
     max_num_threads: usize,
     threads: Vec<thread::JoinHandle<()>>,
     imm_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
@@ -305,7 +306,7 @@ impl LamellarExecutor for WorkStealing {
     // }
 
     fn num_workers(&self) -> usize {
-        self.max_num_threads
+        self.orig_num_threads
     }
 }
 
@@ -317,6 +318,7 @@ impl WorkStealing {
     ) -> WorkStealing {
         // println!("new work stealing queue");
         let mut ws = WorkStealing {
+            orig_num_threads: num_workers,
             max_num_threads: std::cmp::max(1, num_workers - 1), // the main thread does work during blocking_ons and wait_alls
             threads: Vec::new(),
             imm_inj: Arc::new(crossbeam::deque::Injector::new()),

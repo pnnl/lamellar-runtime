@@ -217,7 +217,7 @@ impl LamellarTeam {
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn num_threads_per_pe(&self) -> usize {
-        self.team.scheduler.num_workers() + 1 // plus one for the main thread
+        self.team.scheduler.num_workers()
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1221,7 +1221,7 @@ impl LamellarTeamRT {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn num_threads(&self) -> usize {
-        self.scheduler.num_workers() + 1 // plus one for the main thread
+        self.scheduler.num_workers()
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
@@ -1414,8 +1414,9 @@ impl LamellarTeamRT {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn wait_all(&self) {
         // println!("wait_all called on pe: {}", self.world_pe);
-
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
+
+        self.lamellae.wait();
 
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
@@ -1502,7 +1503,7 @@ impl LamellarTeamRT {
     }
     pub(crate) async fn await_all(&self) {
         // println!("await_all called on pe: {}", self.world_pe);
-
+        self.lamellae.wait();
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
