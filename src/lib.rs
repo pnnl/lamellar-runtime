@@ -287,6 +287,7 @@ pub use crate::lamellar_team::ArcLamellarTeam;
 pub(crate) use crate::lamellar_team::LamellarTeamRT;
 pub use crate::lamellar_world::*;
 pub use crate::scheduler::ExecutorType;
+pub use crate::scheduler::LamellarTask;
 
 extern crate lamellar_impl;
 // //#[doc(hidden)]

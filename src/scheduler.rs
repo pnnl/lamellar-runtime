@@ -102,6 +102,9 @@ pub struct LamellarTask<T> {
     executor: Arc<Executor>,
 }
 
+unsafe impl<T: Send> Send for LamellarTask<T> {}
+unsafe impl<T: Sync> Sync for LamellarTask<T> {}
+
 impl<T> LamellarTask<T> {
     pub fn block(self) -> T {
         RuntimeWarning::BlockingCall("LamellarTask::block", "<task>.await").print();
@@ -123,6 +126,9 @@ pub(crate) enum LamellarTaskInner<T> {
     #[cfg(feature = "tokio-executor")]
     TokioTask(tokio::task::JoinHandle<T>),
 }
+
+unsafe impl<T: Send> Send for LamellarTaskInner<T> {}
+unsafe impl<T: Sync> Sync for LamellarTaskInner<T> {}
 
 impl<T> Drop for LamellarTaskInner<T> {
     fn drop(self: &mut Self) {
