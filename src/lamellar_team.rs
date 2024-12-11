@@ -1416,7 +1416,7 @@ impl LamellarTeamRT {
         // println!("wait_all called on pe: {}", self.world_pe);
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
 
-        self.lamellae.wait();
+        // self.lamellae.wait();
 
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
@@ -1503,7 +1503,7 @@ impl LamellarTeamRT {
     }
     pub(crate) async fn await_all(&self) {
         // println!("await_all called on pe: {}", self.world_pe);
-        self.lamellae.wait();
+        // self.lamellae.wait();
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
