@@ -349,6 +349,10 @@ name="atomic_compare_exchange"
 path="examples/array_examples/atomic_compare_exchange.rs"
 
 [[example]]
+name="network_atomic_ops"
+path="examples/array_examples/network_atomic_ops.rs"
+
+[[example]]
 name="array_first_last_global_indices"
 path="examples/array_examples/array_first_last_global_indices.rs"
 

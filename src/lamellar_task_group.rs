@@ -3,6 +3,7 @@ use crate::active_messaging::*;
 use crate::barrier::BarrierHandle;
 use crate::env_var::config;
 use crate::lamellae::Des;
+use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_request::*;
@@ -851,6 +852,7 @@ impl LamellarTaskGroup {
 
     fn wait_all(&self) {
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
+        self.team.lamellae.wait();
         // println!(
         //     "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
         //     self.team.world_pe,
@@ -917,6 +919,7 @@ impl LamellarTaskGroup {
     }
 
     async fn await_all(&self) {
+        self.team.lamellae.wait();
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.counters.launched_req_cnt.load(Ordering::SeqCst);

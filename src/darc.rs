@@ -889,6 +889,7 @@ impl<T: 'static> DarcInner<T> {
     }
 
     pub(crate) async fn await_all(&self) {
+        self.team().lamellae.wait();
         let mut temp_now = Instant::now();
         let am_counters = self.am_counters();
         let mut orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);

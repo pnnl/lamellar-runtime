@@ -26,18 +26,17 @@ impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
             spawned: false,
         }
     }
-    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+    unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
             buf: buf.clone().into(),
         });
-        ArrayRdmaAtHandle {
+        ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            req: Some(req),
+            state: ArrayAtHandleState::Am(Some(req)),
             buf: buf,
-            spawned: false,
         }
     }
 }
@@ -57,7 +56,7 @@ impl<T: Dist> LamellarArrayGet<T> for LocalLockArray<T> {
             },
         }
     }
-    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+    fn at(&self, index: usize) -> ArrayAtHandle<T> {
         unsafe { self.internal_at(index) }
     }
 }

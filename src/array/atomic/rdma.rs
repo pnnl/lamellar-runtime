@@ -1,3 +1,5 @@
+use private::LamellarArrayPrivate;
+
 use crate::array::atomic::*;
 // use crate::array::private::ArrayExecAm;
 use crate::array::LamellarWrite;
@@ -51,7 +53,7 @@ impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
         }
     }
-    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+    fn at(&self, index: usize) -> ArrayAtHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.at(index),
             AtomicArray::GenericAtomicArray(array) => array.at(index),
@@ -68,6 +70,60 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
+        }
+    }
+}
+
+impl<T: Dist> AtomicArray<T> {
+    pub fn atomic_get(&self, index: usize) -> impl Future<Output = T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.atomic_get(index),
+            AtomicArray::GenericAtomicArray(array) => {
+                unreachable!("atomic_get not implemented for GenericAtomicArray")
+            }
+        }
+    }
+
+    pub fn blocking_atomic_get(&self, index: usize) -> T {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.blocking_atomic_get(index),
+            AtomicArray::GenericAtomicArray(array) => array.inner_array().dummy_val(),
+        }
+    }
+
+    pub fn atomic_put(&self, index: usize, value: T) -> impl Future<Output = ()> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.atomic_put(index, value),
+            AtomicArray::GenericAtomicArray(array) => {
+                unreachable!("atomic_put not implemented for GenericAtomicArray")
+            }
+        }
+    }
+
+    pub fn blocking_atomic_put(&self, index: usize, value: T) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.blocking_atomic_put(index, value),
+            AtomicArray::GenericAtomicArray(array) => {
+                unreachable!("blocking_atomic_put not implemented for GenericAtomicArray")
+            }
+        }
+    }
+
+    pub fn atomic_swap(&self, index: usize, value: T) -> impl Future<Output = T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.atomic_swap(index, value),
+            AtomicArray::GenericAtomicArray(array) => {
+                unreachable!("atomic_swap not implemented for GenericAtomicArray")
+            }
+        }
+    }
+
+    pub fn blocking_atomic_swap(&self, index: usize, value: T) -> T {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.blocking_atomic_swap(index, value),
+            AtomicArray::GenericAtomicArray(array) => {
+                unreachable!("blocking_atomic_swap not implemented for GenericAtomicArray")
+            }
         }
     }
 }

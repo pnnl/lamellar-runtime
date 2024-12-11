@@ -1,6 +1,7 @@
 extern crate libc;
 
 use crate::lamellae::AllocationType;
+use std::any::type_name;
 use std::ffi::CString;
 use std::os::raw::c_ulong;
 
@@ -111,6 +112,10 @@ pub(crate) fn rofi_flush() -> i32 {
     unsafe { rofisys::rofi_flush() as i32 }
 }
 
+pub(crate) fn rofi_wait() -> i32 {
+    unsafe { rofisys::rofi_wait() }
+}
+
 // data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe
 pub(crate) unsafe fn rofi_put<T>(src: &[T], dst: usize, pe: usize) -> Result<c_ulong, i32> {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;
@@ -198,6 +203,415 @@ pub(crate) fn rofi_iget<T>(src: usize, dst: &mut [T], pe: usize) -> Result<c_ulo
         //, &mut txid) };
 
         // println!("[{:?}] ({:?}:{:?}) rofi_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+fn get_rofi_dt<T>() -> Option<rofisys::rofi_datatype> {
+    let dt = type_name::<T>();
+    // println!("T type name:  {} {}",dt, type_name::<usize>());
+    if dt == type_name::<u8>() {
+        Some(rofisys::rofi_datatype_ROFI_U8)
+    } else if dt == type_name::<u16>() {
+        Some(rofisys::rofi_datatype_ROFI_U16)
+    } else if dt == type_name::<u32>() {
+        Some(rofisys::rofi_datatype_ROFI_U32)
+    } else if dt == type_name::<u64>() {
+        Some(rofisys::rofi_datatype_ROFI_U64)
+    } else if dt == type_name::<usize>() {
+        // Some(rofisys::rofi_datatype_ROFI_U64)
+        None
+    } else if dt == type_name::<i8>() {
+        Some(rofisys::rofi_datatype_ROFI_I8)
+    } else if dt == type_name::<i16>() {
+        Some(rofisys::rofi_datatype_ROFI_I16)
+    } else if dt == type_name::<i32>() {
+        Some(rofisys::rofi_datatype_ROFI_I32)
+    } else if dt == type_name::<i64>() {
+        Some(rofisys::rofi_datatype_ROFI_I64)
+    } else if dt == type_name::<isize>() {
+        Some(rofisys::rofi_datatype_ROFI_I64)
+    } else {
+        None
+    }
+}
+
+pub(crate) fn rofi_atomic_avail<T>() -> bool {
+    get_rofi_dt::<T>().is_some()
+}
+
+pub(crate) fn rofi_atomic_store<T>(local: &[T], remote: usize, pe: usize) -> Result<c_ulong, i32> {
+    let local_addr = local.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = local.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_atomic(
+            rofisys::rofi_atomic_op_ROFI_STORE,
+            dt,
+            local_addr,
+            remote_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_atomic(
+                rofisys::rofi_atomic_op_ROFI_STORE,
+                dt,
+                local_addr,
+                remote_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_atomic_load<T>(
+    result: &mut [T],
+    remote: usize,
+    pe: usize,
+) -> Result<c_ulong, i32> {
+    let result_addr = result.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = result.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_atomic_fetch(
+            rofisys::rofi_atomic_op_ROFI_LOAD,
+            dt,
+            std::ptr::null_mut(),
+            remote_addr,
+            result_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_atomic_fetch(
+                rofisys::rofi_atomic_op_ROFI_LOAD,
+                dt,
+                std::ptr::null_mut(),
+                remote_addr,
+                result_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_atomic_swap<T>(
+    operand: &[T],
+    result: &mut [T],
+    remote: usize,
+    pe: usize,
+) -> Result<c_ulong, i32> {
+    let operand_addr = operand.as_ptr() as *mut std::ffi::c_void;
+    let result_addr = result.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = result.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_atomic_fetch(
+            rofisys::rofi_atomic_op_ROFI_STORE,
+            dt,
+            operand_addr,
+            remote_addr,
+            result_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_atomic_fetch(
+                rofisys::rofi_atomic_op_ROFI_STORE,
+                dt,
+                operand_addr,
+                remote_addr,
+                result_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_atomic_compare_exchange<T>(
+    local: &[T],
+    remote: usize,
+    compare: &[T],
+    result: &mut [T],
+    pe: usize,
+) -> Result<c_ulong, i32> {
+    let local_addr = local.as_ptr() as *mut std::ffi::c_void;
+    let compare_addr = compare.as_ptr() as *mut std::ffi::c_void;
+    let result_addr = result.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = local.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_atomic_compare_exchange(
+            dt,
+            local_addr,
+            remote_addr,
+            compare_addr,
+            result_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_atomic_compare_exchange(
+                dt,
+                local_addr,
+                remote_addr,
+                compare_addr,
+                result_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_iatomic_store<T>(local: &[T], remote: usize, pe: usize) -> Result<c_ulong, i32> {
+    let local_addr = local.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = local.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_iatomic(
+            rofisys::rofi_atomic_op_ROFI_STORE,
+            dt,
+            local_addr,
+            remote_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_iatomic(
+                rofisys::rofi_atomic_op_ROFI_STORE,
+                dt,
+                local_addr,
+                remote_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_iatomic_load<T>(
+    result: &mut [T],
+    remote: usize,
+    pe: usize,
+) -> Result<c_ulong, i32> {
+    let result_addr = result.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = result.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_iatomic_fetch(
+            rofisys::rofi_atomic_op_ROFI_LOAD,
+            dt,
+            std::ptr::null_mut(),
+            remote_addr,
+            result_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_iatomic_fetch(
+                rofisys::rofi_atomic_op_ROFI_LOAD,
+                dt,
+                std::ptr::null_mut(),
+                remote_addr,
+                result_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_iatomic_swap<T>(
+    operand: &[T],
+    result: &mut [T],
+    remote: usize,
+    pe: usize,
+) -> Result<c_ulong, i32> {
+    let operand_addr = operand.as_ptr() as *mut std::ffi::c_void;
+    let result_addr = result.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = result.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_iatomic_fetch(
+            rofisys::rofi_atomic_op_ROFI_STORE,
+            dt,
+            operand_addr,
+            remote_addr,
+            result_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_iatomic_fetch(
+                rofisys::rofi_atomic_op_ROFI_STORE,
+                dt,
+                operand_addr,
+                remote_addr,
+                result_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
+    }
+    if ret == 0 {
+        Ok(txid)
+    } else {
+        Err(ret)
+    }
+}
+
+pub(crate) fn rofi_iatomic_compare_exchange<T>(
+    local: &[T],
+    remote: usize,
+    compare: &[T],
+    result: &mut [T],
+    pe: usize,
+) -> Result<c_ulong, i32> {
+    let local_addr = local.as_ptr() as *mut std::ffi::c_void;
+    let compare_addr = compare.as_ptr() as *mut std::ffi::c_void;
+    let result_addr = result.as_ptr() as *mut std::ffi::c_void;
+    let remote_addr = remote as *mut std::ffi::c_void;
+    let size = local.len();
+    let txid: c_ulong = 0;
+    let dt = get_rofi_dt::<T>().expect("type should be atomic");
+
+    let mut ret = unsafe {
+        rofisys::rofi_iatomic_compare_exchange(
+            dt,
+            local_addr,
+            remote_addr,
+            compare_addr,
+            result_addr,
+            size,
+            pe as u32,
+            0,
+        )
+    }; //, &mut txid) };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_iatomic_compare_exchange(
+                dt,
+                local_addr,
+                remote_addr,
+                compare_addr,
+                result_addr,
+                size,
+                pe as u32,
+                0,
+            )
+        }; //, &mut txid) };
+
+        //, &mut txid) };
     }
     if ret == 0 {
         Ok(txid)

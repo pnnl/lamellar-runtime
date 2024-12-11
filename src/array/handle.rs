@@ -11,13 +11,17 @@ use pin_project::{pin_project, pinned_drop};
 use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
     array::LamellarByteArray,
+    lamellae::LamellaeRDMA,
     lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
     warnings::RuntimeWarning,
     Dist, LamellarTeamRT, OneSidedMemoryRegion, RegisteredMemoryRegion,
 };
 
-use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeArray};
+use super::{
+    private::ArrayExecAm, AtomicArray, GlobalLockArray, LocalLockArray, NativeAtomicArray,
+    ReadOnlyArray, UnsafeArray,
+};
 
 /// a task handle for an array rdma (put/get) operation
 pub struct ArrayRdmaHandle {
@@ -25,6 +29,15 @@ pub struct ArrayRdmaHandle {
     pub(crate) reqs: VecDeque<AmHandle<()>>,
     pub(crate) spawned: bool,
 }
+
+// pub(crate) enum ArrayRdmaHandleState<T: Dist> {
+//     Am(Option<LocalAmHandle<()>>),
+//     AtomicLoad(ArrayRdmaAtomicLoadHandle<T>),
+//     AtomicPut(ArrayRdmaAtomicStoreHandle<T>),
+//     RdmaGet(ArrayRdmaGetHandle<T>),
+//     RdmaPut(ArrayRdmaPutHandle<T>),
+//     Launched(LamellarTask<()>),
+// }
 
 impl Drop for ArrayRdmaHandle {
     fn drop(&mut self) {
@@ -109,98 +122,269 @@ impl Future for ArrayRdmaHandle {
     }
 }
 
-/// a task handle for an array rdma 'at' operation
-#[pin_project(PinnedDrop)]
-pub struct ArrayRdmaAtHandle<T: Dist> {
-    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
-    pub(crate) req: Option<LocalAmHandle<()>>,
-    pub(crate) buf: OneSidedMemoryRegion<T>,
-    pub(crate) spawned: bool,
+pub(crate) struct ArrayRdmaAtomicLoadHandle<T: Dist> {
+    pub(crate) array: NativeAtomicArray<T>,
+    pub(crate) index: usize,
 }
 
-#[pinned_drop]
-impl<T: Dist> PinnedDrop for ArrayRdmaAtHandle<T> {
-    fn drop(mut self: Pin<&mut Self>) {
-        if !self.spawned {
-            RuntimeWarning::disable_warnings();
-            let _ = self.req.take();
-            RuntimeWarning::enable_warnings();
-            RuntimeWarning::DroppedHandle("an ArrayRdmaAtHandle").print();
-        }
+impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
+    fn spawn(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+        self.array.network_atomic_load(self.index, &buf);
+        let team = self.array.team_rt();
+        team.clone().spawn(async move {
+            team.lamellae.wait();
+        })
+    }
+
+    fn block(&self, buf: OneSidedMemoryRegion<T>) {
+        self.array.network_iatomic_load(self.index, &buf);
+        // let team = self.array.team_rt().lamellae().wait;
+        // team.clone().spawn(async move {
+        //     team.lamellae.wait();
+        // })
     }
 }
 
-impl<T: Dist> ArrayRdmaAtHandle<T> {
+// pub(crate) struct ArrayRdmaAtomicStoreHandle<T: Dist> {
+//     pub(crate) array: NativeAtomicArray<T>,
+//     pub(crate) index: usize,
+// }
+
+// impl<T: Dist> ArrayRdmaAtomicStoreHandle<T> {
+//     fn exec(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+//         self.array.network_atomic_store(self.index, &buf);
+//         let team = self.array.team_rt();
+//         team.clone().spawn(async move {
+//             team.lamellae.wait();
+//         })
+//     }
+// }
+
+pub(crate) struct ArrayRdmaGetHandle<T: Dist> {
+    pub(crate) array: UnsafeArray<T>,
+    pub(crate) index: usize,
+}
+
+impl<T: Dist> ArrayRdmaGetHandle<T> {
+    fn spawn(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+        unsafe { self.array.get_unchecked(self.index, &buf) };
+        let team = self.array.team_rt();
+        team.clone().spawn(async move {
+            team.lamellae.wait();
+        })
+    }
+
+    fn block(&self, buf: OneSidedMemoryRegion<T>) {
+        unsafe { self.array.get_unchecked(self.index, &buf) };
+        let team = self.array.team_rt().lamellae.wait();
+        // team.clone().spawn(async move {
+        //     team.lamellae.wait();
+        // })
+    }
+}
+
+// pub(crate) struct ArrayRdmaPutHandle<T: Dist> {
+//     pub(crate) array: UnsafeArray<T>,
+//     pub(crate) index: usize,
+// }
+
+// impl<T: Dist> ArrayRdmaPutHandle<T> {
+//     fn exec(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+//         unsafe { self.array.put_unchecked(self.index, &buf) };
+//         let team = self.array.team_rt();
+//         team.clone().spawn(async move {
+//             team.lamellae.wait();
+//         })
+//     }
+// }
+/// a task handle for an array rdma 'at' operation
+#[pin_project(PinnedDrop)]
+pub struct ArrayAtHandle<T: Dist> {
+    pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
+    pub(crate) state: ArrayAtHandleState<T>,
+    pub(crate) buf: OneSidedMemoryRegion<T>,
+    // pub(crate) spawned: bool,
+}
+pub(crate) enum ArrayAtHandleState<T: Dist> {
+    Am(Option<LocalAmHandle<()>>),
+    Atomic(ArrayRdmaAtomicLoadHandle<T>),
+    Get(ArrayRdmaGetHandle<T>),
+    Launched(LamellarTask<()>),
+}
+
+#[pinned_drop]
+impl<T: Dist> PinnedDrop for ArrayAtHandle<T> {
+    fn drop(mut self: Pin<&mut Self>) {
+        match &mut self.state {
+            ArrayAtHandleState::Am(req) => {
+                RuntimeWarning::disable_warnings();
+                let _ = req.take();
+                RuntimeWarning::enable_warnings();
+                RuntimeWarning::DroppedHandle("an ArrayAtHandle").print();
+            }
+            _ => {}
+        }
+        // if !self.spawned {
+        //     RuntimeWarning::disable_warnings();
+        //     let _ = self.req.take();
+        //     RuntimeWarning::enable_warnings();
+        //     RuntimeWarning::DroppedHandle("an ArrayAtHandle").print();
+        // }
+    }
+}
+
+impl<T: Dist> ArrayAtHandle<T> {
     /// This method will spawn the associated Array RDMA at Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<T> {
-        if let Some(req) = &mut self.req {
-            req.launch();
+        match &mut self.state {
+            ArrayAtHandleState::Am(req) => {
+                let task = req.take().unwrap().spawn();
+                self.state = ArrayAtHandleState::Launched(task);
+            }
+            ArrayAtHandleState::Atomic(op) => {
+                self.state = ArrayAtHandleState::Launched(op.spawn(self.buf.clone()));
+            }
+            ArrayAtHandleState::Get(op) => {
+                self.state = ArrayAtHandleState::Launched(op.spawn(self.buf.clone()));
+            }
+            _ => panic!("ArrayAtHandle should already have been spawned"),
         }
-        self.spawned = true;
         self.array.team().spawn(self)
+        // if let Some(req) = &mut self.req {
+        //     req.launch();
+        // }
+        // self.spawned = true;
+        // self.array.team().spawn(self)
     }
 
     /// This method will block the calling thread until the associated Array RDMA at Operation completes
     pub fn block(mut self) -> T {
-        self.spawned = true;
-        RuntimeWarning::BlockingCall(
-            "ArrayRdmaAtHandle::block",
-            "<handle>.spawn() or <handle>.await",
-        )
-        .print();
-        self.array.team().block_on(self)
+        RuntimeWarning::BlockingCall("ArrayAtHandle::block", "<handle>.spawn() or <handle>.await")
+            .print();
+        match &mut self.state {
+            ArrayAtHandleState::Am(req) => {
+                let task = req.take().unwrap().spawn();
+                self.state = ArrayAtHandleState::Launched(task);
+                self.array.team().block_on(self)
+            }
+            ArrayAtHandleState::Atomic(op) => {
+                op.block(self.buf.clone());
+                unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
+                // self.state = ArrayAtHandleState::Launched(op.exec(self.buf.clone()));
+            }
+            ArrayAtHandleState::Get(op) => {
+                op.block(self.buf.clone());
+                unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
+                // self.state = ArrayAtHandleState::Launched(op.exec(self.buf.clone()));
+                // self.array.team().block_on(self)
+            }
+            ArrayAtHandleState::Launched(_) => self.array.team().block_on(self),
+        }
+        // self.array.team().block_on(self)
+        // self.spawned = true;
+        // RuntimeWarning::BlockingCall(
+        //     "ArrayAtHandle::block",
+        //     "<handle>.spawn() or <handle>.await",
+        // )
+        // .print();
+        // self.array.team().block_on(self)
     }
 }
 
-impl<T: Dist> LamellarRequest for ArrayRdmaAtHandle<T> {
-    fn launch(&mut self) {
-        if let Some(req) = &mut self.req {
-            req.launch();
-        }
-        self.spawned = true;
-    }
-    fn blocking_wait(mut self) -> Self::Output {
-        self.spawned = true;
-        if let Some(req) = self.req.take() {
-            req.blocking_wait();
-        }
-        // match self.req {
-        //     Some(req) => req.blocking_wait(),
-        //     None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
-        // }
-        unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
-    }
-    fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
-        self.spawned = true;
-        if let Some(req) = &mut self.req {
-            req.ready_or_set_waker(waker)
-        } else {
-            true
-        }
-    }
-    fn val(&self) -> Self::Output {
-        unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
-    }
-}
+// impl<T: Dist> LamellarRequest for ArrayAtHandle<T> {
+//     fn launch(&mut self) {
+//         match &mut self.state {
+//             ArrayAtHandleState::Am(req) => {
+//                 let task = req.spawn();
+//                 self.state = ArrayAtHandleState::Launched(task);
+//             }
+//             ArrayAtHandleState::Atomic(f) => {
+//                 self.state = ArrayAtHandleState::Launched(f());
+//             }
+//             ArrayAtHandleState::Launched(_) => {}
+//         }
+//     }
+//     fn blocking_wait(mut self) -> Self::Output {
+//         self.spawned = true;
+//         if let Some(req) = self.req.take() {
+//             req.blocking_wait();
+//         }
+//         // match self.req {
+//         //     Some(req) => req.blocking_wait(),
+//         //     None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
+//         // }
+//         unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
+//     }
+//     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
+//         self.spawned = true;
+//         if let Some(req) = &mut self.req {
+//             req.ready_or_set_waker(waker)
+//         } else {
+//             true
+//         }
+//     }
+//     fn val(&self) -> Self::Output {
+//         unsafe { self.buf.as_slice().expect("Data should exist on PE")[0] }
+//     }
+// }
 
-impl<T: Dist> Future for ArrayRdmaAtHandle<T> {
+impl<T: Dist> Future for ArrayAtHandle<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.spawned = true;
-        let mut this = self.project();
-        match &mut this.req {
-            Some(req) => {
-                if !req.ready_or_set_waker(cx.waker()) {
-                    return Poll::Pending;
+        let buf = self.buf.clone();
+        match &mut self.state {
+            ArrayAtHandleState::Am(req) => {
+                let task = req.take().unwrap().spawn();
+                self.state = ArrayAtHandleState::Launched(task);
+                cx.waker().wake_by_ref();
+            }
+            ArrayAtHandleState::Atomic(op) => {
+                let mut task = op.spawn(buf);
+                if let Poll::Ready(_res) = Future::poll(Pin::new(&mut task), cx) {
+                    return Poll::Ready(unsafe {
+                        self.buf.as_slice().expect("Data should exist on PE")[0]
+                    });
+                } else {
+                    self.state = ArrayAtHandleState::Launched(task);
+                    cx.waker().wake_by_ref();
                 }
             }
-            None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
+            ArrayAtHandleState::Get(op) => {
+                let mut task = op.spawn(buf);
+                if let Poll::Ready(_res) = Future::poll(Pin::new(&mut task), cx) {
+                    return Poll::Ready(unsafe {
+                        self.buf.as_slice().expect("Data should exist on PE")[0]
+                    });
+                } else {
+                    self.state = ArrayAtHandleState::Launched(task);
+                    cx.waker().wake_by_ref();
+                }
+            }
+            ArrayAtHandleState::Launched(task) => {
+                if let Poll::Ready(_res) = Future::poll(Pin::new(task), cx) {
+                    return Poll::Ready(unsafe {
+                        self.buf.as_slice().expect("Data should exist on PE")[0]
+                    });
+                }
+            }
         }
-        Poll::Ready(unsafe { this.buf.as_slice().expect("Data should exist on PE")[0] })
+        Poll::Pending
+        // self.array.team().poll(self)
+        // self.spawned = true;
+        // let mut this = self.project();
+        // match &mut this.req {
+        //     Some(req) => {
+        //         if !req.ready_or_set_waker(cx.waker()) {
+        //             return Poll::Pending;
+        //         }
+        //     }
+        //     None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
+        // }
+        // Poll::Ready(unsafe { this.buf.as_slice().expect("Data should exist on PE")[0] })
     }
 }
 

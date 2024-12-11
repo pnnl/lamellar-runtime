@@ -202,11 +202,53 @@ pub(crate) trait LamellaeAM: Send {
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn flush(&self);
+    fn wait(&self);
     fn put(&self, pe: usize, src: &[u8], dst: usize);
     fn iput(&self, pe: usize, src: &[u8], dst: usize);
     fn put_all(&self, src: &[u8], dst: usize);
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
+
+    fn atomic_avail<T: Copy>(&self) -> bool
+    where
+        Self: Sized;
+    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize)
+    where
+        Self: Sized;
+    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize)
+    where
+        Self: Sized;
+    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T])
+    where
+        Self: Sized;
+    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T])
+    where
+        Self: Sized;
+    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T])
+    where
+        Self: Sized;
+    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T])
+    where
+        Self: Sized;
+    fn atomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) where
+        Self: Sized;
+    fn iatomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) where
+        Self: Sized;
+
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);

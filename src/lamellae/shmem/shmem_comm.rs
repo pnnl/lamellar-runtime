@@ -521,6 +521,7 @@ impl CommOps for ShmemComm {
     }
 
     fn flush(&self) {}
+    fn wait(&self) {}
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
@@ -572,6 +573,33 @@ impl CommOps for ShmemComm {
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
         self.get(pe, src_addr, dst_addr);
+    }
+    fn atomic_avail<T: Remote>(&self) -> bool {
+        false
+    }
+    fn atomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
+    fn iatomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
+    fn atomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]) {}
+    fn iatomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]) {}
+    fn atomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
+    fn iatomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
+    fn atomic_compare_exhange<T: Remote>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
+    }
+    fn iatomic_compare_exhange<T: Remote>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
     }
     // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
     //     self.get(pe, src_addr + self.base_addr(), dst_addr);

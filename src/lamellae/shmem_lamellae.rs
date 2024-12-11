@@ -213,6 +213,7 @@ impl Ser for Shmem {
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Shmem {
     fn flush(&self) {}
+    fn wait(&self) {}
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.shmem_comm.put(pe, src, dst);
     }
@@ -227,6 +228,33 @@ impl LamellaeRDMA for Shmem {
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.shmem_comm.get(pe, src, dst);
+    }
+    fn atomic_avail<T: Copy>(&self) -> bool {
+        false
+    }
+    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
+    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
+    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
+    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
+    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
+    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
+    fn atomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
+    }
+    fn iatomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
     }
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.shmem_comm.rt_alloc(size, align)

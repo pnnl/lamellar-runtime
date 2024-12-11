@@ -223,6 +223,9 @@ impl LamellaeRDMA for Rofi {
     fn flush(&self) {
         self.rofi_comm.flush();
     }
+    fn wait(&self) {
+        self.rofi_comm.wait();
+    }
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.rofi_comm.put(pe, src, dst);
     }
@@ -237,6 +240,49 @@ impl LamellaeRDMA for Rofi {
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.rofi_comm.iget(pe, src, dst);
+    }
+    fn atomic_avail<T: Copy>(&self) -> bool {
+        self.rofi_comm.atomic_avail::<T>()
+    }
+    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+        self.rofi_comm.atomic_store(pe, src_addr, dst_addr);
+    }
+    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+        self.rofi_comm.iatomic_store(pe, src_addr, dst_addr);
+    }
+    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {
+        self.rofi_comm.atomic_load(pe, remote, result);
+    }
+    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {
+        self.rofi_comm.iatomic_load(pe, remote, result);
+    }
+    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {
+        self.rofi_comm.atomic_swap(pe, operand, remote, result);
+    }
+    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {
+        self.rofi_comm.iatomic_swap(pe, operand, remote, result);
+    }
+    fn atomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
+        self.rofi_comm
+            .atomic_compare_exhange(pe, old, new, remote, result);
+    }
+    fn iatomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
+        self.rofi_comm
+            .iatomic_compare_exhange(pe, old, new, remote, result);
     }
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size, align)

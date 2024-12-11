@@ -134,6 +134,7 @@ unsafe impl Send for MyPtr {}
 
 impl LamellaeRDMA for Local {
     fn flush(&self) {}
+    fn wait(&self) {}
     fn put(&self, _pe: usize, src: &[u8], dst: usize) {
         let src_ptr = src.as_ptr();
 
@@ -216,6 +217,33 @@ impl LamellaeRDMA for Local {
                 std::ptr::copy(src as *mut u8, dst.as_mut_ptr(), dst.len());
             }
         }
+    }
+    fn atomic_avail<T: Copy>(&self) -> bool {
+        false
+    }
+    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
+    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
+    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
+    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
+    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
+    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
+    fn atomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
+    }
+    fn iatomic_compare_exhange<T: Copy>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    ) {
     }
 
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {

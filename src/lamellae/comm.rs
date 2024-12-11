@@ -113,11 +113,36 @@ pub(crate) trait CommOps {
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
     fn flush(&self);
+    fn wait(&self);
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    fn atomic_avail<T: Remote>(&self) -> bool;
+    fn atomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
+    fn iatomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
+    fn atomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]);
+    fn iatomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]);
+    fn atomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]);
+    fn iatomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]);
+    fn atomic_compare_exhange<T: Remote>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    );
+    fn iatomic_compare_exhange<T: Remote>(
+        &self,
+        pe: usize,
+        old: &[T],
+        new: &[T],
+        remote: usize,
+        result: &mut [T],
+    );
+
     // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
     #[allow(dead_code)]

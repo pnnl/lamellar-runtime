@@ -191,8 +191,8 @@ pub struct ReduceKey {
 crate::inventory::collect!(ReduceKey);
 
 // impl Dist for bool {}
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, u64);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, u64);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, isize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
@@ -1341,11 +1341,13 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 /// Interface defining low level APIs for copying data from an array into a buffer or local variable
 pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     #[doc(alias("One-sided", "onesided"))]
-    /// Performs an (active message based) "Get" of the data in this array starting at the provided `index` into the specified `dst`
+    /// Performs an RDMA (Remote Direct Memory Access)  "Get" of the data in this array starting at the provided `index` into the specified `dst`
     ///
     /// The length of the Get is dictated by the length of the buffer.
     ///
     /// This call returns a future that can be awaited to determine when the `get` has finished
+    ///
+    /// Lock-based array types are not supported with RDMA calls
     ///
     /// # Warning
     /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
@@ -1356,7 +1358,6 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// ## Arrays
     /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
     /// - [AtomicArray] - technically safe, but potentially not what you want, `loads` of individual elements are atomic, but a copy of a range of elements its not atomic (we iterate through the range copying each element individually)
-    /// - [LocalLockArray] - always safe as we grab a local read lock before transfering the data (preventing any modifcation from happening on the array)
     /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
     /// ## Destination Buffer
     /// - [SharedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
@@ -1365,7 +1366,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// # One-sided Operation
     /// the remote transfer is initiated by the calling PE
     /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
+    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
     /// # Examples
     ///```
     /// use lamellar::array::prelude::*;
@@ -1459,7 +1460,7 @@ pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
     /// PE3: array[0] = 0
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T>;
+    fn at(&self, index: usize) -> ArrayAtHandle<T>;
 }
 
 #[doc(hidden)]
@@ -1472,7 +1473,7 @@ pub trait LamellarArrayInternalGet<T: Dist>: LamellarArray<T> {
     ) -> ArrayRdmaHandle;
 
     // blocking call that gets the value stored and the provided index
-    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T>;
+    unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T>;
 }
 
 /// Interface defining low level APIs for copying data from a buffer or local variable into this array

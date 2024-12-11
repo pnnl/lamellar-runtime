@@ -88,7 +88,7 @@ impl ArrayBatchOpHandle {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
-            _ => panic!("ArrayBatchOpHandle should already have been blocked on"),
+            BatchOpState::Launched(reqs_) => self.array.team().block_on(self),
         }
     }
 }
@@ -161,7 +161,7 @@ impl<R: AmDist> ArrayFetchOpHandle<R> {
                 self.state = FetchOpState::Launched(req.spawn());
                 self.array.team().block_on(self)
             }
-            _ => panic!("ArrayBatchOpHandle should already have been blocked_on"),
+            FetchOpState::Launched(ref _req) => self.array.team().block_on(self),
         }
     }
 }
@@ -250,7 +250,7 @@ impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
                 self.state = FetchBatchOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
-            _ => panic!("ArrayBatchOpHandle should already have been blocked on"),
+            FetchBatchOpState::Launched(_) => self.array.team().block_on(self),
         }
     }
 }
@@ -365,7 +365,7 @@ impl<R: AmDist> ArrayResultOpHandle<R> {
                 self.state = ResultOpState::Launched(req.spawn());
                 self.array.team().block_on(self)
             }
-            _ => panic!("ArrayResultOpHandle should already have been spawned"),
+            ResultOpState::Launched(ref _req) => self.array.team().block_on(self),
         }
     }
 }
@@ -452,7 +452,7 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
                 self.state = BatchResultOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
-            _ => panic!("ArrayBatchOpHandle should already have been blocked on"),
+            BatchResultOpState::Launched(_) => self.array.team().block_on(self),
         }
     }
 }

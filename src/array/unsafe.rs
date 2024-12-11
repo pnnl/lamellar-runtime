@@ -16,6 +16,7 @@ use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
 use crate::lamellae::AllocationType;
+use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
@@ -31,7 +32,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 pub(crate) struct UnsafeArrayData {
-    mem_region: MemoryRegion<u8>,
+    pub(crate) mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) task_group: Arc<LamellarTaskGroup>,
@@ -431,6 +432,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     pub(crate) async fn await_all(&self) {
+        self.inner.data.team.lamellae.wait();
         let am_counters = self.inner.data.array_counters.clone();
 
         let mut temp_now = Instant::now();
@@ -996,6 +998,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             .exec_am_local_tg(am, Some(self.team_counters()))
     }
     fn wait_all(&self) {
+        self.inner.data.team.lamellae.wait();
         let mut temp_now = Instant::now();
         // println!(
         //     "in array wait_all  cnt: {:?} {:?} {:?}",

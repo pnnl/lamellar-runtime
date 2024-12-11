@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::r#unsafe::*;
 use crate::array::*;
+use crate::lamellae::LamellaeRDMA;
 use crate::memregion::{
     AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
 };
@@ -638,14 +639,18 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub(crate) unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-        self.blocking_get(index, &buf);
-        ArrayRdmaAtHandle {
+    pub(crate) unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
+        let team = self.team_rt();
+        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
+        // self.blocking_get(index, &buf);
+
+        ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            req: None,
+            state: ArrayAtHandleState::Get(ArrayRdmaGetHandle {
+                array: self.clone(),
+                index,
+            }),
             buf: buf,
-            spawned: false,
         }
     }
 
@@ -693,7 +698,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE2: array[9] = 3
     /// PE3: array[0] = 0
     ///```
-    pub unsafe fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+    pub unsafe fn at(&self, index: usize) -> ArrayAtHandle<T> {
         self.internal_at(index)
     }
 }
@@ -742,7 +747,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         }
     }
 
-    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
+    unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
         self.internal_at(index)
     }
 }
@@ -1209,5 +1214,84 @@ impl LamellarAm for UnsafeSmallPutAm {
                 None => {}
             }
         };
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub(crate) fn network_atomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe { self.inner.data.mem_region.atomic_swap(pe, offset, val, val) }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    pub(crate) fn network_iatomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                self.inner
+                    .data
+                    .mem_region
+                    .iatomic_swap(pe, offset, val, val)
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    pub fn rdma_get(&self, index: usize) -> impl Future<Output = T> {
+        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+        unsafe { self.get_unchecked(index, &buf) };
+        let team = self.team_rt();
+        async move {
+            team.lamellae.wait();
+            unsafe { buf.as_slice().unwrap()[0] }
+        }
+    }
+
+    pub fn blocking_rdma_get(&self, index: usize) -> T {
+        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+        unsafe {
+            self.blocking_get(index, &buf);
+            buf.as_slice().unwrap()[0]
+        }
+    }
+
+    pub fn rdma_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
+        let buf = self.team_rt().alloc_one_sided_mem_region(1);
+        unsafe { buf.as_mut_slice().unwrap()[0] = val };
+        unsafe { self.put_unchecked(index, &buf) };
+        let team = self.team_rt();
+        async move {
+            team.lamellae.wait();
+        }
+    }
+
+    pub fn blocking_rdma_put(&self, index: usize, val: T) {
+        let buf = self.team_rt().alloc_one_sided_mem_region(1);
+        unsafe { buf.as_mut_slice().unwrap()[0] = val };
+        unsafe { self.put_unchecked(index, buf) };
+    }
+
+    pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
+        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+        unsafe {
+            buf.as_mut_slice().unwrap()[0] = val;
+        }
+        self.network_atomic_swap(index, &buf);
+        let team = self.team_rt();
+        async move {
+            team.lamellae.wait();
+            unsafe { buf.as_slice().unwrap()[0] }
+        }
+    }
+
+    pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
+        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+        unsafe {
+            buf.as_mut_slice().unwrap()[0] = val;
+        }
+        self.network_iatomic_swap(index, &buf);
+        unsafe { buf.as_slice().unwrap()[0] }
     }
 }
