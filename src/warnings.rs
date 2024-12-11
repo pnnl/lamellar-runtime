@@ -35,6 +35,11 @@ impl<'a> RuntimeWarning<'a> {
                 },
                 RuntimeWarning::BlockingCall(_, _) | RuntimeWarning::BlockOn => {
                     if std::thread::current().id() != *crate::MAIN_THREAD {
+                        // println!(
+                        //     "warning: blocking call detected in thread {:?} main: {:?}",
+                        //     std::thread::current().id(),
+                        //     *crate::MAIN_THREAD
+                        // );
                         match config().blocking_call_warning {
                             Some(true) => true,
                             Some(false) => false,

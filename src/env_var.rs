@@ -139,6 +139,23 @@ fn default_rofi_domain() -> String {
     "".to_owned()
 }
 
+fn deserialize_bool_or_int_to_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if let Ok(int) = s.parse::<u8>() {
+        Ok(Some(int != 0))
+    } else if let Ok(bool) = s.parse::<bool>() {
+        Ok(Some(bool))
+    } else {
+        Err(serde::de::Error::custom(format!(
+            "invalid boolean value: {}",
+            s
+        )))
+    }
+}
+
 #[doc(hidden)]
 #[derive(Deserialize, Debug)]
 pub struct Config {
@@ -155,12 +172,15 @@ pub struct Config {
     pub barrier_dissemination_factor: usize,
 
     /// flag used to print warnings when users call barriers on worker threads. Default: true
+    #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
     pub blocking_call_warning: Option<bool>,
 
     /// flag used to print warnings when users drop active message handles without awaiting, spawning, or blocking on them. Default: true
+    #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
     pub dropped_unused_handle_warning: Option<bool>,
 
     /// flag used to print warnings when users attempt to call wait_all while there are tasks that have not been spawned. Default: true
+    #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
     pub unpspawned_task_warning: Option<bool>,
 
     /// The lamellae backend to use
