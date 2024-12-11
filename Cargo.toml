@@ -1,20 +1,37 @@
 [package]
 name = "lamellar" 
 version = "0.7.0"
-authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>",  "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>", "Joseph Cottam <joseph.cottam@pnnl.gov>","Greg Roek <gregory.roek@pnnl.gov>","Erdal Mutlu <erdal.mutlu@pnnl.gov>"]
+authors = [
+    "Ryan D. Friese <ryan.friese@pnnl.gov>",
+    "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>",
+    "Joseph Cottam <joseph.cottam@pnnl.gov>",
+    "Greg Roek <gregory.roek@pnnl.gov>",
+    "Erdal Mutlu <erdal.mutlu@pnnl.gov>",
+]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
 readme = "README.md"
 repository = "https://github.com/pnnl/lamellar-runtime"
 homepage = "https://github.com/pnnl/lamellar-runtime"
 license-file = "LICENSE"
-keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
-categories = ["asynchronous","concurrency", "network-programming","science"]
+keywords = ["hpc", "runtime", "pgas", "distributed", "asynchronous"]
+categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [dependencies]
 lamellar-impl = { version = "0.7.0", path = "impl" }
+libfabric = { git = "https://github.com/pnnl/rofi.git", branch = "libfabric-async", features = [
+    "use-async-std",
+    #"thread-safe",
+], optional = true }
+rofi-rust = { path = "/people/thom895/rofi/rofi-rust", features = [
+    "async-rofi",
+], optional = true }
+pmi = { path = "/people/thom895/rofi/pmi/" , optional = true}
+memmap = "0.7.0"
+page_size = "0.6.0"
 rofisys = { version ="0.4", optional = true }
-#rofisys = {git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true}
+# rofisys = { git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true }
+# rofisys = { path = "../rofi-sys-junction", optional = true}
 inventory = "0.3"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -27,7 +44,11 @@ pin-weak = "1.1.0"
 lazy_static = "1.4.0"
 crossbeam = "0.8.2"
 rand = "0.8.5"
-parking_lot = {version = "0.12.1", features = ["arc_lock", "send_guard", "serde"] }
+parking_lot = { version = "0.12.1", features = [
+    "arc_lock",
+    "send_guard",
+    "serde",
+] }
 indexmap = "1.9.1" #lamellar_alloc
 core_affinity = "0.5.10"
 async-task = "4.3.0"
@@ -43,11 +64,10 @@ newtype_derive = "0.1.6"
 custom_derive = "0.1.7"
 glob = "0.3.0"
 thread_local = "1.1.4"
-tokio = { version = "1.35.1", features = ["full"] , optional = true}
+tokio = { version = "1.35.1", features = ["full"], optional = true }
 libc = { version = "0.2.137", optional = true }
 async-global-executor = "2.4.1"
 envy = "0.4.2"
-
 
 
 [dev-dependencies]
@@ -73,24 +93,24 @@ opt-level = 3
 enable-rofi=["rofi","rofisys", "libc"]
 enable-rofi-shared=["rofi","rofisys/shared","libc"]
 rofi=[]
-tokio-executor=["tokio"]
-slurm-test=[]
-disable-runtime-warnings=[]
-runtime-warnings-panic=[]
-default=[]
+enable-libfabric = ["libfabric", "pmi"]
+enable-rofi-rust = ["rofi-rust", "pmi"]
+tokio-executor = ["tokio"]
+slurm-test = []
+default = []
 
 
 [profile.release]
-opt-level=3
-lto=false
-codegen-units=1
+opt-level = 3
+lto = false
+codegen-units = 1
 debug = true
 
 
 [lib]
 doctest = false
-name="lamellar"
-path="src/lib.rs"
+name = "lamellar"
+path = "src/lib.rs"
 
 #[[test]]
 #name= "tests"
@@ -173,180 +193,179 @@ path = "tests/array/atomic_ops/compare_exchange_test.rs"
 ##------------ Bandwidth Examples -----------------##
 
 [[example]]
-name="am_bw"
-path="examples/bandwidths/am_bw.rs"
+name = "am_bw"
+path = "examples/bandwidths/am_bw.rs"
 
 [[example]]
-name="task_group_am_bw"
-path="examples/bandwidths/task_group_am_bw.rs"
+name = "task_group_am_bw"
+path = "examples/bandwidths/task_group_am_bw.rs"
 
 [[example]]
-name="task_group_futures_am_bw"
-path="examples/bandwidths/task_group_futures_am_bw.rs"
+name = "task_group_futures_am_bw"
+path = "examples/bandwidths/task_group_futures_am_bw.rs"
 
 [[example]]
-name="task_group_typed_futures_am_bw"
-path="examples/bandwidths/task_group_typed_futures_am_bw.rs"
+name = "task_group_typed_futures_am_bw"
+path = "examples/bandwidths/task_group_typed_futures_am_bw.rs"
 
 [[example]]
-name="am_bw_get"
-path="examples/bandwidths/am_bw_get.rs"
+name = "am_bw_get"
+path = "examples/bandwidths/am_bw_get.rs"
 
 [[example]]
-name="am_group_bw_get"
-path="examples/bandwidths/am_group_bw_get.rs"
+name = "am_group_bw_get"
+path = "examples/bandwidths/am_group_bw_get.rs"
 
 [[example]]
-name="get_bw"
-path="examples/bandwidths/get_bw.rs"
+name = "get_bw"
+path = "examples/bandwidths/get_bw.rs"
 
 [[example]]
-name="put_bw"
-path="examples/bandwidths/put_bw.rs"
+name = "put_bw"
+path = "examples/bandwidths/put_bw.rs"
 
 [[example]]
-name="unsafe_array_put_bw"
-path="examples/bandwidths/unsafe_array_put_bw.rs"
+name = "unsafe_array_put_bw"
+path = "examples/bandwidths/unsafe_array_put_bw.rs"
 
 [[example]]
-name="unsafe_array_put_unchecked_bw"
-path="examples/bandwidths/unsafe_array_put_unchecked_bw.rs"
+name = "unsafe_array_put_unchecked_bw"
+path = "examples/bandwidths/unsafe_array_put_unchecked_bw.rs"
 
 [[example]]
-name="atomic_array_put_bw"
-path="examples/bandwidths/atomic_array_put_bw.rs"
+name = "atomic_array_put_bw"
+path = "examples/bandwidths/atomic_array_put_bw.rs"
 
 [[example]]
-name="local_lock_atomic_array_put_bw"
-path="examples/bandwidths/local_lock_atomic_array_put_bw.rs"
+name = "local_lock_atomic_array_put_bw"
+path = "examples/bandwidths/local_lock_atomic_array_put_bw.rs"
 
 [[example]]
-name="global_lock_atomic_array_put_bw"
-path="examples/bandwidths/global_lock_atomic_array_put_bw.rs"
+name = "global_lock_atomic_array_put_bw"
+path = "examples/bandwidths/global_lock_atomic_array_put_bw.rs"
 
 [[example]]
-name="unsafe_array_get_bw"
-path="examples/bandwidths/unsafe_array_get_bw.rs"
+name = "unsafe_array_get_bw"
+path = "examples/bandwidths/unsafe_array_get_bw.rs"
 
 [[example]]
-name="unsafe_array_store_bw"
-path="examples/bandwidths/unsafe_array_store_bw.rs"
+name = "unsafe_array_store_bw"
+path = "examples/bandwidths/unsafe_array_store_bw.rs"
 
 [[example]]
-name="unsafe_array_get_unchecked_bw"
-path="examples/bandwidths/unsafe_array_get_unchecked_bw.rs"
+name = "unsafe_array_get_unchecked_bw"
+path = "examples/bandwidths/unsafe_array_get_unchecked_bw.rs"
 
 [[example]]
-name="atomic_array_get_bw"
-path="examples/bandwidths/atomic_array_get_bw.rs"
+name = "atomic_array_get_bw"
+path = "examples/bandwidths/atomic_array_get_bw.rs"
 
 [[example]]
-name="local_lock_atomic_array_get_bw"
-path="examples/bandwidths/local_lock_atomic_array_get_bw.rs"
+name = "local_lock_atomic_array_get_bw"
+path = "examples/bandwidths/local_lock_atomic_array_get_bw.rs"
 
 [[example]]
-name="global_lock_atomic_array_get_bw"
-path="examples/bandwidths/global_lock_atomic_array_get_bw.rs"
+name = "global_lock_atomic_array_get_bw"
+path = "examples/bandwidths/global_lock_atomic_array_get_bw.rs"
 
 [[example]]
-name="readonly_array_get_bw"
-path="examples/bandwidths/readonly_array_get_bw.rs"
+name = "readonly_array_get_bw"
+path = "examples/bandwidths/readonly_array_get_bw.rs"
 
 [[example]]
-name="readonly_array_get_unchecked_bw"
-path="examples/bandwidths/readonly_array_get_unchecked_bw.rs"
+name = "readonly_array_get_unchecked_bw"
+path = "examples/bandwidths/readonly_array_get_unchecked_bw.rs"
 
 ##------------ Active Message Examples -----------------##
 [[example]]
-name="am_no_return"
-path="examples/active_message_examples/am_no_return.rs"
+name = "am_no_return"
+path = "examples/active_message_examples/am_no_return.rs"
 
 [[example]]
-name="am_return_usize"
-path="examples/active_message_examples/am_return_usize.rs"
+name = "am_return_usize"
+path = "examples/active_message_examples/am_return_usize.rs"
 
 [[example]]
-name="am_return_ordered"
-path="examples/active_message_examples/am_return_ordered.rs"
+name = "am_return_ordered"
+path = "examples/active_message_examples/am_return_ordered.rs"
 
 [[example]]
-name="am_return_am"
-path="examples/active_message_examples/am_return_am.rs"
+name = "am_return_am"
+path = "examples/active_message_examples/am_return_am.rs"
 
 [[example]]
-name="am_return_am_usize"
-path="examples/active_message_examples/am_return_am_usize.rs"
+name = "am_return_am_usize"
+path = "examples/active_message_examples/am_return_am_usize.rs"
 
 [[example]]
-name="async_comparison"
-path="examples/active_message_examples/async_comparison.rs"
+name = "async_comparison"
+path = "examples/active_message_examples/async_comparison.rs"
 
 [[example]]
-name="recursive_am"
-path="examples/active_message_examples/recursive_am.rs"
+name = "recursive_am"
+path = "examples/active_message_examples/recursive_am.rs"
 
 [[example]]
-name="am_batch_tests"
-path="examples/active_message_examples/am_batch_tests.rs"
+name = "am_batch_tests"
+path = "examples/active_message_examples/am_batch_tests.rs"
 
 [[example]]
-name="am_local"
-path="examples/active_message_examples/am_local.rs"
+name = "am_local"
+path = "examples/active_message_examples/am_local.rs"
 
 [[example]]
-name="am_local_memregions"
-path="examples/active_message_examples/am_local_memregions.rs"
-
+name = "am_local_memregions"
+path = "examples/active_message_examples/am_local_memregions.rs"
 
 
 ##---------------Array Examples -------------------##
 [[example]]
-name="dist_array_reduce"
-path="examples/array_examples/dist_array_reduce.rs"
+name = "dist_array_reduce"
+path = "examples/array_examples/dist_array_reduce.rs"
 
 [[example]]
-name="array_am"
-path="examples/array_examples/array_am.rs"
+name = "array_am"
+path = "examples/array_examples/array_am.rs"
 
 [[example]]
-name="array_put_get"
-path="examples/array_examples/array_put_get.rs"
+name = "array_put_get"
+path = "examples/array_examples/array_put_get.rs"
 
 [[example]]
-name="onesided_iteration"
-path="examples/array_examples/onesided_iteration.rs"
+name = "onesided_iteration"
+path = "examples/array_examples/onesided_iteration.rs"
 
 [[example]]
-name="local_iteration"
-path="examples/array_examples/local_iteration.rs"
+name = "local_iteration"
+path = "examples/array_examples/local_iteration.rs"
 
 [[example]]
-name="distributed_iteration"
-path="examples/array_examples/distributed_iteration.rs"
+name = "distributed_iteration"
+path = "examples/array_examples/distributed_iteration.rs"
 
 [[example]]
-name="array_consumer_schedules"
-path="examples/array_examples/array_consumer_schedules.rs"
+name = "array_consumer_schedules"
+path = "examples/array_examples/array_consumer_schedules.rs"
 
 #[[example]]
 #name="local_only_array"
 #path="examples/array_examples/local_only_array.rs"
 
 [[example]]
-name="generic_array"
-path="examples/array_examples/generic_array.rs"
+name = "generic_array"
+path = "examples/array_examples/generic_array.rs"
 
 [[example]]
-name="array_batch_add"
-path="examples/array_examples/array_batch_add.rs"
+name = "array_batch_add"
+path = "examples/array_examples/array_batch_add.rs"
 
 [[example]]
-name="array_ops"
-path="examples/array_examples/array_ops.rs"
+name = "array_ops"
+path = "examples/array_examples/array_ops.rs"
 
 [[example]]
-name="atomic_compare_exchange"
-path="examples/array_examples/atomic_compare_exchange.rs"
+name = "atomic_compare_exchange"
+path = "examples/array_examples/atomic_compare_exchange.rs"
 
 [[example]]
 name="network_atomic_ops"
@@ -357,16 +376,16 @@ name="array_first_last_global_indices"
 path="examples/array_examples/array_first_last_global_indices.rs"
 
 [[example]]
-name="global_lock_array"
-path="examples/array_examples/global_lock_array.rs"
+name = "global_lock_array"
+path = "examples/array_examples/global_lock_array.rs"
 
 #[[example]]
 #name="2d_array"
 #path="examples/array_examples/2d_array.rs"
 
 [[example]]
-name="histo"
-path="examples/array_examples/histo.rs"
+name = "histo"
+path = "examples/array_examples/histo.rs"
 
 #[[example]]
 #name="single_pe_array"
@@ -374,63 +393,63 @@ path="examples/array_examples/histo.rs"
 
 ##------------ RDMA Examples -----------------##
 [[example]]
-name="rdma_put"
-path="examples/rdma_examples/rdma_put.rs"
+name = "rdma_put"
+path = "examples/rdma_examples/rdma_put.rs"
 
 [[example]]
-name="rdma_get"
-path="examples/rdma_examples/rdma_get.rs"
+name = "rdma_get"
+path = "examples/rdma_examples/rdma_get.rs"
 
 [[example]]
-name="rdma_am"
-path="examples/rdma_examples/rdma_am.rs"
+name = "rdma_am"
+path = "examples/rdma_examples/rdma_am.rs"
 
 
 ##------------ Team Examples -----------------##
 [[example]]
-name="team_am"
-path="examples/team_examples/team_am.rs"
+name = "team_am"
+path = "examples/team_examples/team_am.rs"
 
 [[example]]
-name="custom_team_arch"
-path="examples/team_examples/custom_team_arch.rs"
+name = "custom_team_arch"
+path = "examples/team_examples/custom_team_arch.rs"
 
 [[example]]
-name="random_team"
-path="examples/team_examples/random_team.rs"
+name = "random_team"
+path = "examples/team_examples/random_team.rs"
 
 ##------------ Kernel Examples -----------------##
 [[example]]
-name="am_flops"
-path="examples/kernels/am_flops.rs"
+name = "am_flops"
+path = "examples/kernels/am_flops.rs"
 
 [[example]]
-name="dft_proxy"
-path="examples/kernels/dft_proxy.rs"
+name = "dft_proxy"
+path = "examples/kernels/dft_proxy.rs"
 
 [[example]]
-name="am_gemm"
-path="examples/kernels/am_gemm.rs"
+name = "am_gemm"
+path = "examples/kernels/am_gemm.rs"
 
 [[example]]
-name="cached_am_gemm"
-path="examples/kernels/cached_am_gemm.rs"
+name = "cached_am_gemm"
+path = "examples/kernels/cached_am_gemm.rs"
 
 [[example]]
-name="serial_array_gemm"
-path="examples/kernels/serial_array_gemm.rs"
+name = "serial_array_gemm"
+path = "examples/kernels/serial_array_gemm.rs"
 
 [[example]]
-name="parallel_array_gemm"
-path="examples/kernels/parallel_array_gemm.rs"
+name = "parallel_array_gemm"
+path = "examples/kernels/parallel_array_gemm.rs"
 
 [[example]]
-name="parallel_blocked_array_gemm"
-path="examples/kernels/parallel_blocked_array_gemm.rs"
+name = "parallel_blocked_array_gemm"
+path = "examples/kernels/parallel_blocked_array_gemm.rs"
 
 [[example]]
-name="safe_parallel_blocked_array_gemm"
-path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
+name = "safe_parallel_blocked_array_gemm"
+path = "examples/kernels/safe_parallel_blocked_array_gemm.rs"
 
 #[[example]]
 #name="safe_parallel_blocked_array_gemm_2"
@@ -439,44 +458,44 @@ path="examples/kernels/safe_parallel_blocked_array_gemm.rs"
 
 ##------------ Miscellaneous Examples -----------------##
 [[example]]
-name="simple_ptp"
-path="examples/misc/simple_ptp.rs"
+name = "simple_ptp"
+path = "examples/misc/simple_ptp.rs"
 
 [[example]]
-name="lamellar_env"
-path="examples/misc/lamellar_env.rs"
+name = "lamellar_env"
+path = "examples/misc/lamellar_env.rs"
 
 [[example]]
-name="ping_pong"
-path="examples/misc/ping_pong.rs"
+name = "ping_pong"
+path = "examples/misc/ping_pong.rs"
 
-[[example]]
-name="dist_hashmap"
-path="examples/misc/dist_hashmap.rs"
+# [[example]]
+# name="dist_hashmap"
+# path="examples/misc/dist_hashmap.rs"
 
 
 ##------------ Darc examples ------------------##
 [[example]]
-name="darc"
-path="examples/darc_examples/darc.rs"
+name = "darc"
+path = "examples/darc_examples/darc.rs"
 
 [[example]]
-name="stress_test"
-path="examples/darc_examples/stress_test.rs"
+name = "stress_test"
+path = "examples/darc_examples/stress_test.rs"
 
 [[example]]
-name="string_darc"
-path="examples/darc_examples/string_darc.rs"
+name = "string_darc"
+path = "examples/darc_examples/string_darc.rs"
 
 ##------------ Hello Worlds examples ------------------##
 [[example]]
-name="hello_world_am"
-path="examples/hello_world/hello_world_am.rs"
+name = "hello_world_am"
+path = "examples/hello_world/hello_world_am.rs"
 
 [[example]]
-name="hello_world_array"
-path="examples/hello_world/hello_world_array.rs"
+name = "hello_world_array"
+path = "examples/hello_world/hello_world_array.rs"
 
 [[example]]
-name="hello_world_array_iteration"
-path="examples/hello_world/hello_world_array_iteration.rs"
+name = "hello_world_array_iteration"
+path = "examples/hello_world/hello_world_array_iteration.rs"

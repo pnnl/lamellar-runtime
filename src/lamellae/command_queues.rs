@@ -325,7 +325,7 @@ impl CmdMsgBuffer {
                 }
                 Cmd::Release | Cmd::Free => {
                     //free is valid still but we need to make sure we release the send_buffer
-                    //     println!("transfer complete!!");
+                    // println!("transfer complete!!");
                     if buf.allocated_cnt > 0 {
                         self.waiting_bufs.insert(buf.addr(), buf);
                         true
@@ -613,8 +613,9 @@ impl InnerCQ {
                 Cmd::Clear => None,
                 // Cmd::Free => panic!("should not see free in recv buffer"),
                 Cmd::Tx | Cmd::Print | Cmd::Free | Cmd::Release => {
+                    // println!("Received something {:?}", cmd.cmd);
                     if cmd.daddr == 0 {
-                        println!("received cmd src {:?} {:?} ", src, cmd);
+                        // println!("received cmd src {:?} {:?} ", src, cmd);
                         return None;
                     }
                     let res = Some(cmd.clone());
@@ -746,13 +747,13 @@ impl InnerCQ {
                 self.try_sending_buffer(dst, &mut cmd_buffer);
                 if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                     let send_buf = self.send_buffer.lock();
-                    println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
-                    println!("send_buf: {:?}", send_buf);
+                    // println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
+                    // println!("send_buf: {:?}", send_buf);
                     // drop(send_buf);
                     let recv_buf = self.recv_buffer.lock();
-                    println!("recv_buf: {:?}", recv_buf);
+                    // println!("recv_buf: {:?}", recv_buf);
                     let free_buf = self.free_buffer.lock();
-                    println!("free_buf: {:?}", free_buf);
+                    // println!("free_buf: {:?}", free_buf);
                     timer = std::time::Instant::now();
                 }
             }
@@ -790,14 +791,14 @@ impl InnerCQ {
                     }
                 }
                 if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    println!("waiting to send cmd buffer {:?}", cmd_buffer);
+                    // println!("waiting to send cmd buffer {:?}", cmd_buffer);
                     let send_buf = self.send_buffer.lock();
-                    println!("send_buf addr {:?}", send_buf.as_ptr());
-                    println!("send_buf: {:?}", send_buf);
+                    // println!("send_buf addr {:?}", send_buf.as_ptr());
+                    // println!("send_buf: {:?}", send_buf);
                     let recv_buf = self.recv_buffer.lock();
-                    println!("recv_buf: {:?}", recv_buf);
+                    // println!("recv_buf: {:?}", recv_buf);
                     let free_buf = self.free_buffer.lock();
-                    println!("free_buf: {:?}", free_buf);
+                    // println!("free_buf: {:?}", free_buf);
                     timer = std::time::Instant::now();
                 }
             }
@@ -856,7 +857,7 @@ impl InnerCQ {
                     self.comm.flush();
                     std::thread::yield_now();
                     if start.elapsed().as_secs_f64() > config().deadlock_timeout {
-                        println!("waiting to alloc: {:?} {:?}", alloc_buf, alloc_id);
+                        // println!("waiting to alloc: {:?} {:?}", alloc_buf, alloc_id);
                         start = std::time::Instant::now();
                     }
                 }
@@ -904,7 +905,7 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    println!("putting panic cmd to pe {:?} {cmd:?}", pe);
+                    // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
                     self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
                 }
             }
@@ -914,7 +915,7 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn send_release(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
-        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
+        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
         let local_daddr = self.comm.local_addr(dst, cmd.daddr);
         // println!("sending release to {dst}");
         self.comm.put(
@@ -927,7 +928,7 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
-        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
+        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
         let local_daddr = self.comm.local_addr(dst, cmd.daddr);
         // println!("sending free to {dst}");
         self.comm.put(
@@ -952,7 +953,7 @@ impl InnerCQ {
                     send_buf[dst].calc_hash();
                     // println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
                     let recv_buffer = self.recv_buffer.lock();
-                    // println!("sending cmd {:?}",send_buf);
+                    println!("sending cmd {:?}", send_buf);
                     println!("sending print to {dst}");
                     self.comm.put(
                         dst,
@@ -995,7 +996,7 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
-        // println!("command queue getting data from {src}");
+        // println!("command queue getting data from {src}, {:?}", cmd.daddr);
         self.comm.iget(src, local_daddr as usize, data_slice);
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
@@ -1033,14 +1034,14 @@ impl InnerCQ {
         {
             async_std::task::yield_now().await;
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                println!(
-                    "stuck waiting for serialized data from {:?} !!! {:?} {:?} {:?} {:?}",
-                    src,
-                    cmd,
-                    data_slice.len(),
-                    cmd.dsize,
-                    &data_slice
-                );
+                // println!(
+                //     "stuck waiting for serialized data from {:?} !!! {:?} {:?} {:?} {:?}",
+                //     src,
+                //     cmd,
+                //     data_slice.len(),
+                //     cmd.dsize,
+                //     &data_slice
+                // );
                 self.send_print(src, cmd).await;
                 timer = std::time::Instant::now();
             }
@@ -1059,12 +1060,12 @@ impl InnerCQ {
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
             // println!("cq 851 data {:?}",ser_data.is_ok());
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout && ser_data.is_err() {
-                println!(
-                    "get cmd stuck waiting for alloc {:?} {:?}",
-                    cmd.dsize,
-                    self.comm
-                        .rt_check_alloc(cmd.dsize, std::mem::align_of::<u8>())
-                );
+                // println!(
+                //     "get cmd stuck waiting for alloc {:?} {:?}",
+                //     cmd.dsize,
+                //     self.comm
+                //         .rt_check_alloc(cmd.dsize, std::mem::align_of::<u8>())
+                // );
                 self.comm.print_pools();
                 timer = std::time::Instant::now();
             }
@@ -1333,6 +1334,82 @@ impl CommandQueue {
         match data {
             #[cfg(feature = "rofi")]
             SerializedData::RofiData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
+            #[cfg(feature = "enable-rofi-rust")]
+            SerializedData::RofiRustData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
+            #[cfg(feature = "enable-rofi-rust")]
+            SerializedData::RofiRustAsyncData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
+            #[cfg(feature = "enable-libfabric")]
+            SerializedData::LibFabData(ref data) => {
+                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+                let hash = calc_hash(data.relative_addr, data.len);
+
+                // println!(
+                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+                //     std::thread::current().id(),
+                //     data.relative_addr,
+                //     data.len,
+                //     hash,
+                //     &data.header_and_data_as_bytes()[0..20]
+                // );
+                data.increment_cnt(); //or we could implement something like an into_raw here...
+                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+
+                self.cq.send(data.relative_addr, data.len, dst, hash).await;
+            }
+            #[cfg(feature = "enable-libfabric")]
+            SerializedData::LibFabAsyncData(ref data) => {
                 // println!("sending: {:?} {:?}",data.relative_addr,data.len);
                 // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
                 let hash = calc_hash(data.relative_addr, data.len);

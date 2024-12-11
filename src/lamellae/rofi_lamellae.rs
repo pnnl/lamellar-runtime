@@ -218,6 +218,7 @@ impl Ser for Rofi {
     }
 }
 
+#[async_trait]
 #[allow(dead_code, unused_variables)]
 impl LamellaeRDMA for Rofi {
     fn flush(&self) {

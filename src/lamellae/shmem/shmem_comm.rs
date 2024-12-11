@@ -545,11 +545,13 @@ impl CommOps for ShmemComm {
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         self.put(pe, src_addr, dst_addr);
     }
+
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
         for pe in 0..self.num_pes {
             self.put(pe, src_addr, dst_addr);
         }
     }
+
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
@@ -570,6 +572,7 @@ impl CommOps for ShmemComm {
             }
         }
     }
+
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
         self.get(pe, src_addr, dst_addr);

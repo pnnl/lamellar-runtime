@@ -1,10 +1,23 @@
-#[cfg(feature = "rofi")]
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric::libfabric_comm::*;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric_async::libfabric_async_comm::*;
+#[cfg(feature = "enable-rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
+#[cfg(feature = "enable-rofi-rust")]
+use crate::lamellae::rofi_rust::rofi_rust_comm::*;
+#[cfg(feature = "enable-rofi-rust")]
+use crate::lamellae::rofi_rust_async::rofi_rust_async_comm::*;
 use crate::lamellae::shmem::shmem_comm::*;
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::LibFabAsyncData;
+#[cfg(feature = "enable-rofi-rust")]
+use crate::lamellae::RofiRustAsyncData;
+#[cfg(feature = "enable-rofi-rust")]
+use crate::lamellae::RofiRustData;
 use crate::lamellae::{AllocationType, SerializedData};
 // use crate::lamellae::shmem::ShmemComm;
 
-use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
@@ -78,6 +91,14 @@ impl<T: Copy> Remote for T {}
 pub(crate) enum Comm {
     #[cfg(feature = "rofi")]
     Rofi(RofiComm),
+    #[cfg(feature = "enable-rofi-rust")]
+    RofiRust(RofiRustComm),
+    #[cfg(feature = "enable-rofi-rust")]
+    RofiRustAsync(RofiRustAsyncComm),
+    #[cfg(feature = "enable-libfabric")]
+    LibFab(LibFabComm),
+    #[cfg(feature = "enable-libfabric")]
+    LibFabAsync(LibFabAsyncComm),
     Shmem(ShmemComm),
 }
 
@@ -89,12 +110,19 @@ impl Comm {
         match self.as_ref() {
             #[cfg(feature = "rofi")]
             Comm::Rofi(_) => Ok(RofiData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-rofi-rust")]
+            Comm::RofiRust(_) => Ok(RofiRustData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-rofi-rust")]
+            Comm::RofiRustAsync(_) => Ok(RofiRustAsyncData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-libfabric")]
+            Comm::LibFab(_) => Ok(LibFabData::new(self.clone(), size)?.into()),
+            #[cfg(feature = "enable-libfabric")]
+            Comm::LibFabAsync(_) => Ok(LibFabAsyncData::new(self.clone(), size)?.into()),
             Comm::Shmem(_) => Ok(ShmemData::new(self.clone(), size)?.into()),
         }
     }
 }
 
-#[async_trait]
 #[enum_dispatch]
 pub(crate) trait CommOps {
     fn my_pe(&self) -> usize;
