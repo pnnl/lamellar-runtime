@@ -1,3 +1,4 @@
+use super::{AtomicOp, NetworkAtomic};
 use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
@@ -236,21 +237,37 @@ impl LamellaeRDMA for RofiRustAsync {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
+    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) {
         self.libfab_comm.put(pe, src, dst);
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.libfab_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
+    fn put_all<T: Remote>(&self, src: &[T], dst: usize) {
         self.libfab_comm.put_all(src, dst);
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) {
         self.libfab_comm.get(pe, src, dst);
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.libfab_comm.iget(pe, src, dst);
     }
+    fn atomic_avail<T>(&self) -> bool {
+        false
+    }
+    fn atomic_op<T: NetworkAtomic>(&self, op: AtomicOp<T>, pe: usize, remote_addr: usize) {
+        unreachable!()
+    }
+    fn atomic_fetch_op<T: NetworkAtomic>(
+        &self,
+        op: AtomicOp<T>,
+        pe: usize,
+        remote_addr: usize,
+        result: &mut [T],
+    ) {
+        unreachable!()
+    }
+
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.libfab_comm.rt_alloc(size, align)
     }

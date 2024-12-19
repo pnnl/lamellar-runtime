@@ -348,7 +348,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
         //-> RofiReq {
         // let mut req = RofiReq{
         //     txids: Vec::new(),
@@ -416,7 +416,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
         //-> RofiReq {
         // println!("[{:?}]-({:?}) put all entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -452,7 +452,7 @@ impl CommOps for RofiComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture{
         //-> RofiReq {
         // println!("[{:?}]-({:?}) get entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{

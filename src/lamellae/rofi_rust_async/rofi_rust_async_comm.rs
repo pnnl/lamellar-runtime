@@ -9,7 +9,8 @@ use crate::lamellar_alloc::BTreeAlloc;
 use crate::lamellar_alloc::LamellarAlloc;
 use libfabric::*;
 use parking_lot::{Mutex, RwLock};
-use rofi_rust::async_::rofi_async::Ofi;
+use rofi_rust::
+::rofi_async::Ofi;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -339,7 +340,7 @@ impl CommOps for RofiRustAsyncComm {
         self.ofi.lock().progress().unwrap()
     }
 
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
         if pe != self.my_pe {
             async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }.await.unwrap()});
             self.put_amt
@@ -377,7 +378,7 @@ impl CommOps for RofiRustAsyncComm {
         }
     }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
         for pe in 0..self.my_pe {
             async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
                 .await
@@ -403,7 +404,7 @@ impl CommOps for RofiRustAsyncComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture{
         if pe != self.my_pe {
             async_std::task::block_on(async {unsafe { self.ofi.lock().get(pe, src_addr, dst_addr) }
                 .await

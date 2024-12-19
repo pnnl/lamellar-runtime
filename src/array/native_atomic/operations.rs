@@ -2,7 +2,6 @@ use crate::array::native_atomic::*;
 // use crate::array::native_atomic::rdma::atomic_store;
 use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
 use crate::array::*;
-use crate::lamellae::LamellaeRDMA;
 use std::collections::VecDeque;
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {

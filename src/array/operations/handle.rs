@@ -8,10 +8,11 @@ use crate::{
 
 use std::{
     collections::VecDeque,
-    future::Future,
     pin::Pin,
     task::{Context, Poll},
 };
+
+use futures_util::Future;
 
 use pin_project::{pin_project, pinned_drop};
 

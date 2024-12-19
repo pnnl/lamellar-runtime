@@ -1,3 +1,4 @@
+use super::{AtomicOp, NetworkAtomic};
 use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
@@ -227,64 +228,37 @@ impl LamellaeRDMA for Rofi {
     fn wait(&self) {
         self.rofi_comm.wait();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
+    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) {
         self.rofi_comm.put(pe, src, dst);
     }
     fn iput(&self, pe: usize, src: &[u8], dst: usize) {
         self.rofi_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
+    fn put_all<T: Remote>(&self, src: &[T], dst: usize) {
         self.rofi_comm.put_all(src, dst);
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) {
         self.rofi_comm.get(pe, src, dst);
     }
     fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.rofi_comm.iget(pe, src, dst);
     }
-    fn atomic_avail<T: Copy>(&self) -> bool {
-        self.rofi_comm.atomic_avail::<T>()
+    fn atomic_avail<T>(&self) -> bool {
+        false
     }
-    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
-        self.rofi_comm.atomic_store(pe, src_addr, dst_addr);
+    fn atomic_op<T: NetworkAtomic>(&self, op: AtomicOp<T>, pe: usize, remote_addr: usize) {
+        unreachable!()
     }
-    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
-        self.rofi_comm.iatomic_store(pe, src_addr, dst_addr);
-    }
-    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {
-        self.rofi_comm.atomic_load(pe, remote, result);
-    }
-    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {
-        self.rofi_comm.iatomic_load(pe, remote, result);
-    }
-    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {
-        self.rofi_comm.atomic_swap(pe, operand, remote, result);
-    }
-    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {
-        self.rofi_comm.iatomic_swap(pe, operand, remote, result);
-    }
-    fn atomic_compare_exhange<T: Copy>(
+    fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
+        op: AtomicOp<T>,
         pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
+        remote_addr: usize,
         result: &mut [T],
     ) {
-        self.rofi_comm
-            .atomic_compare_exhange(pe, old, new, remote, result);
+        unreachable!()
     }
-    fn iatomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-        self.rofi_comm
-            .iatomic_compare_exhange(pe, old, new, remote, result);
-    }
+
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size, align)
     }

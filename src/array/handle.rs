@@ -1,17 +1,17 @@
 use std::{
     collections::VecDeque,
-    future::Future,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll, Waker},
 };
+
+use futures_util::Future;
 
 use pin_project::{pin_project, pinned_drop};
 
 use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
     array::LamellarByteArray,
-    lamellae::LamellaeRDMA,
     lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
     warnings::RuntimeWarning,

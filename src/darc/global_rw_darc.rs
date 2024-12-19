@@ -6,11 +6,12 @@ use std::ptr::NonNull;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::active_messaging::RemotePtr;
-use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
-use crate::lamellae::LamellaeRDMA;
-use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::{IdError, LamellarEnv, LamellarTeam};
+use crate::{
+    active_messaging::RemotePtr,
+    darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc},
+    lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
+    IdError, LamellarEnv, LamellarTeam,
+};
 
 use super::handle::{
     GlobalRwDarcCollectiveWriteHandle, GlobalRwDarcHandle, GlobalRwDarcReadHandle,

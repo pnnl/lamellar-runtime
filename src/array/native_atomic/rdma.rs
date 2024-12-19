@@ -4,7 +4,6 @@ use crate::array::native_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
-use crate::lamellae::LamellaeRDMA;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {

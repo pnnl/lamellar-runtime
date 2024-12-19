@@ -1,21 +1,50 @@
-use crate::lamellae::{
-    AllocResult, AllocationType, Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit,
-    LamellaeRDMA, Ser, SerializeHeader, SerializedData, SerializedDataOps, SubData,
+mod atomic;
+mod comm;
+mod mem;
+mod rdma;
+
+use super::{
+    AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeInit, Ser, SerializeHeader,
+    SerializedData, SerializedDataOps, SubData,
 };
-use crate::lamellar_arch::LamellarArchRT;
-use crate::scheduler::Scheduler;
-// use log::trace;
+use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use async_trait::async_trait;
+use futures_util::Future;
 use parking_lot::Mutex;
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use async_trait::async_trait;
+pub(crate) struct LocalBuilder {
+    my_pe: usize,
+    num_pes: usize,
+    local_comm: Arc<Comm>,
+}
+
+impl LocalBuilder {
+    pub(crate) fn new() -> LocalBuilder {
+        let local_comm: Arc<Comm> = Arc::new(LocalComm::new().into());
+        LocalBuilder {
+            my_pe: local_comm.my_pe(),
+            num_pes: local_comm.num_pes(),
+            local_comm,
+        }
+    }
+}
+
+impl LamellaeInit for LocalBuilder {
+    fn init_fabric(&mut self) -> (usize, usize) {
+        (self.my_pe, self.num_pes)
+    }
+    fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
+        Arc::new(Lamellae::Local(Local::new(self.local_comm.clone())))
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct Local {
-    // am: Arc<LocalLamellaeAM>,
-    // rdma: Arc<LocalLamellaeRDMA>,
-    allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
+    local_comm: Arc<Comm>,
 }
 
 impl std::fmt::Debug for Local {
@@ -24,57 +53,14 @@ impl std::fmt::Debug for Local {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct LocalData {}
-impl Des for LocalData {
-    fn deserialize_header(&self) -> Option<SerializeHeader> {
-        panic!("should not be deserializing in local");
-    }
-    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        panic!("should not be deserializing in local");
-    }
-    fn data_as_bytes(&self) -> &mut [u8] {
-        panic!("should not be deserializing in local");
-    }
-    fn header_and_data_as_bytes(&self) -> &mut [u8] {
-        &mut []
-    }
-    fn print(&self) {}
-}
-
-impl SubData for LocalData {
-    fn sub_data(&self, _start: usize, _end: usize) -> SerializedData {
-        SerializedData::LocalData(self.clone())
-    }
-}
-
-impl SerializedDataOps for LocalData {
-    fn header_as_bytes(&self) -> &mut [u8] {
-        panic!("should not be deserializing in local");
-    }
-    fn increment_cnt(&self) {}
-    fn len(&self) -> usize {
-        0
-    }
-}
-
 impl Local {
-    pub(crate) fn new() -> Local {
-        Local {
-            allocs: Arc::new(Mutex::new(HashMap::new())),
-        }
+    pub(crate) fn new(local_comm: Arc<Comm>) -> Local {
+        Local { local_comm }
     }
 }
 
 // #[async_trait]
 impl Ser for Local {
-    // fn serialize<T: serde::Serialize + ?Sized>(
-    //     &self,
-    //     _header: Option<SerializeHeader>,
-    //     _obj: &T,
-    // ) -> Result<SerializedData, anyhow::Error> {
-    //     panic!("should not be serializing in local");
-    // }
     fn serialize_header(
         &self,
         _header: Option<SerializeHeader>,
@@ -93,27 +79,6 @@ impl LamellaeInit for Local {
     }
 }
 
-impl LamellaeComm for Local {
-    fn my_pe(&self) -> usize {
-        0
-    }
-    fn num_pes(&self) -> usize {
-        1
-    }
-    fn barrier(&self) {}
-    fn backend(&self) -> Backend {
-        Backend::Local
-    }
-    #[allow(non_snake_case)]
-    fn MB_sent(&self) -> f64 {
-        0.0f64
-    }
-    // fn print_stats(&self) {}
-    fn shutdown(&self) {}
-    fn force_shutdown(&self) {}
-    fn force_deinit(&self) {}
-}
-
 #[async_trait]
 impl LamellaeAM for Local {
     async fn send_to_pes_async(
@@ -124,203 +89,3 @@ impl LamellaeAM for Local {
     ) {
     }
 }
-
-struct MyPtr {
-    ptr: *mut u8,
-    layout: std::alloc::Layout,
-}
-// unsafe impl Sync for MyPtr {}
-unsafe impl Send for MyPtr {}
-
-impl LamellaeRDMA for Local {
-    fn flush(&self) {}
-    fn wait(&self) {}
-    fn put(&self, _pe: usize, src: &[u8], dst: usize) {
-        let src_ptr = src.as_ptr();
-
-        if !((src_ptr as usize <= dst
-            && dst < src_ptr as usize + src.len()) //dst start overlaps src
-            || (src_ptr as usize <= dst + src.len()
-            && dst + src.len() < src_ptr as usize + src.len()))
-        //dst end overlaps src
-        {
-            unsafe {
-                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
-            }
-        } else {
-            unsafe {
-                std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
-            }
-        }
-    }
-    fn iput(&self, _pe: usize, src: &[u8], dst: usize) {
-        let src_ptr = src.as_ptr();
-        if !((src_ptr as usize <= dst
-            && dst < src_ptr as usize + src.len()) //dst start overlaps src
-            || (src_ptr as usize <= dst + src.len()
-            && dst + src.len() < src_ptr as usize + src.len()))
-        //dst end overlaps src
-        {
-            unsafe {
-                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
-            }
-        } else {
-            unsafe {
-                std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
-            }
-        }
-    }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        let src_ptr = src.as_ptr();
-        if !((src_ptr as usize <= dst
-            && dst < src_ptr as usize + src.len()) //dst start overlaps src
-            || (src_ptr as usize <= dst + src.len()
-            && dst + src.len() < src_ptr as usize + src.len()))
-        //dst end overlaps src
-        {
-            unsafe {
-                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
-            }
-        } else {
-            unsafe {
-                std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
-            }
-        }
-    }
-    fn get(&self, _pe: usize, src: usize, dst: &mut [u8]) {
-        let dst_ptr = dst.as_mut_ptr();
-        if !((dst_ptr as usize <= src && src < dst_ptr as usize + dst.len())
-            || (dst_ptr as usize <= src + dst.len()
-                && src + dst.len() < dst_ptr as usize + dst.len()))
-        {
-            unsafe {
-                std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
-            }
-        } else {
-            unsafe {
-                std::ptr::copy(src as *mut u8, dst.as_mut_ptr(), dst.len());
-            }
-        }
-    }
-
-    fn iget(&self, _pe: usize, src: usize, dst: &mut [u8]) {
-        let dst_ptr = dst.as_mut_ptr();
-        if !((dst_ptr as usize <= src && src < dst_ptr as usize + dst.len())
-            || (dst_ptr as usize <= src + dst.len()
-                && src + dst.len() < dst_ptr as usize + dst.len()))
-        {
-            unsafe {
-                std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
-            }
-        } else {
-            unsafe {
-                std::ptr::copy(src as *mut u8, dst.as_mut_ptr(), dst.len());
-            }
-        }
-    }
-    fn atomic_avail<T: Copy>(&self) -> bool {
-        false
-    }
-    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
-    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
-    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
-    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
-    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
-    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
-    fn atomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-    }
-    fn iatomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-    }
-
-    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
-        let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
-        let data_ptr = unsafe { std::alloc::alloc(layout) };
-        // let data = vec![0u8; size].into_boxed_slice();
-        // let data_ptr = Box::into_raw(data);
-        let data_addr = data_ptr as usize;
-        let mut allocs = self.allocs.lock();
-        allocs.insert(
-            data_addr,
-            MyPtr {
-                ptr: data_ptr,
-                layout,
-            },
-        );
-        Ok(data_addr)
-    }
-    // fn rt_check_alloc(&self, _size: usize, _align: usize) -> bool {
-    //     true
-    // }
-
-    fn rt_free(&self, addr: usize) {
-        let mut allocs = self.allocs.lock();
-        if let Some(data_ptr) = allocs.remove(&addr) {
-            unsafe {
-                std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
-                // let _ = Box::from_raw(data_ptr.ptr);
-            }; //it will free when dropping from scope
-        }
-    }
-    fn alloc(&self, size: usize, _alloc: AllocationType, align: usize) -> AllocResult<usize> {
-        let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
-        let data_ptr = unsafe { std::alloc::alloc(layout) };
-        // let data = vec![0u8; size].into_boxed_slice();
-        // let data_ptr = Box::into_raw(data);
-        let data_addr = data_ptr as usize;
-        let mut allocs = self.allocs.lock();
-        allocs.insert(
-            data_addr,
-            MyPtr {
-                ptr: data_ptr as *mut u8,
-                layout: layout,
-            },
-        );
-        Ok(data_addr)
-    }
-    fn free(&self, addr: usize) {
-        let mut allocs = self.allocs.lock();
-        if let Some(data_ptr) = allocs.remove(&addr) {
-            unsafe {
-                std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
-                // let _ = Box::from_raw(data_ptr.ptr as *mut [u8]);
-            }; //it will free when dropping from scope
-        }
-    }
-    fn base_addr(&self) -> usize {
-        0
-    }
-    fn local_addr(&self, _pe: usize, remote_addr: usize) -> usize {
-        remote_addr
-    }
-    fn remote_addr(&self, _pe: usize, local_addr: usize) -> usize {
-        local_addr
-    }
-    //todo make this return a real value
-    // fn occupied(&self) -> usize {
-    //     0
-    // }
-    // fn num_pool_allocs(&self) -> usize {
-    //     1
-    // }
-    fn alloc_pool(&self, _min_size: usize) {}
-}
-
-// impl Drop for Local {
-//     fn drop(&mut self) {
-//         trace!("[{:?}] RofiLamellae Dropping", 0);
-//     }
-// }

@@ -1,19 +1,20 @@
-use crate::active_messaging::handle::AmHandleInner;
-use crate::active_messaging::*;
-use crate::barrier::{Barrier, BarrierHandle};
-use crate::env_var::config;
-use crate::lamellae::{AllocationType, Lamellae, LamellaeComm, LamellaeRDMA};
-use crate::lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT};
-use crate::lamellar_env::LamellarEnv;
-use crate::lamellar_request::*;
-use crate::lamellar_world::LamellarWorld;
-use crate::memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle};
-use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
-    MemoryRegion, RemoteMemoryRegion,
+use crate::{
+    active_messaging::{handle::AmHandleInner, *},
+    barrier::{Barrier, BarrierHandle},
+    env_var::config,
+    lamellae::{AllocationType, Lamellae},
+    lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT},
+    lamellar_env::LamellarEnv,
+    lamellar_request::*,
+    lamellar_world::LamellarWorld,
+    memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
+    memregion::{
+        one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+        MemoryRegion, RemoteMemoryRegion,
+    },
+    scheduler::{LamellarTask, ReqId, Scheduler},
+    warnings::RuntimeWarning,
 };
-use crate::scheduler::{LamellarTask, ReqId, Scheduler};
-use crate::warnings::RuntimeWarning;
 
 // #[cfg(feature = "nightly")]
 // use crate::utils::ser_closure;
@@ -508,7 +509,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.wait_all();
     }
 
-    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.await_all()

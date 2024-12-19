@@ -1,10 +1,12 @@
-use crate::env_var::config;
-use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
-use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_request::LamellarRequest;
-use crate::memregion::MemoryRegion;
-use crate::scheduler::Scheduler;
-use crate::warnings::RuntimeWarning;
+use crate::{
+    env_var::config,
+    lamellae::{AllocationType, Lamellae},
+    lamellar_arch::LamellarArchRT,
+    lamellar_request::LamellarRequest,
+    memregion::MemoryRegion,
+    scheduler::Scheduler,
+    warnings::RuntimeWarning,
+};
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};

@@ -1,71 +1,44 @@
-use crate::active_messaging::Msg;
-use crate::config;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfab_lamellae::LibFab;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfab_lamellae::LibFabBuilder;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabasync_lamellae::LibFabAsync;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabasync_lamellae::LibFabAsyncBuilder;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric::libfabric_comm::LibFabData;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_async::libfabric_async_comm::LibFabAsyncData;
-use crate::lamellar_arch::LamellarArchRT;
-use crate::scheduler::Scheduler;
-use async_trait::async_trait;
-use enum_dispatch::enum_dispatch;
-use std::sync::Arc;
-
 pub(crate) mod comm;
 pub(crate) mod command_queues;
-use comm::AllocResult;
-use comm::Comm;
-
-pub(crate) mod local_lamellae;
-use local_lamellae::{Local, LocalData};
-#[cfg(feature = "rofi")]
-mod rofi;
-#[cfg(feature = "rofi")]
-pub(crate) mod rofi_lamellae;
-
-#[cfg(feature = "rofi")]
-use rofi::rofi_comm::RofiData;
-#[cfg(feature = "enable-rofi-rust")]
-use rofi_rust::rofi_rust_comm::RofiRustData;
-#[cfg(feature = "enable-rofi-rust")]
-use rofi_rust_async::rofi_rust_async_comm::RofiRustAsyncData;
-
-#[cfg(feature = "enable-rofi")]
-use rofi_lamellae::{Rofi, RofiBuilder};
-#[cfg(feature = "enable-rofi-rust")]
-use rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder};
-#[cfg(feature = "enable-rofi-rust")]
-use rofi_rust_lamellae::{RofiRust, RofiRustBuilder};
-
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfab_lamellae;
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabasync_lamellae;
+pub(crate) mod local_lamellae;
+#[cfg(feature = "rofi")]
+mod rofi_lamellae;
 #[cfg(feature = "enable-rofi-rust")]
 pub(crate) mod rofi_rust_async_lamellae;
 #[cfg(feature = "enable-rofi-rust")]
 pub(crate) mod rofi_rust_lamellae;
-
-#[cfg(feature = "enable-libfabric")]
-mod libfabric;
-#[cfg(feature = "enable-libfabric")]
-pub(crate) mod libfabric_async;
-#[cfg(feature = "enable-rofi-rust")]
-mod rofi_rust;
-#[cfg(feature = "enable-rofi-rust")]
-mod rofi_rust_async;
-
 pub(crate) mod shmem_lamellae;
-use shmem::shmem_comm::ShmemData;
+
+use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use comm::Comm;
+use local_lamellae::Local;
+#[cfg(feature = "enable-rofi")]
+use rofi_lamellae::{Rofi, RofiBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
-mod shmem;
+#[cfg(feature = "enable-libfabric")]
+use {
+    libfab_lamellae::{LibFab, LibFabBuilder},
+    libfabasync_lamellae::{LibFabAsync, LibFabAsyncBuilder},
+};
+#[cfg(feature = "enable-rofi-rust")]
+use {
+    rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder},
+    rofi_rust_lamellae::{RofiRust, RofiRustBuilder},
+};
+
+use async_trait::async_trait;
+use enum_dispatch::enum_dispatch;
+use std::{
+    ptr::NonNull,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
 lazy_static! {
     static ref SERIALIZE_HEADER_LEN: usize =
@@ -144,72 +117,161 @@ impl Default for Backend {
         }
     }
 }
-// fn default_backend() -> Backend {
-//     match std::env::var("LAMELLAE_BACKEND") {
-//         Ok(p) => match p.as_str() {
-//             "rofi" => {
-//                 #[cfg(feature = "rofi")]
-//                 return Backend::Rofi;
-//                 #[cfg(not(feature = "rofi"))]
-//                 panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
-//             }
-//             "shmem" => {
-//                 return Backend::Shmem;
-//             }
-//             _ => {
-//                 return Backend::Local;
-//             }
-//         },
-//         Err(_) => {
-//             #[cfg(feature = "rofi")]
-//             return Backend::Rofi;
-//             #[cfg(not(feature = "rofi"))]
-//             return Backend::Local;
-//         }
-//     };
-// }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
 pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
 }
 
-#[enum_dispatch(Des, SubData, SerializedDataOps)]
-#[derive(Clone, Debug)]
-pub(crate) enum SerializedData {
-    #[cfg(feature = "rofi")]
-    RofiData,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustData,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsyncData,
-    #[cfg(feature = "enable-libfabric")]
-    LibFabData,
-    #[cfg(feature = "enable-libfabric")]
-    LibFabAsyncData,
-    ShmemData,
-    LocalData,
+pub(crate) struct SerializedData {
+    pub(crate) addr: usize, // process space address)
+    pub(crate) alloc_size: usize,
+    pub(crate) ref_cnt: *const AtomicUsize,
+    pub(crate) data: NonNull<u8>,
+    pub(crate) data_len: usize,
+    pub(crate) relative_addr: usize, //address allocated from Comm
+    pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
+impl SerializedData {
+    pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
+        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+        let alloc_size = size + ref_cnt_size;
+        let relative_addr = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
+        let addr = relative_addr;
+        Ok(SerializedData {
+            addr,
+            alloc_size,
+            ref_cnt: addr as *const AtomicUsize,
+            data: unsafe { NonNull::new_unchecked(addr as *mut u8) },
+            data_len: size,
+            relative_addr,
+            comm,
+        })
+    }
+
+    pub(crate) unsafe fn decrement_cnt(addr: usize) {
+        let ref_cnt = addr as *const AtomicUsize;
+        let cnt = (*ref_cnt).fetch_sub(1, Ordering::SeqCst);
+        if cnt == 1 {
+            rofi_comm.rt_free(addr);
+        }
+    }
+}
+
+impl SerializedDataOps for SerializedData {
+    fn header_as_bytes(&self) -> &[u8] {
+        let header_size = *SERIALIZE_HEADER_LEN;
+        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), header_size) }
+    }
+    fn header_as_bytes_mut(&mut self) -> &mut [u8] {
+        let header_size = *SERIALIZE_HEADER_LEN;
+        unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), header_size) }
+    }
+
+    fn data_as_bytes(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts((self.data_start) as *mut u8, self.data_len) }
+    }
+    fn data_as_bytes_mut(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }
+    }
+
+    fn header_and_data_as_bytes(&self) -> &[u8] {
+        unsafe {
+            std::slice::from_raw_parts(
+                (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
+                self.len,
+            )
+        }
+    }
+    fn header_and_data_as_bytes_mut(&mut self) -> &mut [u8] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
+                self.len,
+            )
+        }
+    }
+
+    //#[tracing::instrument(skip_all)]
+    fn increment_cnt(&self) {
+        self.ref_cnt.fetch_add(1, Ordering::SeqCst);
+    }
+
+    //#[tracing::instrument(skip_all)]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn print(&self) {
+        println!(
+            "addr: {:x} relative addr {:x} len {:?} data_start {:x} data_len {:?} alloc_size {:?}",
+            self.addr,
+            self.relative_addr,
+            self.len,
+            self.data_start,
+            self.data_len,
+            self.alloc_size
+        );
+    }
+}
+
+impl Des for SerializedData {
+    fn deserialize_header(&self) -> Option<SerializeHeader> {
+        crate::deserialize(self.header_as_bytes(), false).unwrap()
+    }
+    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
+        Ok(crate::deserialize(self.data_as_bytes(), true)?)
+    }
+}
+
+impl SubData for SerializedData {
+    // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
+    unsafe fn sub_data(&self, start: usize, end: usize) -> SerializedData {
+        // let mut sub = self.clone();
+        self.increment_cnt();
+        SerializedData {
+            addr: self.addr,
+            alloc_size: self.alloc_size,
+            ref_cnt: self.ref_cnt,
+            data: sub.data.byte_offset(start),
+            data_len: end - start,
+            relative_addr: self.relative_addr,
+            comm: self.comm.clone(),
+        }
+    }
+}
+
+impl Drop for SerializedData {
+    fn drop(&mut self) {
+        unsafe {
+            SerializedData::decrement_cnt(self.addr);
+        }
+    }
+}
 #[enum_dispatch]
 pub(crate) trait SerializedDataOps {
-    fn header_as_bytes(&self) -> &mut [u8];
+    fn header_as_bytes(&self) -> &[u8];
+    fn header_as_bytes_mut(&mut self) -> &mut [u8];
+    fn data_as_bytes(&self) -> &[u8];
+    fn data_as_bytes_mut(&mut self) -> &mut [u8];
+    fn header_and_data_as_bytes(&self) -> &[u8];
+    fn header_and_data_as_bytes_mut(&mut self) -> &mut [u8];
     fn increment_cnt(&self);
     fn len(&self) -> usize;
+    fn print(&self);
 }
 
 #[enum_dispatch]
 pub(crate) trait Des {
     fn deserialize_header(&self) -> Option<SerializeHeader>;
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>;
-    fn header_and_data_as_bytes(&self) -> &mut [u8];
-    fn data_as_bytes(&self) -> &mut [u8];
-    fn print(&self);
 }
 
 #[enum_dispatch]
 pub(crate) trait SubData {
-    fn sub_data(&self, start: usize, end: usize) -> SerializedData;
+    // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
+    unsafe fn sub_data(&self, start: usize, end: usize) -> SerializedData;
 }
 
 #[enum_dispatch(LamellaeInit)]
@@ -234,15 +296,15 @@ pub(crate) trait LamellaeInit {
     fn init_fabric(&mut self) -> (usize, usize); //(my_pe,num_pes)
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>;
 }
+pub(crate) trait LamellaeShutdown {
+    fn shutdown(&self);
+    fn force_shutdown(&self);
+    fn force_deinit(&self);
+}
 
 // #[async_trait]
 #[enum_dispatch]
 pub(crate) trait Ser {
-    // fn serialize<T: serde::Serialize + ?Sized>(
-    //     &self,
-    //     header: Option<SerializeHeader>,
-    //     obj: &T,
-    // ) -> Result<SerializedData, anyhow::Error>;
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
@@ -250,7 +312,7 @@ pub(crate) trait Ser {
     ) -> Result<SerializedData, anyhow::Error>;
 }
 
-#[enum_dispatch(LamellaeComm, LamellaeAM, LamellaeRDMA, Ser)]
+#[enum_dispatch(Ser, LamellaeAM)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
     #[cfg(feature = "rofi")]
@@ -267,21 +329,36 @@ pub(crate) enum Lamellae {
     Local,
 }
 
-// #[async_trait]
-#[enum_dispatch]
-pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
-    // this is a global barrier (hopefully using hardware)
-    fn my_pe(&self) -> usize;
-    fn num_pes(&self) -> usize;
-    fn barrier(&self);
-    fn backend(&self) -> Backend;
-    #[allow(non_snake_case)]
-    fn MB_sent(&self) -> f64;
-    // fn print_stats(&self);
-    fn shutdown(&self);
-    fn force_shutdown(&self);
-    fn force_deinit(&self);
+impl Lamellae {
+    pub(crate) fn comm(&self) -> &Comm {
+        match self {
+            #[cfg(feature = "rofi")]
+            Lamellae::Rofi => self.comm(),
+            #[cfg(feature = "enable-rofi-rust")]
+            Lamellae::RofiRust => self.comm(),
+            #[cfg(feature = "enable-rofi-rust")]
+            Lamellae::RofiRustAsync => self.comm(),
+            #[cfg(feature = "enable-libfabric")]
+            Lamellae::LibFab => self.comm(),
+            #[cfg(feature = "enable-libfabric")]
+            Lamellae::LibFabAsync => self.comm(),
+            Lamellae::Shmem => self.comm(),
+            Lamellae::Local => self.comm(),
+        }
+    }
 }
+
+// // #[async_trait]
+// #[enum_dispatch]
+// pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
+//     fn my_pe(&self) -> usize;
+//     fn num_pes(&self) -> usize;
+//     fn barrier(&self);
+//     fn backend(&self) -> Backend;
+//     #[allow(non_snake_case)]
+//     fn MB_sent(&self) -> f64;
+//     // fn print_stats(&self);
+// }
 
 #[async_trait]
 #[enum_dispatch]
@@ -293,71 +370,8 @@ pub(crate) trait LamellaeAM: Send {
         data: SerializedData,
     );
 }
-#[enum_dispatch]
-pub(crate) trait LamellaeRDMA: Send + Sync {
-    fn flush(&self);
-    fn wait(&self);
-    fn put(&self, pe: usize, src: &[u8], dst: usize);
-    fn iput(&self, pe: usize, src: &[u8], dst: usize);
-    fn put_all(&self, src: &[u8], dst: usize);
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
-    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
-
-    fn atomic_avail<T: Copy>(&self) -> bool
-    where
-        Self: Sized;
-    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize)
-    where
-        Self: Sized;
-    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize)
-    where
-        Self: Sized;
-    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T])
-    where
-        Self: Sized;
-    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T])
-    where
-        Self: Sized;
-    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T])
-    where
-        Self: Sized;
-    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T])
-    where
-        Self: Sized;
-    fn atomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) where
-        Self: Sized;
-    fn iatomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) where
-        Self: Sized;
-
-    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
-    // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
-    fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
-    fn free(&self, addr: usize);
-    fn base_addr(&self) -> usize;
-    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
-    fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
-    // fn occupied(&self) -> usize;
-    // fn num_pool_allocs(&self) -> usize;
-    fn alloc_pool(&self, min_size: usize);
-}
 
 #[allow(unused_variables)]
-
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "rofi")]

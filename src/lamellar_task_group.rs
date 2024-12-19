@@ -1,17 +1,18 @@
-use crate::active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START};
-use crate::active_messaging::*;
-use crate::barrier::BarrierHandle;
-use crate::env_var::config;
-use crate::lamellae::Des;
-use crate::lamellae::LamellaeRDMA;
-use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_request::*;
-use crate::lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT};
-use crate::memregion::one_sided::MemRegionHandleInner;
-use crate::scheduler::{LamellarTask, ReqId, Scheduler};
-use crate::warnings::RuntimeWarning;
-use crate::Darc;
+use crate::{
+    active_messaging::registered_active_message::{AmId, AMS_EXECS, AMS_IDS, AM_ID_START},
+    active_messaging::*,
+    barrier::BarrierHandle,
+    env_var::config,
+    lamellae::Des,
+    lamellar_arch::LamellarArchRT,
+    lamellar_request::LamellarRequest,
+    lamellar_request::*,
+    lamellar_team::{IntoLamellarTeam, LamellarTeam, LamellarTeamRT},
+    memregion::one_sided::MemRegionHandleInner,
+    scheduler::{LamellarTask, ReqId, Scheduler},
+    warnings::RuntimeWarning,
+    Darc,
+};
 
 // use crossbeam::utils::CachePadded;
 // use futures_util::StreamExt;
@@ -701,7 +702,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.wait_all();
     }
 
-    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
         self.await_all()
     }
 
@@ -1214,7 +1215,7 @@ impl LamellarActiveMessage for AmGroupAm {
         __local: bool,
         __lamellar_world: Arc<LamellarTeam>,
         __lamellar_team: Arc<LamellarTeam>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>> {
+    ) -> std::pin::Pin<Box<dyn Future<Output = LamellarReturn> + Send>> {
         Box::pin(async move {
             // let timer = std::time::Instant::now();
             self.ams[self.si..self.ei]

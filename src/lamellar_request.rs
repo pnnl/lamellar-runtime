@@ -6,7 +6,7 @@ use crate::lamellae::SerializedData;
 use crate::lamellar_task_group::{TaskGroupAmHandleInner, TaskGroupMultiAmHandleInner};
 use crate::memregion::one_sided::MemRegionHandleInner;
 
-use std::future::Future;
+use futures_util::Future;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::task::Waker;

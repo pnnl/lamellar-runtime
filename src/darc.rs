@@ -59,16 +59,18 @@ use std::time::Instant;
 
 // //use tracing::*;
 
-use crate::active_messaging::{AMCounters, RemotePtr};
-use crate::barrier::Barrier;
-use crate::env_var::config;
-use crate::lamellae::{AllocationType, Backend, LamellaeComm, LamellaeRDMA};
-use crate::lamellar_request::LamellarRequest;
-use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::lamellar_world::LAMELLAES;
-use crate::scheduler::LamellarTask;
-use crate::warnings::RuntimeWarning;
-use crate::{IdError, LamellarEnv, LamellarTeam};
+use crate::{
+    active_messaging::{AMCounters, RemotePtr},
+    barrier::Barrier,
+    env_var::config,
+    lamellae::{AllocationType, Backend},
+    lamellar_request::LamellarRequest,
+    lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
+    lamellar_world::LAMELLAES,
+    scheduler::LamellarTask,
+    warnings::RuntimeWarning,
+    IdError, LamellarEnv, LamellarTeam,
+};
 
 /// prelude for the darc module
 pub mod prelude;
@@ -675,11 +677,13 @@ impl<T: 'static> DarcInner<T> {
                         //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
                         // );
                         // println!("darc block_on_outstanding put 1");
-                        rdma.iput(
+                        rdma.put(
                             send_pe,
                             ref_cnt_u8,
                             inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>(), //this is barrier_ref_cnt_slice
-                        );
+                        )
+                        .await
+                        .expect("rdma put failed");
                         // dist_cnts_changed = true;
                         outstanding_refs = true;
                         barrier_id = 0;
@@ -771,11 +775,13 @@ impl<T: 'static> DarcInner<T> {
                     // );
 
                     // println!("darc block_on_outstanding put 2");
-                    rdma.iput(
+                    rdma.put(
                         send_pe,
                         barrier_id_slice,
                         inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
-                    );
+                    )
+                    .await
+                    .expect("rdma put failed");
                 }
                 //maybe we need to change the above to a get?
                 rdma.flush();

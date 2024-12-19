@@ -1,25 +1,24 @@
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric::libfabric_comm::*;
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_async::libfabric_async_comm::*;
+pub(crate) mod atomic;
+pub(crate) mod error;
+pub(crate) mod rdma;
+
+use super::Backend;
 #[cfg(feature = "enable-rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
-#[cfg(feature = "enable-rofi-rust")]
-use crate::lamellae::rofi_rust::rofi_rust_comm::*;
-#[cfg(feature = "enable-rofi-rust")]
-use crate::lamellae::rofi_rust_async::rofi_rust_async_comm::*;
-use crate::lamellae::shmem::shmem_comm::*;
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::LibFabAsyncData;
+use crate::lamellae::{
+    libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibFabAsyncData,
+};
 #[cfg(feature = "enable-rofi-rust")]
-use crate::lamellae::RofiRustAsyncData;
-#[cfg(feature = "enable-rofi-rust")]
-use crate::lamellae::RofiRustData;
-use crate::lamellae::{AllocationType, SerializedData};
-// use crate::lamellae::shmem::ShmemComm;
-
+use crate::lamellae::{
+    rofi_rust::rofi_rust_comm::*, rofi_rust_async::rofi_rust_async_comm::*, RofiRustAsyncData,
+    RofiRustData,
+};
+use crate::lamellae::{shmem_lamellae::comm::ShmemComm, AllocationType, SerializedData};
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
+
+// use super::LamellaeRDMA;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -30,63 +29,7 @@ pub(crate) enum CmdQStatus {
     Panic = 4,
 }
 
-// impl Into<u8> for CmdQStatus {
-//     fn into(self) -> u8 {
-//         self as u8
-//     }
-// }
-// const ACTIVE: u8 = 0;
-// const FINISHED: u8 = 1;
-// const SHUTING_DOWN: u8 = 2;
-// const PANIC: u8 = 3;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum AllocError {
-    OutOfMemoryError(usize),
-    IdError(usize),
-}
-
-impl std::fmt::Display for AllocError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            AllocError::OutOfMemoryError(size) => {
-                write!(f, "not enough memory for to allocate {} bytes", size)
-            }
-            AllocError::IdError(pe) => {
-                write!(f, "pe {} must be part of team of sub allocation", pe)
-            }
-        }
-    }
-}
-
-impl std::error::Error for AllocError {}
-
-pub(crate) type AllocResult<T> = Result<T, AllocError>;
-
-#[cfg(feature = "rofi")]
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum TxError {
-    GetError,
-}
-#[cfg(feature = "rofi")]
-impl std::fmt::Display for TxError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TxError::GetError => {
-                write!(f, "error performing get")
-            }
-        }
-    }
-}
-#[cfg(feature = "rofi")]
-impl std::error::Error for TxError {}
-#[cfg(feature = "rofi")]
-pub(crate) type TxResult<T> = Result<T, TxError>;
-
-pub(crate) trait Remote: Copy {}
-impl<T: Copy> Remote for T {}
-
-#[enum_dispatch(CommOps)]
+// #[enum_dispatch(LamellaeRDMA, CommOps)]
 #[derive(Debug)]
 pub(crate) enum Comm {
     #[cfg(feature = "rofi")]
@@ -123,57 +66,33 @@ impl Comm {
     }
 }
 
-#[enum_dispatch]
-pub(crate) trait CommOps {
-    fn my_pe(&self) -> usize;
-    fn num_pes(&self) -> usize;
-    fn barrier(&self);
-    fn occupied(&self) -> usize;
-    fn num_pool_allocs(&self) -> usize;
-    fn print_pools(&self);
-    fn alloc_pool(&self, min_size: usize);
-    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
+pub(crate) trait CommShutown {
+    fn force_shutdown(&self);
+}
+
+pub(crate) trait CommMem {
+    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> error::AllocResult<usize>;
+    fn free(&self, addr: usize);
+    fn rt_alloc(&self, size: usize, align: usize) -> error::AllocResult<usize>;
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
-    fn free(&self, addr: usize);
+    fn mem_occupied(&self) -> usize;
+    fn alloc_pool(&self, min_size: usize);
+    fn num_pool_allocs(&self) -> usize;
+    fn print_pools(&self);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
-    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
+    fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize;
+}
+
+pub(crate) trait CommProgress {
     fn flush(&self);
     fn wait(&self);
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
-    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    fn atomic_avail<T: Remote>(&self) -> bool;
-    fn atomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
-    fn iatomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
-    fn atomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]);
-    fn iatomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]);
-    fn atomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]);
-    fn iatomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]);
-    fn atomic_compare_exhange<T: Remote>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    );
-    fn iatomic_compare_exhange<T: Remote>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    );
+    fn barrier(&self);
+}
 
-    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    #[allow(non_snake_case)]
-    #[allow(dead_code)]
-    fn MB_sent(&self) -> f64;
-    fn force_shutdown(&self);
+pub(crate) trait CommInfo {
+    fn my_pe(&self) -> usize;
+    fn num_pes(&self) -> usize;
+    fn backend(&self) -> Backend;
 }

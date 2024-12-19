@@ -1,19 +1,23 @@
+use super::{AtomicOp, NetworkAtomic};
 use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::libfabric::libfabric_comm::{LibFabComm, LibFabData};
 use crate::lamellae::{
     AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
+    RdmaFuture, RdmaResult, Remote, Ser, SerializeHeader, SerializedData, SerializedDataOps,
+    SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
-use futures_util::StreamExt;
+use futures_util::{Future, StreamExt};
 
 pub(crate) struct LibFabBuilder {
     my_pe: usize,
@@ -233,21 +237,46 @@ impl LamellaeRDMA for LibFab {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
+    fn wait(&self) {
+        self.libfab_comm.wait();
+    }
+    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) -> RdmaFuture {
         self.libfab_comm.put(pe, src, dst);
     }
-    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
-        self.libfab_comm.iput(pe, src, dst);
-    }
-    fn put_all(&self, src: &[u8], dst: usize) {
+    // fn iput(&self, pe: usize, src: &[u8], dst: usize) {
+    //     self.libfab_comm.iput(pe, src, dst);
+    // }
+    fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaFuture {
         self.libfab_comm.put_all(src, dst);
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture {
         self.libfab_comm.get(pe, src, dst);
     }
-    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.libfab_comm.iget(pe, src, dst);
+    // fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
+    //     self.libfab_comm.iget(pe, src, dst);
+    // }
+
+    fn atomic_avail<T>(&self) -> bool {
+        false
     }
+    fn atomic_op<T: NetworkAtomic>(
+        &self,
+        op: AtomicOp<T>,
+        pe: usize,
+        remote_addr: usize,
+    ) -> RdmaFuture {
+        unreachable!()
+    }
+    fn atomic_fetch_op<T: NetworkAtomic>(
+        &self,
+        op: AtomicOp<T>,
+        pe: usize,
+        remote_addr: usize,
+        result: &mut [T],
+    ) -> RdmaFuture {
+        unreachable!()
+    }
+
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.libfab_comm.rt_alloc(size, align)
     }
@@ -278,13 +307,25 @@ impl LamellaeRDMA for LibFab {
     // fn num_pool_allocs(&self) -> usize {
     //     self.rofi_comm.num_pool_allocs()
     // }
-    fn alloc_pool(&self, min_size: usize) {
-        // println!("trying to alloc pool {:?}",min_size);
-        match config().heap_mode {
-            HeapMode::Static => {
-                panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes,set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",LibFabComm::heap_size())
-            }
-            HeapMode::Dynamic => self.cq.send_alloc(min_size),
-        }
+    // fn alloc_pool(&self, min_size: usize) {
+    //     // println!("trying to alloc pool {:?}",min_size);
+    //     match config().heap_mode {
+    //         HeapMode::Static => {
+    //             panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes,set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",LibFabComm::heap_size())
+    //         }
+    //         HeapMode::Dynamic => self.cq.send_alloc(min_size),
+    //     }
+    // }
+    fn comm(&self) -> &Comm {
+        &self.libfab_comm
+    }
+}
+
+pub(crate) struct LibFabFuture {}
+
+impl Future for LibFabFuture {
+    type Output = RdmaResult;
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Poll::Ready(Ok(()))
     }
 }

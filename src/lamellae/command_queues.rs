@@ -1,27 +1,10 @@
-use crate::env_var::config;
-use crate::lamellae::comm::*;
-use crate::lamellae::{
-    Des, Lamellae, LamellaeComm, LamellaeRDMA, SerializedData, SerializedDataOps,
-};
-use crate::scheduler::Scheduler;
-
+use super::{comm::CmdQStatus, Comm, Lamellae, SerializedData, SerializedDataOps};
+use crate::{env_var::config, scheduler::Scheduler};
 use parking_lot::Mutex;
-// use thread_local::ThreadLocal;
-
 use std::collections::HashMap;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-
-//use tracing::*;
-
-// const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
-// const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
-// const CMD_BUFS_PER_PE: usize = 2;
-
-// lazy_static! {
-//     static ref CNTS: ThreadLocal<AtomicUsize> = ThreadLocal::new();
-// }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -364,13 +347,7 @@ impl CmdMsgBuffer {
                 for cmd in buf.iter() {
                     if cmd.dsize > 0 {
                         let ref_cnt_addr = cmd.daddr as usize - std::mem::size_of::<AtomicUsize>();
-                        //+ comm.base_addr();
-                        let cnt = unsafe {
-                            (*(ref_cnt_addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst)
-                        };
-                        if cnt == 1 {
-                            comm.rt_free(ref_cnt_addr); // - comm.base_addr());
-                        }
+                        unsafe { SerializedData::decrement_cnt(ref_cnt_addr) }; //we assume this address is valid...
                     }
                 }
                 buf.reset();
@@ -955,11 +932,14 @@ impl InnerCQ {
                     let recv_buffer = self.recv_buffer.lock();
                     println!("sending cmd {:?}", send_buf);
                     println!("sending print to {dst}");
-                    self.comm.put(
-                        dst,
-                        send_buf[dst].as_bytes(),
-                        recv_buffer[self.my_pe].as_addr(),
-                    );
+                    self.comm
+                        .put(
+                            dst,
+                            send_buf[dst].as_bytes(),
+                            recv_buffer[self.my_pe].as_addr(),
+                        )
+                        .await
+                        .expect("put failed");
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
@@ -997,7 +977,10 @@ impl InnerCQ {
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting data from {src}, {:?}", cmd.daddr);
-        self.comm.iget(src, local_daddr as usize, data_slice);
+        self.comm
+            .get(src, local_daddr as usize, data_slice)
+            .await
+            .expect("get failed");
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
@@ -1026,7 +1009,10 @@ impl InnerCQ {
         let data_slice = ser_data.header_and_data_as_bytes();
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
-        self.comm.iget(src, local_daddr as usize, data_slice);
+        self.comm
+            .get(src, local_daddr as usize, data_slice)
+            .await
+            .expect("get failed");
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash

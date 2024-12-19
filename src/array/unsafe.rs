@@ -16,7 +16,6 @@ use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
 use crate::lamellae::AllocationType;
-use crate::lamellae::LamellaeRDMA;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;

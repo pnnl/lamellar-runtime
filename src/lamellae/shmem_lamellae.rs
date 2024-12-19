@@ -1,21 +1,21 @@
-use crate::config;
-use crate::env_var::HeapMode;
-use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
-use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::shmem::shmem_comm::*;
+pub(crate) mod atomic;
+pub(crate) mod comm;
+pub(crate) mod fabric;
+pub(crate) mod mem;
+pub(crate) mod rdma;
 
-use crate::lamellae::{
-    AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
+use super::{
+    comm::CmdQStatus, command_queues::CommandQueue, Comm, Lamellae, LamellaeAM, LamellaeInit,
+    LamellaeShutdown, Ser, SerializeHeader, SerializedData, SerializedDataOps,
+    SERIALIZE_HEADER_LEN,
 };
-use crate::lamellar_arch::LamellarArchRT;
-use crate::scheduler::Scheduler;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::Arc;
-
+use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use async_trait::async_trait;
+
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
+use std::sync::atomic::{AtomicU8, Ordering};
+use std::{sync::Arc, task::Context};
 
 pub(crate) struct ShmemBuilder {
     my_pe: usize,
@@ -40,27 +40,25 @@ impl LamellaeInit for ShmemBuilder {
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone());
-        let cq_clone = shmem.cq();
-        let cq_clone2 = shmem.cq();
-        let cq_clone3 = shmem.cq();
-        let scheduler_clone = scheduler.clone();
-        let scheduler_clone2 = scheduler.clone();
-        let scheduler_clone3 = scheduler.clone();
 
         let shmem = Arc::new(Lamellae::Shmem(shmem));
         let shmem_clone = shmem.clone();
+        let cq = shmem.cq();
+        let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq_clone
-                .recv_data(scheduler_clone.clone(), shmem_clone.clone())
+            cq.recv_data(scheduler_clone.clone(), shmem_clone.clone())
                 .await;
         });
 
+        let cq = shmem.cq();
+        let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq_clone2.alloc_task(scheduler_clone2.clone()).await;
+            cq.alloc_task(scheduler_clone.clone()).await;
         });
-
+        let cq = shmem.cq();
+        let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq_clone3.panic_task(scheduler_clone3.clone()).await;
+            cq.panic_task(scheduler_clone.clone()).await;
         });
         shmem
     }
@@ -96,47 +94,16 @@ impl Shmem {
             cq: Arc::new(CommandQueue::new(shmem_comm, my_pe, num_pes, active)),
         }
     }
-    // fn active(&self) -> Arc<AtomicU8> {
-    //     self.active.clone()
-    // }
     fn cq(&self) -> Arc<CommandQueue> {
         self.cq.clone()
     }
+
+    fn comm(&self) -> &Comm {
+        &self.shmem_comm
+    }
 }
 
-// impl Drop for Shmem{
-//     fn drop(&mut self){
-//         // println!("dropping shmem_lamellae");
-//         // self.active.store(0, Ordering::SeqCst);
-//         // while self.active.load(Ordering::SeqCst) != 2 {
-//         //     std::thread::yield_now();
-//         // }
-//         println!("dropped shmem_lamellae");
-//         //shmem finit
-//     }
-// }
-
-impl LamellaeComm for Shmem {
-    // this is a global barrier (hopefully using hardware)
-    fn my_pe(&self) -> usize {
-        self.my_pe
-    }
-    fn num_pes(&self) -> usize {
-        self.num_pes
-    }
-    fn barrier(&self) {
-        self.shmem_comm.barrier()
-    }
-    fn backend(&self) -> Backend {
-        Backend::Shmem
-    }
-    #[allow(non_snake_case)]
-    fn MB_sent(&self) -> f64 {
-        // println!("put: {:?} get: {:?}",self.shmem_comm.put_amt.load(Ordering::SeqCst),self.shmem_comm.get_amt.load(Ordering::SeqCst));
-        // (self.shmem_comm.put_amt.load(Ordering::SeqCst) + self.shmem_comm.get_amt.load(Ordering::SeqCst)) as
-        self.cq.tx_amount() as f64 / 1_000_000.0
-    }
-    // fn print_stats(&self) {}
+impl LamellaeShutdown for Shmem {
     fn shutdown(&self) {
         // println!("Shmem Lamellae shuting down");
         let _ = self.active.compare_exchange(
@@ -186,18 +153,6 @@ impl LamellaeAM for Shmem {
 }
 
 impl Ser for Shmem {
-    // fn serialize<T: serde::Serialize + ?Sized>(
-    //     &self,
-    //     header: Option<SerializeHeader>,
-    //     obj: &T,
-    // ) -> Result<SerializedData, anyhow::Error> {
-    //     let header_size = *SERIALIZE_HEADER_LEN;
-    //     let data_size = crate::serialized_size(obj, true) as usize;
-    //     let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + data_size)?;
-    //     crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
-    //     crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
-    //     Ok(SerializedData::ShmemData(ser_data))
-    // }
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
@@ -210,89 +165,78 @@ impl Ser for Shmem {
     }
 }
 
-#[allow(dead_code, unused_variables)]
-impl LamellaeRDMA for Shmem {
-    fn flush(&self) {}
-    fn wait(&self) {}
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.shmem_comm.put(pe, src, dst);
-    }
-    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
-        self.shmem_comm.iput(pe, src, dst);
-    }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        self.shmem_comm.put_all(src, dst);
-    }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.shmem_comm.get(pe, src, dst);
-    }
+// #[allow(dead_code, unused_variables)]
+// impl LamellaeRDMA for Shmem {
+//     fn flush(&self) {}
+//     fn wait(&self) {}
+//     fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) {
+//         self.shmem_comm.put(pe, src, dst);
+//     }
+//     // fn iput(&self, pe: usize, src: &[u8], dst: usize) {
+//     //     self.shmem_comm.iput(pe, src, dst);
+//     // }
+//     fn put_all<T: Remote>(&self, src: &[T], dst: usize) {
+//         self.shmem_comm.put_all(src, dst);
+//     }
+//     fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) {
+//         self.shmem_comm.get(pe, src, dst);
+//     }
 
-    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.shmem_comm.get(pe, src, dst);
-    }
-    fn atomic_avail<T: Copy>(&self) -> bool {
-        false
-    }
-    fn atomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
-    fn iatomic_store<T: Copy>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {}
-    fn atomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
-    fn iatomic_load<T: Copy>(&self, pe: usize, remote: usize, result: &mut [T]) {}
-    fn atomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
-    fn iatomic_swap<T: Copy>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {}
-    fn atomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-    }
-    fn iatomic_compare_exhange<T: Copy>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-    }
-    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
-        self.shmem_comm.rt_alloc(size, align)
-    }
-    // fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
-    //     self.shmem_comm.rt_check_alloc(size, align)
-    // }
-    fn rt_free(&self, addr: usize) {
-        self.shmem_comm.rt_free(addr)
-    }
-    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
-        self.shmem_comm.alloc(size, alloc)
-    }
-    fn free(&self, addr: usize) {
-        self.shmem_comm.free(addr)
-    }
-    fn base_addr(&self) -> usize {
-        self.shmem_comm.base_addr()
-    }
-    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
-        self.shmem_comm.local_addr(remote_pe, remote_addr)
-    }
-    fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
-        self.shmem_comm.remote_addr(remote_pe, local_addr)
-    }
-    // fn occupied(&self) -> usize {
-    //     self.shmem_comm.occupied()
-    // }
-    // fn num_pool_allocs(&self) -> usize {
-    //     self.shmem_comm.num_pool_allocs()
-    // }
-    fn alloc_pool(&self, min_size: usize) {
-        match config().heap_mode {
-            HeapMode::Static => {
-                panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes, set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",ShmemComm::heap_size())
-            }
-            HeapMode::Dynamic => self.cq.send_alloc(min_size),
-        }
-    }
-}
+//     // fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
+//     //     self.shmem_comm.get(pe, src, dst);
+//     // }
+//     fn atomic_avail<T>(&self) -> bool {
+//         false
+//     }
+//     fn atomic_op<T: NetworkAtomic>(&self, op: AtomicOp<T>, pe: usize, remote_addr: usize) {
+//         unreachable!()
+//     }
+//     fn atomic_fetch_op<T: NetworkAtomic>(
+//         &self,
+//         op: AtomicOp<T>,
+//         pe: usize,
+//         remote_addr: usize,
+//         result: &mut [T],
+//     ) {
+//         unreachable!()
+//     }
+
+//     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+//         self.shmem_comm.rt_alloc(size, align)
+//     }
+//     // fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+//     //     self.shmem_comm.rt_check_alloc(size, align)
+//     // }
+//     fn rt_free(&self, addr: usize) {
+//         self.shmem_comm.rt_free(addr)
+//     }
+//     fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
+//         self.shmem_comm.alloc(size, alloc)
+//     }
+//     fn free(&self, addr: usize) {
+//         self.shmem_comm.free(addr)
+//     }
+//     fn base_addr(&self) -> usize {
+//         self.shmem_comm.base_addr()
+//     }
+//     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+//         self.shmem_comm.local_addr(remote_pe, remote_addr)
+//     }
+//     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> usize {
+//         self.shmem_comm.remote_addr(remote_pe, local_addr)
+//     }
+//     // fn occupied(&self) -> usize {
+//     //     self.shmem_comm.occupied()
+//     // }
+//     // fn num_pool_allocs(&self) -> usize {
+//     //     self.shmem_comm.num_pool_allocs()
+//     // }
+//     fn alloc_pool(&self, min_size: usize) {
+//         match config().heap_mode {
+//             HeapMode::Static => {
+//                 panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes, set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",ShmemComm::heap_size())
+//             }
+//             HeapMode::Dynamic => self.cq.send_alloc(min_size),
+//         }
+//     }
+// }

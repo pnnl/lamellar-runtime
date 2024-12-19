@@ -1,5 +1,6 @@
-use crate::lamellae::comm::Remote;
+use crate::lamellae::Remote;
 use crate::parking_lot::RwLock;
+
 use libfabric::async_::comm::collective::AsyncCollectiveEp;
 use libfabric::async_::comm::rma::AsyncReadEp;
 use libfabric::async_::comm::rma::AsyncWriteEp;
@@ -85,7 +86,7 @@ impl OfiAsync {
         provider: Option<&str>,
         domain: Option<&str>,
     ) -> Result<Self, libfabric::error::Error> {
-        let my_pmi = pmi::pmi::PmiBuilder::with_pmi1().unwrap();
+        let my_pmi = pmi::pmi::PmiBuilder::init().unwrap();
 
         // let info_caps = libfabric::infocapsoptions::InfoCaps::new().rma().atomic().collective();
         // let mut domain_conf = libfabric::domain::DomainAttr::new();
@@ -185,9 +186,9 @@ impl OfiAsync {
         };
 
         ep.bind_av(&av)?;
-        ep.bind_cntr().write().remote_write().cntr(&put_cntr)?;
+        ep.bind_cntr().write().cntr(&put_cntr)?;
 
-        ep.bind_cntr().read().remote_read().cntr(&get_cntr)?;
+        ep.bind_cntr().read().cntr(&get_cntr)?;
 
         ep.bind_shared_cq(&cq)?;
 
@@ -347,6 +348,11 @@ impl OfiAsync {
                 }
             }
         }
+    }
+
+    pub(crate) fn wait_all(&self) -> Result<(), libfabric::error::Error> {
+        self.wait_all_put()?;
+        self.wait_all_get()
     }
 
     pub(crate) fn wait_all_put(&self) -> Result<(), libfabric::error::Error> {

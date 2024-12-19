@@ -5,14 +5,16 @@
 //!
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
-use crate::active_messaging::{AmDist, RemotePtr};
-use crate::array::{
-    LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
-    TeamTryFrom,
+use crate::{
+    active_messaging::{AmDist, RemotePtr},
+    array::{
+        LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
+        TeamTryFrom,
+    },
+    lamellae::{AllocationType, Backend, Lamellae},
+    lamellar_team::{LamellarTeam, LamellarTeamRT},
+    LamellarEnv,
 };
-use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
-use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::LamellarEnv;
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -1089,7 +1091,8 @@ impl<T: Dist> MemoryRegion<T> {
         //todo make return a result?
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.atomic_store(
+            self.rdma.atomic_op(
+                AtomcicOp::Store,
                 pe,
                 data.as_slice().expect("memory should be local"),
                 self.addr + index * std::mem::size_of::<R>(),

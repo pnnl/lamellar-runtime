@@ -19,19 +19,17 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [dependencies]
 lamellar-impl = { version = "0.7.0", path = "impl" }
-libfabric = { git = "https://github.com/pnnl/rofi.git", branch = "libfabric-async", features = [
+libfabric = { path = "../rofi-junction/libfabric", features = [
     "use-async-std",
     #"thread-safe",
 ], optional = true }
-rofi-rust = { path = "/people/thom895/rofi/rofi-rust", features = [
+rofi-rust = { path = "../rofi-junction/rofi-rust", features = [
     "async-rofi",
 ], optional = true }
-pmi = { path = "/people/thom895/rofi/pmi/" , optional = true}
+pmi = { path = "../rofi-junction/pmi", default-features = false, features = ["with-pmix"] , optional = true}
 memmap = "0.7.0"
 page_size = "0.6.0"
 rofisys = { version ="0.4", optional = true }
-# rofisys = { git = "https://github.com/pnnl/rofi-sys.git", branch = "master", optional = true }
-# rofisys = { path = "../rofi-sys-junction", optional = true}
 inventory = "0.3"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_bytes = "0.11.7"
@@ -82,7 +80,7 @@ tracing-subscriber = "0.3"
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
-members = ["impl"]
+members = ["impl", "lamellar-lamellae"]
 
 # Set the settings for build scripts and proc-macros.
 [profile.dev.build-override]
@@ -96,7 +94,8 @@ rofi=[]
 enable-libfabric = ["libfabric", "pmi"]
 enable-rofi-rust = ["rofi-rust", "pmi"]
 tokio-executor = ["tokio"]
-slurm-test = []
+disable-runtime-warnings=[]
+runtime-warnings-panic=[]
 default = []
 
 

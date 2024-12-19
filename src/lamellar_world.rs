@@ -1,12 +1,14 @@
-use crate::barrier::BarrierHandle;
-use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeComm, LamellaeInit};
-use crate::lamellar_arch::LamellarArch;
-use crate::lamellar_env::LamellarEnv;
-use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
-use crate::memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle};
-use crate::memregion::{one_sided::OneSidedMemoryRegion, Dist, RemoteMemoryRegion};
-use crate::scheduler::{create_scheduler, ExecutorType, LamellarTask};
-use crate::{active_messaging::*, config};
+use crate::{
+    barrier::BarrierHandle,
+    lamellae::{create_lamellae, Backend, Lamellae, LamellaeInit},
+    lamellar_arch::LamellarArch,
+    lamellar_env::LamellarEnv,
+    lamellar_team::{LamellarTeam, LamellarTeamRT},
+    memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
+    memregion::{one_sided::OneSidedMemoryRegion, Dist, RemoteMemoryRegion},
+    scheduler::{create_scheduler, ExecutorType, LamellarTask},
+    {active_messaging::*, config},
+};
 // use log::trace;
 
 //use tracing::*;
@@ -73,7 +75,7 @@ impl ActiveMessaging for LamellarWorld {
     fn wait_all(&self) {
         self.team.wait_all();
     }
-    fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
+    fn await_all(&self) -> impl Future<Output = ()> + Send {
         self.team.await_all()
     }
     //#[tracing::instrument(skip_all)]

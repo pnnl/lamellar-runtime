@@ -3,7 +3,6 @@ use std::collections::VecDeque;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::r#unsafe::*;
 use crate::array::*;
-use crate::lamellae::LamellaeRDMA;
 use crate::memregion::{
     AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
 };

@@ -635,7 +635,7 @@
 
 use crate::barrier::BarrierHandle;
 use crate::darc::__NetworkDarc;
-use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
+use crate::lamellae::{Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -791,7 +791,7 @@ pub trait LamellarActiveMessage: DarcSerde {
         local: bool,
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
+    ) -> std::pin::Pin<Box<dyn Future<Output = LamellarReturn> + Send>>;
     fn get_id(&self) -> &'static str;
 }
 

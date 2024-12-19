@@ -1,12 +1,13 @@
 use crate::config;
-use crate::lamellae::comm::{AllocError, AllocResult, Comm, CommOps, Remote};
-use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::{
-    AllocationType, Des, SerializeHeader, SerializedData, SerializedDataOps, SubData,
-    SERIALIZE_HEADER_LEN,
+    comm::{AllocError, AllocResult, Comm, CommOps},
+    command_queues::CommandQueue,
+    AllocationType, AtomicOp, Des, LamellaeRDMA, NetworkAtomic, RdmaFuture, RdmaResult, Remote,
+    SerializeHeader, SerializedData, SerializedDataOps, SubData, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_alloc::BTreeAlloc;
 use crate::lamellar_alloc::LamellarAlloc;
+use futures_util::Future;
 use libfabric::*;
 use parking_lot::{Mutex, RwLock};
 use std::cell::RefCell;
@@ -50,7 +51,8 @@ pub(crate) struct LibFabComm {
     pub(crate) put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
     pub(crate) get_cnt: Arc<AtomicUsize>,
-    ofi: Arc<Mutex<Ofi>>,
+    // ofi: Arc<Mutex<Ofi>>,
+    ofi: Arc<Ofi>,
 }
 
 impl std::fmt::Debug for LibFabComm {
@@ -96,7 +98,8 @@ impl LibFabComm {
             put_cnt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
             get_cnt: Arc::new(AtomicUsize::new(0)),
-            ofi: Arc::new(Mutex::new(ofi)),
+            // ofi: Arc::new(Mutex::new(ofi)),
+            ofi: Arc::new(ofi),
         };
 
         libfab.alloc.write()[0].init(addr as usize, total_mem);
@@ -189,7 +192,7 @@ impl LibFabComm {
     fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         // println!("iget_data {:?} {:x} {:?}", pe, src_addr, dst_addr.as_ptr());
         // let _lock = self.comm_mutex.write();
-        match unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) } {
+        match unsafe { self.ofi.get(pe, src_addr, dst_addr, true) } {
             //.expect("error in rofi get")
             Err(ret) => {
                 println!(
@@ -222,7 +225,7 @@ impl CommOps for LibFabComm {
 
     fn barrier(&self) {
         let all_pes: Vec<_> = (0..self.num_pes).collect();
-        self.ofi.lock().sub_barrier(&all_pes).unwrap();
+        self.ofi.sub_barrier(&all_pes).unwrap();
     }
 
     fn occupied(&self) -> usize {
@@ -268,21 +271,6 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
-        // println!("rt_alloc size {size} align {align}");
-        // let size = size + size%8;
-        let allocs = self.alloc.read();
-        for alloc in allocs.iter() {
-            // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
-
-            if let Some(addr) = alloc.try_malloc(size, align) {
-                return Ok(addr);
-            }
-            // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
-        }
-        Err(AllocError::OutOfMemoryError(size))
-    }
-
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -295,50 +283,22 @@ impl CommOps for LibFabComm {
         false
     }
 
-    fn rt_free(&self, addr: usize) {
-        let allocs = self.alloc.read();
-        for alloc in allocs.iter() {
-            if let Ok(_) = alloc.free(addr) {
-                return;
-            }
-        }
-        panic!("Error invalid free! {:?}", addr);
+    fn force_shutdown(&self) {
+        todo!()
     }
+}
 
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
-        match alloc {
-            AllocationType::Local => todo!(),
-            AllocationType::Global => {
-                let pes: Vec<_> = (0..self.num_pes).collect();
-                Ok(self.ofi.lock().sub_alloc(&pes, size).unwrap())
-            }
-            AllocationType::Sub(pes) => Ok(self.ofi.lock().sub_alloc(&pes, size).unwrap()),
-        }
-    }
-
-    fn free(&self, addr: usize) {
-        self.ofi.lock().release(&addr);
-    }
-
-    fn base_addr(&self) -> usize {
-        *self.base_address.read()
-    }
-
-    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
-        self.ofi.lock().local_addr(&remote_pe, &remote_addr)
-    }
-
-    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
-        self.ofi.lock().remote_addr(&pe, &local_addr)
-    }
-
+impl LamellaeRDMA for LibFabComm {
     fn flush(&self) {
-        self.ofi.lock().progress().unwrap()
+        self.ofi.progress().unwrap()
+    }
+    fn wait(&self) {
+        self.ofi.wait_all().unwrap()
     }
 
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) -> RdmaFuture {
         if pe != self.my_pe {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap();
+            unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.unwrap();
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -357,26 +317,26 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
-        if pe != self.my_pe {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, true) }.unwrap();
-            self.put_amt
-                .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        } else {
-            unsafe {
-                // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
-                std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
-            }
-        }
-    }
+    // fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    //     if pe != self.my_pe {
+    //         unsafe { self.ofi.put(pe, src_addr, dst_addr, true) }.unwrap();
+    //         self.put_amt
+    //             .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+    //     } else {
+    //         unsafe {
+    //             // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
+    //             std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
+    //         }
+    //     }
+    // }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) -> RdmaFuture {
         for pe in 0..self.my_pe {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap()
+            unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.unwrap()
         }
 
         for pe in self.my_pe..self.num_pes {
-            unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap()
+            unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.unwrap()
         }
 
         unsafe {
@@ -390,102 +350,173 @@ impl CommOps for LibFabComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst: &mut [T]) -> RdmaFuture {
+        let dst_ptr = dst.as_mut_ptr();
+        let dst_addr = dst_ptr as usize;
         if pe != self.my_pe {
-            unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) }.unwrap();
+            unsafe { self.ofi.get(pe, src_addr, dst, true) }.unwrap();
             self.get_amt
-                .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+                .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
             // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
             unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                std::ptr::copy(src_addr as *const T, dst_ptr, dst_addr.len());
             }
         }
     }
 
     //#[tracing::instrument(skip_all)]
-    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        if pe != self.my_pe {
-            let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
-            self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
-            // println!(
-            //     "rofi_comm iget {:?} {:?} {:?}",
-            //     dst_addr.len() * std::mem::size_of::<T>(),
-            //     bytes_len,
-            //     self.get_amt.load(Ordering::SeqCst)
-            // );
-            self.get_cnt.fetch_add(1, Ordering::SeqCst);
-            let rem_bytes = bytes_len % std::mem::size_of::<u64>();
-            // println!(
-            //     "{:x} {:?} {:?} {:?}",
-            //     src_addr,
-            //     dst_addr.as_ptr(),
-            //     bytes_len,
-            //     rem_bytes
-            // );
-            if bytes_len >= std::mem::size_of::<u64>() {
-                let temp_dst_addr = &mut dst_addr[rem_bytes..];
-                self.init_buffer(temp_dst_addr);
-                self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
-                while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
-                    self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
-                }
-            }
-            if rem_bytes > 0 {
-                loop {
-                    if let Ok(addr) = self.rt_alloc(rem_bytes, std::mem::size_of::<u8>()) {
-                        unsafe {
-                            let temp_dst_addr = &mut dst_addr[0..rem_bytes];
-                            let buf1 = std::slice::from_raw_parts_mut(
-                                addr as *mut T as *mut u8,
-                                rem_bytes,
-                            );
-                            let buf0 = std::slice::from_raw_parts(
-                                temp_dst_addr.as_ptr() as *mut T as *mut u8,
-                                rem_bytes,
-                            );
-                            self.fill_buffer(temp_dst_addr, 0u8);
-                            self.fill_buffer(buf1, 1u8);
+    // fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    //     if pe != self.my_pe {
+    //         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+    //         self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
+    //         // println!(
+    //         //     "rofi_comm iget {:?} {:?} {:?}",
+    //         //     dst_addr.len() * std::mem::size_of::<T>(),
+    //         //     bytes_len,
+    //         //     self.get_amt.load(Ordering::SeqCst)
+    //         // );
+    //         self.get_cnt.fetch_add(1, Ordering::SeqCst);
+    //         let rem_bytes = bytes_len % std::mem::size_of::<u64>();
+    //         // println!(
+    //         //     "{:x} {:?} {:?} {:?}",
+    //         //     src_addr,
+    //         //     dst_addr.as_ptr(),
+    //         //     bytes_len,
+    //         //     rem_bytes
+    //         // );
+    //         if bytes_len >= std::mem::size_of::<u64>() {
+    //             let temp_dst_addr = &mut dst_addr[rem_bytes..];
+    //             self.init_buffer(temp_dst_addr);
+    //             self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
+    //             while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
+    //                 self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
+    //             }
+    //         }
+    //         if rem_bytes > 0 {
+    //             loop {
+    //                 if let Ok(addr) = self.rt_alloc(rem_bytes, std::mem::size_of::<u8>()) {
+    //                     unsafe {
+    //                         let temp_dst_addr = &mut dst_addr[0..rem_bytes];
+    //                         let buf1 = std::slice::from_raw_parts_mut(
+    //                             addr as *mut T as *mut u8,
+    //                             rem_bytes,
+    //                         );
+    //                         let buf0 = std::slice::from_raw_parts(
+    //                             temp_dst_addr.as_ptr() as *mut T as *mut u8,
+    //                             rem_bytes,
+    //                         );
+    //                         self.fill_buffer(temp_dst_addr, 0u8);
+    //                         self.fill_buffer(buf1, 1u8);
 
-                            self.iget_data(pe, src_addr, temp_dst_addr);
-                            self.iget_data(pe, src_addr, buf1);
+    //                         self.iget_data(pe, src_addr, temp_dst_addr);
+    //                         self.iget_data(pe, src_addr, buf1);
 
-                            let mut timer = std::time::Instant::now();
-                            for i in 0..temp_dst_addr.len() {
-                                while buf0[i] != buf1[i] {
-                                    std::thread::yield_now();
-                                    if timer.elapsed().as_secs_f64() > 1.0 {
-                                        // println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
-                                        self.iget_data(pe, src_addr, temp_dst_addr);
-                                        self.iget_data(pe, src_addr, buf1);
-                                        timer = std::time::Instant::now();
-                                    }
-                                }
-                            }
-                            // println!("{:?} {:?}",buf0,buf1);
-                        }
-                        self.rt_free(addr);
-                        break;
-                    }
-                    std::thread::yield_now();
-                }
+    //                         let mut timer = std::time::Instant::now();
+    //                         for i in 0..temp_dst_addr.len() {
+    //                             while buf0[i] != buf1[i] {
+    //                                 std::thread::yield_now();
+    //                                 if timer.elapsed().as_secs_f64() > 1.0 {
+    //                                     // println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
+    //                                     self.iget_data(pe, src_addr, temp_dst_addr);
+    //                                     self.iget_data(pe, src_addr, buf1);
+    //                                     timer = std::time::Instant::now();
+    //                                 }
+    //                             }
+    //                         }
+    //                         // println!("{:?} {:?}",buf0,buf1);
+    //                     }
+    //                     self.rt_free(addr);
+    //                     break;
+    //                 }
+    //                 std::thread::yield_now();
+    //             }
+    //         }
+    //     } else {
+    //         unsafe {
+    //             std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+    //         }
+    //     }
+    // }
+
+    fn atomic_avail<T>(&self) -> bool {
+        false
+    }
+    fn atomic_op<T: NetworkAtomic>(
+        &self,
+        op: AtomicOp<T>,
+        pe: usize,
+        remote_addr: usize,
+    ) -> RdmaFuture {
+        async move { Ok(()) }
+    }
+    fn atomic_fetch_op<T: NetworkAtomic>(
+        &self,
+        op: AtomicOp<T>,
+        pe: usize,
+        remote_addr: usize,
+        result: &mut [T],
+    ) -> RdmaFuture {
+        async move { Ok(()) }
+    }
+
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+        // println!("rt_alloc size {size} align {align}");
+        // let size = size + size%8;
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter() {
+            // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
+
+            if let Some(addr) = alloc.try_malloc(size, align) {
+                return Ok(addr);
             }
-        } else {
-            unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+            // println!("size: {:?} remaining {:?} occupied {:?} len {:?}",size, alloc.space_avail(),alloc.occupied(),allocs.len());
+        }
+        Err(AllocError::OutOfMemoryError(size))
+    }
+
+    fn rt_free(&self, addr: usize) {
+        let allocs = self.alloc.read();
+        for alloc in allocs.iter() {
+            if let Ok(_) = alloc.free(addr) {
+                return;
             }
+        }
+        panic!("Error invalid free! {:?}", addr);
+    }
+
+    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
+        match alloc {
+            AllocationType::Local => todo!(),
+            AllocationType::Global => {
+                let pes: Vec<_> = (0..self.num_pes).collect();
+                Ok(self.ofi.sub_alloc(&pes, size).unwrap())
+            }
+            AllocationType::Sub(pes) => Ok(self.ofi.sub_alloc(&pes, size).unwrap()),
         }
     }
 
-    #[allow(non_snake_case)]
-    fn MB_sent(&self) -> f64 {
-        (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
-            / 1_000_000.0
+    fn free(&self, addr: usize) {
+        self.ofi.release(&addr);
     }
 
-    fn force_shutdown(&self) {
-        todo!()
+    fn base_addr(&self) -> usize {
+        *self.base_address.read()
     }
+
+    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+        self.ofi.local_addr(&remote_pe, &remote_addr)
+    }
+
+    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+        self.ofi.remote_addr(&pe, &local_addr)
+    }
+
+    // #[allow(non_snake_case)]
+    // fn MB_sent(&self) -> f64 {
+    //     (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
+    //         / 1_000_000.0
+    // }
 }
 
 impl Drop for LibFabComm {

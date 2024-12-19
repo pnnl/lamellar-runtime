@@ -1,10 +1,14 @@
-use crate::active_messaging::batching::{Batcher, BatcherType};
-use crate::lamellae::comm::AllocError;
-use crate::lamellae::{
-    Backend, Des, Lamellae, LamellaeAM, LamellaeComm, LamellaeRDMA, Ser, SerializeHeader,
-    SerializedData, SubData,
+use crate::{
+    active_messaging::{
+        batching::{Batcher, BatcherType},
+        *,
+    },
+    config,
+    lamellae::{
+        comm::error::AllocError, Backend, Lamellae, LamellaeAM, Ser, SerializeHeader,
+        SerializedData, SerializedDataOps, SubData,
+    },
 };
-use crate::{active_messaging::*, config};
 
 use async_recursion::async_recursion;
 // use log::trace;
@@ -382,7 +386,7 @@ impl RegisteredActiveMessages {
             async_std::task::yield_now().await;
             match err.downcast_ref::<AllocError>() {
                 Some(AllocError::OutOfMemoryError(_)) => {
-                    lamellae.alloc_pool(size * 2);
+                    lamellae.comm().alloc_pool(size * 2);
                 }
                 _ => panic!("unhanlded error!! {:?}", err),
             }
@@ -543,7 +547,7 @@ impl RegisteredActiveMessages {
             crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
         *i += data_header.darc_list_size;
 
-        let data = ser_data.sub_data(*i, *i + data_header.size);
+        let data = unsafe { ser_data.sub_data(*i, *i + data_header.size) }; // i is incermented preventing overlapping sub_data
         *i += data_header.size;
 
         self.send_data_to_user_handle(

@@ -60,7 +60,10 @@ fn default_dissemination_factor() -> usize {
 fn default_backend() -> String {
     #[cfg(feature = "rofi")]
     return "rofi".to_owned();
-    #[cfg(not(feature = "rofi"))]
+    #[cfg(feature = "enable-rofi-rust")]
+    return "rofi_rust".to_owned();
+    #[cfg(feature = "enable-libfabric")]
+    return "libfab".to_owned();
     return "local".to_owned();
 }
 
