@@ -66,7 +66,7 @@ impl Comm {
     }
 }
 
-pub(crate) trait CommShutown {
+pub(crate) trait CommShutdown {
     fn force_shutdown(&self);
 }
 

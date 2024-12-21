@@ -1,9 +1,12 @@
-use crate::lamellae::comm::error::AllocResult;
+use crate::lamellae::comm::{error::AllocResult, CommMem};
 
-use super::{comm::LocalComm, AllocationType};
+use super::{
+    comm::{LocalComm, MyPtr},
+    AllocationType,
+};
 
 impl CommMem for LocalComm {
-    fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc_type: AllocationType, align: usize) -> AllocResult<usize> {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         let data_addr = data_ptr as usize;
@@ -43,7 +46,7 @@ impl CommMem for LocalComm {
     }
 
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
-        let allocs = self.alloc.read();
+        let allocs = self.allocs.lock();
         for alloc in allocs.iter() {
             if alloc.fake_malloc(size, align) {
                 return true;
@@ -62,9 +65,9 @@ impl CommMem for LocalComm {
         }
     }
 
-    fn occupied(&self) -> usize {
+    fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
-        let allocs = self.alloc.read();
+        let allocs = self.allocs.lock();
         for alloc in allocs.iter() {
             occupied += alloc.occupied();
         }

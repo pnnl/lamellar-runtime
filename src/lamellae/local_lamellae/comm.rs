@@ -1,26 +1,24 @@
-use crate::config;
+use crate::{
+    lamellae::comm::{CommInfo, CommProgress, CommShutdown},
+    lamellar_alloc::LamellarAlloc,
+    Backend,
+};
 
-use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
-
-use futures_util::Future;
-use parking_lot::{Mutex, RwLock};
-
+use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::env;
-use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-struct MyPtr {
-    ptr: *mut u8,
-    layout: std::alloc::Layout,
+pub(crate) struct MyPtr {
+    pub(crate) ptr: *mut u8,
+    pub(crate) layout: std::alloc::Layout,
 }
 unsafe impl Send for MyPtr {}
 
 #[derive(Debug)]
 pub(crate) struct LocalComm {
-    num_pes: usize,
-    my_pe: usize,
-    allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
+    pub(crate) num_pes: usize,
+    pub(crate) my_pe: usize,
+    pub(crate) allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
 }
 
 impl LocalComm {

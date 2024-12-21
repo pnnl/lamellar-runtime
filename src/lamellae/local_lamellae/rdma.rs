@@ -1,3 +1,17 @@
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use futures_util::Future;
+
+use crate::lamellae::comm::{
+    error::RdmaResult,
+    rdma::{CommRdma, RdmaFuture, Remote},
+};
+
+use super::comm::LocalComm;
+
 pub(crate) struct LocalFuture {}
 
 impl Future for LocalFuture {

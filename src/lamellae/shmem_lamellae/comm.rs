@@ -1,13 +1,20 @@
-use crate::config;
+use crate::{
+    config,
+    lamellae::comm::{CommInfo, CommProgress, CommShutdown},
+    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
+    Backend,
+};
 
-use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
+use super::{
+    fabric::{MyShmem, ShmemAlloc},
+    CommandQueue,
+};
 
-use futures_util::Future;
 use parking_lot::RwLock;
 
 use std::collections::HashMap;
 use std::env;
-use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -15,11 +22,11 @@ pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
     _size: usize,                                //size of my segment
-    alloc: RwLock<Vec<BTreeAlloc>>,
+    pub(crate) alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
-    alloc_lock: Arc<
+    pub(crate) alloc_lock: Arc<
         RwLock<(
             HashMap<
                 usize, //local addr
@@ -38,7 +45,7 @@ pub(crate) struct ShmemComm {
     >,
 }
 
-static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
+pub(crate) static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl ShmemComm {
     pub(crate) fn new() -> ShmemComm {

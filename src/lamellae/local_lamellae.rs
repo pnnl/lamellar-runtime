@@ -1,20 +1,16 @@
-mod atomic;
-mod comm;
-mod mem;
-mod rdma;
+pub(crate) mod atomic;
+pub(crate) mod comm;
+pub(crate) mod mem;
+pub(crate) mod rdma;
 
 use super::{
-    AllocationType, Backend, Comm, Des, Lamellae, LamellaeAM, LamellaeInit, Ser, SerializeHeader,
-    SerializedData, SerializedDataOps, SubData,
+    AllocationType, Comm, Lamellae, LamellaeAM, LamellaeInit, Ser, SerializeHeader, SerializedData,
 };
 use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use comm::LocalComm;
+
 use async_trait::async_trait;
-use futures_util::Future;
-use parking_lot::Mutex;
-use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 pub(crate) struct LocalBuilder {
     my_pe: usize,

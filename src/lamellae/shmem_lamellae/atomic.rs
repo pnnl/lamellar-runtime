@@ -1,3 +1,10 @@
+use crate::lamellae::comm::{
+    atomic::{AtomicOp, CommAtomic, NetworkAtomic},
+    rdma::RdmaFuture,
+};
+
+use super::comm::ShmemComm;
+
 impl CommAtomic for ShmemComm {
     fn atomic_avail<T>(&self) -> bool {
         false

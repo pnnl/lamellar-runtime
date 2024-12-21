@@ -1,3 +1,17 @@
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+use futures_util::Future;
+
+use crate::lamellae::comm::{
+    error::RdmaResult,
+    rdma::{CommRdma, RdmaFuture, Remote},
+};
+
+use super::comm::ShmemComm;
+
 pub(crate) struct ShmemFuture {}
 
 impl Future for ShmemFuture {
@@ -8,18 +22,14 @@ impl Future for ShmemFuture {
 }
 
 impl CommRdma for ShmemComm {
-    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) -> RdmaFuture {
+    fn put<T: Remote>(&self, pe: usize, src: &[T], remote_addr: usize) -> RdmaFuture {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(dst_addr) {
+            if shmem.contains(remote_addr) {
                 let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_dst_addr = real_dst_base + (dst_addr - addr);
+                let real_dst_addr = real_dst_base + (remote_addr - addr);
                 unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        src_addr.as_ptr(),
-                        real_dst_addr as *mut T,
-                        src_addr.len(),
-                    );
+                    std::ptr::copy_nonoverlapping(src.as_ptr(), real_dst_addr as *mut T, src.len());
                 }
                 break;
             }

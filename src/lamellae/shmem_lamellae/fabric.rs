@@ -1,8 +1,10 @@
+use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
+
 use shared_memory::*;
 
-struct MyShmem {
-    data: *mut u8,
-    len: usize,
+pub(crate) struct MyShmem {
+    pub(crate) data: *mut u8,
+    pub(crate) len: usize,
     _shmem: Shmem,
 }
 
@@ -16,16 +18,16 @@ unsafe impl Sync for MyShmem {}
 unsafe impl Send for MyShmem {}
 
 impl MyShmem {
-    fn as_ptr(&self) -> *mut u8 {
+    pub(crate) fn as_ptr(&self) -> *mut u8 {
         self.data
     }
-    fn base_addr(&self) -> usize {
+    pub(crate) fn base_addr(&self) -> usize {
         self.as_ptr() as usize
     }
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.len
     }
-    fn contains(&self, addr: usize) -> bool {
+    pub(crate) fn contains(&self, addr: usize) -> bool {
         self.base_addr() <= addr && addr < self.base_addr() + self.len
     }
 }
@@ -116,7 +118,7 @@ fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: 
 }
 
 #[derive(Debug)]
-struct ShmemAlloc {
+pub(crate) struct ShmemAlloc {
     _shmem: MyShmem,
     mutex: *mut AtomicUsize,
     id: *mut usize,
@@ -132,7 +134,7 @@ unsafe impl Sync for ShmemAlloc {}
 unsafe impl Send for ShmemAlloc {}
 
 impl ShmemAlloc {
-    fn new(num_pes: usize, pe: usize, job_id: usize) -> Self {
+    pub(crate) fn new(num_pes: usize, pe: usize, job_id: usize) -> Self {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
@@ -165,7 +167,7 @@ impl ShmemAlloc {
             job_id: job_id,
         }
     }
-    unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
+    pub(crate) unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
     where
         I: Iterator<Item = usize> + Clone,
     {

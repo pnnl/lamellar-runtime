@@ -1,5 +1,20 @@
+use std::{collections::HashMap, sync::atomic::Ordering};
+
+use crate::{
+    lamellae::{
+        comm::{
+            error::{AllocError, AllocResult},
+            CommMem,
+        },
+        AllocationType,
+    },
+    lamellar_alloc::BTreeAlloc,
+};
+
+use super::comm::{ShmemComm, SHMEM_SIZE};
+
 impl CommMem for ShmemComm {
-    fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc_type: AllocationType, align: usize) -> AllocResult<usize> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
         let (ret, index, remote_addrs) = match alloc_type {
@@ -66,7 +81,7 @@ impl CommMem for ShmemComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
-    fn occupied(&self) -> usize {
+    fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -81,7 +96,7 @@ impl CommMem for ShmemComm {
             min_size * 2 * self.num_pes,
             SHMEM_SIZE.load(Ordering::SeqCst),
         ) / self.num_pes;
-        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
+        if let Ok(addr) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("shmem".to_string());
             new_alloc.init(addr, size);

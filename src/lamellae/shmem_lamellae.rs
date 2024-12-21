@@ -10,8 +10,9 @@ use super::{
     SERIALIZE_HEADER_LEN,
 };
 use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
-use async_trait::async_trait;
+use comm::ShmemComm;
 
+use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicU8, Ordering};
