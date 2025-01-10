@@ -14,8 +14,8 @@ pub(crate) mod rofi_rust_lamellae;
 pub(crate) mod shmem_lamellae;
 
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
-use comm::Comm;
-use local_lamellae::Local;
+pub(crate) use comm::*;
+use local_lamellae::{Local, LocalBuilder};
 #[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
@@ -123,93 +123,149 @@ pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
 }
 
+#[derive(Debug)]
 pub(crate) struct SerializedData {
     pub(crate) addr: usize, // process space address)
     pub(crate) alloc_size: usize,
     pub(crate) ref_cnt: *const AtomicUsize,
     pub(crate) data: NonNull<u8>,
     pub(crate) data_len: usize,
-    pub(crate) relative_addr: usize, //address allocated from Comm
+    pub(crate) ser_data_addr: usize, //address allocated from Comm
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
+
+
+#[derive(Debug)]
+pub(crate) struct SubSerializedData {
+    pub(crate) addr: usize, // process space address)
+    pub(crate) alloc_size: usize,
+    pub(crate) ref_cnt: *const AtomicUsize,
+    pub(crate) data: NonNull<u8>,
+    pub(crate) data_len: usize,
+    pub(crate) ser_data_addr: usize, //address allocated from Comm
+    pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
+}
+
+
+#[derive(Debug)]
+pub(crate) struct RemoteSerializedData {
+    pub(crate) addr: usize, // process space address)
+    pub(crate) alloc_size: usize,
+    pub(crate) ref_cnt: *const AtomicUsize,
+    pub(crate) data: NonNull<u8>,
+    pub(crate) data_len: usize,
+    pub(crate) ser_data_addr: usize, //address allocated from Comm
+    pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
+}
+
+
+
+// we have allocated this memory out of fabric memory and thus are responsible for managing it,
+// we will not move the underlying data, reallocate it, nor free it until all references are dropped
+unsafe impl Send for SerializedData {} 
+unsafe impl Sync for SerializedData {}
+
+unsafe impl Send for SubSerializedData {} 
+unsafe impl Sync for SubSerializedData {}
+
+unsafe impl Send for RemoteSerializedData {} 
+unsafe impl Sync for RemoteSerializedData {}
 
 impl SerializedData {
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size;
-        let relative_addr = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let addr = relative_addr;
+        let addr = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
+        let ser_data_addr = addr + ref_cnt_size;
+        let raw_data_addr = ser_data_addr + *SERIALIZE_HEADER_LEN;
+
         Ok(SerializedData {
             addr,
             alloc_size,
             ref_cnt: addr as *const AtomicUsize,
-            data: unsafe { NonNull::new_unchecked(addr as *mut u8) },
+            data: unsafe { NonNull::new_unchecked(raw_data_addr as *mut u8) },
             data_len: size,
-            relative_addr,
+            ser_data_addr,
             comm,
         })
     }
 
-    pub(crate) unsafe fn decrement_cnt(addr: usize) {
-        let ref_cnt = addr as *const AtomicUsize;
-        let cnt = (*ref_cnt).fetch_sub(1, Ordering::SeqCst);
-        if cnt == 1 {
-            rofi_comm.rt_free(addr);
+    pub(crate) unsafe fn from_raw(addr: usize) -> Self {
+        let data = (addr as *const Self)
+            .as_ref()
+            .expect("valid serialized data");
+        SerializedData {
+            addr: data.addr,
+            alloc_size: data.alloc_size,
+            ref_cnt: data.ref_cnt,
+            data: data.data,
+            data_len: data.data_len,
+            ser_data_addr: data.ser_data_addr,
+            comm: data.comm.clone(),
+        }
+    }
+
+    pub(crate) fn into_remote(self) -> RemoteSerializedData {
+        self.increment_cnt();
+        RemoteSerializedData {
+            addr: self.addr,
+            alloc_size: self.alloc_size,
+            ref_cnt: self.ref_cnt,
+            data: self.data,
+            data_len: self.data_len,
+            ser_data_addr: self.ser_data_addr,
+            comm: self.comm.clone(),
         }
     }
 }
 
-impl SerializedDataOps for SerializedData {
-    fn header_as_bytes(&self) -> &[u8] {
+// impl SerializedDataOps for SerializedData {
+impl SerializedData {
+    pub(crate) fn header_as_bytes(&self) -> &[u8] {
         let header_size = *SERIALIZE_HEADER_LEN;
-        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), header_size) }
+        unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
     }
-    fn header_as_bytes_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn header_as_bytes_mut(&mut self) -> &mut [u8] {
         let header_size = *SERIALIZE_HEADER_LEN;
-        unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), header_size) }
+        unsafe { std::slice::from_raw_parts_mut((self.ser_data_addr) as *mut u8, header_size) }
     }
 
-    fn data_as_bytes(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts((self.data_start) as *mut u8, self.data_len) }
+    pub(crate) fn data_as_bytes(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
     }
-    fn data_as_bytes_mut(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }
+    pub(crate) fn data_as_bytes_mut(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), self.data_len) }
     }
 
-    fn header_and_data_as_bytes(&self) -> &[u8] {
-        unsafe {
-            std::slice::from_raw_parts(
-                (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
-                self.len,
-            )
-        }
+    pub(crate) fn header_and_data_as_bytes(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
     }
-    fn header_and_data_as_bytes_mut(&mut self) -> &mut [u8] {
+    pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> &mut [u8] {
         unsafe {
             std::slice::from_raw_parts_mut(
                 (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
-                self.len,
+                self.len(),
             )
         }
     }
 
     //#[tracing::instrument(skip_all)]
-    fn increment_cnt(&self) {
-        self.ref_cnt.fetch_add(1, Ordering::SeqCst);
+    pub(crate) fn increment_cnt(&self) {
+        unsafe { self.ref_cnt.as_ref().expect("valid serialized data").fetch_add(1, Ordering::SeqCst) };
     }
 
     //#[tracing::instrument(skip_all)]
-    fn len(&self) -> usize {
-        self.len
+    pub(crate) fn len(&self) -> usize {
+        self.alloc_size - std::mem::size_of::<AtomicUsize>()
     }
 
-    fn print(&self) {
+    pub(crate) fn print(&self) {
         println!(
-            "addr: {:x} relative addr {:x} len {:?} data_start {:x} data_len {:?} alloc_size {:?}",
+            "addr: {:x} relative addr {:x} len {:?} data {:?} data_len {:?} alloc_size {:?}",
             self.addr,
-            self.relative_addr,
-            self.len,
-            self.data_start,
+            self.ser_data_addr,
+            self.alloc_size - std::mem::size_of::<AtomicUsize>(),
+            self.data.as_ptr(),
             self.data_len,
             self.alloc_size
         );
@@ -225,18 +281,20 @@ impl Des for SerializedData {
     }
 }
 
-impl SubData for SerializedData {
+// impl SubData for SubSerializedData {
+    impl SerializedData {
+
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
-    unsafe fn sub_data(&self, start: usize, end: usize) -> SerializedData {
+    pub(crate)  fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
         // let mut sub = self.clone();
         self.increment_cnt();
-        SerializedData {
+        SubSerializedData {
             addr: self.addr,
             alloc_size: self.alloc_size,
             ref_cnt: self.ref_cnt,
-            data: sub.data.byte_offset(start),
+            data: unsafe{self.data.add(start)},
             data_len: end - start,
-            relative_addr: self.relative_addr,
+            ser_data_addr: self.ser_data_addr,
             comm: self.comm.clone(),
         }
     }
@@ -245,33 +303,83 @@ impl SubData for SerializedData {
 impl Drop for SerializedData {
     fn drop(&mut self) {
         unsafe {
-            SerializedData::decrement_cnt(self.addr);
+            if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
+                self.comm.rt_free(self.addr);
+            }
         }
     }
 }
-#[enum_dispatch]
-pub(crate) trait SerializedDataOps {
-    fn header_as_bytes(&self) -> &[u8];
-    fn header_as_bytes_mut(&mut self) -> &mut [u8];
-    fn data_as_bytes(&self) -> &[u8];
-    fn data_as_bytes_mut(&mut self) -> &mut [u8];
-    fn header_and_data_as_bytes(&self) -> &[u8];
-    fn header_and_data_as_bytes_mut(&mut self) -> &mut [u8];
-    fn increment_cnt(&self);
-    fn len(&self) -> usize;
-    fn print(&self);
+
+impl SubSerializedData{
+    pub(crate) fn header_as_bytes(&self) -> &[u8] {
+        let header_size = *SERIALIZE_HEADER_LEN;
+        unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
+    }
+    
+    pub(crate) fn data_as_bytes(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
+    }
 }
+
+impl Des for SubSerializedData {
+    fn deserialize_header(&self) -> Option<SerializeHeader> {
+        crate::deserialize(self.header_as_bytes(), false).unwrap()
+    }
+    fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
+        Ok(crate::deserialize(self.data_as_bytes(), true)?)
+    }
+}
+
+impl Drop for SubSerializedData {
+    fn drop(&mut self) {
+        unsafe {
+            if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
+                self.comm.rt_free(self.addr);
+            }
+        }
+    }
+}
+
+impl RemoteSerializedData {
+    pub(crate) fn increment_cnt(&self) {
+        unsafe { self.ref_cnt.as_ref().expect("valid serialized data").fetch_add(1, Ordering::SeqCst) };
+    }
+
+    pub(crate)  fn len(&self) -> usize {
+        self.alloc_size - std::mem::size_of::<AtomicUsize>()
+    }
+}
+
+impl Clone for RemoteSerializedData {
+    fn clone(&self) -> Self {
+        self.increment_cnt();
+        RemoteSerializedData {
+            addr: self.addr,
+            alloc_size: self.alloc_size,
+            ref_cnt: self.ref_cnt,
+            data: self.data,
+            data_len: self.data_len,
+            ser_data_addr: self.ser_data_addr,
+            comm: self.comm.clone(),
+        }
+    }
+}
+
+impl Drop for RemoteSerializedData{
+    fn drop(&mut self) {
+        unsafe {
+            if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
+                self.comm.rt_free(self.addr);
+            }
+        }
+    }
+}
+
 
 #[enum_dispatch]
 pub(crate) trait Des {
     fn deserialize_header(&self) -> Option<SerializeHeader>;
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error>;
-}
-
-#[enum_dispatch]
-pub(crate) trait SubData {
-    // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
-    unsafe fn sub_data(&self, start: usize, end: usize) -> SerializedData;
 }
 
 #[enum_dispatch(LamellaeInit)]
@@ -287,7 +395,7 @@ pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-libfabric")]
     LibFabAsyncBuilder,
     ShmemBuilder,
-    Local,
+    LocalBuilder,
 }
 
 #[async_trait]
@@ -312,7 +420,7 @@ pub(crate) trait Ser {
     ) -> Result<SerializedData, anyhow::Error>;
 }
 
-#[enum_dispatch(Ser, LamellaeAM)]
+#[enum_dispatch(Ser, LamellaeAM, LamellaeShutdown)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
     #[cfg(feature = "rofi")]
@@ -342,8 +450,8 @@ impl Lamellae {
             Lamellae::LibFab => self.comm(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::LibFabAsync => self.comm(),
-            Lamellae::Shmem => self.comm(),
-            Lamellae::Local => self.comm(),
+            Lamellae::Shmem(shmem) => shmem.comm(),
+            Lamellae::Local(local) => local.comm(),
         }
     }
 }
@@ -405,6 +513,6 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             LamellaeBuilder::LibFabAsyncBuilder(LibFabAsyncBuilder::new(&provider, &domain))
         }
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
-        Backend::Local => LamellaeBuilder::Local(Local::new()),
+        Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }
 }

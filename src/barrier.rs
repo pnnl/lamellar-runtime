@@ -1,6 +1,6 @@
 use crate::{
     env_var::config,
-    lamellae::{AllocationType, Lamellae},
+    lamellae::{AllocationType, Lamellae,CommProgress},
     lamellar_arch::LamellarArchRT,
     lamellar_request::LamellarRequest,
     memregion::MemoryRegion,
@@ -259,7 +259,7 @@ impl Barrier {
                                             recv_pe,
                                             send_buf_slice,
                                         );
-                                        self.lamellae.flush();
+                                        self.lamellae.comm().flush();
                                         wait_func();
                                     }
                                 }
@@ -273,7 +273,7 @@ impl Barrier {
         }
 
         // self.print_bar();
-        // self.lamellae.flush();
+        // self.lamellae.comm().flush();
     }
 
     pub(crate) fn barrier(&self) {
@@ -424,7 +424,7 @@ impl BarrierHandle {
                         .expect("Data should exist on PE")[round]
                         < self.barrier_id
                     {
-                        self.lamellae.flush();
+                        self.lamellae.comm().flush();
                         return Some(i);
                     }
                 }

@@ -141,9 +141,9 @@ impl Drop for ShmemComm {
         // for alloc in allocs.iter(){
         //     println!("dropping shmem -- memory in use {:?}", alloc.occupied());
         // }
-        if self.occupied() > 0 {
-            println!("dropping shmem -- memory in use {:?}", self.occupied());
-        }
+        // if self.occupied() > 0 {
+        //     println!("dropping shmem -- memory in use {:?}", self.occupied());
+        // }
         if self.alloc.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
         }

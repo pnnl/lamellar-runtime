@@ -5,16 +5,20 @@ use crate::{
         comm::{
             error::{AllocError, AllocResult},
             CommMem,
+            CommAlloc,
+            CommAllocType,
+            CommAllocAddr,
+            
         },
         AllocationType,
     },
-    lamellar_alloc::BTreeAlloc,
+    lamellar_alloc::{LamellarAlloc,BTreeAlloc},
 };
 
 use super::comm::{ShmemComm, SHMEM_SIZE};
 
 impl CommMem for ShmemComm {
-    fn alloc(&self, size: usize, alloc_type: AllocationType, align: usize) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc_type: AllocationType, align: usize) -> AllocResult<CommAlloc> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
         let (ret, index, remote_addrs) = match alloc_type {
@@ -42,20 +46,30 @@ impl CommMem for ShmemComm {
         }
         let addr = ret.as_ptr() as usize + size * index;
         alloc.0.insert(addr, (ret, size, addr_map));
-        Ok(addr)
+        Ok(CommAlloc{
+            addr,
+            size,
+            alloc_type: CommAllocType::Fabric,
+        })
     }
 
-    fn free(&self, addr: usize) {
+    fn free(&self, alloc: CommAlloc) {
         //maybe need to do something more intelligent on the drop of the shmem_alloc
+        assert!(alloc.alloc_type == CommAllocType::Fabric);
+        let addr = alloc.addr;
         let mut alloc = self.alloc_lock.write();
         alloc.0.remove(&addr);
     }
 
-    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
+    fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                return Ok(addr);
+                return Ok(CommAlloc{
+                    addr,
+                    size,
+                    alloc_type: CommAllocType::RtHeap,
+                });
             }
         }
         Err(AllocError::OutOfMemoryError(size))
@@ -71,7 +85,9 @@ impl CommMem for ShmemComm {
         false
     }
 
-    fn rt_free(&self, addr: usize) {
+    fn rt_free(&self, alloc: CommAlloc) {
+        assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        let addr = alloc.addr;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Ok(_) = alloc.free(addr) {
@@ -114,11 +130,12 @@ impl CommMem for ShmemComm {
         println!("num_pools {:?}", allocs.len());
         for alloc in allocs.iter() {
             println!(
-                "{:x} {:?} {:?} {:?}",
+                // "{:x} {:?} {:?} {:?}",
+                "{:x} {:?}",
                 alloc.start_addr,
                 alloc.max_size,
-                alloc.occupied(),
-                alloc.space_avail()
+                // alloc.occupied(),
+                // alloc.space_avail()
             );
         }
     }
@@ -126,7 +143,7 @@ impl CommMem for ShmemComm {
     fn base_addr(&self) -> usize {
         *self.base_address.read()
     }
-    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if let Some(data) = addrs.get(&remote_pe) {
@@ -138,7 +155,7 @@ impl CommMem for ShmemComm {
         }
         panic!("not sure i should be here...means address not found");
     }
-    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+    fn remote_addr(&self, pe: usize, local_addr: usize) -> CommAllocAddr {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(local_addr) {

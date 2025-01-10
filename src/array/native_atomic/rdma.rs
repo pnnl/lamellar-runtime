@@ -4,6 +4,7 @@ use crate::array::native_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
+use crate::lamellae::comm::{CommProgress,CommAtomic};
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
@@ -25,7 +26,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        if self.array.team_rt().lamellae.atomic_avail::<T>() {
+        if self.array.team_rt().lamellae.comm().atomic_avail::<T>() {
             // self.network_atomic_load(index, &buf);
 
             ArrayAtHandle {
@@ -454,7 +455,7 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.network_atomic_load(index, &buf);
         let team = self.team_rt();
         async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
             unsafe { buf.as_slice().unwrap()[0] }
         }
     }
@@ -469,7 +470,7 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.network_atomic_store(index, val);
         let team = self.team_rt();
         async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
         }
     }
 
@@ -485,7 +486,7 @@ impl<T: Dist> NativeAtomicArray<T> {
         self.network_atomic_swap(index, &buf);
         let team = self.team_rt();
         async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
             unsafe { buf.as_slice().unwrap()[0] }
         }
     }

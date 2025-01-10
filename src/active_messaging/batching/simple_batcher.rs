@@ -1,7 +1,6 @@
 use crate::{
-    active_messaging::registered_active_message::*,
-    active_messaging::*,
-    lamellae::{comm::error::AllocError, Des, Lamellae, LamellaeAM, Ser, SerializeHeader},
+    active_messaging::{registered_active_message::*, *},
+    lamellae::{comm::error::AllocError,  Lamellae, LamellaeAM, Ser,Des, SerializeHeader,CommMem},
 };
 use batching::*;
 
@@ -276,26 +275,28 @@ impl Batcher for SimpleBatcher {
     async fn exec_batched_msg(
         &self,
         msg: Msg,
-        ser_data: SerializedData,
+        mut ser_data:  SerializedData,
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
-        let data = ser_data.data_as_bytes();
+        // let data = ser_data.data_as_bytes();
         let mut i = 0;
+        let data_len = ser_data.len();
         // println!("executing batched msg {:?}", data.len());
-        while i < data.len() {
-            let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
+        while i < data_len { //data.len() { 
+            // let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
+            let cmd: Cmd  = ser_data.sub_data(i, *CMD_LEN).deserialize_data().unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => self.exec_am(&msg, data, &mut i, &lamellae, ame),
+                Cmd::Am => self.exec_am(&msg,&ser_data, &mut i, &lamellae, ame),
                 Cmd::ReturnAm => {
-                    self.exec_return_am(&msg, data, &mut i, &lamellae, ame)
+                    self.exec_return_am(&msg, &ser_data, &mut i, &lamellae, ame)
                         .await
                 }
-                Cmd::Data => ame.exec_data_am(&msg, data, &mut i, &ser_data).await,
-                Cmd::Unit => ame.exec_unit_am(&msg, data, &mut i).await,
+                Cmd::Data => ame.exec_data_am(&msg,  &mut i, &mut ser_data).await,
+                Cmd::Unit => ame.exec_unit_am(&msg, &ser_data, &mut i).await,
                 Cmd::BatchedMsg => {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")
                 }
@@ -332,8 +333,8 @@ impl SimpleBatcher {
             let lamellae = buf[0].0.lamellae.clone();
             let arch = buf[0].0.team.arch.clone();
             let header = SimpleBatcher::create_header(buf[0].0.team.world_pe);
-            let data_buf = SimpleBatcher::create_data_buf(header, size, &lamellae).await;
-            let data_slice = data_buf.data_as_bytes();
+            let mut data_buf = SimpleBatcher::create_data_buf(header, size, &lamellae).await;
+            let data_slice = data_buf.data_as_bytes_mut();
 
             let mut cnts = HashMap::new();
 
@@ -510,7 +511,7 @@ impl SimpleBatcher {
             async_std::task::yield_now().await;
             match err.downcast_ref::<AllocError>() {
                 Some(AllocError::OutOfMemoryError(_)) => {
-                    lamellae.alloc_pool(size * 2);
+                    lamellae.comm().alloc_pool(size * 2);
                 }
                 _ => panic!("unhanlded error!! {:?}", err),
             }
@@ -524,12 +525,14 @@ impl SimpleBatcher {
     fn exec_am(
         &self,
         msg: &Msg,
-        data: &[u8],
+        // data: &[u8],
+        ser_data: &SerializedData,
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
         // println!("exec_am");
+        let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =
@@ -583,12 +586,14 @@ impl SimpleBatcher {
     async fn exec_return_am(
         &self,
         msg: &Msg,
-        data: &[u8],
+        // data: &[u8],
+        ser_data: &SerializedData,
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
         // println!("exec_return_am");
+        let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =

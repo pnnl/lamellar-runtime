@@ -2,7 +2,7 @@ use crate::active_messaging::{
     AmHandleInner, DarcSerde, LamellarAny, MultiAmHandleInner, RemotePtr,
 };
 use crate::darc::Darc;
-use crate::lamellae::SerializedData;
+use crate::lamellae::SubSerializedData;
 use crate::lamellar_task_group::{TaskGroupAmHandleInner, TaskGroupMultiAmHandleInner};
 use crate::memregion::one_sided::MemRegionHandleInner;
 
@@ -14,7 +14,7 @@ use std::task::Waker;
 #[derive(Debug)]
 pub(crate) enum InternalResult {
     Local(LamellarAny), // a local result from a local am (possibly a returned one)
-    Remote(SerializedData, Vec<RemotePtr>), // a remte result from a remote am
+    Remote(SubSerializedData, Vec<RemotePtr>), // a remte result from a remote am
     Unit,
 }
 

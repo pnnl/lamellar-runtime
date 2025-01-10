@@ -1,6 +1,6 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
-use crate::lamellae::{AllocationType, Lamellae};
+use crate::lamellae::{AllocationType, Lamellae,CommMem};
 use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::IdError;
 use crate::LamellarTeamRT;
@@ -58,7 +58,7 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         let mrh = match mrh_map.get(&parent_id) {
             Some(mrh) => mrh.clone(),
             None => {
-                let local_mem_region_addr = lamellae.local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
+                let local_mem_region_addr = lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
                 let mem_region = MemoryRegion::from_remote_addr(
                     local_mem_region_addr,
                     net_handle.mr_pe,

@@ -78,7 +78,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn atomic_get(&self, index: usize) -> impl Future<Output = T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.atomic_get(index),
-            AtomicArray::GenericAtomicArray(array) => {
+            AtomicArray::GenericAtomicArray(_array) => {
                 unreachable!("atomic_get not implemented for GenericAtomicArray")
             }
         }
@@ -94,7 +94,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn atomic_put(&self, index: usize, value: T) -> impl Future<Output = ()> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.atomic_put(index, value),
-            AtomicArray::GenericAtomicArray(array) => {
+            AtomicArray::GenericAtomicArray(_array) => {
                 unreachable!("atomic_put not implemented for GenericAtomicArray")
             }
         }
@@ -103,7 +103,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn blocking_atomic_put(&self, index: usize, value: T) {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.blocking_atomic_put(index, value),
-            AtomicArray::GenericAtomicArray(array) => {
+            AtomicArray::GenericAtomicArray(_array) => {
                 unreachable!("blocking_atomic_put not implemented for GenericAtomicArray")
             }
         }
@@ -112,7 +112,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn atomic_swap(&self, index: usize, value: T) -> impl Future<Output = T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.atomic_swap(index, value),
-            AtomicArray::GenericAtomicArray(array) => {
+            AtomicArray::GenericAtomicArray(_array) => {
                 unreachable!("atomic_swap not implemented for GenericAtomicArray")
             }
         }
@@ -121,7 +121,7 @@ impl<T: Dist> AtomicArray<T> {
     pub fn blocking_atomic_swap(&self, index: usize, value: T) -> T {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.blocking_atomic_swap(index, value),
-            AtomicArray::GenericAtomicArray(array) => {
+            AtomicArray::GenericAtomicArray(_array) => {
                 unreachable!("blocking_atomic_swap not implemented for GenericAtomicArray")
             }
         }

@@ -11,7 +11,7 @@ use crate::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
     },
-    lamellae::{AllocationType, Backend, Lamellae},
+    lamellae::{AllocationType, Backend, Lamellae,CommInfo,CommMem,CommRdma,CommAtomic,RdmaFuture},
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     LamellarEnv,
 };
@@ -757,9 +757,9 @@ impl<T: Dist> MemoryRegion<T> {
         let addr = if size > 0 {
             if let AllocationType::Local = alloc {
                 mode = Mode::Local;
-                lamellae.rt_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
+                lamellae.comm().rt_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
             } else {
-                lamellae.alloc(
+                lamellae.comm().alloc(
                     size * std::mem::size_of::<T>(),
                     alloc,
                     std::mem::align_of::<T>(),
@@ -775,10 +775,10 @@ impl<T: Dist> MemoryRegion<T> {
         };
         let temp = MemoryRegion {
             addr: addr,
-            pe: lamellae.my_pe(),
+            pe: lamellae.comm().my_pe(),
             size: size,
             num_bytes: size * std::mem::size_of::<T>(),
-            backend: lamellae.backend(),
+            backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: mode,
             phantom: PhantomData,
@@ -802,7 +802,7 @@ impl<T: Dist> MemoryRegion<T> {
             pe: pe,
             size: size,
             num_bytes: size * std::mem::size_of::<T>(),
-            backend: lamellae.backend(),
+            backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: Mode::Remote,
             phantom: PhantomData,
@@ -824,7 +824,7 @@ impl<T: Dist> MemoryRegion<T> {
         //     size: self.num_bytes / std::mem::size_of::<B>(),
         //     num_bytes: self.num_bytes,
         //     backend: self.backend,
-        //     rdma: self.rdma.clone(),
+        //     rdma: self.rdma.comm().clone(),
         //     mode: self.mode,
         //     phantom: PhantomData,
         // }
@@ -850,7 +850,7 @@ impl<T: Dist> MemoryRegion<T> {
         pe: usize,
         index: usize,
         data: U,
-    ) {
+    ) -> RdmaFuture{
         //todo make return a result?
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
@@ -858,7 +858,7 @@ impl<T: Dist> MemoryRegion<T> {
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+                    .comm().put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -902,7 +902,7 @@ impl<T: Dist> MemoryRegion<T> {
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+                    .comm().iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -917,14 +917,14 @@ impl<T: Dist> MemoryRegion<T> {
         &self,
         index: usize,
         data: U,
-    ) {
+    ) -> RdmaFuture {
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .put_all(bytes, self.addr + index * std::mem::size_of::<R>());
+                    .comm().put_all(bytes, self.addr + index * std::mem::size_of::<R>());
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -957,7 +957,7 @@ impl<T: Dist> MemoryRegion<T> {
                 let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
                 // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
                 self.rdma
-                    .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+                    .comm().get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
             } else {
@@ -1000,7 +1000,7 @@ impl<T: Dist> MemoryRegion<T> {
                 //     self.num_bytes
                 // );
                 self.rdma
-                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+                    .comm().iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
             } else {
@@ -1064,7 +1064,7 @@ impl<T: Dist> MemoryRegion<T> {
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
             self.rdma
-                .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+                .comm().iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
         } else {
@@ -1091,7 +1091,7 @@ impl<T: Dist> MemoryRegion<T> {
         //todo make return a result?
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.atomic_op(
+            self.rdma.comm().atomic_op(
                 AtomcicOp::Store,
                 pe,
                 data.as_slice().expect("memory should be local"),
@@ -1121,7 +1121,7 @@ impl<T: Dist> MemoryRegion<T> {
         //todo make return a result?
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.atomic_store(
+            self.rdma.comm().atomic_store(
                 pe,
                 data.as_slice().expect("memory should be local"),
                 self.addr + index * std::mem::size_of::<R>(),
@@ -1177,7 +1177,7 @@ impl<T: Dist> MemoryRegion<T> {
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             self.rdma
-                .iatomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
+                .comm().iatomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
                     data.as_mut_slice().expect("memory should be local")
                 })
         } else {
@@ -1206,7 +1206,7 @@ impl<T: Dist> MemoryRegion<T> {
         let operand = operand.into();
         let result = result.into();
         if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.atomic_swap(
+            self.rdma.comm().atomic_swap(
                 pe,
                 operand.as_slice().expect("memory should be local"),
                 self.addr + index * std::mem::size_of::<R>(),
@@ -1238,7 +1238,7 @@ impl<T: Dist> MemoryRegion<T> {
         let operand = operand.into();
         let result = result.into();
         if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.iatomic_swap(
+            self.rdma.comm().iatomic_swap(
                 pe,
                 operand.as_slice().expect("memory should be local"),
                 self.addr + index * std::mem::size_of::<R>(),
@@ -1263,8 +1263,8 @@ impl<T: Dist> MemoryRegion<T> {
             let num_bytes = len * std::mem::size_of::<R>();
             let my_offset = self.addr + my_index * std::mem::size_of::<R>();
             let bytes = std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes);
-            let local_addr = self.rdma.local_addr(pe, addr);
-            self.rdma.iget(pe, local_addr, bytes);
+            let local_addr = self.rdma.comm().local_addr(pe, addr);
+            self.rdma.comm().iget(pe, local_addr, bytes);
         } else {
             println!(
                 "mem region len: {:?} index: {:?} data len{:?}",
@@ -1466,8 +1466,8 @@ impl<T: Dist> Drop for MemoryRegion<T> {
         // println!("trying to dropping mem region {:?}",self);
         if self.addr != 0 {
             match self.mode {
-                Mode::Local => self.rdma.rt_free(self.addr), // - self.rdma.base_addr());
-                Mode::Shared => self.rdma.free(self.addr),
+                Mode::Local => self.rdma.comm().rt_free(self.addr), // - self.rdma.comm().base_addr());
+                Mode::Shared => self.rdma.comm().free(self.addr),
                 Mode::Remote => {}
             }
         }

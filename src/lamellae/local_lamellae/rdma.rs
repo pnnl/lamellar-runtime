@@ -5,14 +5,16 @@ use std::{
 
 use futures_util::Future;
 
-use crate::lamellae::comm::{
+use crate::{LamellarMemoryRegion,lamellae::comm::{
     error::RdmaResult,
     rdma::{CommRdma, RdmaFuture, Remote},
-};
+    CommAllocAddr, CommSlice
+}};
 
 use super::comm::LocalComm;
 
 pub(crate) struct LocalFuture {}
+
 
 impl Future for LocalFuture {
     type Output = RdmaResult;
@@ -21,11 +23,16 @@ impl Future for LocalFuture {
     }
 }
 
+impl From<LocalFuture> for RdmaFuture{
+    fn from(f: LocalFuture) -> RdmaFuture {
+        RdmaFuture::Local(f)
+    }
+}
+
 impl CommRdma for LocalComm {
-    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) -> RdmaFuture {
-        let src_ptr = src.as_ptr();
-        let src_addr = src_ptr as usize;
-        async move {
+    fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture {
+        let src_addr = src.addr();
+        let dst = dst as usize;
             if !((src_addr <= dst
             && dst < src_addr + src.len()) //dst start overlaps src
             || (src_addr <= dst + src.len()
@@ -33,52 +40,49 @@ impl CommRdma for LocalComm {
             //dst end overlaps src
             {
                 unsafe {
-                    std::ptr::copy_nonoverlapping(src_addr as *mut u8, dst as *mut u8, src.len());
+                    std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst as *mut T, src.len());
                 }
             } else {
                 unsafe {
-                    std::ptr::copy(src_addr as *mut u8, dst as *mut u8, src.len());
+                    std::ptr::copy(src_addr.as_ptr(), dst as *mut T, src.len());
                 }
             }
-            Ok(())
-        }
+        LocalFuture {}.into()
     }
-    fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaFuture {
-        let src_ptr = src.as_ptr();
-        if !((src_ptr as usize <= dst
-            && dst < src_ptr as usize + src.len()) //dst start overlaps src
-            || (src_ptr as usize <= dst + src.len()
-            && dst + src.len() < src_ptr as usize + src.len()))
+    fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture {
+        let src_addr = src.addr();
+        let dst = dst as usize;
+        if !((src_addr<= dst
+            && dst < src_addr+ src.len()) //dst start overlaps src
+            || (src_addr <= dst + src.len()
+            && dst + src.len() < src_addr + src.len()))
         //dst end overlaps src
         {
-            async {
                 unsafe {
-                    std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+                    std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len());
                 }
-                Ok(())
-            }
         } else {
-            async {
                 unsafe {
-                    std::ptr::copy(src.as_ptr(), dst as *mut u8, src.len());
+                    std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
                 }
-                Ok(())
-            }
         }
+        LocalFuture {}.into()
     }
-    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture {
-        let dst_ptr = dst.as_mut_ptr();
-        if !((dst_ptr as usize <= src && src < dst_ptr as usize + dst.len())
-            || (dst_ptr as usize <= src + dst.len()
-                && src + dst.len() < dst_ptr as usize + dst.len()))
+    fn get<T: Remote>(&self, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaFuture {
+        let dst_addr = dst.addr();
+        let src = src as usize;
+        if !((dst_addr <= src && src <dst_addr + dst.len())
+            || (dst_addr <= src + dst.len()
+                && src + dst.len() < dst_addr + dst.len()))
         {
             unsafe {
-                std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+                std::ptr::copy_nonoverlapping(src as *mut T, dst.as_mut_ptr(), dst.len());
             }
         } else {
             unsafe {
-                std::ptr::copy(src as *mut u8, dst.as_mut_ptr(), dst.len());
+                std::ptr::copy(src as *mut T, dst.as_mut_ptr(), dst.len());
             }
         }
+        LocalFuture {}.into()
     }
 }

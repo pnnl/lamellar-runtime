@@ -3,7 +3,7 @@ use crate::lamellae::comm::{
     rdma::RdmaFuture,
 };
 
-use super::comm::ShmemComm;
+use super::{comm::ShmemComm, rdma::ShmemFuture};
 
 impl CommAtomic for ShmemComm {
     fn atomic_avail<T>(&self) -> bool {
@@ -15,7 +15,7 @@ impl CommAtomic for ShmemComm {
         pe: usize,
         remote_addr: usize,
     ) -> RdmaFuture {
-        async move { Ok(()) }
+        ShmemFuture {}.into()
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
@@ -24,6 +24,6 @@ impl CommAtomic for ShmemComm {
         remote_addr: usize,
         result: &mut [T],
     ) -> RdmaFuture {
-        async move { Ok(()) }
+        ShmemFuture {}.into()
     }
 }

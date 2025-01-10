@@ -10,6 +10,7 @@ use crate::{
     darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc},
     lamellar_team::IntoLamellarTeam,
     IdError, LamellarEnv, LamellarTeam,
+    lamellae::CommMem,
 };
 
 use super::handle::LocalRwDarcHandle;
@@ -178,7 +179,7 @@ impl<T> LocalRwDarc<T> {
     #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.base_addr() };
+            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
             "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,
@@ -478,7 +479,7 @@ where
 //         let team = &darc.inner().team();
 //         let ndarc = __NetworkDarc {
 //             inner_addr: darc.inner as *const u8 as usize,
-//             backend: team.lamellae.backend(),
+//             backend: team.lamellae.comm().backend(),
 //             orig_world_pe: team.world_pe,
 //             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
 //         };
@@ -493,7 +494,7 @@ where
 //         let team = &darc.inner().team();
 //         let ndarc = __NetworkDarc {
 //             inner_addr: darc.inner as *const u8 as usize,
-//             backend: team.lamellae.backend(),
+//             backend: team.lamellae.comm().backend(),
 //             orig_world_pe: team.world_pe,
 //             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
 //         };
@@ -507,7 +508,7 @@ where
 
 //         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
 //             let darc = Darc {
-//                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
+//                 inner: lamellae.comm().local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
 //                     as *mut DarcInner<Arc<RwLock<T>>>,
 //                 src_pe: ndarc.orig_team_pe,
 //                 // phantom: PhantomData,

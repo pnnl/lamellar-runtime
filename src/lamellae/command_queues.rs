@@ -1,4 +1,7 @@
-use super::{comm::CmdQStatus, Comm, Lamellae, SerializedData, SerializedDataOps};
+use super::{
+    comm::{CmdQStatus, CommMem, CommProgress, CommRdma, CommInfo},
+    Comm, Lamellae, SerializedData,RemoteSerializedData,
+};
 use crate::{env_var::config, scheduler::Scheduler};
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -346,8 +349,8 @@ impl CmdMsgBuffer {
             if let Some(mut buf) = self.waiting_bufs.remove(&buf_addr) {
                 for cmd in buf.iter() {
                     if cmd.dsize > 0 {
-                        let ref_cnt_addr = cmd.daddr as usize - std::mem::size_of::<AtomicUsize>();
-                        unsafe { SerializedData::decrement_cnt(ref_cnt_addr) }; //we assume this address is valid...
+                        let ser_data_addr = cmd.daddr as usize - std::mem::size_of::<AtomicUsize>();
+                        unsafe { SerializedData::from_raw(ser_data_addr) }; //creates and then drops to decrement the reference count
                     }
                 }
                 buf.reset();
@@ -722,17 +725,17 @@ impl InnerCQ {
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
                 self.try_sending_buffer(dst, &mut cmd_buffer);
-                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    let send_buf = self.send_buffer.lock();
-                    // println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
-                    // println!("send_buf: {:?}", send_buf);
-                    // drop(send_buf);
-                    let recv_buf = self.recv_buffer.lock();
-                    // println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
-                    // println!("free_buf: {:?}", free_buf);
-                    timer = std::time::Instant::now();
-                }
+                // if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+                //     let send_buf = self.send_buffer.lock();
+                //     println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
+                //     println!("send_buf: {:?}", send_buf);
+                //     // drop(send_buf);
+                //     let recv_buf = self.recv_buffer.lock();
+                //     println!("recv_buf: {:?}", recv_buf);
+                //     let free_buf = self.free_buffer.lock();
+                //     println!("free_buf: {:?}", free_buf);
+                //     timer = std::time::Instant::now();
+                // }
             }
             async_std::task::yield_now().await;
         }
@@ -767,17 +770,17 @@ impl InnerCQ {
                         break;
                     }
                 }
-                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    // println!("waiting to send cmd buffer {:?}", cmd_buffer);
-                    let send_buf = self.send_buffer.lock();
-                    // println!("send_buf addr {:?}", send_buf.as_ptr());
-                    // println!("send_buf: {:?}", send_buf);
-                    let recv_buf = self.recv_buffer.lock();
-                    // println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
-                    // println!("free_buf: {:?}", free_buf);
-                    timer = std::time::Instant::now();
-                }
+                // if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+                //     println!("waiting to send cmd buffer {:?}", cmd_buffer);
+                //     let send_buf = self.send_buffer.lock();
+                //     println!("send_buf addr {:?}", send_buf.as_ptr());
+                //     println!("send_buf: {:?}", send_buf);
+                //     let recv_buf = self.recv_buffer.lock();
+                //     println!("recv_buf: {:?}", recv_buf);
+                //     let free_buf = self.free_buffer.lock();
+                //     println!("free_buf: {:?}", free_buf);
+                //     timer = std::time::Instant::now();
+                // }
             }
             async_std::task::yield_now().await;
         }
@@ -883,9 +886,11 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
+                    self.comm.put(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
                 }
             }
+            self.comm.wait();
+            // join_all(txs).await;
         }
     }
 
@@ -1005,8 +1010,9 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    async fn get_serialized_data(&self, src: usize, cmd: CmdMsg, ser_data: &SerializedData) {
-        let data_slice = ser_data.header_and_data_as_bytes();
+    async fn get_serialized_data(&self, src: usize, cmd: CmdMsg, ser_data: &mut SerializedData) {
+        let len = ser_data.len();
+        let data_slice = ser_data.header_and_data_as_bytes_mut();
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
         self.comm
@@ -1015,7 +1021,7 @@ impl InnerCQ {
             .expect("get failed");
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash
+        while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
             async_std::task::yield_now().await;
@@ -1065,11 +1071,11 @@ impl InnerCQ {
 
             // };
         }
-        let ser_data = ser_data.unwrap();
+        let mut ser_data = ser_data.unwrap();
         // if print{
         // ser_data.print();
         // }
-        self.get_serialized_data(src, cmd, &ser_data).await;
+        self.get_serialized_data(src, cmd, &mut ser_data).await;
         // println!(
         //     "received data {:?}",
         //     &ser_data.header_and_data_as_bytes()[0..10]
@@ -1316,115 +1322,117 @@ impl CommandQueue {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
-        match data {
-            #[cfg(feature = "rofi")]
-            SerializedData::RofiData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
+    pub(crate) async fn send_data(&self, data: RemoteSerializedData, dst: usize) {
+        // match data {
+        //     #[cfg(feature = "rofi")]
+        //     SerializedData::RofiData(ref data) => {
+        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+        //         let hash = calc_hash(data.relative_addr, data.len);
 
-                // println!(
-                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-                //     std::thread::current().id(),
-                //     data.relative_addr,
-                //     data.len,
-                //     hash,
-                //     &data.header_and_data_as_bytes()[0..20]
-                // );
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+        //         // println!(
+        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+        //         //     std::thread::current().id(),
+        //         //     data.relative_addr,
+        //         //     data.len,
+        //         //     hash,
+        //         //     &data.header_and_data_as_bytes()[0..20]
+        //         // );
+        //         data.increment_cnt(); //or we could implement something like an into_raw here...
+        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
 
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            #[cfg(feature = "enable-rofi-rust")]
-            SerializedData::RofiRustData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
+        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
+        //     }
+        //     #[cfg(feature = "enable-rofi-rust")]
+        //     SerializedData::RofiRustData(ref data) => {
+        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+        //         let hash = calc_hash(data.relative_addr, data.len);
 
-                // println!(
-                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-                //     std::thread::current().id(),
-                //     data.relative_addr,
-                //     data.len,
-                //     hash,
-                //     &data.header_and_data_as_bytes()[0..20]
-                // );
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+        //         // println!(
+        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+        //         //     std::thread::current().id(),
+        //         //     data.relative_addr,
+        //         //     data.len,
+        //         //     hash,
+        //         //     &data.header_and_data_as_bytes()[0..20]
+        //         // );
+        //         data.increment_cnt(); //or we could implement something like an into_raw here...
+        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
 
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            #[cfg(feature = "enable-rofi-rust")]
-            SerializedData::RofiRustAsyncData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
+        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
+        //     }
+        //     #[cfg(feature = "enable-rofi-rust")]
+        //     SerializedData::RofiRustAsyncData(ref data) => {
+        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+        //         let hash = calc_hash(data.relative_addr, data.len);
 
-                // println!(
-                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-                //     std::thread::current().id(),
-                //     data.relative_addr,
-                //     data.len,
-                //     hash,
-                //     &data.header_and_data_as_bytes()[0..20]
-                // );
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+        //         // println!(
+        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+        //         //     std::thread::current().id(),
+        //         //     data.relative_addr,
+        //         //     data.len,
+        //         //     hash,
+        //         //     &data.header_and_data_as_bytes()[0..20]
+        //         // );
+        //         data.increment_cnt(); //or we could implement something like an into_raw here...
+        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
 
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            #[cfg(feature = "enable-libfabric")]
-            SerializedData::LibFabData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
+        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
+        //     }
+        //     #[cfg(feature = "enable-libfabric")]
+        //     SerializedData::LibFabData(ref data) => {
+        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+        //         let hash = calc_hash(data.relative_addr, data.len);
 
-                // println!(
-                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-                //     std::thread::current().id(),
-                //     data.relative_addr,
-                //     data.len,
-                //     hash,
-                //     &data.header_and_data_as_bytes()[0..20]
-                // );
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+        //         // println!(
+        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+        //         //     std::thread::current().id(),
+        //         //     data.relative_addr,
+        //         //     data.len,
+        //         //     hash,
+        //         //     &data.header_and_data_as_bytes()[0..20]
+        //         // );
+        //         data.increment_cnt(); //or we could implement something like an into_raw here...
+        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
 
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            #[cfg(feature = "enable-libfabric")]
-            SerializedData::LibFabAsyncData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
+        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
+        //     }
+        //     #[cfg(feature = "enable-libfabric")]
+        //     SerializedData::LibFabAsyncData(ref data) => {
+        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+        //         let hash = calc_hash(data.relative_addr, data.len);
 
-                // println!(
-                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-                //     std::thread::current().id(),
-                //     data.relative_addr,
-                //     data.len,
-                //     hash,
-                //     &data.header_and_data_as_bytes()[0..20]
-                // );
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
+        //         // println!(
+        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
+        //         //     std::thread::current().id(),
+        //         //     data.relative_addr,
+        //         //     data.len,
+        //         //     hash,
+        //         //     &data.header_and_data_as_bytes()[0..20]
+        //         // );
+        //         data.increment_cnt(); //or we could implement something like an into_raw here...
+        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
 
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            SerializedData::ShmemData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
+        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
+        //     }
+        //     SerializedData::ShmemData(ref data) => {
+        // println!("sending: {:?} {:?}",data.relative_addr,data.len);
+        // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
+        let hash = calc_hash(data.ser_data_addr, data.len());
 
-                // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}",data.header_and_data_as_bytes());
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            _ => {}
-        }
+        // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
+        data.increment_cnt(); //or we could implement something like an into_raw here...
+                              // println!("sending data {:?}",data.header_and_data_as_bytes());
+        self.cq
+            .send(data.ser_data_addr, data.len(), dst, hash)
+            .await;
+        //     }
+        //     _ => {}
+        // }
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1456,8 +1464,9 @@ impl CommandQueue {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>) {
-        let num_pes = lamellae.num_pes();
-        let my_pe = lamellae.my_pe();
+        let comm = lamellae.comm();
+        let num_pes = comm.num_pes();
+        let my_pe = comm.my_pe();
         // let mut timer= std::time::Instant::now();
         while self.active.load(Ordering::SeqCst) == CmdQStatus::Active as u8
             || !self.cq.empty()
@@ -1575,7 +1584,7 @@ impl CommandQueue {
             //         self.cq.empty()
             //     );
             // }
-            lamellae.flush();
+            comm.flush();
             async_std::task::yield_now().await;
         }
         // println!(

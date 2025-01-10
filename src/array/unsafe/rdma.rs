@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::r#unsafe::*;
 use crate::array::*;
+use crate::lamellae::comm::CommProgress;
 use crate::memregion::{
     AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
 };
@@ -1243,7 +1244,7 @@ impl<T: Dist> UnsafeArray<T> {
         unsafe { self.get_unchecked(index, &buf) };
         let team = self.team_rt();
         async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
             unsafe { buf.as_slice().unwrap()[0] }
         }
     }
@@ -1262,7 +1263,7 @@ impl<T: Dist> UnsafeArray<T> {
         unsafe { self.put_unchecked(index, &buf) };
         let team = self.team_rt();
         async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
         }
     }
 
@@ -1280,7 +1281,7 @@ impl<T: Dist> UnsafeArray<T> {
         self.network_atomic_swap(index, &buf);
         let team = self.team_rt();
         async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
             unsafe { buf.as_slice().unwrap()[0] }
         }
     }

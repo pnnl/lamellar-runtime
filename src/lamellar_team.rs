@@ -2,7 +2,7 @@ use crate::{
     active_messaging::{handle::AmHandleInner, *},
     barrier::{Barrier, BarrierHandle},
     env_var::config,
-    lamellae::{AllocationType, Lamellae},
+    lamellae::{AllocationType, Lamellae,CommMem,CommProgress,CommInfo,CommShutdown, LamellaeShutdown},
     lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT},
     lamellar_env::LamellarEnv,
     lamellar_request::*,
@@ -634,6 +634,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
             // );
             self.team
                 .lamellae
+                .comm()
                 .alloc_pool(size * std::mem::size_of::<T>());
             lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
         }
@@ -746,7 +747,7 @@ impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
         } else {
             panic!("unexepected lamellae backend {:?}", &remote_ptr.backend);
         };
-        let local_team_addr = lamellae.local_addr(remote_ptr.pe, remote_ptr.addr);
+        let local_team_addr = lamellae.comm().local_addr(remote_ptr.pe, remote_ptr.addr);
         let team_ptr = local_team_addr as *mut *const LamellarTeamRT;
 
         unsafe {
@@ -762,7 +763,7 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
         LamellarTeamRemotePtr {
             addr: team.remote_ptr_addr,
             pe: team.world_pe,
-            backend: team.lamellae.backend(),
+            backend: team.lamellae.comm().backend(),
         }
     }
 }
@@ -870,7 +871,7 @@ impl LamellarTeamRT {
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
             num_pes: num_pes,
         });
-        lamellae.barrier();
+        lamellae.comm().barrier();
 
         let barrier = Barrier::new(
             world_pe,
@@ -887,6 +888,7 @@ impl LamellarTeamRT {
         let dropped = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
 
         let remote_ptr_addr = lamellae
+            .comm()
             .alloc(
                 std::mem::size_of::<*const LamellarTeamRT>(),
                 alloc,
@@ -956,7 +958,7 @@ impl LamellarTeamRT {
         // );
 
         // println!("entering lamellae barrier");
-        lamellae.barrier(); // need to make sure barriers are done before we return
+        lamellae.comm().barrier(); // need to make sure barriers are done before we return
                             // println!("entering team barrier");
                             // team.barrier.barrier();
         team
@@ -1134,6 +1136,7 @@ impl LamellarTeamRT {
 
             let remote_ptr_addr = parent
                 .lamellae
+                .comm()
                 .alloc(
                     std::mem::size_of::<*const LamellarTeamRT>(),
                     parent_alloc,
@@ -1417,7 +1420,7 @@ impl LamellarTeamRT {
         // println!("wait_all called on pe: {}", self.world_pe);
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
 
-        self.lamellae.wait();
+        self.lamellae.comm().wait();
 
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
@@ -1504,7 +1507,7 @@ impl LamellarTeamRT {
     }
     pub(crate) async fn await_all(&self) {
         // println!("await_all called on pe: {}", self.world_pe);
-        self.lamellae.wait();
+        self.lamellae.comm().wait();
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
@@ -1628,7 +1631,7 @@ impl LamellarTeamRT {
     }
 
     pub(crate) fn flush(&self) {
-        self.lamellae.flush();
+        self.lamellae.comm().flush();
     }
 
     //#[tracing::instrument(skip_all)]
@@ -2305,7 +2308,7 @@ impl LamellarTeamRT {
             //     size,
             //     std::mem::size_of::<T>()
             // );
-            self.lamellae.alloc_pool(size * std::mem::size_of::<T>());
+            self.lamellae.comm().alloc_pool(size * std::mem::size_of::<T>());
             lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
         }
         lmr.expect("out of memory")
@@ -2329,7 +2332,7 @@ impl Drop for LamellarTeamRT {
         //     Arc::strong_count(&self.world_counters)
         // );
         // println!("removing {:?} ", self.team_hash);
-        self.lamellae.free(self.remote_ptr_addr);
+        self.lamellae.comm().free(self.remote_ptr_addr);
         // println!("Lamellae Cnt: {:?}", Arc::strong_count(&self.lamellae));
         // println!("scheduler Cnt: {:?}", Arc::strong_count(&self.scheduler));
         // println!("LamellarTeamRT dropped {:?}", self.team_hash);
@@ -2457,7 +2460,7 @@ impl Drop for LamellarTeam {
 //         lamellae.init_lamellae(sched.get_queue().clone());
 //         let lamellae = Arc::new(lamellae);
 //         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
-//         lamellaes.insert(lamellae.backend(), lamellae.get_am());
+//         lamellaes.insert(lamellae.comm().backend(), lamellae.get_am());
 //         sched.init(num_pes, world_pe, lamellaes);
 //         let counters = Arc::new(AMCounters::new());
 //         let root_team = Arc::new(LamellarTeamRT::new(
@@ -2532,7 +2535,7 @@ impl Drop for LamellarTeam {
 //         lamellae.init_lamellae(sched.get_queue().clone());
 //         let lamellae = Arc::new(lamellae);
 //         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
-//         lamellaes.insert(lamellae.backend(), lamellae.get_am());
+//         lamellaes.insert(lamellae.comm().backend(), lamellae.get_am());
 //         sched.init(num_pes, world_pe, lamellaes);
 //         let counters = Arc::new(AMCounters::new());
 

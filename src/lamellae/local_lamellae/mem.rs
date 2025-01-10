@@ -6,7 +6,7 @@ use super::{
 };
 
 impl CommMem for LocalComm {
-    fn alloc(&self, size: usize, alloc_type: AllocationType, align: usize) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, _alloc_type: AllocationType, align: usize) -> AllocResult<usize> {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         let data_addr = data_ptr as usize;
@@ -45,14 +45,8 @@ impl CommMem for LocalComm {
         Ok(data_addr)
     }
 
-    fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
-        let allocs = self.allocs.lock();
-        for alloc in allocs.iter() {
-            if alloc.fake_malloc(size, align) {
-                return true;
-            }
-        }
-        false
+    fn rt_check_alloc(&self, _size: usize, _align: usize) -> bool {
+        true
     }
 
     fn rt_free(&self, addr: usize) {
@@ -69,12 +63,12 @@ impl CommMem for LocalComm {
         let mut occupied = 0;
         let allocs = self.allocs.lock();
         for alloc in allocs.iter() {
-            occupied += alloc.occupied();
+            occupied += alloc.1.layout.size();
         }
         occupied
     }
 
-    fn alloc_pool(&self, min_size: usize) {
+    fn alloc_pool(&self, _min_size: usize) {
         panic!("should never alloc a pool in local")
     }
     fn num_pool_allocs(&self) -> usize {
@@ -88,10 +82,10 @@ impl CommMem for LocalComm {
     fn base_addr(&self) -> usize {
         0
     }
-    fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+    fn local_addr(&self, _remote_pe: usize, remote_addr: usize) -> usize {
         remote_addr
     }
-    fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
+    fn remote_addr(&self, _pe: usize, local_addr: usize) -> usize {
         local_addr
     }
 }

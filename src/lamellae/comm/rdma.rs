@@ -1,55 +1,57 @@
+use super::{CommSlice,CommAllocAddr,error::RdmaResult};
+use crate::{LamellarMemoryRegion,lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture}};
+
+use enum_dispatch::enum_dispatch;
+use pin_project::pin_project;
+use futures_util::{Future, FutureExt};
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
 
-use futures_util::Future;
-
-use crate::lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture};
-
-use super::error::RdmaResult;
-
 pub(crate) trait Remote: Copy {}
 impl<T: Copy> Remote for T {}
 
+#[pin_project(project = RdmaFutureProj)]
 pub(crate) enum RdmaFuture {
     #[cfg(feature = "rofi")]
-    Rofi(RofiFuture),
+    Rofi(#[pin] RofiFuture),
     #[cfg(feature = "enable-rofi-rust")]
-    RofiRust(RofiRustFuture),
+    RofiRust(#[pin] RofiRustFuture),
     #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsync(RofiRustAsyncFuture),
+    RofiRustAsync(#[pin] RofiRustAsyncFuture),
     #[cfg(feature = "enable-libfabric")]
-    LibFab(LibFabFuture),
+    LibFab(#[pin] LibFabFuture),
     #[cfg(feature = "enable-libfabric")]
-    LibFabAsync(LibFabAsyncFuture),
-    Shmem(ShmemFuture),
-    Local(LocalFuture),
+    LibFabAsync(#[pin] LibFabAsyncFuture),
+    Shmem(#[pin] ShmemFuture),
+    Local(#[pin] LocalFuture),
 }
 
 impl Future for RdmaFuture {
     type Output = RdmaResult;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.get_mut() {
+        match self.project() {
             #[cfg(feature = "rofi")]
-            RdmaFuture::Rofi(f) => f.poll(cx),
+            RdmaFutureProj::Rofi(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaFuture::RofiRust(f) => f.poll(cx),
+            RdmaFutureProj::RofiRust(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaFuture::RofiRustAsync(f) => f.poll(cx),
+            RdmaFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            RdmaFuture::LibFab(f) => f.poll(cx),
+            RdmaFutureProj::LibFab(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            RdmaFuture::LibFabAsync(f) => f.poll(cx),
-            RdmaFuture::Shmem(f) => f.poll(cx),
-            RdmaFuture::Local(f) => f.poll(cx),
+            RdmaFutureProj::LibFabAsync(f) => f.poll(cx),
+            RdmaFutureProj::Shmem(f) => f.poll(cx),
+            RdmaFutureProj::Local(f) => f.poll(cx),
         }
     }
 }
 
+#[enum_dispatch]
 pub(crate) trait CommRdma {
-    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) -> RdmaFuture;
-    fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaFuture;
-    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture;
+    fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture;
+    fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture;
+    fn get<T: Remote>(&self, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaFuture;
 }

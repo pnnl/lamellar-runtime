@@ -635,7 +635,7 @@
 
 use crate::barrier::BarrierHandle;
 use crate::darc::__NetworkDarc;
-use crate::lamellae::{Lamellae, SerializedData};
+use crate::lamellae::{Lamellae, SerializedData, CommMem};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -1369,7 +1369,7 @@ pub(crate) trait ActiveMessageEngine {
         team_addr: usize,
         lamellae: &Arc<Lamellae>,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
-        let local_team_addr = lamellae.local_addr(pe, team_addr);
+        let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
         let team_rt = unsafe {
             let team_ptr = local_team_addr as *mut *const LamellarTeamRT;
             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());

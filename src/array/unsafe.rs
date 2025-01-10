@@ -15,7 +15,7 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
-use crate::lamellae::AllocationType;
+use crate::lamellae::{CommProgress,AllocationType};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
@@ -431,7 +431,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     pub(crate) async fn await_all(&self) {
-        self.inner.data.team.lamellae.wait();
+        self.inner.data.team.lamellae.comm().wait();
         let am_counters = self.inner.data.array_counters.clone();
 
         let mut temp_now = Instant::now();
@@ -997,7 +997,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             .exec_am_local_tg(am, Some(self.team_counters()))
     }
     fn wait_all(&self) {
-        self.inner.data.team.lamellae.wait();
+        self.inner.data.team.lamellae.comm().wait();
         let mut temp_now = Instant::now();
         // println!(
         //     "in array wait_all  cnt: {:?} {:?} {:?}",

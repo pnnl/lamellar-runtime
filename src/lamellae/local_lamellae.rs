@@ -4,7 +4,8 @@ pub(crate) mod mem;
 pub(crate) mod rdma;
 
 use super::{
-    AllocationType, Comm, Lamellae, LamellaeAM, LamellaeInit, Ser, SerializeHeader, SerializedData,
+    AllocationType, Comm, CommInfo, Lamellae, LamellaeAM, LamellaeInit, Ser, SerializeHeader,
+    SerializedData,
 };
 use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::LocalComm;
@@ -52,6 +53,10 @@ impl std::fmt::Debug for Local {
 impl Local {
     pub(crate) fn new(local_comm: Arc<Comm>) -> Local {
         Local { local_comm }
+    }
+
+    pub(crate) fn comm(&self) -> &Comm{
+        &self.local_comm
     }
 }
 

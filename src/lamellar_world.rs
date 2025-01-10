@@ -1,6 +1,6 @@
 use crate::{
     barrier::BarrierHandle,
-    lamellae::{create_lamellae, Backend, Lamellae, LamellaeInit},
+    lamellae::{create_lamellae, Backend, Lamellae, LamellaeInit,CommInfo, CommProgress},
     lamellar_arch::LamellarArch,
     lamellar_env::LamellarEnv,
     lamellar_team::{LamellarTeam, LamellarTeamRT},
@@ -197,16 +197,16 @@ impl LamellarWorld {
         self.num_pes
     }
 
-    #[doc(hidden)]
-    #[allow(non_snake_case)]
-    //#[tracing::instrument(skip_all)]
-    pub fn MB_sent(&self) -> f64 {
-        let mut sent = vec![];
-        for (_backend, lamellae) in LAMELLAES.read().iter() {
-            sent.push(lamellae.MB_sent());
-        }
-        sent[0]
-    }
+    // #[doc(hidden)]
+    // #[allow(non_snake_case)]
+    // //#[tracing::instrument(skip_all)]
+    // pub fn MB_sent(&self) -> f64 {
+    //     let mut sent = vec![];
+    //     for (_backend, lamellae) in LAMELLAES.read().iter() {
+    //         sent.push(lamellae.comm().MB_sent());
+    //     }
+    //     sent[0]
+    // }
 
     #[doc(alias = "Collective")]
     /// Create a team containing any number of pe's from the world using the provided LamellarArch (layout)
@@ -613,7 +613,7 @@ impl LamellarWorldBuilder {
         // println!("{:?}: init_counters", timer.elapsed());
 
         // timer = std::time::Instant::now();
-        lamellae.barrier();
+        lamellae.comm().barrier();
         // println!("{:?}: lamellae barrier", timer.elapsed());
 
         // timer = std::time::Instant::now();
@@ -643,7 +643,7 @@ impl LamellarWorldBuilder {
         // timer = std::time::Instant::now();
         LAMELLAES
             .write()
-            .insert(lamellae.backend(), lamellae.clone());
+            .insert(lamellae.comm().backend(), lamellae.clone());
         // println!("{:?}: insert lamellae", timer.elapsed());
 
         // timer = std::time::Instant::now();

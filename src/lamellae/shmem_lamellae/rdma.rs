@@ -14,6 +14,12 @@ use super::comm::ShmemComm;
 
 pub(crate) struct ShmemFuture {}
 
+impl From<ShmemFuture> for RdmaFuture{
+    fn from(f: ShmemFuture) -> RdmaFuture {
+        RdmaFuture::Shmem(f)
+    }
+}
+
 impl Future for ShmemFuture {
     type Output = RdmaResult;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -34,11 +40,14 @@ impl CommRdma for ShmemComm {
                 break;
             }
         }
+        ShmemFuture {}.into()
     }
     fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaFuture {
-        self.put_all(src, dst)
+        // self.put_all(src, dst)
+        ShmemFuture {}.into()
     }
     fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture {
-        self.get(pe, src, dst)
+        // self.get(pe, src, dst)
+        ShmemFuture {}.into()
     }
 }

@@ -12,7 +12,7 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {
     //         let team = self.team_rt();
     //         team.inc_outstanding(1);
     //         let task = self.spawn(async move {
-    //             // team.lamellae.wait();
+    //             // team.lamellae.comm().wait();
     //             team.dec_outstanding(1);
     //             vec![unsafe { buf.as_slice().unwrap()[0] }]
     //         });
@@ -40,7 +40,7 @@ impl<T: ElementOps + 'static> AccessOps<T> for NativeAtomicArray<T> {
     //         let team = self.team_rt();
     //         team.inc_outstanding(1);
     //         let task = self.spawn(async move {
-    //             team.lamellae.wait();
+    //             team.lamellae.comm().wait();
     //             team.dec_outstanding(1);
     //         });
     //         req.push_back((task, vec![index]));

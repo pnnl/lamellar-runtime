@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub(crate) struct MyPtr {
     pub(crate) ptr: *mut u8,
     pub(crate) layout: std::alloc::Layout,

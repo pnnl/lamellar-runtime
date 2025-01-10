@@ -5,9 +5,9 @@ pub(crate) mod mem;
 pub(crate) mod rdma;
 
 use super::{
-    comm::CmdQStatus, command_queues::CommandQueue, Comm, Lamellae, LamellaeAM, LamellaeInit,
-    LamellaeShutdown, Ser, SerializeHeader, SerializedData, SerializedDataOps,
-    SERIALIZE_HEADER_LEN,
+    comm::{CommInfo,CmdQStatus, CommShutdown}, command_queues::CommandQueue, Comm, Lamellae, LamellaeAM, LamellaeInit,
+    LamellaeShutdown, Ser, SerializeHeader, SerializedData,
+    SERIALIZE_HEADER_LEN
 };
 use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::ShmemComm;
@@ -41,25 +41,25 @@ impl LamellaeInit for ShmemBuilder {
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone());
-
+        let cq = shmem.cq();
         let shmem = Arc::new(Lamellae::Shmem(shmem));
         let shmem_clone = shmem.clone();
-        let cq = shmem.cq();
         let scheduler_clone = scheduler.clone();
+        let cq_clone = cq.clone();
         scheduler.submit_task(async move {
-            cq.recv_data(scheduler_clone.clone(), shmem_clone.clone())
+            cq_clone.recv_data(scheduler_clone.clone(), shmem_clone.clone())
                 .await;
         });
 
-        let cq = shmem.cq();
+        let cq_clone = cq.clone();
         let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq.alloc_task(scheduler_clone.clone()).await;
+            cq_clone.alloc_task(scheduler_clone.clone()).await;
         });
-        let cq = shmem.cq();
+        let cq_clone = cq.clone();
         let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq.panic_task(scheduler_clone.clone()).await;
+            cq_clone.panic_task(scheduler_clone.clone()).await;
         });
         shmem
     }
@@ -99,7 +99,7 @@ impl Shmem {
         self.cq.clone()
     }
 
-    fn comm(&self) -> &Comm {
+    pub(crate) fn comm(&self) -> &Comm {
         &self.shmem_comm
     }
 }
@@ -140,13 +140,14 @@ impl LamellaeAM for Shmem {
         team: Arc<LamellarArchRT>,
         data: SerializedData,
     ) {
+        let remote_data = data.into_remote();
         if let Some(pe) = pe {
-            self.cq.send_data(data, pe).await;
+            self.cq.send_data(remote_data, pe).await;
         } else {
             let mut futures = team
                 .team_iter()
                 .filter(|pe| pe != &self.my_pe)
-                .map(|pe| self.cq.send_data(data.clone(), pe))
+                .map(|pe| self.cq.send_data(remote_data.clone(), pe))
                 .collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
             while let Some(_) = futures.next().await {}
         }
@@ -160,9 +161,9 @@ impl Ser for Shmem {
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
-        let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
-        Ok(SerializedData::ShmemData(ser_data))
+        let mut ser_data = SerializedData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
+        crate::serialize_into(ser_data.header_as_bytes_mut(), &header, false)?; //we want header to be a fixed size
+        Ok(ser_data)
     }
 }
 

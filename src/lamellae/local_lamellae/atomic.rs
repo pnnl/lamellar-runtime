@@ -3,7 +3,7 @@ use crate::lamellae::comm::{
     rdma::RdmaFuture,
 };
 
-use super::comm::LocalComm;
+use super::{comm::LocalComm, rdma::LocalFuture};
 
 impl CommAtomic for LocalComm {
     fn atomic_avail<T>(&self) -> bool {
@@ -15,7 +15,7 @@ impl CommAtomic for LocalComm {
         pe: usize,
         remote_addr: usize,
     ) -> RdmaFuture {
-        async move { Ok(()) }
+        LocalFuture{}.into()
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
@@ -24,6 +24,6 @@ impl CommAtomic for LocalComm {
         remote_addr: usize,
         result: &mut [T],
     ) -> RdmaFuture {
-        async move { Ok(()) }
+        LocalFuture{}.into()
     }
 }

@@ -109,7 +109,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
                     MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
-                    team.lamellae.alloc_pool(size * std::mem::size_of::<T>());
+                    team.lamellae.comm().alloc_pool(size * std::mem::size_of::<T>());
                     mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
                 }
 

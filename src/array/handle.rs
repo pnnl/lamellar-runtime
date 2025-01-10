@@ -16,6 +16,7 @@ use crate::{
     scheduler::LamellarTask,
     warnings::RuntimeWarning,
     Dist, LamellarTeamRT, OneSidedMemoryRegion, RegisteredMemoryRegion,
+    lamellae::CommProgress
 };
 
 use super::{
@@ -132,7 +133,7 @@ impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
         self.array.network_atomic_load(self.index, &buf);
         let team = self.array.team_rt();
         team.clone().spawn(async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
         })
     }
 
@@ -140,7 +141,7 @@ impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
         self.array.network_iatomic_load(self.index, &buf);
         // let team = self.array.team_rt().lamellae().wait;
         // team.clone().spawn(async move {
-        //     team.lamellae.wait();
+        //     team.lamellae.comm().wait();
         // })
     }
 }
@@ -155,7 +156,7 @@ impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
 //         self.array.network_atomic_store(self.index, &buf);
 //         let team = self.array.team_rt();
 //         team.clone().spawn(async move {
-//             team.lamellae.wait();
+//             team.lamellae.comm().wait();
 //         })
 //     }
 // }
@@ -170,15 +171,15 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
         unsafe { self.array.get_unchecked(self.index, &buf) };
         let team = self.array.team_rt();
         team.clone().spawn(async move {
-            team.lamellae.wait();
+            team.lamellae.comm().wait();
         })
     }
 
     fn block(&self, buf: OneSidedMemoryRegion<T>) {
         unsafe { self.array.get_unchecked(self.index, &buf) };
-        let team = self.array.team_rt().lamellae.wait();
+        let team = self.array.team_rt().lamellae.comm().wait();
         // team.clone().spawn(async move {
-        //     team.lamellae.wait();
+        //     team.lamellae.comm().wait();
         // })
     }
 }
@@ -193,7 +194,7 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
 //         unsafe { self.array.put_unchecked(self.index, &buf) };
 //         let team = self.array.team_rt();
 //         team.clone().spawn(async move {
-//             team.lamellae.wait();
+//             team.lamellae.comm().wait();
 //         })
 //     }
 // }
