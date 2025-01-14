@@ -8,16 +8,17 @@ use std::sync::Arc;
 
 use crate::{
     active_messaging::RemotePtr,
-    darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc},
+    darc::{Darc, DarcInner, DarcMode, __NetworkDarc, DarcCommPtr},
     lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
     IdError, LamellarEnv, LamellarTeam,
-    lamellae::CommMem
+    lamellae::{CommMem,CommAllocAddr},
 };
 
 use super::handle::{
     GlobalRwDarcCollectiveWriteHandle, GlobalRwDarcHandle, GlobalRwDarcReadHandle,
     GlobalRwDarcWriteHandle, IntoDarcHandle, IntoLocalRwDarcHandle,
 };
+use super::CommAlloc;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 enum LockType {
@@ -240,7 +241,7 @@ impl<T> DistRwLock<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LockAm {
-    rwlock_addr: usize,
+    rwlock_addr: CommAllocAddr,
     orig_pe: usize, //with respect to the team
     lock_type: LockType,
 }
@@ -249,7 +250,8 @@ impl LamellarAM for LockAm {
     async fn exec() {
         // println!("In lock am {:?}", self);
         // let lock = {
-        let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) };
+        // let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) };
+        let inner: &DarcInner<DistRwLock<()>> = unsafe { &*(self.rwlock_addr.as_ptr()) };
         // inner.deserialize_update_cnts(self.orig_pe);
         let rwlock = inner.item(); //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
         match self.lock_type {
@@ -270,7 +272,7 @@ impl LamellarAM for LockAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct UnlockAm {
-    rwlock_addr: usize,
+    rwlock_addr: CommAllocAddr,
     orig_pe: usize, //with respect to the team
     lock_type: LockType,
 }
@@ -278,8 +280,8 @@ struct UnlockAm {
 impl LamellarAM for UnlockAm {
     async fn exec() {
         // println!("In unlock am {:?}", self);
-        let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
-                                                                                       // inner.deserialize_update_cnts(self.orig_pe);
+        // let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
+        let inner: &DarcInner<DistRwLock<()>> = unsafe { &*(self.rwlock_addr.as_ptr()) };                                                                              // inner.deserialize_update_cnts(self.orig_pe);
         let rwlock = inner.item();
 
         unsafe {
@@ -549,11 +551,11 @@ impl<T> GlobalRwDarc<T> {
     #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.comm().base_addr() };
+            unsafe { self.darc.inner.addr()  - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
-            "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
+            "--------\norig: {:?} 0x{:x} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,
-            self.darc.inner,
+            self.darc.inner.addr(),
             rel_addr,
             self.inner()
         );
@@ -820,13 +822,22 @@ impl<T: Send> GlobalRwDarc<T> {
     /// let five_as_darc = five.into_darc().block();
     /// ```
     pub fn into_darc(self) -> IntoDarcHandle<T> {
-        let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                .expect("invalid darc pointer"),
-        };
-        let wrapped_lock = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
-                .expect("invalid darc pointer"),
+        // let wrapped_inner = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+        //         .expect("invalid darc pointer"),
+        // };
+        // let wrapped_lock = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
+        //         .expect("invalid darc pointer"),
+        // };
+        let inner = self.darc.inner.clone();
+        let wrapped_lock = DarcCommPtr{
+            alloc: CommAlloc{
+                addr: inner.alloc.addr,
+                size: inner.alloc.size,
+                alloc_type: inner.alloc.alloc_type,
+            },
+            _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
         };
         let team = self.darc.inner().team().clone();
         IntoDarcHandle {
@@ -837,7 +848,7 @@ impl<T: Send> GlobalRwDarc<T> {
                 while wrapped_lock.item().dirty_num_locks() != 0 {
                     async_std::task::yield_now().await;
                 }
-                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::Darc, 0).await;
+                DarcInner::block_on_outstanding(inner, DarcMode::Darc, 0).await;
             }),
         }
     }
@@ -864,13 +875,18 @@ impl<T: Send> GlobalRwDarc<T> {
     /// let five_as_localdarc = world.block_on(async move {five.into_localrw().await});
     /// ```
     pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
-        let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                .expect("invalid darc pointer"),
-        };
-        let wrapped_lock = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
-                .expect("invalid darc pointer"),
+        // let wrapped_inner = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+        //         .expect("invalid darc pointer"),
+        // };
+        let inner = self.darc.inner.clone();
+        let wrapped_lock = DarcCommPtr{
+            alloc: CommAlloc{
+                addr: inner.alloc.addr,
+                size: inner.alloc.size,
+                alloc_type: inner.alloc.alloc_type,
+            },
+            _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
         };
         let team = self.darc.inner().team().clone();
         IntoLocalRwDarcHandle {
@@ -881,7 +897,7 @@ impl<T: Send> GlobalRwDarc<T> {
                 while wrapped_lock.item().dirty_num_locks() != 0 {
                     async_std::task::yield_now().await;
                 }
-                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::LocalRw, 0).await;
+                DarcInner::block_on_outstanding(inner, DarcMode::LocalRw, 0).await;
             }),
         }
     }

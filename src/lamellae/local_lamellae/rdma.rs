@@ -32,7 +32,7 @@ impl From<LocalFuture> for RdmaFuture{
 impl CommRdma for LocalComm {
     fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture {
         let src_addr = src.addr();
-        let dst = dst as usize;
+        let dst = dst.0 as usize;
             if !((src_addr <= dst
             && dst < src_addr + src.len()) //dst start overlaps src
             || (src_addr <= dst + src.len()

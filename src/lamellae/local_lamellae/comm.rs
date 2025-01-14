@@ -20,6 +20,7 @@ pub(crate) struct LocalComm {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     pub(crate) allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
+    pub(crate) heap_allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
 }
 
 impl LocalComm {
@@ -28,6 +29,7 @@ impl LocalComm {
             num_pes: 1,
             my_pe: 0,
             allocs: Arc::new(Mutex::new(HashMap::new())),
+            heap_allocs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }

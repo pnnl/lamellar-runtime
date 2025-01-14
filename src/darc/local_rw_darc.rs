@@ -1,16 +1,15 @@
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::{
     active_messaging::RemotePtr,
-    darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc},
+    darc::{Darc, DarcInner, DarcMode, __NetworkDarc,DarcCommPtr},
     lamellar_team::IntoLamellarTeam,
     IdError, LamellarEnv, LamellarTeam,
-    lamellae::CommMem,
+    lamellae::{CommAllocAddr,CommMem},
 };
 
 use super::handle::LocalRwDarcHandle;
@@ -179,11 +178,11 @@ impl<T> LocalRwDarc<T> {
     #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.comm().base_addr() };
+            unsafe { self.darc.inner.addr()  - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
-            "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
+            "--------\norig: {:?} 0x{:x} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,
-            self.darc.inner,
+            self.darc.inner.addr(),
             rel_addr,
             self.inner()
         );
@@ -344,17 +343,18 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let five_as_globaldarc = world.block_on(async move {five.into_globalrw().await});
     /// ```
     pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {
-        let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                .expect("invalid darc pointer"),
-        };
+        // let wrapped_inner = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+        //         .expect("invalid darc pointer"),
+        // };
+        let inner = self.darc.inner.clone();
         let team = self.darc.inner().team().clone();
         IntoGlobalRwDarcHandle {
             darc: self.into(),
             team,
             launched: false,
             outstanding_future: Box::pin(DarcInner::block_on_outstanding(
-                wrapped_inner,
+                inner,
                 DarcMode::GlobalRw,
                 0,
             )),
@@ -385,17 +385,18 @@ impl<T: Send + Sync> LocalRwDarc<T> {
     /// let five_as_darc = five.into_darc().block();
     /// ```
     pub fn into_darc(self) -> IntoDarcHandle<T> {
-        let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                .expect("invalid darc pointer"),
-        };
+        // let wrapped_inner = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+        //         .expect("invalid darc pointer"),
+        // };
+        let inner = self.darc.inner.clone();
         let team = self.darc.inner().team().clone();
         IntoDarcHandle {
             darc: self.into(),
             team,
             launched: false,
             outstanding_future: Box::pin(async move {
-                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::Darc, 0).await;
+                DarcInner::block_on_outstanding(inner, DarcMode::Darc, 0).await;
             }),
         }
     }

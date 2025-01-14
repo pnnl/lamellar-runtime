@@ -11,18 +11,18 @@ use async_trait::async_trait;
 
 #[derive(Clone)]
 enum LamellarData {
-    Am(LamellarArcAm, AmId),
-    Return(LamellarArcAm, AmId),
-    Data(LamellarResultArc, Vec<RemotePtr>, usize),
+    Am(LamellarArcAm, AmId,usize),
+    Return(LamellarArcAm, AmId,usize),
+    Data(LamellarResultArc, Vec<RemotePtr>,usize, usize),
     Unit,
 }
 
 impl std::fmt::Debug for LamellarData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LamellarData::Am(_, _) => write!(f, "Am"),
-            LamellarData::Return(_, _) => write!(f, "Return"),
-            LamellarData::Data(_, _, _) => write!(f, "Data"),
+            LamellarData::Am(_, _,_) => write!(f, "Am"),
+            LamellarData::Return(_, _, _) => write!(f, "Return"),
+            LamellarData::Data(_, _, _, _) => write!(f, "Data"),
             LamellarData::Unit => write!(f, "Unit"),
         }
     }

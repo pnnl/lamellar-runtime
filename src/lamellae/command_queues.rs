@@ -1,5 +1,5 @@
 use super::{
-    comm::{CmdQStatus, CommMem, CommProgress, CommRdma, CommInfo},
+    comm::{CmdQStatus, CommMem, CommProgress, CommRdma, CommInfo, CommAlloc, CommSlice},
     Comm, Lamellae, SerializedData,RemoteSerializedData,
 };
 use crate::{env_var::config, scheduler::Scheduler};
@@ -98,6 +98,12 @@ impl CmdMsg {
         let slice: &[u8] = unsafe { std::slice::from_raw_parts(pointer, size) };
         slice
     }
+    fn cmd_as_comm_slice(&self) -> CommSlice<Cmd> {
+        let pointer = &self.cmd as *const Cmd ;
+        let size = std::mem::size_of::<Cmd>();
+        let slice: CommSlice<Cmd> = unsafe { CommSlice::from_raw_parts(pointer, 1) };
+        slice
+    }
     //#[tracing::instrument(skip_all)]
     fn hash(&self) -> usize {
         let mut res = self
@@ -136,7 +142,7 @@ impl std::fmt::Debug for CmdMsg {
 }
 
 struct CmdBuf {
-    buf: Box<[CmdMsg]>,
+    buf: CommSlice<CmdMsg>,
     addr: usize,
     // base_addr: usize,
     index: usize,
@@ -146,7 +152,9 @@ struct CmdBuf {
 
 impl CmdBuf {
     //#[tracing::instrument(skip_all)]
-    fn push(&mut self, daddr: usize, dsize: usize, hash: usize) {
+    fn push(&mut self, data: CommSlice<u8>, hash: usize) {
+        let daddr = data.addr();
+        let dsize = data.len();
         if daddr == 0 || dsize == 0 {
             panic!("this shouldnt happen! {:?} {:?}", daddr, dsize);
         }
@@ -204,15 +212,15 @@ impl std::fmt::Debug for CmdBuf {
     }
 }
 
-impl Drop for CmdBuf {
-    //#[tracing::instrument(skip_all)]
-    fn drop(&mut self) {
-        // println!("dropping cmd buf");
-        let old = std::mem::take(&mut self.buf);
-        let _ = Box::into_raw(old);
-        // println!("dropped cmd buf");
-    }
-}
+// impl Drop for CmdBuf {
+//     //#[tracing::instrument(skip_all)]
+//     fn drop(&mut self) {
+//         // println!("dropping cmd buf");
+//         let old = std::mem::take(&mut self.buf);
+//         let _ = Box::into_raw(old);
+//         // println!("dropped cmd buf");
+//     }
+// }
 
 struct CmdMsgBuffer {
     empty_bufs: Vec<CmdBuf>,
@@ -228,19 +236,13 @@ struct CmdMsgBuffer {
 impl CmdMsgBuffer {
     // fn new(addrs: Arc<Vec<usize>>, base_addr: usize, pe: usize) -> CmdMsgBuffer {
     //#[tracing::instrument(skip_all)]
-    fn new(addrs: Arc<Vec<usize>>, pe: usize) -> CmdMsgBuffer {
+    fn new(addrs: Arc<Vec<CommAlloc>>, pe: usize) -> CmdMsgBuffer {
         let mut bufs = vec![];
-        for addr in addrs.iter() {
+        for alloc in addrs.iter() {
             // println!("CmdMsgBuffer {:x} {:?}",addr,addr);
             bufs.push(CmdBuf {
-                buf: unsafe {
-                    Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                        // (*addr + base_addr) as *mut CmdMsg,
-                        *addr as *mut CmdMsg,
-                        config().cmd_buf_len,
-                    ))
-                },
-                addr: *addr,
+                buf: alloc.as_slice(),
+                addr: alloc.addr,
                 // base_addr: base_addr,
                 index: 0,
                 allocated_cnt: 0,
@@ -259,12 +261,12 @@ impl CmdMsgBuffer {
         }
     }
     //#[tracing::instrument(skip_all)]
-    fn try_push(&mut self, addr: usize, len: usize, hash: usize) -> bool {
+    fn try_push(&mut self, data: CommSlice<u8>, hash: usize) -> bool {
         if self.cur_buf.is_none() {
             self.cur_buf = self.empty_bufs.pop();
         }
         if let Some(buf) = &mut self.cur_buf {
-            buf.push(addr, len, hash);
+            buf.push(data, hash);
             if buf.full() {
                 self.full_bufs
                     .push(std::mem::replace(&mut self.cur_buf, None).unwrap());
@@ -403,11 +405,11 @@ impl Drop for CmdMsgBuffer {
 }
 
 struct InnerCQ {
-    send_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    recv_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    free_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    alloc_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    panic_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
+    send_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
+    recv_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
+    free_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
+    alloc_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
+    panic_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
     cmd_buffers: Vec<Mutex<CmdMsgBuffer>>,
     release_cmd: Arc<Box<CmdMsg>>,
     clear_cmd: Arc<Box<CmdMsg>>,
@@ -429,15 +431,15 @@ struct InnerCQ {
 impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn new(
-        send_buffer_addr: usize,
-        recv_buffer_addr: usize,
-        free_buffer_addr: usize,
-        alloc_buffer_addr: usize,
-        panic_buffer_addr: usize,
-        cmd_buffers_addrs: &Vec<Arc<Vec<usize>>>,
-        release_cmd_addr: usize,
-        clear_cmd_addr: usize,
-        free_cmd_addr: usize,
+        send_buffer_alloc: CommAlloc,
+        recv_buffer_alloc: CommAlloc,
+        free_buffer_alloc: CommAlloc,
+        alloc_buffer_alloc: CommAlloc,
+        panic_buffer_alloc: CommAlloc,
+        cmd_buffers_alloc: &Vec<Arc<Vec<CommAlloc>>>,
+        release_cmd_alloc: CommAlloc,
+        clear_cmd_alloc: CommAlloc,
+        free_cmd_alloc: CommAlloc,
         comm: Arc<Comm>,
         my_pe: usize,
         num_pes: usize,
@@ -445,7 +447,7 @@ impl InnerCQ {
     ) -> InnerCQ {
         let mut cmd_buffers = vec![];
         let mut pe = 0;
-        for addrs in cmd_buffers_addrs.iter() {
+        for addrs in cmd_buffers_alloc.iter() {
             cmd_buffers.push(Mutex::new(CmdMsgBuffer::new(
                 addrs.clone(),
                 // comm.base_addr(),
@@ -453,12 +455,7 @@ impl InnerCQ {
             )));
             pe += 1;
         }
-        let mut send_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                send_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
+        let mut send_buffer:CommSlice<CmdMsg> = send_buffer_alloc.as_slice();
         for cmd in send_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -467,12 +464,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut recv_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                recv_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
+        let mut recv_buffer:CommSlice<CmdMsg> =recv_buffer_alloc.as_slice();
         for cmd in recv_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -481,12 +473,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut free_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                free_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
+        let mut free_buffer:CommSlice<CmdMsg> = free_buffer_alloc.as_slice();
         for cmd in free_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -495,12 +482,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut alloc_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                alloc_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
+        let mut alloc_buffer:CommSlice<CmdMsg> = alloc_buffer_alloc.as_slice();
         for cmd in alloc_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -509,12 +491,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut panic_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                panic_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
+        let mut panic_buffer:CommSlice<CmdMsg> = panic_buffer_alloc.as_slice();
         for cmd in panic_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -523,21 +500,21 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut release_cmd = unsafe { Box::from_raw(release_cmd_addr as *mut CmdMsg) };
+        let mut release_cmd = unsafe { Box::from_raw(release_cmd_alloc.addr as *mut CmdMsg) };
         release_cmd.daddr = 1;
         release_cmd.dsize = 1;
         release_cmd.cmd = Cmd::Release;
         release_cmd.msg_hash = 1;
         release_cmd.calc_hash();
 
-        let mut clear_cmd = unsafe { Box::from_raw(clear_cmd_addr as *mut CmdMsg) };
+        let mut clear_cmd = unsafe { Box::from_raw(clear_cmd_alloc.addr as *mut CmdMsg) };
         clear_cmd.daddr = 0;
         clear_cmd.dsize = 0;
         clear_cmd.cmd = Cmd::Clear;
         clear_cmd.msg_hash = 0;
         clear_cmd.calc_hash();
 
-        let mut free_cmd = unsafe { Box::from_raw(free_cmd_addr as *mut CmdMsg) };
+        let mut free_cmd = unsafe { Box::from_raw(free_cmd_alloc.addr as *mut CmdMsg) };
         free_cmd.daddr = 0;
         free_cmd.dsize = 0;
         free_cmd.cmd = Cmd::Free;
@@ -674,8 +651,11 @@ impl InnerCQ {
                     // println!("Command Queue sending buffer");
                     self.comm.put(
                         dst,
-                        send_buf[dst].as_bytes(),
-                        recv_buffer[self.my_pe].as_addr(),
+                        // send_buf[dst].as_bytes(),
+                        // recv_buffer[self.my_pe].as_addr(),
+                        send_buf.sub_slice(dst..=dst),
+                        recv_buffer.index_addr(self.my_pe),
+                        
                     );
                     self.put_amt
                         .fetch_add(send_buf[dst].as_bytes().len(), Ordering::Relaxed);
@@ -703,7 +683,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    async fn send(&self, addr: usize, len: usize, dst: usize, hash: usize) {
+    async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
         let mut timer = std::time::Instant::now();
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
@@ -714,9 +694,9 @@ impl InnerCQ {
 
                 // let mut cmd_buffer = trace_span!("lock").in_scope(|| self.cmd_buffers[dst].lock());
                 let mut cmd_buffer = self.cmd_buffers[dst].lock();
-                if cmd_buffer.try_push(addr, len, hash) {
+                if cmd_buffer.try_push(data, hash) {
                     self.sent_cnt.fetch_add(1, Ordering::SeqCst);
-                    self.put_amt.fetch_add(len, Ordering::Relaxed);
+                    self.put_amt.fetch_add(data.len(), Ordering::Relaxed);
                     let _cnt = self.pending_cmds.fetch_sub(1, Ordering::SeqCst);
                     break;
                 }
@@ -811,7 +791,7 @@ impl InnerCQ {
 
     // need to include  a "barrier" count...
     //#[tracing::instrument(skip_all)]
-    fn send_alloc_inner(&self, alloc_buf: &mut Box<[CmdMsg]>, min_size: usize) {
+    fn send_alloc_inner(&self, alloc_buf: &CommSlice<CmdMsg>, min_size: usize) {
         let mut new_alloc = true;
         while new_alloc {
             new_alloc = false;
@@ -827,7 +807,7 @@ impl InnerCQ {
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
                         // println!("putting alloc cmd to pe {:?}", pe);
-                        self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+                        self.comm.put(pe,  alloc_buf.sub_slice(self.my_pe..=self.my_pe), alloc_buf.index_addr(self.my_pe));
                     }
                 }
             }
@@ -855,7 +835,9 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting clear cmd to pe {:?}", pe);
-                    self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+                    self.comm.put(pe,  alloc_buf.sub_slice(self.my_pe..=self.my_pe), alloc_buf.index_addr(self.my_pe));
+
+                    // self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
             }
             for pe in 0..self.num_pes {
@@ -875,7 +857,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn send_panic_inner(&self, panic_buf: &mut Box<[CmdMsg]>) {
+    fn send_panic_inner(&self, panic_buf:&CommSlice<CmdMsg>) {
         if panic_buf[self.my_pe].hash() == self.clear_cmd.hash() {
             let cmd = &mut panic_buf[self.my_pe];
             cmd.daddr = 0;
@@ -886,7 +868,9 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    self.comm.put(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
+                    self.comm.put(pe,  panic_buf.sub_slice(self.my_pe..=self.my_pe), panic_buf.index_addr(self.my_pe));
+
+                    // self.comm.put(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
                 }
             }
             self.comm.wait();
@@ -902,7 +886,7 @@ impl InnerCQ {
         // println!("sending release to {dst}");
         self.comm.put(
             dst,
-            self.release_cmd.cmd_as_bytes(),
+            self.release_cmd.cmd_as_comm_slice(),
             local_daddr + offset_of!(CmdMsg, cmd),
         ); // + self.comm.base_addr(),);
     }
@@ -915,7 +899,7 @@ impl InnerCQ {
         // println!("sending free to {dst}");
         self.comm.put(
             dst,
-            self.free_cmd.cmd_as_bytes(),
+            self.free_cmd.cmd_as_comm_slice(),
             local_daddr + offset_of!(CmdMsg, cmd),
         ); // + self.comm.base_addr(),);
     }
@@ -940,8 +924,10 @@ impl InnerCQ {
                     self.comm
                         .put(
                             dst,
-                            send_buf[dst].as_bytes(),
-                            recv_buffer[self.my_pe].as_addr(),
+                            // send_buf[dst].as_bytes(),
+                            // recv_buffer[self.my_pe].as_addr(),
+                            send_buf.sub_slice(dst..=dst),
+                            recv_buffer.index_addr(dst),
                         )
                         .await
                         .expect("put failed");
@@ -979,11 +965,11 @@ impl InnerCQ {
 
     //update cmdbuffers to include a hash the wait on that here
     //#[tracing::instrument(skip_all)]
-    async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
+    async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: CommSlice<u8>) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting data from {src}, {:?}", cmd.daddr);
         self.comm
-            .get(src, local_daddr as usize, data_slice)
+            .get(src, local_daddr, data_slice)
             .await
             .expect("get failed");
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
@@ -1016,7 +1002,7 @@ impl InnerCQ {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
         self.comm
-            .get(src, local_daddr as usize, data_slice)
+            .get(src, local_daddr , data_slice)
             .await
             .expect("get failed");
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
@@ -1087,7 +1073,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
+    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> CommAlloc {
         let mut data = self
             .comm
             .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
@@ -1107,8 +1093,9 @@ impl InnerCQ {
         }
         // println!("getting into {:?} 0x{:x} ",data, data.unwrap() + self.comm.base_addr());
         let data = data.unwrap();
-        let data_slice =
-            unsafe { std::slice::from_raw_parts_mut(data as *mut u8, cmd.dsize as usize) };
+        let data_slice = data.as_slice();
+        // let data_slice =
+        //     unsafe { std::slice::from_raw_parts_mut(data as *mut u8, cmd.dsize as usize) };
         self.get_data(src, cmd, data_slice).await;
         // println!("received cmd_buf {:?}", data_slice);
         // println!(
@@ -1182,15 +1169,15 @@ impl Drop for InnerCQ {
 
 pub(crate) struct CommandQueue {
     cq: Arc<InnerCQ>,
-    send_buffer_addr: usize,
-    recv_buffer_addr: usize,
-    free_buffer_addr: usize,
-    alloc_buffer_addr: usize,
-    panic_buffer_addr: usize,
-    release_cmd_addr: usize,
-    clear_cmd_addr: usize,
-    free_cmd_addr: usize,
-    cmd_buffers_addrs: Vec<Arc<Vec<usize>>>,
+    send_buffer: CommAlloc,
+    recv_buffer: CommAlloc,
+    free_buffer: CommAlloc,
+    alloc_buffer: CommAlloc,
+    panic_buffer: CommAlloc,
+    release_cmd: CommAlloc,
+    clear_cmd: CommAlloc,
+    free_cmd: CommAlloc,
+    cmd_buffers: Vec<Arc<Vec<CommAlloc>>>,
     comm: Arc<Comm>,
     active: Arc<AtomicU8>,
 }
@@ -1203,14 +1190,14 @@ impl CommandQueue {
         num_pes: usize,
         active: Arc<AtomicU8>,
     ) -> CommandQueue {
-        let send_buffer_addr = comm
+        let send_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
         // + comm.base_addr();
-        // println!("send_buffer_addr{:x} {:x}",send_buffer_addr,send_buffer_addr-comm.base_addr());
+        // println!("send_buffer{:x} {:x}",send_buffer,send_buffer-comm.base_addr());
         let recv_buffer_addr = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
@@ -1281,7 +1268,7 @@ impl CommandQueue {
         }
         // let cmd_buffers_addrs=Arc::new(cmd_buffers_addrs);
         let cq = InnerCQ::new(
-            send_buffer_addr,
+            send_buffer,
             recv_buffer_addr,
             free_buffer_addr,
             alloc_buffer_addr,
@@ -1297,17 +1284,17 @@ impl CommandQueue {
         );
         CommandQueue {
             cq: Arc::new(cq),
-            send_buffer_addr: send_buffer_addr,
-            recv_buffer_addr: recv_buffer_addr,
-            free_buffer_addr: free_buffer_addr,
-            alloc_buffer_addr: alloc_buffer_addr,
-            panic_buffer_addr: panic_buffer_addr,
-            release_cmd_addr: release_cmd_addr,
-            clear_cmd_addr: clear_cmd_addr,
-            free_cmd_addr: free_cmd_addr,
-            cmd_buffers_addrs: cmd_buffers_addrs,
-            comm: comm,
-            active: active,
+            send_buffer,
+            recv_buffer_addr,
+            free_buffer_addr,
+            alloc_buffer_addr,
+            panic_buffer_addr,
+            release_cmd_addr,
+            clear_cmd_addr,
+            free_cmd_addr,
+            cmd_buffers_addrs,
+            comm,
+            active,
         }
     }
 
@@ -1323,112 +1310,14 @@ impl CommandQueue {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn send_data(&self, data: RemoteSerializedData, dst: usize) {
-        // match data {
-        //     #[cfg(feature = "rofi")]
-        //     SerializedData::RofiData(ref data) => {
-        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-        //         let hash = calc_hash(data.relative_addr, data.len);
-
-        //         // println!(
-        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     data.relative_addr,
-        //         //     data.len,
-        //         //     hash,
-        //         //     &data.header_and_data_as_bytes()[0..20]
-        //         // );
-        //         data.increment_cnt(); //or we could implement something like an into_raw here...
-        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
-
-        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
-        //     }
-        //     #[cfg(feature = "enable-rofi-rust")]
-        //     SerializedData::RofiRustData(ref data) => {
-        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-        //         let hash = calc_hash(data.relative_addr, data.len);
-
-        //         // println!(
-        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     data.relative_addr,
-        //         //     data.len,
-        //         //     hash,
-        //         //     &data.header_and_data_as_bytes()[0..20]
-        //         // );
-        //         data.increment_cnt(); //or we could implement something like an into_raw here...
-        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
-
-        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
-        //     }
-        //     #[cfg(feature = "enable-rofi-rust")]
-        //     SerializedData::RofiRustAsyncData(ref data) => {
-        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-        //         let hash = calc_hash(data.relative_addr, data.len);
-
-        //         // println!(
-        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     data.relative_addr,
-        //         //     data.len,
-        //         //     hash,
-        //         //     &data.header_and_data_as_bytes()[0..20]
-        //         // );
-        //         data.increment_cnt(); //or we could implement something like an into_raw here...
-        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
-
-        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
-        //     }
-        //     #[cfg(feature = "enable-libfabric")]
-        //     SerializedData::LibFabData(ref data) => {
-        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-        //         let hash = calc_hash(data.relative_addr, data.len);
-
-        //         // println!(
-        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     data.relative_addr,
-        //         //     data.len,
-        //         //     hash,
-        //         //     &data.header_and_data_as_bytes()[0..20]
-        //         // );
-        //         data.increment_cnt(); //or we could implement something like an into_raw here...
-        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
-
-        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
-        //     }
-        //     #[cfg(feature = "enable-libfabric")]
-        //     SerializedData::LibFabAsyncData(ref data) => {
-        //         // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-        //         // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-        //         let hash = calc_hash(data.relative_addr, data.len);
-
-        //         // println!(
-        //         //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     data.relative_addr,
-        //         //     data.len,
-        //         //     hash,
-        //         //     &data.header_and_data_as_bytes()[0..20]
-        //         // );
-        //         data.increment_cnt(); //or we could implement something like an into_raw here...
-        //                               // println!("sending data {:?}", data.header_and_data_as_bytes());
-
-        //         self.cq.send(data.relative_addr, data.len, dst, hash).await;
-        //     }
-        //     SerializedData::ShmemData(ref data) => {
-        // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-        // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-        let hash = calc_hash(data.ser_data_addr, data.len());
+        
+        let hash = calc_hash(data.ser_data_bytes.addr(), data.len());
 
         // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
         data.increment_cnt(); //or we could implement something like an into_raw here...
                               // println!("sending data {:?}",data.header_and_data_as_bytes());
         self.cq
-            .send(data.ser_data_addr, data.len(), dst, hash)
+            .send(data.ser_data_bytes, dst, hash)
             .await;
         //     }
         //     _ => {}
@@ -1500,21 +1389,22 @@ impl CommandQueue {
                                     //     cmd_buf_cmd, src
                                     // );
                                     let data = cq.get_cmd_buf(src, cmd_buf_cmd).await;
-                                    let cmd_buf = unsafe {
-                                        std::slice::from_raw_parts(
-                                            data as *const CmdMsg,
-                                            cmd_buf_cmd.dsize as usize
-                                                / std::mem::size_of::<CmdMsg>(),
-                                        )
-                                    };
+                                    let cmd_buf: CommSlice<CmdMsg> = data.as_slice();
+                                    // let cmd_buf = unsafe {
+                                    //     std::slice::from_raw_parts(
+                                    //         data as *const CmdMsg,
+                                    //         cmd_buf_cmd.dsize as usize
+                                    //             / std::mem::size_of::<CmdMsg>(),
+                                    //     )
+                                    // };
                                     // println!("cmd_buf {:?}", cmd_buf);
                                     let mut i = 0;
                                     let len = cmd_buf.len();
                                     let cmd_cnt = Arc::new(AtomicUsize::new(len));
                                     // println!("src: {:?} cmd_buf len {:?}", src, len);
 
-                                    for cmd in cmd_buf {
-                                        let cmd = *cmd;
+                                    for cmd in cmd_buf.iter() {
+                                        let cmd  = *cmd;
                                         if cmd.dsize != 0 {
                                             let cq = cq.clone();
                                             let lamellae = lamellae.clone();
@@ -1618,7 +1508,7 @@ impl Drop for CommandQueue {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("dropping rofi command queue");
-        self.comm.rt_free(self.send_buffer_addr); // - self.comm.base_addr());
+        self.comm.rt_free(self.send_buffer); // - self.comm.base_addr());
         self.comm.rt_free(self.recv_buffer_addr); // - self.comm.base_addr());
         self.comm.rt_free(self.free_buffer_addr); // - self.comm.base_addr());
         self.comm.rt_free(self.alloc_buffer_addr);

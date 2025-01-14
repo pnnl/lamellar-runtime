@@ -5,10 +5,10 @@ use std::{
 
 use futures_util::Future;
 
-use crate::lamellae::comm::{
+use crate::lamellae::{comm::{
     error::RdmaResult,
     rdma::{CommRdma, RdmaFuture, Remote},
-};
+}, CommAllocAddr, CommSlice};
 
 use super::comm::ShmemComm;
 
@@ -28,7 +28,7 @@ impl Future for ShmemFuture {
 }
 
 impl CommRdma for ShmemComm {
-    fn put<T: Remote>(&self, pe: usize, src: &[T], remote_addr: usize) -> RdmaFuture {
+    fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, remote_addr: CommAllocAddr) -> RdmaFuture {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(remote_addr) {
@@ -42,11 +42,11 @@ impl CommRdma for ShmemComm {
         }
         ShmemFuture {}.into()
     }
-    fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaFuture {
+    fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture {
         // self.put_all(src, dst)
         ShmemFuture {}.into()
     }
-    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture {
+    fn get<T: Remote>(&self, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaFuture {
         // self.get(pe, src, dst)
         ShmemFuture {}.into()
     }

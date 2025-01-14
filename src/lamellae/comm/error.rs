@@ -1,7 +1,10 @@
+use super::CommAllocAddr;
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum AllocError {
     OutOfMemoryError(usize),
     IdError(usize),
+    LocalNotFound(CommAllocAddr),
 }
 
 impl std::fmt::Display for AllocError {
@@ -12,6 +15,9 @@ impl std::fmt::Display for AllocError {
             }
             AllocError::IdError(pe) => {
                 write!(f, "pe {} must be part of team of sub allocation", pe)
+            }
+            AllocError::LocalNotFound(addr) => {
+                write!(f, "Allocation not found locally for given address {:x}", addr)
             }
         }
     }

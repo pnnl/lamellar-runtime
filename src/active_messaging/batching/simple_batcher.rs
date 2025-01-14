@@ -1,6 +1,6 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
-    lamellae::{comm::error::AllocError,  Lamellae, LamellaeAM, Ser,Des, SerializeHeader,CommMem},
+    lamellae::{comm::error::AllocError,  Lamellae, LamellaeAM, Ser,Des, SerializeHeader,CommMem,CommSlice},
 };
 use batching::*;
 
@@ -28,11 +28,11 @@ impl SimpleBatcherInner {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn add(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
+    fn add(&self, req_data: ReqMetaData, data: LamellarData, payload_size: usize, header_size: usize) -> usize {
         // println!("adding to batch");
         //return true if this is the first am in the batch
         let mut batch = self.batch.lock();
-        let size = size + *CMD_LEN;
+        let size = *CMD_LEN + payload_size + header_size;
         batch.push((req_data, data, size));
         // batch.len() == 1
         self.size.fetch_add(size, Ordering::Relaxed)
@@ -80,8 +80,8 @@ impl Batcher for SimpleBatcher {
         }
         let size = batch.add(
             req_data,
-            LamellarData::Am(am, am_id),
-            am_size + *AM_HEADER_LEN,
+            LamellarData::Am(am, am_id, am_size),
+            am_size, *AM_HEADER_LEN,
         );
         if size == 0 {
             //first data in batch, schedule a transfer task
@@ -135,8 +135,8 @@ impl Batcher for SimpleBatcher {
         }
         let size = batch.add(
             req_data,
-            LamellarData::Return(am, am_id),
-            am_size + *AM_HEADER_LEN,
+            LamellarData::Return(am, am_id,am_size),
+            am_size , *AM_HEADER_LEN,
         );
         if size == 0 {
             //first data in batch, schedule a transfer task
@@ -192,8 +192,8 @@ impl Batcher for SimpleBatcher {
         let darc_list_size = crate::serialized_size(&darcs, false);
         let size = batch.add(
             req_data,
-            LamellarData::Data(data, darcs, darc_list_size),
-            data_size + darc_list_size + *DATA_HEADER_LEN,
+            LamellarData::Data(data, darcs, data_size, darc_list_size),
+            data_size , darc_list_size + *DATA_HEADER_LEN,
         );
         if size == 0 {
             //first data in batch, schedule a transfer task
@@ -238,7 +238,7 @@ impl Batcher for SimpleBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let size = batch.add(req_data, LamellarData::Unit, *UNIT_HEADER_LEN);
+        let size = batch.add(req_data, LamellarData::Unit, 0,*UNIT_HEADER_LEN);
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
@@ -334,53 +334,51 @@ impl SimpleBatcher {
             let arch = buf[0].0.team.arch.clone();
             let header = SimpleBatcher::create_header(buf[0].0.team.world_pe);
             let mut data_buf = SimpleBatcher::create_data_buf(header, size, &lamellae).await;
-            let data_slice = data_buf.data_as_bytes_mut();
+            let mut data_slice = data_buf.data_as_bytes_mut();
 
             let mut cnts = HashMap::new();
 
             let mut i = 0;
-            for (req_data, data, size) in buf {
+            for (req_data, data, _size) in buf { 
+                let  req_data_slice = data_slice.sub_slice(i..);
                 match data {
-                    LamellarData::Am(am, id) => {
-                        SimpleBatcher::serialize_am(
+                    LamellarData::Am(am, id,am_size) => {
+                        i += SimpleBatcher::serialize_am(
                             req_data,
+                            am_size,
                             am,
                             id,
-                            size,
-                            data_slice,
-                            &mut i,
+                            req_data_slice,
                             Cmd::Am,
                         );
                         cnts.entry(Cmd::Am).and_modify(|e| *e += 1).or_insert(1);
                     }
-                    LamellarData::Return(am, id) => {
-                        SimpleBatcher::serialize_am(
+                    LamellarData::Return(am, id,am_size) => {
+                        i += SimpleBatcher::serialize_am(
                             req_data,
+                            am_size,
                             am,
                             id,
-                            size,
-                            data_slice,
-                            &mut i,
+                            req_data_slice,
                             Cmd::ReturnAm,
                         );
                         cnts.entry(Cmd::ReturnAm)
                             .and_modify(|e| *e += 1)
                             .or_insert(1);
                     }
-                    LamellarData::Data(data, darcs, darc_counter) => {
-                        SimpleBatcher::serialize_data(
+                    LamellarData::Data(data, darcs, data_size, darc_list_size) => {
+                        i += SimpleBatcher::serialize_data(
                             req_data,
+                            data_size,
                             data,
-                            size,
-                            data_slice,
-                            &mut i,
+                            req_data_slice,
                             darcs,
-                            darc_counter,
+                            darc_list_size,
                         );
                         cnts.entry(Cmd::Data).and_modify(|e| *e += 1).or_insert(1);
                     }
                     LamellarData::Unit => {
-                        SimpleBatcher::serialize_unit(req_data, data_slice, &mut i);
+                        i += SimpleBatcher::serialize_unit(req_data, req_data_slice);
                         cnts.entry(Cmd::Unit).and_modify(|e| *e += 1).or_insert(1);
                     }
                 }
@@ -400,26 +398,24 @@ impl SimpleBatcher {
     //#[tracing::instrument(skip_all)]
     fn serialize_am(
         req_data: ReqMetaData,
+        am_size: usize,
         am: LamellarArcAm,
         am_id: AmId,
-        am_size: usize,
-        data_buf: &mut [u8],
-        i: &mut usize,
+        mut data_buf: CommSlice<u8>,
         cmd: Cmd,
-    ) {
+    ) ->usize{
         // println!("serialize_am");
-        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &cmd, false).unwrap();
-        *i += *CMD_LEN;
+        let mut i = 0;
+        crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &cmd, false).unwrap();
+        i += *CMD_LEN;
 
         let am_header = AmHeader {
             am_id: am_id,
             req_id: req_data.id,
             team_addr: req_data.team_addr,
         };
-        crate::serialize_into(&mut data_buf[*i..*i + *AM_HEADER_LEN], &am_header, false).unwrap();
-        *i += *AM_HEADER_LEN;
-
-        let am_size = am_size - (*CMD_LEN + *AM_HEADER_LEN);
+        crate::serialize_into(&mut data_buf[i..i + *AM_HEADER_LEN], &am_header, false).unwrap();
+        i += *AM_HEADER_LEN;
 
         let darc_ser_cnt = match req_data.dst {
             Some(_) => 1,
@@ -432,60 +428,60 @@ impl SimpleBatcher {
         };
         let mut darcs = vec![];
         am.ser(darc_ser_cnt, &mut darcs);
-        am.serialize_into(&mut data_buf[*i..*i + am_size]);
-        *i += am_size;
+        am.serialize_into(&mut data_buf[i..i + am_size]);
+        i + am_size
     }
 
     //#[tracing::instrument(skip_all)]
     fn serialize_data(
         req_data: ReqMetaData,
-        data: LamellarResultArc,
         data_size: usize,
-        data_buf: &mut [u8],
-        i: &mut usize,
+        data: LamellarResultArc,
+        mut data_buf: CommSlice<u8>,
         darcs: Vec<RemotePtr>,
         darc_list_size: usize,
-    ) {
+    ) -> usize {
         // println!("serialize_data");
-        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Data, false).unwrap();
-        *i += *CMD_LEN;
-        let data_size = data_size - (*CMD_LEN + *DATA_HEADER_LEN + darc_list_size);
+        let mut i = 0;
+        crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &Cmd::Data, false).unwrap();
+        i += *CMD_LEN;
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
             darc_list_size: darc_list_size,
         };
         crate::serialize_into(
-            &mut data_buf[*i..*i + *DATA_HEADER_LEN],
+            &mut data_buf[i..i + *DATA_HEADER_LEN],
             &data_header,
             false,
         )
         .unwrap();
-        *i += *DATA_HEADER_LEN;
+        i += *DATA_HEADER_LEN;
 
-        crate::serialize_into(&mut data_buf[*i..(*i + darc_list_size)], &darcs, false).unwrap();
-        *i += darc_list_size;
+        crate::serialize_into(&mut data_buf[i..(i + darc_list_size)], &darcs, false).unwrap();
+        i += darc_list_size;
 
-        data.serialize_into(&mut data_buf[*i..*i + data_size]);
-        *i += data_size;
+        data.serialize_into(&mut data_buf[i..i + data_size]);
+        i + data_size
     }
 
     //#[tracing::instrument(skip_all)]
-    fn serialize_unit(req_data: ReqMetaData, data_buf: &mut [u8], i: &mut usize) {
+    fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>, ) -> usize{
         // println!("serialize_unit");
-        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Unit, false).unwrap();
-        *i += *CMD_LEN;
+        let mut i = 0;
+        crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &Cmd::Unit, false).unwrap();
+        i += *CMD_LEN;
 
         let unit_header = UnitHeader {
             req_id: req_data.id,
         };
         crate::serialize_into(
-            &mut data_buf[*i..*i + *UNIT_HEADER_LEN],
+            &mut data_buf[i..i + *UNIT_HEADER_LEN],
             &unit_header,
             false,
         )
         .unwrap();
-        *i += *UNIT_HEADER_LEN;
+        i + *UNIT_HEADER_LEN
     }
 
     //#[tracing::instrument(skip_all)]

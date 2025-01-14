@@ -276,7 +276,7 @@ impl RegisteredActiveMessages {
         let mut data_buf = self
             .create_data_buf(header, am_size + *AM_HEADER_LEN, &req_data.lamellae)
             .await;
-        let data_slice = data_buf.data_as_bytes_mut();
+        let mut data_slice = data_buf.data_as_bytes_mut();
 
         let am_header = AmHeader {
             am_id: am_id,
@@ -326,7 +326,7 @@ impl RegisteredActiveMessages {
                 &req_data.lamellae,
             )
             .await;
-        let data_slice = data_buf.data_as_bytes_mut();
+        let mut data_slice = data_buf.data_as_bytes_mut();
 
         crate::serialize_into(&mut data_slice[0..*DATA_HEADER_LEN], &data_header, false).unwrap();
         let mut i = *DATA_HEADER_LEN;
@@ -349,7 +349,7 @@ impl RegisteredActiveMessages {
         let mut data_buf = self
             .create_data_buf(header, *UNIT_HEADER_LEN, &req_data.lamellae)
             .await;
-        let data_slice = data_buf.data_as_bytes_mut();
+        let mut data_slice = data_buf.data_as_bytes_mut();
 
         let unit_header = UnitHeader {
             req_id: req_data.id,

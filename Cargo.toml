@@ -68,6 +68,7 @@ tokio = { version = "1.35.1", features = ["full"], optional = true }
 libc = { version = "0.2.137", optional = true }
 async-global-executor = "2.4.1"
 envy = "0.4.2"
+derive_more = { version = "1.0.0", features = ["add", "from", "into"] }
 
 
 [dev-dependencies]

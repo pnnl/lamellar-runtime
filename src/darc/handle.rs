@@ -19,7 +19,7 @@ use super::global_rw_darc::{
     DistRwLock, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
 use super::local_rw_darc::LocalRwDarcWriteGuard;
-use super::DarcInner;
+use super::{DarcCommPtr, DarcInner};
 
 #[pin_project(project = StateProj)]
 enum State<T> {
@@ -702,11 +702,11 @@ impl<T: 'static> OrigDarc<T> {
             OrigDarc::GlobalRw(darc) => darc.darc.inc_local_cnt(1),
         }
     }
-    fn inner<N>(&self) -> *mut DarcInner<N> {
+    fn inner<N>(&self) -> DarcCommPtr<N> {
         match self {
-            OrigDarc::Darc(darc) => darc.inner_mut() as *mut _ as *mut DarcInner<N>,
-            OrigDarc::LocalRw(darc) => darc.darc.inner_mut() as *mut _ as *mut DarcInner<N>,
-            OrigDarc::GlobalRw(darc) => darc.darc.inner_mut() as *mut _ as *mut DarcInner<N>,
+            OrigDarc::Darc(darc) => darc.inner.transmute(),
+            OrigDarc::LocalRw(darc) => darc.darc.inner.transmute(),
+            OrigDarc::GlobalRw(darc) => darc.darc.inner.transmute(),
         }
     }
     fn src_pe(&self) -> usize {

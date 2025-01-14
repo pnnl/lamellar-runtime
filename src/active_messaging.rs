@@ -1371,10 +1371,10 @@ pub(crate) trait ActiveMessageEngine {
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
         let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
         let team_rt = unsafe {
-            let team_ptr = local_team_addr as *mut *const LamellarTeamRT;
+            let team_ptr: *const LamellarTeamRT  = local_team_addr.as_ptr();
             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
-            Arc::increment_strong_count(*team_ptr);
-            Pin::new_unchecked(Arc::from_raw(*team_ptr))
+            Arc::increment_strong_count(team_ptr);
+            Pin::new_unchecked(Arc::from_raw(team_ptr))
         };
         let world_rt = if let Some(world) = team_rt.world.clone() {
             world

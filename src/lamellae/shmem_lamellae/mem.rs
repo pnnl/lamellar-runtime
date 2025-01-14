@@ -55,7 +55,7 @@ impl CommMem for ShmemComm {
 
     fn free(&self, alloc: CommAlloc) {
         //maybe need to do something more intelligent on the drop of the shmem_alloc
-        assert!(alloc.alloc_type == CommAllocType::Fabric);
+        debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
         let addr = alloc.addr;
         let mut alloc = self.alloc_lock.write();
         alloc.0.remove(&addr);
@@ -86,7 +86,7 @@ impl CommMem for ShmemComm {
     }
 
     fn rt_free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
         let addr = alloc.addr;
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -140,7 +140,7 @@ impl CommMem for ShmemComm {
         }
     }
 
-    fn base_addr(&self) -> usize {
+    fn base_addr(&self) -> CommAllocAddr {
         *self.base_address.read()
     }
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
@@ -165,4 +165,25 @@ impl CommMem for ShmemComm {
         }
         panic!("not sure i should be here...means address not found");
     }
+
+    fn local_alloc(&self, pe: usize, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+        let  alloc = self.alloc_lock.read();
+        if let Some((_,size,_)) = alloc.0.get(&addr) {
+            return Ok(CommAlloc{
+                addr,
+                size: *size,
+                alloc_type: CommAllocType::Fabric
+            })
+        }
+        let allocs = self.alloc.read();
+        if let Some(size) = allocs.find(addr) {
+            return Ok(CommAlloc{
+                addr,
+                size,
+                alloc_type: CommAllocType::RtHeap
+            })
+        }
+        Err(AllocError::LocalNotFound(addr))
+    }
+       
 }

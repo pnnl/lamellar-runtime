@@ -125,36 +125,38 @@ pub(crate) struct SerializeHeader {
 
 #[derive(Debug)]
 pub(crate) struct SerializedData {
-    pub(crate) addr: usize, // process space address)
-    pub(crate) alloc_size: usize,
+    // pub(crate) addr: usize, // process space address)
+    // pub(crate) alloc_size: usize,
+    // pub(crate) data: NonNull<u8>,
+    // pub(crate) data_len: usize,
+    // pub(crate) ser_data_addr: usize, //address allocated from Comm
+    pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
-    pub(crate) data: NonNull<u8>,
-    pub(crate) data_len: usize,
-    pub(crate) ser_data_addr: usize, //address allocated from Comm
+    pub(crate) ser_data_bytes: CommSlice<u8>,
+    pub(crate) header_bytes: CommSlice<u8>,
+    pub(crate) payload_bytes: CommSlice<u8>,
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
 
 #[derive(Debug)]
 pub(crate) struct SubSerializedData {
-    pub(crate) addr: usize, // process space address)
-    pub(crate) alloc_size: usize,
+    pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
-    pub(crate) data: NonNull<u8>,
-    pub(crate) data_len: usize,
-    pub(crate) ser_data_addr: usize, //address allocated from Comm
+    pub(crate) ser_data_bytes: CommSlice<u8>,
+    pub(crate) header_bytes: CommSlice<u8>,
+    pub(crate) payload_bytes: CommSlice<u8>,
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
 
 #[derive(Debug)]
 pub(crate) struct RemoteSerializedData {
-    pub(crate) addr: usize, // process space address)
-    pub(crate) alloc_size: usize,
+    pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
-    pub(crate) data: NonNull<u8>,
-    pub(crate) data_len: usize,
-    pub(crate) ser_data_addr: usize, //address allocated from Comm
+    pub(crate) ser_data_bytes: CommSlice<u8>,
+    pub(crate) header_bytes: CommSlice<u8>,
+    pub(crate) payload_bytes: CommSlice<u8>,
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
@@ -175,17 +177,25 @@ impl SerializedData {
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size;
-        let addr = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let ser_data_addr = addr + ref_cnt_size;
-        let raw_data_addr = ser_data_addr + *SERIALIZE_HEADER_LEN;
+        let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
+        let ref_cnt = alloc.addr as *const AtomicUsize;
+        let ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
+        let header_bytes = ser_data_bytes.sub_slice(0.. *SERIALIZE_HEADER_LEN);
+        let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
+        // let ser_data_addr = addr + ref_cnt_size;
+        // let raw_data_addr = ser_data_addr + *SERIALIZE_HEADER_LEN;
 
         Ok(SerializedData {
-            addr,
-            alloc_size,
-            ref_cnt: addr as *const AtomicUsize,
-            data: unsafe { NonNull::new_unchecked(raw_data_addr as *mut u8) },
-            data_len: size,
-            ser_data_addr,
+            // addr,
+            // alloc_size,
+            // data: unsafe { NonNull::new_unchecked(raw_data_addr as *mut u8) },
+            // data_len: size,
+            // ser_data_addr,
+            alloc,
+            ref_cnt,
+            ser_data_bytes,
+            header_bytes,
+            payload_bytes,
             comm,
         })
     }
@@ -195,12 +205,11 @@ impl SerializedData {
             .as_ref()
             .expect("valid serialized data");
         SerializedData {
-            addr: data.addr,
-            alloc_size: data.alloc_size,
+            alloc: data.alloc,
             ref_cnt: data.ref_cnt,
-            data: data.data,
-            data_len: data.data_len,
-            ser_data_addr: data.ser_data_addr,
+            ser_data_bytes: data.ser_data_bytes,
+            header_bytes: data.header_bytes,
+            payload_bytes: data.payload_bytes,
             comm: data.comm.clone(),
         }
     }
@@ -208,12 +217,11 @@ impl SerializedData {
     pub(crate) fn into_remote(self) -> RemoteSerializedData {
         self.increment_cnt();
         RemoteSerializedData {
-            addr: self.addr,
-            alloc_size: self.alloc_size,
+            alloc: self.alloc,
             ref_cnt: self.ref_cnt,
-            data: self.data,
-            data_len: self.data_len,
-            ser_data_addr: self.ser_data_addr,
+            ser_data_bytes: self.ser_data_bytes,
+            header_bytes: self.header_bytes,
+            payload_bytes: self.payload_bytes,
             comm: self.comm.clone(),
         }
     }
@@ -221,32 +229,38 @@ impl SerializedData {
 
 // impl SerializedDataOps for SerializedData {
 impl SerializedData {
-    pub(crate) fn header_as_bytes(&self) -> &[u8] {
-        let header_size = *SERIALIZE_HEADER_LEN;
-        unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
+    pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
+        // let header_size = *SERIALIZE_HEADER_LEN;
+        // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
+        self.header_bytes
     }
-    pub(crate) fn header_as_bytes_mut(&mut self) -> &mut [u8] {
-        let header_size = *SERIALIZE_HEADER_LEN;
-        unsafe { std::slice::from_raw_parts_mut((self.ser_data_addr) as *mut u8, header_size) }
-    }
-
-    pub(crate) fn data_as_bytes(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
-    }
-    pub(crate) fn data_as_bytes_mut(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), self.data_len) }
+    pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
+        // let header_size = *SERIALIZE_HEADER_LEN;
+        // unsafe { std::slice::from_raw_parts_mut((self.ser_data_addr) as *mut u8, header_size) }
+        self.header_bytes
     }
 
-    pub(crate) fn header_and_data_as_bytes(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
+    pub(crate) fn data_as_bytes(&self) ->  CommSlice<u8> {
+        // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
+        self.payload_bytes
     }
-    pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> &mut [u8] {
-        unsafe {
-            std::slice::from_raw_parts_mut(
-                (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
-                self.len(),
-            )
-        }
+    pub(crate) fn data_as_bytes_mut(&mut self) -> CommSlice<u8> {
+        // unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), self.data_len) }
+        self.payload_bytes
+    }
+
+    pub(crate) fn header_and_data_as_bytes(&self) -> CommSlice<u8> {
+        // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
+        self.ser_data_bytes
+    }
+    pub(crate) fn header_and_data_as_bytes_mut(&mut self) ->  CommSlice<u8> {
+        // unsafe {
+        //     std::slice::from_raw_parts_mut(
+        //         (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
+        //         self.len(),
+        //     )
+        // }
+        self.ser_data_bytes
     }
 
     //#[tracing::instrument(skip_all)]
@@ -261,13 +275,13 @@ impl SerializedData {
 
     pub(crate) fn print(&self) {
         println!(
-            "addr: {:x} relative addr {:x} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-            self.addr,
-            self.ser_data_addr,
-            self.alloc_size - std::mem::size_of::<AtomicUsize>(),
-            self.data.as_ptr(),
-            self.data_len,
-            self.alloc_size
+            "addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            self.alloc.addr,
+            self.ser_data_bytes.as_ptr(),
+            self.ser_data_bytes.len(),
+            self.payload_bytes.as_ptr(),
+            self.payload_bytes.len(),
+            self.alloc.size
         );
     }
 }
@@ -289,12 +303,11 @@ impl Des for SerializedData {
         // let mut sub = self.clone();
         self.increment_cnt();
         SubSerializedData {
-            addr: self.addr,
-            alloc_size: self.alloc_size,
+            alloc: self.alloc,
             ref_cnt: self.ref_cnt,
-            data: unsafe{self.data.add(start)},
-            data_len: end - start,
-            ser_data_addr: self.ser_data_addr,
+            ser_data_bytes: self.ser_data_bytes,
+            header_bytes: self.header_bytes,
+            payload_bytes: self.payload_bytes,
             comm: self.comm.clone(),
         }
     }
@@ -304,20 +317,22 @@ impl Drop for SerializedData {
     fn drop(&mut self) {
         unsafe {
             if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
-                self.comm.rt_free(self.addr);
+                self.comm.rt_free(self.alloc);
             }
         }
     }
 }
 
 impl SubSerializedData{
-    pub(crate) fn header_as_bytes(&self) -> &[u8] {
-        let header_size = *SERIALIZE_HEADER_LEN;
-        unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
+    pub(crate) fn header_as_bytes(&self) ->  CommSlice<u8> {
+        // let header_size = *SERIALIZE_HEADER_LEN;
+        // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
+        self.header_bytes
     }
     
-    pub(crate) fn data_as_bytes(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
+    pub(crate) fn data_as_bytes(&self) ->  CommSlice<u8> {
+        // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
+        self.payload_bytes
     }
 }
 
