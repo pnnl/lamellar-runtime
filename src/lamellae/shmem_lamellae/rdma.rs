@@ -31,9 +31,9 @@ impl CommRdma for ShmemComm {
     fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, remote_addr: CommAllocAddr) -> RdmaFuture {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(remote_addr) {
+            if shmem.contains(remote_addr.0) {
                 let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_dst_addr = real_dst_base + (remote_addr - addr);
+                let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
                 unsafe {
                     std::ptr::copy_nonoverlapping(src.as_ptr(), real_dst_addr as *mut T, src.len());
                 }

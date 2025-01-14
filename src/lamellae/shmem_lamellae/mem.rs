@@ -112,10 +112,10 @@ impl CommMem for ShmemComm {
             min_size * 2 * self.num_pes,
             SHMEM_SIZE.load(Ordering::SeqCst),
         ) / self.num_pes;
-        if let Ok(addr) = self.alloc(size, AllocationType::Global, 0) {
+        if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("shmem".to_string());
-            new_alloc.init(addr, size);
+            new_alloc.init(alloc.addr, size);
             allocs.push(new_alloc)
         } else {
             panic!("[Error] out of system memory");
@@ -141,7 +141,7 @@ impl CommMem for ShmemComm {
     }
 
     fn base_addr(&self) -> CommAllocAddr {
-        *self.base_address.read()
+        CommAllocAddr(*self.base_address.read())
     }
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         let alloc = self.alloc_lock.read();
@@ -149,7 +149,7 @@ impl CommMem for ShmemComm {
             if let Some(data) = addrs.get(&remote_pe) {
                 if data.0 <= remote_addr && remote_addr < data.0 + shmem.len() {
                     let remote_offset = remote_addr - (data.0 + size * data.1);
-                    return addr + remote_offset;
+                    return CommAllocAddr(addr + remote_offset);
                 }
             }
         }
@@ -160,7 +160,7 @@ impl CommMem for ShmemComm {
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(local_addr) {
                 let local_offset = local_addr - addr;
-                return addrs[&pe].0 + size * addrs[&pe].1 + local_offset;
+                return CommAllocAddr(addrs[&pe].0 + size * addrs[&pe].1 + local_offset);
             }
         }
         panic!("not sure i should be here...means address not found");
@@ -168,20 +168,22 @@ impl CommMem for ShmemComm {
 
     fn local_alloc(&self, pe: usize, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         let  alloc = self.alloc_lock.read();
-        if let Some((_,size,_)) = alloc.0.get(&addr) {
+        if let Some((_,size,_)) = alloc.0.get(&addr.0) {
             return Ok(CommAlloc{
-                addr,
+                addr: addr.0,
                 size: *size,
                 alloc_type: CommAllocType::Fabric
             })
         }
         let allocs = self.alloc.read();
-        if let Some(size) = allocs.find(addr) {
-            return Ok(CommAlloc{
-                addr,
-                size,
-                alloc_type: CommAllocType::RtHeap
-            })
+        for alloc in allocs.iter(){
+            if let Some(size) = alloc.find(addr.0) {
+                return Ok(CommAlloc{
+                    addr: addr.0,
+                    size,
+                    alloc_type: CommAllocType::RtHeap
+                })
+            }
         }
         Err(AllocError::LocalNotFound(addr))
     }

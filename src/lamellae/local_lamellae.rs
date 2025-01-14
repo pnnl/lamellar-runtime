@@ -4,8 +4,7 @@ pub(crate) mod mem;
 pub(crate) mod rdma;
 
 use super::{
-    AllocationType, Comm, CommInfo, Lamellae, LamellaeAM, LamellaeInit, Ser, SerializeHeader,
-    SerializedData,
+    AllocationType, Comm, CommInfo, Lamellae, LamellaeAM, LamellaeInit, LamellaeShutdown, Ser, SerializeHeader, SerializedData
 };
 use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::LocalComm;
@@ -77,6 +76,16 @@ impl LamellaeInit for Local {
     }
     fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         Arc::new(Lamellae::Local(self.clone()))
+    }
+}
+
+impl LamellaeShutdown for Local {
+    fn shutdown(&self) {
+    }
+
+    fn force_shutdown(&self) {
+    }
+    fn force_deinit(&self) {
     }
 }
 

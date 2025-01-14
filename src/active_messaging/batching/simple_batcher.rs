@@ -545,7 +545,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_addr,
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
         // println!(
         //     "[{:?}] simple batcher exec_am submit task",
@@ -605,7 +605,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_addr,
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
         // println!(
         //     "[{:?}] exec_return_am submit task",

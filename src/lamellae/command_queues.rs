@@ -1115,20 +1115,20 @@ impl Drop for InnerCQ {
     fn drop(&mut self) {
         // println!("dropping InnerCQ");
         let mut send_buf = self.send_buffer.lock();
-        let old = std::mem::take(&mut *send_buf);
-        let _ = Box::into_raw(old);
-        let mut recv_buf = self.recv_buffer.lock();
-        let old = std::mem::take(&mut *recv_buf);
-        let _ = Box::into_raw(old);
-        let mut free_buf = self.free_buffer.lock();
-        let old = std::mem::take(&mut *free_buf);
-        let _ = Box::into_raw(old);
-        let mut alloc_buffer = self.alloc_buffer.lock();
-        let old = std::mem::take(&mut *alloc_buffer);
-        let _ = Box::into_raw(old);
-        let mut panic_buffer = self.panic_buffer.lock();
-        let old = std::mem::take(&mut *panic_buffer);
-        let _ = Box::into_raw(old);
+        // let old = std::mem::take(&mut *send_buf);
+        // let _ = Box::into_raw(old);
+        // let mut recv_buf = self.recv_buffer.lock();
+        // let old = std::mem::take(&mut *recv_buf);
+        // let _ = Box::into_raw(old);
+        // let mut free_buf = self.free_buffer.lock();
+        // let old = std::mem::take(&mut *free_buf);
+        // let _ = Box::into_raw(old);
+        // let mut alloc_buffer = self.alloc_buffer.lock();
+        // let old = std::mem::take(&mut *alloc_buffer);
+        // let _ = Box::into_raw(old);
+        // let mut panic_buffer = self.panic_buffer.lock();
+        // let old = std::mem::take(&mut *panic_buffer);
+        // let _ = Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
             Box::new(CmdMsg {
@@ -1198,60 +1198,60 @@ impl CommandQueue {
             .unwrap();
         // + comm.base_addr();
         // println!("send_buffer{:x} {:x}",send_buffer,send_buffer-comm.base_addr());
-        let recv_buffer_addr = comm
+        let recv_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
         // + comm.base_addr();
-        // println!("recv_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
-        let free_buffer_addr = comm
+        // println!("recv_buffer {:x} {:x}",recv_buffer,recv_buffer-comm.base_addr());
+        let free_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
         // + comm.base_addr();
-        // println!("free_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
-        let alloc_buffer_addr = comm
+        // println!("free_buffer {:x} {:x}",recv_buffer,recv_buffer-comm.base_addr());
+        let alloc_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        // println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
-        let panic_buffer_addr = comm
+        // println!("alloc_buffer {:x}",alloc_buffer);
+        let panic_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        // println!("panic_buffer_addr {:x}",panic_buffer_addr);
-        let release_cmd_addr = comm
+        // println!("panic_buffer {:x}",panic_buffer);
+        let release_cmd = comm
             .rt_alloc(
                 std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap(); // + comm.base_addr();
-                       // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
+                       // println!("release_cmd {:x}",release_cmd-comm.base_addr());
 
-        let clear_cmd_addr = comm
+        let clear_cmd = comm
             .rt_alloc(
                 std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap(); // + comm.base_addr();
-                       // println!("clear_cmd_addr {:x}",clear_cmd_addr-comm.base_addr());
-        let free_cmd_addr = comm
+                       // println!("clear_cmd {:x}",clear_cmd-comm.base_addr());
+        let free_cmd = comm
             .rt_alloc(
                 std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap(); // + comm.base_addr();
-                       // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
+                       // println!("free_cmd {:x}",free_cmd-comm.base_addr());
 
-        let mut cmd_buffers_addrs = vec![];
+        let mut cmd_buffers = vec![];
         for _pe in 0..num_pes {
             let mut addrs = vec![];
             for _i in 0..config().cmd_buf_cnt {
@@ -1264,19 +1264,19 @@ impl CommandQueue {
                                // println!("{:x} {:x} {:x}",_pe,_i,addr,);
                 addrs.push(addr);
             }
-            cmd_buffers_addrs.push(Arc::new(addrs));
+            cmd_buffers.push(Arc::new(addrs));
         }
-        // let cmd_buffers_addrs=Arc::new(cmd_buffers_addrs);
+        // let cmd_buffers=Arc::new(cmd_buffers);
         let cq = InnerCQ::new(
             send_buffer,
-            recv_buffer_addr,
-            free_buffer_addr,
-            alloc_buffer_addr,
-            panic_buffer_addr,
-            &cmd_buffers_addrs.clone(),
-            release_cmd_addr,
-            clear_cmd_addr,
-            free_cmd_addr,
+            recv_buffer,
+            free_buffer,
+            alloc_buffer,
+            panic_buffer,
+            &cmd_buffers.clone(),
+            release_cmd,
+            clear_cmd,
+            free_cmd,
             comm.clone(),
             my_pe,
             num_pes,
@@ -1285,14 +1285,14 @@ impl CommandQueue {
         CommandQueue {
             cq: Arc::new(cq),
             send_buffer,
-            recv_buffer_addr,
-            free_buffer_addr,
-            alloc_buffer_addr,
-            panic_buffer_addr,
-            release_cmd_addr,
-            clear_cmd_addr,
-            free_cmd_addr,
-            cmd_buffers_addrs,
+            recv_buffer,
+            free_buffer,
+            alloc_buffer,
+            panic_buffer,
+            release_cmd,
+            clear_cmd,
+            free_cmd,
+            cmd_buffers,
             comm,
             active,
         }
@@ -1509,14 +1509,14 @@ impl Drop for CommandQueue {
     fn drop(&mut self) {
         // println!("dropping rofi command queue");
         self.comm.rt_free(self.send_buffer); // - self.comm.base_addr());
-        self.comm.rt_free(self.recv_buffer_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.free_buffer_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.alloc_buffer_addr);
-        self.comm.rt_free(self.panic_buffer_addr);
-        self.comm.rt_free(self.release_cmd_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.clear_cmd_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.free_cmd_addr); // - self.comm.base_addr());
-        for bufs in self.cmd_buffers_addrs.iter() {
+        self.comm.rt_free(self.recv_buffer); // - self.comm.base_addr());
+        self.comm.rt_free(self.free_buffer); // - self.comm.base_addr());
+        self.comm.rt_free(self.alloc_buffer);
+        self.comm.rt_free(self.panic_buffer);
+        self.comm.rt_free(self.release_cmd); // - self.comm.base_addr());
+        self.comm.rt_free(self.clear_cmd); // - self.comm.base_addr());
+        self.comm.rt_free(self.free_cmd); // - self.comm.base_addr());
+        for bufs in self.cmd_buffers.iter() {
             for buf in bufs.iter() {
                 self.comm.rt_free(*buf);
             }

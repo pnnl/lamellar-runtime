@@ -179,7 +179,7 @@ impl SerializedData {
         let alloc_size = size + ref_cnt_size;
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         let ref_cnt = alloc.addr as *const AtomicUsize;
-        let ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
+        let mut ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
         let header_bytes = ser_data_bytes.sub_slice(0.. *SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
         // let ser_data_addr = addr + ref_cnt_size;
@@ -270,7 +270,7 @@ impl SerializedData {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
-        self.alloc_size - std::mem::size_of::<AtomicUsize>()
+        self.alloc.size - std::mem::size_of::<AtomicUsize>()
     }
 
     pub(crate) fn print(&self) {
@@ -288,10 +288,10 @@ impl SerializedData {
 
 impl Des for SerializedData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(), false).unwrap()
+        crate::deserialize(&self.header_as_bytes(), false).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(), true)?)
+        Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
 }
 
@@ -338,10 +338,10 @@ impl SubSerializedData{
 
 impl Des for SubSerializedData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(), false).unwrap()
+        crate::deserialize(&self.header_as_bytes(), false).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(), true)?)
+        Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
 }
 
@@ -349,7 +349,7 @@ impl Drop for SubSerializedData {
     fn drop(&mut self) {
         unsafe {
             if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
-                self.comm.rt_free(self.addr);
+                self.comm.rt_free(self.alloc);
             }
         }
     }
@@ -361,7 +361,7 @@ impl RemoteSerializedData {
     }
 
     pub(crate)  fn len(&self) -> usize {
-        self.alloc_size - std::mem::size_of::<AtomicUsize>()
+        self.alloc.size - std::mem::size_of::<AtomicUsize>()
     }
 }
 
@@ -369,12 +369,11 @@ impl Clone for RemoteSerializedData {
     fn clone(&self) -> Self {
         self.increment_cnt();
         RemoteSerializedData {
-            addr: self.addr,
-            alloc_size: self.alloc_size,
+            alloc: self.alloc,
             ref_cnt: self.ref_cnt,
-            data: self.data,
-            data_len: self.data_len,
-            ser_data_addr: self.ser_data_addr,
+            ser_data_bytes: self.ser_data_bytes,
+            header_bytes: self.header_bytes,
+            payload_bytes: self.payload_bytes,
             comm: self.comm.clone(),
         }
     }
@@ -384,7 +383,7 @@ impl Drop for RemoteSerializedData{
     fn drop(&mut self) {
         unsafe {
             if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
-                self.comm.rt_free(self.addr);
+                self.comm.rt_free(self.alloc);
             }
         }
     }

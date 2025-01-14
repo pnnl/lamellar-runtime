@@ -32,7 +32,7 @@ impl From<LocalFuture> for RdmaFuture{
 impl CommRdma for LocalComm {
     fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture {
         let src_addr = src.addr();
-        let dst = dst.0 as usize;
+        let dst = dst.into();
             if !((src_addr <= dst
             && dst < src_addr + src.len()) //dst start overlaps src
             || (src_addr <= dst + src.len()
@@ -40,18 +40,18 @@ impl CommRdma for LocalComm {
             //dst end overlaps src
             {
                 unsafe {
-                    std::ptr::copy_nonoverlapping(src_addr.as_ptr(), dst as *mut T, src.len());
+                    std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len());
                 }
             } else {
                 unsafe {
-                    std::ptr::copy(src_addr.as_ptr(), dst as *mut T, src.len());
+                    std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
                 }
             }
         LocalFuture {}.into()
     }
     fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaFuture {
         let src_addr = src.addr();
-        let dst = dst as usize;
+        let dst = dst.into();
         if !((src_addr<= dst
             && dst < src_addr+ src.len()) //dst start overlaps src
             || (src_addr <= dst + src.len()
@@ -70,7 +70,7 @@ impl CommRdma for LocalComm {
     }
     fn get<T: Remote>(&self, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaFuture {
         let dst_addr = dst.addr();
-        let src = src as usize;
+        let src = src.into();
         if !((dst_addr <= src && src <dst_addr + dst.len())
             || (dst_addr <= src + dst.len()
                 && src + dst.len() < dst_addr + dst.len()))

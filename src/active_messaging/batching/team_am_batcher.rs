@@ -823,7 +823,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_addr,
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
 
         let ame = ame.clone();
@@ -880,7 +880,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_addr,
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
 
         ame.clone()

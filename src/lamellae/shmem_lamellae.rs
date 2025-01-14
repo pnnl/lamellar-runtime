@@ -162,7 +162,7 @@ impl Ser for Shmem {
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
         let mut ser_data = SerializedData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
-        crate::serialize_into(ser_data.header_as_bytes_mut(), &header, false)?; //we want header to be a fixed size
+        crate::serialize_into(&mut ser_data.header_as_bytes_mut(), &header, false)?; //we want header to be a fixed size
         Ok(ser_data)
     }
 }

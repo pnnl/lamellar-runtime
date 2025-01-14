@@ -131,7 +131,7 @@ impl CommAlloc{
     }
 }
 
-#[derive(Debug,Copy,Clone)]
+#[derive(Debug,Copy,Clone,Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) enum CommAllocType {
     RtHeap,
     Fabric,
@@ -140,7 +140,7 @@ pub(crate) enum CommAllocType {
 // unsafe impl Sync for CommAllocType {}
 
 #[derive(Debug,Copy,Clone,Add,Sub,From,Into,Serialize,Deserialize)]
-pub(crate) struct  CommAllocAddr(usize);
+pub(crate) struct  CommAllocAddr(pub(crate) usize);
 
 impl std::fmt::LowerHex for CommAllocAddr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
