@@ -18,7 +18,7 @@ impl CommAtomic for LocalComm {
         pe: usize,
         remote_addr: usize,
     ) -> RdmaHandle<T> {
-        LocalFuture { op: Op::Atomic }.into()
+        LocalFuture { op: Op::Atomic, spawned: false }.into()
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
@@ -27,6 +27,6 @@ impl CommAtomic for LocalComm {
         remote_addr: usize,
         result: &mut [T],
     ) -> RdmaHandle<T> {
-        LocalFuture { op: Op::Atomic }.into()
+        LocalFuture { op: Op::Atomic, spawned: false }.into()
     }
 }

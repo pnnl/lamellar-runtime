@@ -70,7 +70,6 @@ use crate::memregion::{
     shared::SharedMemoryRegion,
     Dist,
     LamellarMemoryRegion,
-    RegisteredMemoryRegion, // RemoteMemoryRegion,
 };
 use crate::scheduler::LamellarTask;
 use crate::{active_messaging::*, LamellarTeam, LamellarTeamRT};
@@ -191,8 +190,8 @@ pub struct ReduceKey {
 crate::inventory::collect!(ReduceKey);
 
 // impl Dist for bool {}
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, u64);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, u64);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize, u64);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize, u64);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, isize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
@@ -204,18 +203,18 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 // // //------------------------------------
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 

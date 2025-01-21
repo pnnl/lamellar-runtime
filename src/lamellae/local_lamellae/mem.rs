@@ -26,6 +26,7 @@ impl CommMem for LocalComm {
                 layout: layout,
             },
         );
+        println!("new alloc: {:x} {}", data_addr,size);
         Ok(CommAlloc {
             addr: data_addr,
             size,
@@ -37,6 +38,7 @@ impl CommMem for LocalComm {
         debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.addr) {
+            println!("freeing alloc: {:x}", alloc.addr);
             unsafe {
                 std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
             };
@@ -55,6 +57,7 @@ impl CommMem for LocalComm {
                 layout,
             },
         );
+        println!("new rt alloc: {:x} {}", data_addr,size);
         Ok(CommAlloc {
             addr: data_addr,
             size,
@@ -71,6 +74,7 @@ impl CommMem for LocalComm {
         let mut allocs = self.heap_allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.addr) {
             unsafe {
+                println!("freeing rt alloc: {:x}", alloc.addr);
                 std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
                 // let _ = Box::from_raw(data_ptr.ptr);
             }; //it will free when dropping from scope

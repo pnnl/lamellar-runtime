@@ -471,7 +471,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: unsafe {*team.team.remote_ptr_alloc.as_ptr()},
         };
 
         world.team.world_counters.inc_outstanding(1);
@@ -529,7 +529,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: unsafe {*team.team.remote_ptr_alloc.as_ptr()},
         };
         self.exec_local_am(req_data, am.as_local(), world, team)
             .await;

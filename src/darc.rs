@@ -58,15 +58,13 @@ use std::time::Instant;
 
 // //use tracing::*;
 
-use crate::lamellae::CommAlloc;
-use crate::Dist;
 use crate::{
     active_messaging::{AMCounters, RemotePtr},
     barrier::Barrier,
     env_var::config,
     lamellae::{
         AllocationType, Backend, CommAllocAddr, CommInfo, CommMem, CommProgress, CommRdma,
-        CommSlice,
+        CommSlice,CommAlloc
     },
     lamellar_request::LamellarRequest,
     lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
@@ -518,7 +516,7 @@ impl<T: 'static> DarcInner<T> {
 
     async fn broadcast_state(
         // mut inner: WrappedInner<T>,
-        mut inner: DarcCommPtr<T>,
+         inner: DarcCommPtr<T>,
         team: Pin<Arc<LamellarTeamRT>>,
         state: DarcMode,
     ) {
@@ -1293,12 +1291,12 @@ macro_rules! launch_drop {
         let rdma = team.lamellae.comm();
         for pe in team.arch.team_iter() {
             // println!("darc block_on_outstanding put 3");
-            rdma.put(
+            let _ = rdma.put(
                 pe,
                 $inner.mode_slice.sub_slice($inner.my_pe..=$inner.my_pe),
                 // &mode_refs[$inner.my_pe..=$inner.my_pe],
                 $inner.mode_slice.index_addr( $inner.my_pe),// * std::mem::size_of::<DarcMode>(),
-            );
+            ).spawn(&team.scheduler, team.counters());
         }
         // team.print_cnt();
         team.team_counters.inc_outstanding(1);

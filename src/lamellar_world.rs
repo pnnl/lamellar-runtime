@@ -592,7 +592,8 @@ impl LamellarWorldBuilder {
         // we delay building the scheduler until we know the number of PEs (which is used for message aggregation)
         // this could be lazyily provided but this is easy enough to do here
         let panic = Arc::new(AtomicU8::new(0));
-        let sched_new = Arc::new(create_scheduler(
+        let sched_new = Arc::new(
+            create_scheduler(
             self.executor,
             num_pes,
             self.num_threads,

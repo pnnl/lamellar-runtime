@@ -5,15 +5,13 @@ use crate::{
     lamellar_request::LamellarRequest,
     memregion::MemoryRegion,
     scheduler::Scheduler,
-    warnings::RuntimeWarning,
-    LamellarTeamRT,
+    warnings::RuntimeWarning
 };
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc,atomic::{AtomicU8, AtomicUsize, Ordering}};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
 

@@ -1,8 +1,8 @@
 use crate::array::native_atomic::*;
 // use crate::array::native_atomic::rdma::atomic_store;
-use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
+// use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
 use crate::array::*;
-use std::collections::VecDeque;
+// use std::collections::VecDeque;
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {
     // fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {

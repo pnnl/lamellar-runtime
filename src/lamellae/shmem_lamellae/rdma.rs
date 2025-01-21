@@ -5,14 +5,13 @@ use std::{
 };
 
 use futures_util::Future;
+use pin_project::{pin_project, pinned_drop};
 
 use crate::{
-    active_messaging::AMCounters,
-    lamellae::{
+    active_messaging::AMCounters, lamellae::{
         comm::rdma::{CommRdma, RdmaHandle, Remote},
         CommAllocAddr, CommSlice,
-    },
-    LamellarTask,
+    }, warnings::RuntimeWarning, LamellarTask
 };
 
 use super::{comm::ShmemComm, Scheduler};
@@ -23,8 +22,11 @@ pub(super) enum Op<T> {
     Get(usize, CommAllocAddr, CommSlice<T>),
     Atomic,
 }
+
+#[pin_project(PinnedDrop)]
 pub(crate) struct ShmemFuture<T> {
     pub(crate) op: Op<T>,
+    pub(crate) spawned: bool,
 }
 
 impl<T: Remote> ShmemFuture<T> {
@@ -69,6 +71,7 @@ impl<T: Remote> ShmemFuture<T> {
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.spawned = true;
         // Ok(())
     }
     pub(crate) fn spawn(
@@ -76,7 +79,18 @@ impl<T: Remote> ShmemFuture<T> {
         scheduler: &Arc<Scheduler>,
         outstanding_reqs: Vec<Arc<AMCounters>>,
     ) -> LamellarTask<()> {
-        scheduler.spawn_task(self, outstanding_reqs)
+        self.exec_op();
+        self.spawned = true;
+        scheduler.spawn_task(async {}, outstanding_reqs)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for ShmemFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
     }
 }
 
@@ -89,7 +103,11 @@ impl<T: Remote> From<ShmemFuture<T>> for RdmaHandle<T> {
 impl<T: Remote> Future for ShmemFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.exec_op();
+        if !self.spawned {
+            
+            self.exec_op();
+            *self.project().spawned = true;
+        }
         Poll::Ready(())
     }
 }
@@ -109,7 +127,8 @@ impl CommRdma for ShmemComm {
                 let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
                 return ShmemFuture {
-                    op: Op::Put(pe, src, real_dst_addr),
+                    op: Op::Put(pe, src, real_dst_addr), spawned: false
+                    
                 }
                 .into();
             }
@@ -132,7 +151,7 @@ impl CommRdma for ShmemComm {
                     })
                     .collect::<Vec<_>>();
                 return ShmemFuture {
-                    op: Op::PutAll(src, pe_addrs),
+                    op: Op::PutAll(src, pe_addrs), spawned: false
                 }
                 .into();
             }
@@ -153,7 +172,7 @@ impl CommRdma for ShmemComm {
                 let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_src_addr = real_src_base + (src_addr.0 - addr);
                 return ShmemFuture {
-                    op: Op::Get(pe, real_src_addr, dst),
+                    op: Op::Get(pe, real_src_addr, dst), spawned: false
                 }
                 .into();
             }

@@ -5,14 +5,13 @@ use std::{
 };
 
 use futures_util::Future;
+use pin_project::{pin_project, pinned_drop};
 
 use crate::{
-    active_messaging::{AMCounters, ActiveMessaging},
-    lamellae::comm::{
+    active_messaging::{AMCounters}, lamellae::comm::{
         rdma::{CommRdma, RdmaHandle, Remote},
         CommAllocAddr, CommSlice,
-    },
-    LamellarTask, LamellarTeamRT,
+    }, warnings::RuntimeWarning, LamellarTask
 };
 
 use super::{comm::LocalComm, Scheduler};
@@ -22,12 +21,16 @@ pub(super) enum Op<T> {
     Get(CommAllocAddr, CommSlice<T>),
     Atomic,
 }
+
+#[pin_project(PinnedDrop)]
 pub(crate) struct LocalFuture<T> {
     pub(crate) op: Op<T>,
+    pub(crate) spawned: bool,
 }
 
 impl<T: Remote> LocalFuture<T> {
     fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
+        println!("putting src: {:?} dst: {:?} len: {}", src.addr, dst, src.len());
         if !(src.contains(dst) || src.contains(dst + src.len())) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len());
@@ -39,6 +42,7 @@ impl<T: Remote> LocalFuture<T> {
         }
     }
     fn inner_get(&self, src: &CommAllocAddr, dst: &CommSlice<T>) {
+        println!("getting src: {:?} dst: {:?} len: {}", src, dst.addr, dst.len());
         if !(dst.contains(src) || dst.contains(src + dst.len())) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
@@ -60,23 +64,40 @@ impl<T: Remote> LocalFuture<T> {
             Op::Atomic => {}
         }
     }
-    pub(crate) fn block(self) {
+    pub(crate) fn block(mut self) {
+        
         self.exec_op();
+        self.spawned = true;
         // Ok(())
     }
+    
     pub(crate) fn spawn(
         mut self,
         scheduler: &Arc<Scheduler>,
         outstanding_reqs: Vec<Arc<AMCounters>>,
     ) -> LamellarTask<()> {
+        self.exec_op();
+        self.spawned = true;
         scheduler.spawn_task(self, outstanding_reqs)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LocalFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
     }
 }
 
 impl<T: Remote> Future for LocalFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.exec_op();
+        if !self.spawned {
+            self.exec_op();
+            *self.project().spawned = true;
+        }
         Poll::Ready(())
     }
 }
@@ -92,7 +113,7 @@ impl CommRdma for LocalComm {
         self.put_amt
             .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         LocalFuture {
-            op: Op::Put(src, dst),
+            op: Op::Put(src, dst), spawned: false
         }
         .into()
     }
@@ -102,7 +123,7 @@ impl CommRdma for LocalComm {
             Ordering::SeqCst,
         );
         LocalFuture {
-            op: Op::Put(src, dst),
+            op: Op::Put(src, dst), spawned: false
         }
         .into()
     }
@@ -110,7 +131,7 @@ impl CommRdma for LocalComm {
         self.get_amt
             .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         LocalFuture {
-            op: Op::Get(src, dst),
+            op: Op::Get(src, dst), spawned: false
         }
         .into()
     }

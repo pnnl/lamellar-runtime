@@ -1,8 +1,7 @@
 use super::{CommAllocAddr, CommSlice};
 use crate::{
     active_messaging::AMCounters,
-    lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler},
-    Dist, LamellarTask, LamellarTeamRT,
+    lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler}, LamellarTask,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -18,6 +17,7 @@ pub(crate) trait Remote: Copy + Send + 'static {}
 impl<T: Copy + Send + 'static> Remote for T {}
 
 /// A task handle for raw RMDA (put/get) operation
+#[must_use = " RdmaHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project(project = RdmaHandleProj)]
 pub enum RdmaHandle<T> {
     #[cfg(feature = "rofi")]

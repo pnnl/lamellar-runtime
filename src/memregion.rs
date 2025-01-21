@@ -881,6 +881,7 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) -> RdmaHandle<R> {
+        println!("put memregion {:?} index: {:?}", self.alloc,index);
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
@@ -980,6 +981,7 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) -> RdmaHandle<R> {
+        println!("get memregion {:?} index: {:?}", self.alloc,index);
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
@@ -1048,6 +1050,7 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: CommSlice<R>,
     ) -> RdmaHandle<R> {
+        println!("put commslice memregion {:?} index: {:?} {:?} {:?}", self.alloc,index, data.addr,data.len());
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             // let num_bytes = data.len() * std::mem::size_of::<R>();
             // let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);

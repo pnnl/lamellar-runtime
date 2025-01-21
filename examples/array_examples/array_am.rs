@@ -21,35 +21,39 @@ struct RdmaAM {
 impl LamellarAM for RdmaAM {
     async fn exec(&self) {
         let num_pes = lamellar::num_pes;
-        let max_i = unsafe { std::cmp::min(self.array.local_as_slice().len(), num_pes) };
+        let max_i = unsafe { std::cmp::min(self.array.local_as_slice().len(), self.index+num_pes) };
         println!(
-            "\t in RdmaAM on pe {:?}, originating from pe {:?}",
+            "\t({},{}) in RdmaAM on pe {:?}, originating from pe {:?} with index {} and max_i {}",
+            self.orig_pe,
+            self.index,
             lamellar::current_pe,
             self.orig_pe,
+            self.index,
+            max_i
         );
         println!("\tlocal segement of array: {:?}..", unsafe {
-            &self.array.local_as_slice()[0..max_i]
+            &self.array.local_as_slice()[self.index..max_i]
         });
 
         //get the original nodes data
         let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+        println!("({},{}) local region allocated at addr {:?}",self.orig_pe,self.index,unsafe{local.as_ptr()});
         let local_slice = unsafe { local.as_mut_slice() };
         local_slice[ARRAY_LEN - 1] = num_pes as u8;
         unsafe {
             self.array.get(0, &local).await;
         }
-        // while local_slice[ARRAY_LEN - 1] == num_pes as u8 {
-        //     async_std::task::yield_now().await;
-        // }
 
         let my_index = self.index * num_pes + lamellar::current_pe;
-        println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..max_i], &local_slice[local_slice.len()-max_i..],lamellar::current_pe, my_index, self.orig_pe);
+        println!("\t({},{}) current view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe,
+        self.index,self.orig_pe, &local_slice[self.index..max_i], &local_slice[local_slice.len()-max_i..],lamellar::current_pe, my_index, self.orig_pe);
 
         //update an element on the original node
-        local_slice[0] = lamellar::current_pe as u8;
+        local_slice[0] =  lamellar::current_pe as u8;
         unsafe {
             self.array.put(my_index, &local.sub_region(0..=0)).await;
         }
+        
     }
 }
 

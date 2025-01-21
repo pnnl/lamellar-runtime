@@ -347,7 +347,7 @@ impl SimpleBatcher {
             let arch = buf[0].0.team.arch.clone();
             let header = SimpleBatcher::create_header(buf[0].0.team.world_pe);
             let mut data_buf = SimpleBatcher::create_data_buf(header, size, &lamellae).await;
-            let mut data_slice = data_buf.data_as_bytes_mut();
+            let data_slice = data_buf.data_as_bytes_mut();
 
             let mut cnts = HashMap::new();
 
@@ -548,7 +548,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: unsafe {*team.team.remote_ptr_alloc.as_ptr()},
         };
         // println!(
         //     "[{:?}] simple batcher exec_am submit task",
@@ -608,7 +608,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: unsafe {*team.team.remote_ptr_alloc.as_ptr()},
         };
         // println!(
         //     "[{:?}] exec_return_am submit task",

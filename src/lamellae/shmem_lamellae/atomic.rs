@@ -18,7 +18,7 @@ impl CommAtomic for ShmemComm {
         pe: usize,
         remote_addr: usize,
     ) -> RdmaHandle<T> {
-        ShmemFuture { op: Op::Atomic }.into()
+        ShmemFuture { op: Op::Atomic, spawned: false }.into()
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
@@ -27,6 +27,6 @@ impl CommAtomic for ShmemComm {
         remote_addr: usize,
         result: &mut [T],
     ) -> RdmaHandle<T> {
-        ShmemFuture { op: Op::Atomic }.into()
+        ShmemFuture { op: Op::Atomic, spawned: false }.into()
     }
 }

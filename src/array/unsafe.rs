@@ -17,7 +17,7 @@ use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
 use crate::lamellae::{AllocationType, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion};
+use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::LamellarTaskGroup;

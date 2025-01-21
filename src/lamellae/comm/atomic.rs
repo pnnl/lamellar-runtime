@@ -1,4 +1,4 @@
-use crate::{lamellae::comm::rdma::RdmaHandle, Dist};
+use crate::{lamellae::comm::rdma::RdmaHandle};
 
 use super::Remote;
 pub(crate) trait NetworkAtomic: Remote {}

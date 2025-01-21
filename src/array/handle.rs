@@ -6,7 +6,7 @@ use std::{
 };
 
 use futures_util::{
-    stream::{FuturesUnordered, StreamExt},
+    stream::FuturesUnordered,
     Future, Stream,
 };
 
@@ -17,7 +17,6 @@ use crate::{
     array::LamellarByteArray,
     lamellae::{CommProgress, Lamellae, RdmaHandle},
     lamellar_request::LamellarRequest,
-    memregion::RegisteredMemoryRegion,
     scheduler::{LamellarTask, Scheduler},
     warnings::RuntimeWarning,
     Dist, LamellarTeamRT, OneSidedMemoryRegion,

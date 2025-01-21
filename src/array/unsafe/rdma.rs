@@ -638,6 +638,7 @@ impl<T: Dist> UnsafeArray<T> {
     where
         U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
+        println!("array get {:?}", index);
         match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
@@ -1115,12 +1116,12 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
             .pes_for_range(self.index, self.buf.len())
             .into_iter()
         {
-            // println!(
-            //     "InitSmallGetAm pe {:?} index {:?} len {:?}",
-            //     pe,
-            //     self.index,
-            //     self.buf.len()
-            // );
+            println!(
+                "InitSmallGetAm pe {:?} index {:?} len {:?}",
+                pe,
+                self.index,
+                self.buf.len()
+            );
             let remote_am = UnsafeRemoteSmallGetAm {
                 array: self.array.clone().into(),
                 start_index: self.index,
@@ -1138,6 +1139,9 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}", data.len());
+                        println!("InitSmallGetAm put_comm_slice: {:?}",data.as_ptr());
+
+                        
                         u8_buf
                             .put_comm_slice(
                                 lamellar::current_pe,
@@ -1146,6 +1150,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                             )
                             .spawn(&team_rt.scheduler, team_rt.counters()); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
+                        println!("InitSmallGetAm put_comm_slice after: {:?}",data.as_ptr());
                     }
                 }
                 Distribution::Cyclic => {

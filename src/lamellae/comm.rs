@@ -103,11 +103,16 @@ pub(crate) trait CommShutdown {
     fn force_shutdown(&self);
 }
 
-#[derive(Debug, Clone)]
+#[derive( Clone)]
 pub(crate) struct CommAlloc {
     pub(crate) addr: usize,
     pub(crate) size: usize,
     pub(crate) alloc_type: CommAllocType,
+}
+impl std::fmt::Debug for CommAlloc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CommAlloc {{ addr: {:x}, size: {:?}, alloc_type: {:?} }}", self.addr, self.size, self.alloc_type)
+    }
 }
 
 // unsafe impl Send for CommAlloc {}
@@ -115,7 +120,7 @@ pub(crate) struct CommAlloc {
 
 impl CommAlloc {
     pub(crate) fn byte_add(&self, offset: usize) -> CommAllocAddr {
-        debug_assert!(self.addr + offset < self.size);
+        debug_assert!(offset < self.size);
         CommAllocAddr(self.addr + offset)
     }
     pub(crate) fn as_slice<T>(&self) -> CommSlice<T> {
@@ -125,11 +130,12 @@ impl CommAlloc {
             _phantom: std::marker::PhantomData,
         }
     }
-    pub(crate) fn slice_at_offset<T>(&self, offset: usize, size: usize) -> CommSlice<T> {
-        debug_assert!(self.addr + offset < self.size && self.addr + offset + size < self.size);
+    pub(crate) fn slice_at_offset<T>(&self, offset: usize, num_elems: usize) -> CommSlice<T> {
+        println!("{:?} offset: {}  num_elems: {} bytes: {}", self, offset, num_elems,num_elems*std::mem::size_of::<T>());
+        debug_assert!( offset < self.size &&  offset + num_elems*std::mem::size_of::<T>() <= self.size);
         CommSlice {
             addr: CommAllocAddr(self.addr + offset),
-            size,
+            size: num_elems,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -138,6 +144,13 @@ impl CommAlloc {
     }
     pub(crate) unsafe fn as_mut_ptr<T>(&self) -> *mut T {
         self.addr as *mut T
+    }
+    pub(crate) unsafe fn as_ref<T>(&self) -> Option<&T> {
+        self.as_ptr::<T>().as_ref()
+    }
+
+    pub(crate) unsafe fn as_mut<T>(&self) -> Option<&mut T> {
+        self.as_mut_ptr::<T>().as_mut()
     }
     pub(crate) fn comm_addr(&self) -> CommAllocAddr {
         CommAllocAddr(self.addr)
@@ -154,9 +167,15 @@ pub(crate) enum CommAllocType {
 // unsafe impl Sync for CommAllocType {}
 
 #[derive(
-    Debug, Copy, Clone, Add, Sub, From, Into, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
+ Copy, Clone, Add, Sub, From, Into, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
 pub(crate) struct CommAllocAddr(pub(crate) usize);
+
+impl std::fmt::Debug for CommAllocAddr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x}", self.0)
+    }
+}
 
 impl std::fmt::LowerHex for CommAllocAddr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -204,7 +223,7 @@ impl std::convert::AsRef<CommAllocAddr> for CommAllocAddr {
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct CommSlice<T> {
-    addr: CommAllocAddr,
+    pub(crate) addr: CommAllocAddr,
     size: usize,
     _phantom: std::marker::PhantomData<T>,
 }
@@ -272,6 +291,10 @@ impl<T> CommSlice<T> {
         let addr = addr.as_ref();
         &self.addr <= addr && addr < &(self.addr + self.size)
     }
+    
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.size * std::mem::size_of::<T>()
+    }
 }
 
 impl<T> std::ops::Deref for CommSlice<T> {
@@ -286,6 +309,8 @@ impl<T> std::ops::DerefMut for CommSlice<T> {
         unsafe { std::slice::from_raw_parts_mut(self.addr.as_mut_ptr(), self.size) }
     }
 }
+
+
 
 #[enum_dispatch]
 pub(crate) trait CommMem {
