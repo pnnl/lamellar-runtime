@@ -2,15 +2,18 @@ use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 use shared_memory::*;
 
+use crate::lamellae::{CommAlloc, CommAllocAddr,CommAllocType};
+
 pub(crate) struct MyShmem {
-    pub(crate) data: *mut u8,
-    pub(crate) len: usize,
+    // pub(crate) data: *mut u8,
+    // pub(crate) len: usize,
+    pub(crate) alloc: CommAlloc,
     _shmem: Shmem,
 }
 
 impl std::fmt::Debug for MyShmem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MyShmem{{ data: {:?}, len: {:?} }}", self.data, self.len)
+        write!(f, "MyShmem{{ alloc: {:?} }}", self.alloc)
     }
 }
 
@@ -18,17 +21,20 @@ unsafe impl Sync for MyShmem {}
 unsafe impl Send for MyShmem {}
 
 impl MyShmem {
-    pub(crate) fn as_ptr(&self) -> *mut u8 {
-        self.data
+    pub(crate) fn as_ptr(&self) -> *const u8 {
+        unsafe {self.alloc.as_ptr()}
     }
-    pub(crate) fn base_addr(&self) -> usize {
-        self.as_ptr() as usize
+    pub(crate) fn as_mut_ptr(&mut self) -> *mut u8 {
+        unsafe {self.alloc.as_mut_ptr()}
+    }
+    pub(crate) fn base_addr(&self) -> CommAllocAddr {
+        self.alloc.comm_addr()
     }
     pub(crate) fn len(&self) -> usize {
-        self.len
+        self.alloc.size
     }
     pub(crate) fn contains(&self, addr: usize) -> bool {
-        self.base_addr() <= addr && addr < self.base_addr() + self.len
+        self.alloc.addr <= addr && addr < self.alloc.addr + self.alloc.size
     }
 }
 
@@ -110,8 +116,13 @@ fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: 
 
     unsafe {
         MyShmem {
-            data: m.as_ptr().add(std::mem::size_of::<usize>()),
-            len: size,
+            // data: m.as_ptr().add(std::mem::size_of::<usize>()),
+            // len: size,
+            alloc: CommAlloc{
+                addr: m.as_ptr().add(std::mem::size_of::<usize>()) as usize,
+                size,
+                alloc_type: CommAllocType::Fabric
+            },
             _shmem: m,
         }
     }
@@ -138,8 +149,8 @@ impl ShmemAlloc {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
-        let shmem = attach_to_shmem(job_id, size, "alloc", job_id, pe == 0);
-        let data = unsafe { std::slice::from_raw_parts_mut(shmem.as_ptr(), size) };
+        let mut shmem = attach_to_shmem(job_id, size, "alloc", job_id, pe == 0);
+        let data = unsafe { std::slice::from_raw_parts_mut(shmem.as_mut_ptr(), size) };
         if pe == 0 {
             for i in data {
                 *i = 0;

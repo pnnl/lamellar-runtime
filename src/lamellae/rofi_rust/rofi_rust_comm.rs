@@ -338,7 +338,7 @@ impl CommOps for RofiRustComm {
         self.ofi.lock().progress().unwrap()
     }
 
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaHandle{
         if pe != self.my_pe {
             unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap();
             self.put_amt
@@ -372,7 +372,7 @@ impl CommOps for RofiRustComm {
         }
     }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaHandle{
         for pe in 0..self.my_pe {
             unsafe { self.ofi.lock().put(pe, src_addr, dst_addr, false) }.unwrap()
         }
@@ -392,7 +392,7 @@ impl CommOps for RofiRustComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture{
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaHandle{
         if pe != self.my_pe {
             unsafe { self.ofi.lock().get(pe, src_addr, dst_addr, true) }.unwrap();
             self.get_amt

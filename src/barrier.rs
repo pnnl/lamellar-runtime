@@ -1,11 +1,11 @@
 use crate::{
     env_var::config,
-    lamellae::{AllocationType, Lamellae,CommProgress},
+    lamellae::{AllocationType, CommProgress, CommSlice, Lamellae},
     lamellar_arch::LamellarArchRT,
     lamellar_request::LamellarRequest,
     memregion::MemoryRegion,
     scheduler::Scheduler,
-    warnings::RuntimeWarning,
+    warnings::RuntimeWarning, LamellarTeamRT,
 };
 
 use futures_util::Future;
@@ -72,11 +72,11 @@ impl Barrier {
 
                 unsafe {
                     for buff in &buffs {
-                        for elem in buff.as_mut_slice().expect("Data should exist on PE") {
+                        for elem in buff.as_mut_slice() {
                             *elem = 0;
                         }
                     }
-                    for elem in send_buf.as_mut_slice().expect("Data should exist on PE") {
+                    for elem in send_buf.as_mut_slice() {
                         *elem = 0;
                     }
                 }
@@ -111,7 +111,7 @@ impl Barrier {
             let buffs = self
                 .barrier_buf
                 .iter()
-                .map(|b| b.as_slice().unwrap())
+                .map(|b| b.as_slice())
                 .collect::<Vec<_>>();
             println!(
                 " [LAMELLAR BARRIER][{:?}][{:?}][{:x}] {:?} {:?} {:?}",
@@ -119,7 +119,7 @@ impl Barrier {
                 self.my_pe,
                 self.barrier_buf[0].addr().unwrap(),
                 buffs,
-                send_buf.as_slice().expect("Data should exist on PE"),
+                send_buf.as_slice(),
                 self.barrier_cnt.load(Ordering::SeqCst)
             );
         }
@@ -153,7 +153,7 @@ impl Barrier {
                     unsafe {
                         self.barrier_buf[i - 1]
                             .as_mut_slice()
-                            .expect("Data should exist on PE")
+                           
                     }
             );
             self.print_bar();
@@ -170,7 +170,7 @@ impl Barrier {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
                     let send_buf_slice = unsafe {
                         // im the only thread (remote or local) that can write to this buff
-                        send_buf.as_mut_slice().expect("Data should exist on PE")
+                        send_buf.as_mut_slice()
                     };
 
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
@@ -212,11 +212,11 @@ impl Barrier {
                                 // );
                                 // println!("barrier put_slice 1");
                                 unsafe {
-                                    self.barrier_buf[i - 1].put_slice(
+                                    self.barrier_buf[i - 1].put_comm_slice(
                                         send_pe,
                                         round,
-                                        barrier_slice,
-                                    );
+                                        CommSlice::from_slice(barrier_slice),
+                                    ).spawn(&self.scheduler,vec![]); //no need to pass in counters as we wont leave until the barrier is complete anyway
                                     //safe as we are the only ones writing to our index
                                 }
                             }
@@ -247,7 +247,7 @@ impl Barrier {
                                     //safe as  each pe is only capable of writing to its own index
                                     while self.barrier_buf[i - 1]
                                         .as_mut_slice()
-                                        .expect("Data should exist on PE")[round]
+                                        [round]
                                         < barrier_id
                                     {
                                         self.barrier_timeout(
@@ -302,6 +302,7 @@ impl Barrier {
         let mut handle = BarrierHandle {
             barrier_buf: self.barrier_buf.clone(),
             arch: self.arch.clone(),
+            scheduler: self.scheduler.clone(),
             lamellae: self.lamellae.clone(),
             my_index: 0,
             num_pes: self.num_pes,
@@ -366,6 +367,7 @@ impl Barrier {
 pub struct BarrierHandle {
     barrier_buf: Arc<Vec<MemoryRegion<usize>>>,
     arch: Arc<LamellarArchRT>,
+    scheduler: Arc<Scheduler>,
     lamellae: Arc<Lamellae>,
     my_index: usize,
     num_pes: usize,
@@ -401,7 +403,7 @@ impl BarrierHandle {
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                 unsafe {
-                    self.barrier_buf[i - 1].put_slice(send_pe, round, barrier_slice);
+                    self.barrier_buf[i - 1].put_comm_slice(send_pe, round, CommSlice::from_slice(barrier_slice)).spawn(&self.scheduler, vec![]);
                     //safe as we are the only ones writing to our index
                 }
             }
@@ -421,7 +423,7 @@ impl BarrierHandle {
                     //safe as  each pe is only capable of writing to its own index
                     if self.barrier_buf[i - 1]
                         .as_mut_slice()
-                        .expect("Data should exist on PE")[round]
+                       [round]
                         < self.barrier_id
                     {
                         self.lamellae.comm().flush();

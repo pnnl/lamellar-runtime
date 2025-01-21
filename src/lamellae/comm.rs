@@ -43,7 +43,7 @@ pub(crate) enum CmdQStatus {
     Panic = 4,
 }
 
-#[enum_dispatch(CommMem,CommProgress,CommRdma,CommShutdown,CommInfo,)]
+#[enum_dispatch(CommMem,CommRdma,CommShutdown,CommInfo,CommProgress)]
 #[derive(Debug)]
 pub(crate) enum Comm {
     #[cfg(feature = "rofi")]
@@ -73,13 +73,13 @@ impl CommAtomic for Comm {
     fn atomic_avail<T>(&self) -> bool {
         false
     }
-    fn atomic_op<T: NetworkAtomic>(&self, _op: AtomicOp<T>,_pe: usize, _remote_addr: usize) -> RdmaFuture {
+    fn atomic_op<T: NetworkAtomic>(&self, _op: AtomicOp<T>,_pe: usize, _remote_addr: usize) -> RdmaHandle<T> {
         match self {
             Comm::Shmem(comm) => comm.atomic_op(_op,_pe,_remote_addr),
             Comm::Local(comm) => comm.atomic_op(_op,_pe,_remote_addr),
         }
     }
-    fn atomic_fetch_op<T: NetworkAtomic>(&self, _op: AtomicOp<T>,_pe: usize, _remote_addr: usize, _result: &mut [T]) -> RdmaFuture {
+    fn atomic_fetch_op<T: NetworkAtomic>(&self, _op: AtomicOp<T>,_pe: usize, _remote_addr: usize, _result: &mut [T]) -> RdmaHandle<T> {
         match self {
             Comm::Shmem(comm) => comm.atomic_fetch_op(_op,_pe,_remote_addr,_result),
             Comm::Local(comm) => comm.atomic_fetch_op(_op,_pe,_remote_addr,_result),
@@ -92,7 +92,7 @@ pub(crate) trait CommShutdown {
     fn force_shutdown(&self);
 }
 
-#[derive(Debug)]
+#[derive(Debug,Clone)]
 pub(crate) struct  CommAlloc{
     pub(crate) addr: usize,
     pub(crate) size: usize,
@@ -129,17 +129,21 @@ impl CommAlloc{
     pub(crate) unsafe fn as_mut_ptr<T>(&self) -> *mut T {
         self.addr as *mut T
     }
+    pub(crate) fn comm_addr(&self) -> CommAllocAddr {
+        CommAllocAddr(self.addr)
+    }
 }
 
 #[derive(Debug,Copy,Clone,Eq, PartialEq, PartialOrd, Ord)]
 pub(crate) enum CommAllocType {
     RtHeap,
     Fabric,
+    Remote,
 }
 // unsafe impl Send for CommAllocType {}
 // unsafe impl Sync for CommAllocType {}
 
-#[derive(Debug,Copy,Clone,Add,Sub,From,Into,Serialize,Deserialize)]
+#[derive(Debug,Copy,Clone,Add,Sub,From,Into,PartialEq,Eq,PartialOrd,Ord,Serialize,Deserialize)]
 pub(crate) struct  CommAllocAddr(pub(crate) usize);
 
 impl std::fmt::LowerHex for CommAllocAddr {
@@ -173,6 +177,19 @@ impl std::ops::Add<usize> for CommAllocAddr {
         CommAllocAddr(self.0 + rhs)
     }
 }
+impl std::ops::Add<usize> for &CommAllocAddr {
+    type Output = CommAllocAddr;
+    fn add(self, rhs: usize) -> Self::Output {
+        CommAllocAddr(self.0 + rhs)
+    }
+}
+
+impl std::convert::AsRef<CommAllocAddr> for CommAllocAddr {
+    fn as_ref(&self) -> &CommAllocAddr {
+        self
+    }
+}
+
 
 #[derive(Debug,Copy,Clone)]
 pub(crate) struct CommSlice<T>{
@@ -190,10 +207,10 @@ impl <T> CommSlice<T>{
     pub(crate) fn as_slice(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.addr.as_ptr(), self.size) }
     }
-    pub(crate) fn as_slice_mut(&mut self) -> &mut [T] {
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { std::slice::from_raw_parts_mut(self.addr.as_mut_ptr(), self.size) }
     }
-    pub(crate) fn sub_slice(&mut self,range: impl std::ops::RangeBounds<usize>) -> Self {
+    pub(crate) fn sub_slice(&self,range: impl std::ops::RangeBounds<usize>) -> Self {
         let start = match range.start_bound() {
             std::ops::Bound::Included(&index) => index,
             std::ops::Bound::Excluded(&index) => index + 1,
@@ -238,6 +255,15 @@ impl <T> CommSlice<T>{
             size: len,
             _phantom: std::marker::PhantomData
         }
+    }
+
+    pub(crate) unsafe fn from_slice(slice: &[T]) -> Self {
+        CommSlice::from_raw_parts(slice.as_ptr(), slice.len())
+    }
+
+    pub(crate) fn contains<Addr: AsRef<CommAllocAddr>>(&self, addr: Addr) -> bool {
+        let addr = addr.as_ref();
+        &self.addr <= addr && addr < &(self.addr + self.size)
     }
 }
 
@@ -289,4 +315,5 @@ pub(crate) trait CommInfo {
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
     fn backend(&self) -> Backend;
+    fn MB_sent(&self) -> f64;
 }

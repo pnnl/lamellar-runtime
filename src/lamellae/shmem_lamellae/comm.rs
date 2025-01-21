@@ -43,6 +43,8 @@ pub(crate) struct ShmemComm {
             ShmemAlloc,
         )>,
     >,
+    pub(crate) put_amt: Arc<AtomicUsize>,
+    pub(crate) get_amt: Arc<AtomicUsize>,
 }
 
 pub(crate) static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
@@ -95,6 +97,8 @@ impl ShmemComm {
             num_pes: num_pes,
             my_pe: my_pe,
             alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
+            put_amt: Arc::new(AtomicUsize::new(0)),
+            get_amt: Arc::new(AtomicUsize::new(0)),
         };
         shmem.alloc.write()[0].init(addr, mem_per_pe);
         shmem
@@ -132,6 +136,10 @@ impl CommInfo for ShmemComm {
     }
     fn backend(&self) -> Backend {
         Backend::Shmem
+    }
+    fn MB_sent(&self) -> f64 {
+        (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
+            / 1_000_000.0
     }
 }
 

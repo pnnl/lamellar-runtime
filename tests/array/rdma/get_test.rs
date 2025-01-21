@@ -8,7 +8,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 ) {
     unsafe {
         let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice().unwrap() {
+        for elem in memregion.as_mut_slice() {
             *elem = i;
             i += inc_val;
         }
@@ -146,7 +146,7 @@ macro_rules! get_test{
                 array.barrier();
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
                 unsafe{
-                    for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
+                    for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
                             eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
@@ -186,7 +186,7 @@ macro_rules! get_test{
                 sub_array.barrier();
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
                 unsafe{
-                    for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
+                    for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
                         if ((i as $t - *elem) as f32).abs() > 0.0001 {
                             eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                             success = false;
@@ -230,7 +230,7 @@ macro_rules! get_test{
                     sub_array.wait_all();
                     sub_array.barrier();
                     unsafe{
-                        for (i,elem) in shared_mem_region.as_slice().unwrap().iter().enumerate().take( num_txs * tx_size){
+                        for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
                             if ((i as $t - *elem) as f32).abs() > 0.0001 {
                                 eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
                                 success = false;

@@ -45,11 +45,11 @@ fn main() {
     if my_pe == 0 {
         unsafe {
             let mut i = 0; //(len_per_pe * my_pe as f32).round() as usize;
-            for elem in local_mem_region.as_mut_slice().unwrap() {
+            for elem in local_mem_region.as_mut_slice() {
                 *elem = i;
                 i += 1
             }
-            println!("{:?}", local_mem_region.as_slice().unwrap());
+            println!("{:?}", local_mem_region.as_slice());
             // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
             block_array.put(0, &local_mem_region).block();
@@ -66,7 +66,7 @@ fn main() {
     cyclic_array.print();
     println!();
     unsafe {
-        for elem in local_mem_region.as_mut_slice().unwrap() {
+        for elem in local_mem_region.as_mut_slice() {
             *elem = 0;
         }
     }
@@ -80,7 +80,7 @@ fn main() {
     }
 
     unsafe {
-        for elem in local_mem_region.as_mut_slice().unwrap() {
+        for elem in local_mem_region.as_mut_slice() {
             *elem = 0;
         }
     }

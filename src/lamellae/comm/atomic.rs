@@ -1,5 +1,7 @@
-use crate::lamellae::comm::rdma::RdmaFuture;
-pub(crate) trait NetworkAtomic {}
+use crate::{lamellae::comm::rdma::RdmaHandle, Dist};
+
+use super::Remote;
+pub(crate) trait NetworkAtomic: Remote {}
 impl NetworkAtomic for u8 {}
 impl NetworkAtomic for u16 {}
 impl NetworkAtomic for u32 {}
@@ -37,12 +39,12 @@ pub(crate) trait CommAtomic {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,
-    ) -> RdmaFuture;
+    ) -> RdmaHandle<T>;
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,
         result: &mut [T],
-    ) -> RdmaFuture;
+    ) -> RdmaHandle<T>;
 }

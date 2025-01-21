@@ -8,7 +8,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
 ) {
     unsafe {
         let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice().unwrap() {
+        for elem in memregion.as_mut_slice() {
             *elem = i;
             i += inc_val;
         }

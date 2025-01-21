@@ -5,7 +5,7 @@ use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::libfabric::libfabric_comm::{LibFabComm, LibFabData};
 use crate::lamellae::{
     AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
-    RdmaFuture, RdmaResult, Remote, Ser, SerializeHeader, SerializedData, SerializedDataOps,
+    RdmaHandle, RdmaResult, Remote, Ser, SerializeHeader, SerializedData, SerializedDataOps,
     SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_arch::LamellarArchRT;
@@ -240,16 +240,16 @@ impl LamellaeRDMA for LibFab {
     fn wait(&self) {
         self.libfab_comm.wait();
     }
-    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) -> RdmaFuture {
+    fn put<T: Remote>(&self, pe: usize, src: &[T], dst: usize) -> RdmaHandle {
         self.libfab_comm.put(pe, src, dst);
     }
     // fn iput(&self, pe: usize, src: &[u8], dst: usize) {
     //     self.libfab_comm.iput(pe, src, dst);
     // }
-    fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaFuture {
+    fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaHandle {
         self.libfab_comm.put_all(src, dst);
     }
-    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture {
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaHandle {
         self.libfab_comm.get(pe, src, dst);
     }
     // fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
@@ -264,7 +264,7 @@ impl LamellaeRDMA for LibFab {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,
-    ) -> RdmaFuture {
+    ) -> RdmaHandle {
         unreachable!()
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
@@ -273,7 +273,7 @@ impl LamellaeRDMA for LibFab {
         pe: usize,
         remote_addr: usize,
         result: &mut [T],
-    ) -> RdmaFuture {
+    ) -> RdmaHandle {
         unreachable!()
     }
 

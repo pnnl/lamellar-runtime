@@ -276,8 +276,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             .inner
             .data
             .mem_region
-            .as_slice()
-            .expect("array data should be on PE");
+            .as_slice();
+        assert!(slice.len() > 0 && slice.len() % std::mem::size_of::<T>() == 0);
         unsafe {
             std::slice::from_raw_parts(
                 slice.as_ptr() as *const T,

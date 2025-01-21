@@ -413,13 +413,13 @@ pub struct OneSidedIter<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> {
     index: usize,
     buf_index: usize,
     ptr: SendNonNull<T>,
-    state: State,
+    state: State<T>,
     _marker: PhantomData<&'a T>,
 }
 
-pub(crate) enum State {
+pub(crate) enum State<T: Dist> {
     // Ready,
-    Pending(ArrayRdmaHandle),
+    Pending(ArrayRdmaHandle<T>),
     Buffered,
     Finished,
 }

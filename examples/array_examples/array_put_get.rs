@@ -9,7 +9,7 @@ async fn initialize_array(array: &UnsafeArray<usize>) {
 fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
     unsafe {
         let mut i = 0; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice().unwrap() {
+        for elem in memregion.as_mut_slice() {
             *elem = i;
             i += 1
         }

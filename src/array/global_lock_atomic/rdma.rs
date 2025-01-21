@@ -6,6 +6,7 @@ use crate::array::{
     LamellarEnv, LamellarRead, LamellarWrite, TeamTryInto,
 };
 use crate::config;
+use crate::lamellae::CommSlice;
 use crate::memregion::{
     AsBase, Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RTMemoryRegionRDMA,
     RegisteredMemoryRegion, SubRegion,
@@ -13,7 +14,7 @@ use crate::memregion::{
 
 use std::collections::{HashMap, VecDeque};
 
-use super::ArrayAtHandleState;
+use super::{ArrayAtHandleState, InnerRdmaHandle};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
     // fn iget<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
@@ -23,7 +24,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         let req = self.exec_am_local_tg(InitGetAm {
             array: self.clone(),
             index: index,
@@ -31,7 +32,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
         });
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: VecDeque::from([req.into()]),
+            reqs: InnerRdmaHandle::Am(VecDeque::from([req.into()])),
             spawned: false,
         }
     }
@@ -55,12 +56,12 @@ impl<T: Dist> LamellarArrayGet<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.array.team()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
         }
@@ -75,7 +76,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         let req = self.exec_am_local_tg(InitPutAm {
             array: self.clone(),
             index: index,
@@ -83,7 +84,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
         });
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: VecDeque::from([req.into()]),
+            reqs: InnerRdmaHandle::Am(VecDeque::from([req.into()])),
             spawned: false,
         }
     }
@@ -94,12 +95,12 @@ impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.array.team()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
         }
@@ -140,15 +141,17 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
+                    let team_rt = self.array.team_rt();
+
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}",data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        u8_buf.put_comm_slice(lamellar::current_pe, cur_index, CommSlice::from_slice(&data)).spawn(&team_rt.scheduler,team_rt.counters());//we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice().expect("array data should be on PE");
+                    let buf_slice = self.buf.as_mut_slice();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
@@ -244,7 +247,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                     array: self.array.clone().into(), //inner of the indices we need to place data into
                                     start_index: self.index,
                                     len: self.buf.len(),
-                                    data: u8_buf.as_slice().expect("array data should be on PE")
+                                    data: u8_buf.as_slice()
                                         [cur_index..(cur_index + u8_buf_len)]
                                         .to_vec(),
                                 };
@@ -261,7 +264,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     let num_pes = ArrayExecAm::team_rt(&self.array).num_pes();
                     let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
                     let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();
-                    let buf_slice = self.buf.as_slice().expect("array data should be on PE");
+                    let buf_slice = self.buf.as_slice();
                     for pe in self
                         .array
                         .array
@@ -330,16 +333,18 @@ impl LamellarAm for GlobalLockRemotePutAm {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         let _lock = self.array.lock.write().await;
         unsafe {
-            match self
-                .array
-                .array
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, _)) => {
-                    self.data.blocking_get_slice(self.pe, 0, elems);
-                }
-                None => {}
-            }
+            let comm_slice = self.array.array.comm_slice_for_range(self.start_index, self.len);
+            self.data.get_comm_slice(self.pe, 0, comm_slice).await;
+            // match self
+            //     .array
+            //     .array
+            //     .local_elements_for_range(self.start_index, self.len)
+            // {
+            //     Some((elems, _)) => {
+            //         self.data.get_comm_slice(self.pe, 0, CommSlice::from_slice(elems)).await; //alright to do this conversion because we await the get immediately, ensuring elems stays in scope until the RDMA is finished
+            //     }
+            //     None => {}
+            // }
         }
         // println!("done remote put");
     }

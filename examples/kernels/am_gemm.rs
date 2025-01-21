@@ -58,7 +58,7 @@ impl SubMatrix {
     fn add_mat(&self, mat: &Vec<f32>) {
         let start_row = self.row_block * self.block_size;
         let start_col = self.col_block * self.block_size;
-        let raw = unsafe { self.mat.as_mut_slice().unwrap() };
+        let raw = unsafe { self.mat.as_mut_slice() };
         let _lock = LOCK.lock(); //we are operating on the raw data of this matrix so need to protect access
         for row in 0..self.block_size {
             let global_index = (row + start_row) * self.cols + (start_col);
@@ -71,7 +71,7 @@ impl SubMatrix {
 async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
-    let sub_mat_slice = unsafe { sub_mat.as_mut_slice().unwrap() };
+    let sub_mat_slice = unsafe { sub_mat.as_mut_slice() };
     sub_mat_slice[sub_mat.len() - 1] = f32::NAN;
     for row in 0..mat.block_size {
         let offset = (row + start_row) * mat.cols + (start_col);
@@ -132,7 +132,7 @@ impl LamellarAM for NaiveMM {
 //     for pe in 0..world.num_pes() {
 //         if pe == world.my_pe() {
 //             unsafe {
-//                 for row in mat.as_slice().unwrap().chunks(cols) {
+//                 for row in mat.as_slice().chunks(cols) {
 //                     println!("{:?}", row);
 //                 }
 //             }
@@ -173,11 +173,11 @@ fn main() {
         .block();
     unsafe {
         let mut cnt = (((m * n) / num_pes) * my_pe) as f32;
-        for elem in a.as_mut_slice().unwrap() {
+        for elem in a.as_mut_slice() {
             *elem = cnt;
             cnt += 1.0;
         }
-        for (i, elem) in b.as_mut_slice().unwrap().iter_mut().enumerate() {
+        for (i, elem) in b.as_mut_slice().iter_mut().enumerate() {
             let global_i = i + ((m * n) / num_pes) * my_pe;
             let row = global_i / n;
             let col = global_i % n;
@@ -188,7 +188,7 @@ fn main() {
                 *elem = 0.0;
             }
         }
-        for elem in c.as_mut_slice().unwrap() {
+        for elem in c.as_mut_slice() {
             *elem = 0.0;
         }
     }
@@ -269,10 +269,10 @@ fn main() {
         // for pe in 0..num_pes{
         //     if pe ==my_pe {
         unsafe {
-            //             for row in c.as_slice().unwrap().chunks(m) {
+            //             for row in c.as_slice().chunks(m) {
             //                 println!("{:?}", row);
             //             }
-            for elem in c.as_mut_slice().unwrap().iter_mut() {
+            for elem in c.as_mut_slice().iter_mut() {
                 *elem = 0.0
             }
         }

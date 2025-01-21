@@ -340,7 +340,7 @@ impl CommOps for RofiRustAsyncComm {
         self.ofi.lock().progress().unwrap()
     }
 
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaHandle{
         if pe != self.my_pe {
             async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }.await.unwrap()});
             self.put_amt
@@ -378,7 +378,7 @@ impl CommOps for RofiRustAsyncComm {
         }
     }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaFuture{
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaHandle{
         for pe in 0..self.my_pe {
             async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
                 .await
@@ -404,7 +404,7 @@ impl CommOps for RofiRustAsyncComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaFuture{
+    fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaHandle{
         if pe != self.my_pe {
             async_std::task::block_on(async {unsafe { self.ofi.lock().get(pe, src_addr, dst_addr) }
                 .await

@@ -1,4 +1,4 @@
-use crate::{env_var::Alloc, lamellae::{comm::{error::AllocResult, CommMem}, AllocError, CommAlloc, CommAllocAddr, CommAllocType}};
+use crate::{ lamellae::{comm::{error::AllocResult, CommMem}, AllocError, CommAlloc, CommAllocAddr, CommAllocType}};
 
 use super::{
     comm::{LocalComm, MyPtr},

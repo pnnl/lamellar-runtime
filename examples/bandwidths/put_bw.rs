@@ -14,10 +14,10 @@ fn main() {
     let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
-        for i in data.as_mut_slice().unwrap() {
+        for i in data.as_mut_slice() {
             *i = my_pe as u8;
         }
-        for i in array.as_mut_slice().unwrap() {
+        for i in array.as_mut_slice() {
             *i = 255 as u8;
         }
     }
@@ -61,7 +61,7 @@ fn main() {
             world.wait_all();
         }
         if my_pe == num_pes - 1 {
-            let array_slice = unsafe { array.as_slice().unwrap() };
+            let array_slice = unsafe { array.as_slice() };
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
                     std::thread::yield_now()
@@ -90,7 +90,7 @@ fn main() {
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
         unsafe {
-            for i in array.as_mut_slice().unwrap() {
+            for i in array.as_mut_slice() {
                 *i = 255 as u8;
             }
         };

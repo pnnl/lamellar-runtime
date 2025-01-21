@@ -26,7 +26,7 @@ impl LamellarAM for DataAM {
         unsafe {
             // let local = lamellar::team.local_array::<u8>(self.length, 255u8);
             let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
-            let local_slice = local.as_mut_slice().unwrap();
+            let local_slice = local.as_mut_slice();
             local_slice[self.length - 1] = 255u8;
             self.array.get_unchecked(self.index, local.clone());
 
@@ -45,7 +45,7 @@ fn main() {
     let array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
-        for i in data.as_mut_slice().unwrap() {
+        for i in data.as_mut_slice() {
             *i = my_pe as u8;
         }
     }
@@ -114,7 +114,7 @@ fn main() {
             bws.push((sum as f64 / 1048576.0) / cur_t);
         }
         unsafe {
-            let data = array.as_mut_slice().unwrap();
+            let data = array.as_mut_slice();
             for j in 0..ARRAY_LEN as usize {
                 data[j] = my_pe as u8;
             }

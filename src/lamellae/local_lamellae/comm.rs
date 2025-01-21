@@ -1,12 +1,10 @@
 use crate::{
-    lamellae::comm::{CommInfo, CommProgress, CommShutdown},
-    lamellar_alloc::LamellarAlloc,
-    Backend,
+    lamellae::comm::{CommInfo, CommProgress, CommShutdown}, lamellar_alloc::LamellarAlloc, Backend,
 };
 
 use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
 
 #[derive(Debug)]
 pub(crate) struct MyPtr {
@@ -21,6 +19,8 @@ pub(crate) struct LocalComm {
     pub(crate) my_pe: usize,
     pub(crate) allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
     pub(crate) heap_allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
+    pub(crate) put_amt: Arc<AtomicUsize>,
+    pub(crate) get_amt: Arc<AtomicUsize>,
 }
 
 impl LocalComm {
@@ -30,6 +30,8 @@ impl LocalComm {
             my_pe: 0,
             allocs: Arc::new(Mutex::new(HashMap::new())),
             heap_allocs: Arc::new(Mutex::new(HashMap::new())),
+            put_amt: Arc::new(AtomicUsize::new(0)),
+            get_amt: Arc::new(AtomicUsize::new(0)),
         }
     }
 }
@@ -54,5 +56,9 @@ impl CommInfo for LocalComm {
     }
     fn backend(&self) -> Backend {
         Backend::Local
+    }
+    fn MB_sent(&self) -> f64 {
+        (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
+            / 1_000_000.0
     }
 }

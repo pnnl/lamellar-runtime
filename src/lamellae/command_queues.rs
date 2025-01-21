@@ -791,7 +791,7 @@ impl InnerCQ {
 
     // need to include  a "barrier" count...
     //#[tracing::instrument(skip_all)]
-    fn send_alloc_inner(&self, alloc_buf: &CommSlice<CmdMsg>, min_size: usize) {
+    fn send_alloc_inner(&self, alloc_buf: &mut CommSlice<CmdMsg>, min_size: usize) {
         let mut new_alloc = true;
         while new_alloc {
             new_alloc = false;
@@ -857,7 +857,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn send_panic_inner(&self, panic_buf:&CommSlice<CmdMsg>) {
+    fn send_panic_inner(&self, panic_buf: &mut CommSlice<CmdMsg>) {
         if panic_buf[self.my_pe].hash() == self.clear_cmd.hash() {
             let cmd = &mut panic_buf[self.my_pe];
             cmd.daddr = 0;
@@ -929,8 +929,7 @@ impl InnerCQ {
                             send_buf.sub_slice(dst..=dst),
                             recv_buffer.index_addr(dst),
                         )
-                        .await
-                        .expect("put failed");
+                        .await;
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
@@ -970,8 +969,7 @@ impl InnerCQ {
         // println!("command queue getting data from {src}, {:?}", cmd.daddr);
         self.comm
             .get(src, local_daddr, data_slice)
-            .await
-            .expect("get failed");
+            .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
@@ -1003,8 +1001,7 @@ impl InnerCQ {
         // println!("command queue getting serialized data from {src}");
         self.comm
             .get(src, local_daddr , data_slice)
-            .await
-            .expect("get failed");
+            .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
@@ -1268,15 +1265,15 @@ impl CommandQueue {
         }
         // let cmd_buffers=Arc::new(cmd_buffers);
         let cq = InnerCQ::new(
-            send_buffer,
-            recv_buffer,
-            free_buffer,
-            alloc_buffer,
-            panic_buffer,
+            send_buffer.clone(),
+            recv_buffer.clone(),
+            free_buffer.clone(),
+            alloc_buffer.clone(),
+            panic_buffer.clone(),
             &cmd_buffers.clone(),
-            release_cmd,
-            clear_cmd,
-            free_cmd,
+            release_cmd.clone(),
+            clear_cmd.clone(),
+            free_cmd.clone(),
             comm.clone(),
             my_pe,
             num_pes,
@@ -1508,17 +1505,17 @@ impl Drop for CommandQueue {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("dropping rofi command queue");
-        self.comm.rt_free(self.send_buffer); // - self.comm.base_addr());
-        self.comm.rt_free(self.recv_buffer); // - self.comm.base_addr());
-        self.comm.rt_free(self.free_buffer); // - self.comm.base_addr());
-        self.comm.rt_free(self.alloc_buffer);
-        self.comm.rt_free(self.panic_buffer);
-        self.comm.rt_free(self.release_cmd); // - self.comm.base_addr());
-        self.comm.rt_free(self.clear_cmd); // - self.comm.base_addr());
-        self.comm.rt_free(self.free_cmd); // - self.comm.base_addr());
+        self.comm.rt_free(self.send_buffer.clone()); // - self.comm.base_addr());
+        self.comm.rt_free(self.recv_buffer.clone()); // - self.comm.base_addr());
+        self.comm.rt_free(self.free_buffer.clone()); // - self.comm.base_addr());
+        self.comm.rt_free(self.alloc_buffer.clone());
+        self.comm.rt_free(self.panic_buffer.clone());
+        self.comm.rt_free(self.release_cmd.clone()); // - self.comm.base_addr());
+        self.comm.rt_free(self.clear_cmd.clone()); // - self.comm.base_addr());
+        self.comm.rt_free(self.free_cmd.clone()); // - self.comm.base_addr());
         for bufs in self.cmd_buffers.iter() {
             for buf in bufs.iter() {
-                self.comm.rt_free(*buf);
+                self.comm.rt_free(buf.clone());
             }
         }
         // println!("rofi command queue dropped");

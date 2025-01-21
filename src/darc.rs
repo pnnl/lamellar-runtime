@@ -51,7 +51,6 @@ use std::cmp::PartialEq;
 use std::fmt;
 use std::ops::Deref;
 use std::pin::Pin;
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -60,6 +59,7 @@ use std::time::Instant;
 // //use tracing::*;
 
 use crate::lamellae::CommAlloc;
+use crate::Dist;
 use crate::{
     active_messaging::{AMCounters, RemotePtr},
     barrier::Barrier,
@@ -106,6 +106,11 @@ pub(crate) enum DarcMode {
     Dropped,
     RestartDrop,
 }
+
+// unsafe impl Send for DarcMode {}
+// unsafe impl Sync for DarcMode {}
+
+// impl Remote for DarcMode {}
 
 
 #[lamellar_impl::AmDataRT(Debug)]
@@ -658,8 +663,7 @@ impl<T: 'static> DarcInner<T> {
                             unsafe { CommSlice::from_raw_parts(&mut old_ref_cnts[pe],1) },
                             inner.mode_ref_cnt_slice.index_addr(inner.my_pe), //this is barrier_ref_cnt_slice
                         )
-                        .await
-                        .expect("rdma put failed");
+                        .await;
                         outstanding_refs = true;
                         barrier_id = 0;
                     }
@@ -705,8 +709,7 @@ impl<T: 'static> DarcInner<T> {
                         // inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
                         inner.mode_barrier_slice.index_addr( inner.my_pe),
                     )
-                    .await
-                    .expect("rdma put failed");
+                    .await;
                 }
                 //maybe we need to change the above to a get?
                 rdma.flush();
@@ -853,38 +856,38 @@ impl<T> Darc<T> {
         weak
     }
     pub(crate) fn inner(&self) -> &DarcInner<T> {
-        unsafe { self.inner.as_ref().expect("invalid darc inner ptr") }
+       self.inner.as_ref().expect("invalid darc inner ptr") 
     }
     fn inner_mut(&self) -> &mut DarcInner<T> {
-        unsafe { self.inner.as_mut().expect("invalid darc inner ptr") }
+        self.inner.as_mut().expect("invalid darc inner ptr") 
     }
     #[allow(dead_code)]
     pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner().team()
     }
-    fn ref_cnts_as_mut_slice(&self) -> &mut [usize] {
-        self.inner().ref_cnt_slice.as_slice_mut()
-        // unsafe { std::slice::from_raw_parts_mut(inner.ref_cnt_addr as *mut usize, inner.num_pes) }
-    }
-    fn mode_as_mut_slice(&self) -> &mut [DarcMode] {
-        self.inner().mode_slice.as_slice_mut()
-        // let inner = self.inner();
-        // unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes) }
-    }
-    fn mode_barrier_as_mut_slice(&self) -> &mut [usize] {
-        self.inner().mode_barrier_slice.as_slice_mut()
-        // let inner = self.inner();
-        // unsafe {
-        //     std::slice::from_raw_parts_mut(inner.mode_barrier_addr as *mut usize, inner.num_pes)
-        // }
-    }
-    fn mode_ref_cnt_as_mut_slice(&self) -> &mut [usize] {
-        self.inner().mode_ref_cnt_slice.as_slice_mut()
-        // let inner = self.inner();
-        // unsafe {
-        //     std::slice::from_raw_parts_mut(inner.mode_ref_cnt_addr as *mut usize, inner.num_pes)
-        // }
-    }
+    // fn ref_cnts_as_mut_slice(&self) -> &mut [usize] {
+    //     self.inner().ref_cnt_slice.as_mut_slice()
+    //     // unsafe { std::slice::from_raw_parts_mut(inner.ref_cnt_addr as *mut usize, inner.num_pes) }
+    // }
+    // fn mode_as_mut_slice(&self) -> &mut [DarcMode] {
+    //     self.inner().mode_slice.as_mut_slice()
+    //     // let inner = self.inner();
+    //     // unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut DarcMode, inner.num_pes) }
+    // }
+    // fn mode_barrier_as_mut_slice(&self) -> &mut [usize] {
+    //     self.inner().mode_barrier_slice.as_mut_slice()
+    //     // let inner = self.inner();
+    //     // unsafe {
+    //     //     std::slice::from_raw_parts_mut(inner.mode_barrier_addr as *mut usize, inner.num_pes)
+    //     // }
+    // }
+    // fn mode_ref_cnt_as_mut_slice(&self) -> &mut [usize] {
+    //     self.inner().mode_ref_cnt_slice.as_mut_slice()
+    //     // let inner = self.inner();
+    //     // unsafe {
+    //     //     std::slice::from_raw_parts_mut(inner.mode_ref_cnt_addr as *mut usize, inner.num_pes)
+    //     // }
+    // }
 
     #[doc(hidden)]
     pub fn serialize_update_cnts(&self, cnt: usize) {
@@ -1108,16 +1111,19 @@ impl<T: Send + Sync> Darc<T> {
             },//.addr as *mut DarcInner<T>,
             src_pe: my_pe,
         };
-        for elem in d.ref_cnts_as_mut_slice() {
+        for elem in d.inner().ref_cnt_slice.clone().iter_mut() {
             *elem = 0;
         }
-        for elem in d.mode_as_mut_slice() {
+        for elem in d.inner().total_ref_cnt_slice.clone().iter_mut() {
+            *elem = 0;
+        }
+        for elem in d.inner().mode_slice.clone().iter_mut() {
             *elem = state;
         }
-        for elem in d.mode_barrier_as_mut_slice() {
+        for elem in d.inner().mode_ref_cnt_slice.clone().iter_mut() {
             *elem = 0;
         }
-        for elem in d.mode_ref_cnt_as_mut_slice() {
+        for elem in d.inner().mode_barrier_slice.clone().iter_mut() {
             *elem = 0;
         }
         // println!(
@@ -1225,7 +1231,7 @@ impl<T> Clone for Darc<T> {
         // println! {"[{:?}] darc[{:?}] cloned {:?} {:?} {:?}", std::thread::current().id(),self.inner().id,self.inner,self.inner().local_cnt.load(Ordering::SeqCst),self.inner().total_local_cnt.load(Ordering::SeqCst)};
         // self.print();
         Darc {
-            inner: self.inner,
+            inner: self.inner.clone(),
             src_pe: self.src_pe,
         }
     }
@@ -1324,14 +1330,14 @@ impl<T: 'static> Drop for Darc<T> {
         // self.print();
         if cnt == 1 {
             //we are currently the last local ref, if it increases again it must mean someone else has come in and we can probably let them worry about cleaning up...
-            let pe_ref_cnts = self.ref_cnts_as_mut_slice();
+            
             // println!(
             //     "[{:?}] Last local ref... for now! {:?}",
             //     std::thread::current().id(),
-            //     pe_ref_cnts
+            //      self.inner().ref_cnt_slice
             // );
             // self.print();
-            if pe_ref_cnts.iter().any(|&x| x > 0) {
+            if self.inner().ref_cnt_slice.iter().any(|&x| x > 0) {
                 //if we have received and accesses from remote pes, send we are finished
                 inner.send_finished();
                 // .into_iter().for_each(|x| {
@@ -1346,31 +1352,31 @@ impl<T: 'static> Drop for Darc<T> {
 
             // println!("[{:?}] launching drop task", std::thread::current().id());
 
-            let mode_refs = self.mode_as_mut_slice();
+            let mut mode_refs =  self.inner().mode_slice;
             if local_mode!(DarcMode::Darc, mode_refs, inner) {
-                launch_drop!(DarcMode::Darc, inner, self.inner);
+                launch_drop!(DarcMode::Darc, inner, self.inner.clone());
             } else if local_mode!(DarcMode::LocalRw, mode_refs, inner) {
-                launch_drop!(DarcMode::LocalRw, inner, self.inner);
+                launch_drop!(DarcMode::LocalRw, inner, self.inner.clone());
             } else if local_mode!(DarcMode::GlobalRw, mode_refs, inner) {
-                launch_drop!(DarcMode::GlobalRw, inner, self.inner);
+                launch_drop!(DarcMode::GlobalRw, inner, self.inner.clone());
             } else if local_mode!(DarcMode::LocalRw, mode_refs, inner) {
-                launch_drop!(DarcMode::LocalRw, inner, self.inner);
+                launch_drop!(DarcMode::LocalRw, inner, self.inner.clone());
             } else if local_mode!(DarcMode::UnsafeArray, mode_refs, inner) {
-                launch_drop!(DarcMode::UnsafeArray, inner, self.inner);
+                launch_drop!(DarcMode::UnsafeArray, inner, self.inner.clone());
             } else if local_mode!(DarcMode::ReadOnlyArray, mode_refs, inner) {
-                launch_drop!(DarcMode::ReadOnlyArray, inner, self.inner);
+                launch_drop!(DarcMode::ReadOnlyArray, inner, self.inner.clone());
             }
             // else if local_mode!(DarcMode::LocalOnlyArray, mode_refs, inner) {
-            //     launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner);
+            //     launch_drop!(DarcMode::LocalOnlyArray, inner, self.inner.clone());
             // }
             else if local_mode!(DarcMode::LocalLockArray, mode_refs, inner) {
-                launch_drop!(DarcMode::LocalLockArray, inner, self.inner);
+                launch_drop!(DarcMode::LocalLockArray, inner, self.inner.clone());
             } else if local_mode!(DarcMode::GlobalLockArray, mode_refs, inner) {
-                launch_drop!(DarcMode::GlobalLockArray, inner, self.inner);
+                launch_drop!(DarcMode::GlobalLockArray, inner, self.inner.clone());
             } else if local_mode!(DarcMode::GenericAtomicArray, mode_refs, inner) {
-                launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner);
+                launch_drop!(DarcMode::GenericAtomicArray, inner, self.inner.clone());
             } else if local_mode!(DarcMode::NativeAtomicArray, mode_refs, inner) {
-                launch_drop!(DarcMode::NativeAtomicArray, inner, self.inner);
+                launch_drop!(DarcMode::NativeAtomicArray, inner, self.inner.clone());
             }
             // self.print();
         }
@@ -1621,7 +1627,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                                                      // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             let _am_counters = Arc::from_raw(self.inner.am_counters);
             let _barrier = Box::from_raw(self.inner.barrier);
-            self.team.lamellae.comm().free(self.inner.alloc);
+            self.team.lamellae.comm().free(self.inner.alloc.clone());
             // println!(
             //     "[{:?}]leaving DroppedWaitAM {:?} {:x}",
             //     std::thread::current().id(),

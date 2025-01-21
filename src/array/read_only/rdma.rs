@@ -131,7 +131,7 @@ impl<T: Dist + 'static> LamellarArrayInternalGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         self.array.internal_get(index, buf)
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
@@ -144,7 +144,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         self.array.get(index, buf)
     }
     fn at(&self, index: usize) -> ArrayAtHandle<T> {

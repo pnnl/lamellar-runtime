@@ -47,7 +47,7 @@ impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
@@ -66,7 +66,7 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.put(index, buf),

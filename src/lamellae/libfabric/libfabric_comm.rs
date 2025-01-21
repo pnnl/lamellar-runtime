@@ -2,7 +2,7 @@ use crate::config;
 use crate::lamellae::{
     comm::{AllocError, AllocResult, Comm, CommOps},
     command_queues::CommandQueue,
-    AllocationType, AtomicOp, Des, LamellaeRDMA, NetworkAtomic, RdmaFuture, RdmaResult, Remote,
+    AllocationType, AtomicOp, Des, LamellaeRDMA, NetworkAtomic, RdmaHandle, RdmaResult, Remote,
     SerializeHeader, SerializedData, SerializedDataOps, SubData, SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_alloc::BTreeAlloc;
@@ -296,7 +296,7 @@ impl LamellaeRDMA for LibFabComm {
         self.ofi.wait_all().unwrap()
     }
 
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) -> RdmaFuture {
+    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) -> RdmaHandle {
         if pe != self.my_pe {
             unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.unwrap();
             self.put_amt
@@ -330,7 +330,7 @@ impl LamellaeRDMA for LibFabComm {
     //     }
     // }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) -> RdmaFuture {
+    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) -> RdmaHandle {
         for pe in 0..self.my_pe {
             unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.unwrap()
         }
@@ -350,7 +350,7 @@ impl LamellaeRDMA for LibFabComm {
         self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
     }
 
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst: &mut [T]) -> RdmaFuture {
+    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst: &mut [T]) -> RdmaHandle {
         let dst_ptr = dst.as_mut_ptr();
         let dst_addr = dst_ptr as usize;
         if pe != self.my_pe {
@@ -447,7 +447,7 @@ impl LamellaeRDMA for LibFabComm {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,
-    ) -> RdmaFuture {
+    ) -> RdmaHandle {
         async move { Ok(()) }
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
@@ -456,7 +456,7 @@ impl LamellaeRDMA for LibFabComm {
         pe: usize,
         remote_addr: usize,
         result: &mut [T],
-    ) -> RdmaFuture {
+    ) -> RdmaHandle {
         async move { Ok(()) }
     }
 

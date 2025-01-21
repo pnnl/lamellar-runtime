@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use crate::{
     active_messaging::RemotePtr,
-    darc::{Darc, DarcInner, DarcMode, __NetworkDarc,DarcCommPtr},
+    darc::{Darc, DarcInner, DarcMode, __NetworkDarc},
     lamellar_team::IntoLamellarTeam,
     IdError, LamellarEnv, LamellarTeam,
-    lamellae::{CommAllocAddr,CommMem},
+    lamellae::CommMem,
 };
 
 use super::handle::LocalRwDarcHandle;

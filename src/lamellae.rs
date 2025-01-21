@@ -33,7 +33,6 @@ use {
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::{
-    ptr::NonNull,
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -205,7 +204,7 @@ impl SerializedData {
             .as_ref()
             .expect("valid serialized data");
         SerializedData {
-            alloc: data.alloc,
+            alloc: data.alloc.clone(),
             ref_cnt: data.ref_cnt,
             ser_data_bytes: data.ser_data_bytes,
             header_bytes: data.header_bytes,
@@ -217,7 +216,7 @@ impl SerializedData {
     pub(crate) fn into_remote(self) -> RemoteSerializedData {
         self.increment_cnt();
         RemoteSerializedData {
-            alloc: self.alloc,
+            alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
             ser_data_bytes: self.ser_data_bytes,
             header_bytes: self.header_bytes,
@@ -303,7 +302,7 @@ impl Des for SerializedData {
         // let mut sub = self.clone();
         self.increment_cnt();
         SubSerializedData {
-            alloc: self.alloc,
+            alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
             ser_data_bytes: self.ser_data_bytes,
             header_bytes: self.header_bytes,
@@ -317,7 +316,7 @@ impl Drop for SerializedData {
     fn drop(&mut self) {
         unsafe {
             if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
-                self.comm.rt_free(self.alloc);
+                self.comm.rt_free(self.alloc.clone());
             }
         }
     }
@@ -349,7 +348,7 @@ impl Drop for SubSerializedData {
     fn drop(&mut self) {
         unsafe {
             if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
-                self.comm.rt_free(self.alloc);
+                self.comm.rt_free(self.alloc.clone());
             }
         }
     }
@@ -369,7 +368,7 @@ impl Clone for RemoteSerializedData {
     fn clone(&self) -> Self {
         self.increment_cnt();
         RemoteSerializedData {
-            alloc: self.alloc,
+            alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
             ser_data_bytes: self.ser_data_bytes,
             header_bytes: self.header_bytes,
@@ -383,7 +382,7 @@ impl Drop for RemoteSerializedData{
     fn drop(&mut self) {
         unsafe {
             if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
-                self.comm.rt_free(self.alloc);
+                self.comm.rt_free(self.alloc.clone());
             }
         }
     }
@@ -418,6 +417,8 @@ pub(crate) trait LamellaeInit {
     fn init_fabric(&mut self) -> (usize, usize); //(my_pe,num_pes)
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>;
 }
+
+#[enum_dispatch]
 pub(crate) trait LamellaeShutdown {
     fn shutdown(&self);
     fn force_shutdown(&self);
@@ -494,7 +495,7 @@ pub(crate) trait LamellaeAM: Send {
 }
 
 #[allow(unused_variables)]
-pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
+pub(crate) fn create_lamellae(backend: Backend, ) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "rofi")]
         Backend::Rofi => {

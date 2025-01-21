@@ -19,7 +19,7 @@ where
 }
 
 enum ChunkState<I: Dist> {
-    Pending(OneSidedMemoryRegion<I>, ArrayRdmaHandle),
+    Pending(OneSidedMemoryRegion<I>, ArrayRdmaHandle<I>),
     Finished,
 }
 
@@ -44,7 +44,7 @@ where
         array: <I as OneSidedIteratorInner>::Array,
         index: usize,
         size: usize,
-    ) -> (OneSidedMemoryRegion<I::ElemType>, ArrayRdmaHandle) {
+    ) -> (OneSidedMemoryRegion<I::ElemType>, ArrayRdmaHandle<I::ElemType>) {
         // println!(" get chunk of len: {:?}", size);
         let mem_region: OneSidedMemoryRegion<I::ElemType> =
             array.team().team.alloc_one_sided_mem_region(size);

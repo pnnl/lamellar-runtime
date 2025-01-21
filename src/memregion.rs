@@ -11,7 +11,7 @@ use crate::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
     },
-    lamellae::{AllocationType, Backend, Lamellae,CommInfo,CommMem,CommRdma,CommAtomic,RdmaFuture},
+    lamellae::{AllocationType, Backend, CommAlloc, CommAllocAddr, CommAllocType, CommAtomic, CommInfo, CommMem, CommRdma, CommSlice, Lamellae, RdmaHandle},
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     LamellarEnv,
 };
@@ -42,19 +42,29 @@ use enum_dispatch::enum_dispatch;
 /// It can also occur if a subteam creates a shared memory region, and then a PE that does not exist in the team tries to access local data directly.
 ///
 /// In both these cases the solution would be to use the memregion handle to perfrom a `get` operation, transferring the data from a remote node into a local buffer.
-#[derive(Debug, Clone)]
-pub struct MemNotLocalError;
+#[derive(Debug, Clone, Copy)]
+pub enum MemRegionError{
+    MemNotLocalError,
+    MemNotAlignedError,
+}
 
-/// A Result type for LamellarMemoryRegion Operations
-pub type MemResult<T> = Result<T, MemNotLocalError>;
-
-impl std::fmt::Display for MemNotLocalError {
+impl std::fmt::Display for MemRegionError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "mem region not local",)
+        match self {
+            MemRegionError::MemNotLocalError => write!(f, "trying to access the local data of a mem region that is remote",),
+            MemRegionError::MemNotAlignedError => write!(f, "trying to convert a mem region to a non aligned type",),
+        }
     }
 }
 
-impl std::error::Error for MemNotLocalError {}
+impl std::error::Error for MemRegionError {}
+
+/// A Result type for LamellarMemoryRegion Operations
+pub type MemResult<T> = Result<T, MemRegionError>;
+
+
+
+
 
 /// Trait representing types that can be used in remote operations
 ///
@@ -71,7 +81,8 @@ pub trait Dist:
 
 //#[doc(hidden)]
 /// Enum used to expose common methods for all registered memory regions
-#[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>, LamellarEnv)]
+// #[enum_dispatch(RegisteredMemoryRegion<T>, MemRegionId, AsBase, MemoryRegionRDMA<T>, RTMemoryRegionRDMA<T>, LamellarEnv)]
+#[enum_dispatch(RegisteredMemoryRegion<T>, MemoryRegionRDMA<T>,RTMemoryRegionRDMA<T>,MemRegionId, AsBase,LamellarEnv)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Dist> {
@@ -125,8 +136,8 @@ impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
 impl<T: Dist> LamellarMemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
     /// If the memory region contains local data, return it as a mutable slice
-    /// else return an error
-    pub unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+    /// else return a 0 length slice
+    pub unsafe fn as_mut_slice(&self) -> &mut [T] {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_mut_slice(),
             LamellarMemoryRegion::Local(memregion) => memregion.as_mut_slice(),
@@ -136,8 +147,8 @@ impl<T: Dist> LamellarMemoryRegion<T> {
 
     //#[tracing::instrument(skip_all)]
     /// if the memory region contains local data, return it as a slice
-    /// else return an error
-    pub unsafe fn as_slice(&self) -> MemResult<&[T]> {
+    /// else return a 0 length slice
+    pub unsafe fn as_slice(&self) -> &[T] {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.as_slice(),
             LamellarMemoryRegion::Local(memregion) => memregion.as_slice(),
@@ -276,7 +287,7 @@ impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T
 /// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
 /// [LamellarArray][crate::array::LamellarArray] interface to construct and interact with distributed memory.
 #[enum_dispatch]
-pub trait RegisteredMemoryRegion<T: Dist> {
+pub(crate) trait RegisteredMemoryRegion<T: Dist> {
     #[doc(alias("One-sided", "onesided"))]
     /// The length (in number of elements of `T`) of the local segment of the memory region (i.e. not the global length of the memory region)  
     ///
@@ -301,7 +312,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     #[doc(alias("One-sided", "onesided"))]
     /// Return a slice of the local (to the calling PE) data of the memory region
     ///
-    /// Returns an error if the PE does not contain any local data associated with this memory region
+    /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
@@ -318,7 +329,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
     ///```
-    unsafe fn as_slice(&self) -> MemResult<&[T]>;
+    unsafe fn as_slice(&self) -> &[T];
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return a reference to the local (to the calling PE) element located by the provided index
@@ -345,7 +356,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     #[doc(alias("One-sided", "onesided"))]
     /// Return a mutable slice of the local (to the calling PE) data of the memory region
     ///
-    /// Returns an error if the PE does not contain any local data associated with this memory region
+    /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
     ///
     /// # Safety
     /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
@@ -362,7 +373,7 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
     ///```
-    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]>;
+    unsafe fn as_mut_slice(&self) -> &mut [T];
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return a ptr to the local (to the calling PE) data of the memory region
@@ -407,6 +418,8 @@ pub trait RegisteredMemoryRegion<T: Dist> {
     /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
     ///```
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>;
+    unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>>;
+    unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr>;
 }
 
 #[enum_dispatch]
@@ -497,52 +510,52 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///     }      
     /// }
     ///```
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U)->RdmaHandle<T>;
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
-    ///
-    /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    ///
-    /// for pe in 0..num_pes{
-    ///    unsafe{dst_mem_region.blocking_put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
-    /// }
-    /// unsafe {
-    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
-    ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len();
-    ///         while *elem == num_pes{
-    ///             std::thread::yield_now();
-    ///         }
-    ///         assert_eq!(pe,*elem);
-    ///     }      
-    /// }
-    ///```
-    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    );
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
+    // ///
+    // /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
+    // ///
+    // /// # Safety
+    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    // ///
+    // /// # One-sided Operation
+    // /// the calling PE initaites the remote transfer
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::memregion::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let my_pe = world.my_pe();
+    // /// let num_pes = world.num_pes();
+    // ///
+    // /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
+    // /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    // /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    // /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    // ///
+    // /// for pe in 0..num_pes{
+    // ///    unsafe{dst_mem_region.blocking_put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
+    // /// }
+    // /// unsafe {
+    // ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    // ///     for (i,elem) in dst_slice.iter().enumerate(){
+    // ///         let pe = i / &src_mem_region.len();
+    // ///         while *elem == num_pes{
+    // ///             std::thread::yield_now();
+    // ///         }
+    // ///         assert_eq!(pe,*elem);
+    // ///     }      
+    // /// }
+    // ///```
+    // unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // );
 
     /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
     ///
@@ -579,7 +592,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///     }      
     /// }
     ///```
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U)-> RdmaHandle<T>;
 
     #[doc(alias("One-sided", "onesided"))]
     /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
@@ -629,58 +642,58 @@ pub trait MemoryRegionRDMA<T: Dist> {
         pe: usize,
         index: usize,
         data: U,
-    );
+    )-> RdmaHandle<T>;
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
-    /// After calling this function, the data is guaranteed to be placed in the data buffer
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
-    ///
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    ///
-    /// for pe in 0..num_pes{
-    ///     let start_i = pe*src_mem_region.len();
-    ///     let end_i = start_i+src_mem_region.len();
-    ///     unsafe{src_mem_region.blocking_get(pe,0,dst_mem_region.sub_region(start_i..end_i))};
-    /// }
-    ///
-    /// unsafe {
-    ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
-    ///     for (i,elem) in dst_slice.iter().enumerate(){
-    ///         let pe = i / &src_mem_region.len();
-    ///         assert_eq!(pe,*elem);
-    ///     }      
-    /// }
-    ///```
-    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    );
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
+    // /// After calling this function, the data is guaranteed to be placed in the data buffer
+    // ///
+    // /// # Safety
+    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    // ///
+    // /// # One-sided Operation
+    // /// the calling PE initaites the remote transfer
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::memregion::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let my_pe = world.my_pe();
+    // /// let num_pes = world.num_pes();
+    // ///
+    // /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    // /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
+    // ///
+    // /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    // /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
+    // ///
+    // /// for pe in 0..num_pes{
+    // ///     let start_i = pe*src_mem_region.len();
+    // ///     let end_i = start_i+src_mem_region.len();
+    // ///     unsafe{src_mem_region.blocking_get(pe,0,dst_mem_region.sub_region(start_i..end_i))};
+    // /// }
+    // ///
+    // /// unsafe {
+    // ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
+    // ///     for (i,elem) in dst_slice.iter().enumerate(){
+    // ///         let pe = i / &src_mem_region.len();
+    // ///         assert_eq!(pe,*elem);
+    // ///     }      
+    // /// }
+    // ///```
+    // unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // );
 }
 
 #[enum_dispatch]
 pub(crate) trait RTMemoryRegionRDMA<T: Dist> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]);
-    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]);
+    unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>)-> RdmaHandle<T>;
+    unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>)-> RdmaHandle<T>;
 }
 
 impl<T: Dist> Hash for LamellarMemoryRegion<T> {
@@ -704,7 +717,7 @@ impl<T: Dist> LamellarWrite for &LamellarMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for LamellarMemoryRegion<T> {}
 impl<T: Dist> LamellarRead for &LamellarMemoryRegion<T> {}
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(crate) enum Mode {
     Local,
     Remote,
@@ -717,10 +730,9 @@ pub(crate) enum Mode {
 // to different nodes, in local its wrapped in Arc (we dont currently support sending to other nodes)
 // for local we would probably need to develop something like a one-sided initiated darc...
 pub(crate) struct MemoryRegion<T: Dist> {
-    addr: usize,
+    alloc: CommAlloc,
+    num_elems: usize,
     pe: usize,
-    size: usize,
-    num_bytes: usize,
     backend: Backend,
     // rdma: Arc<dyn LamellaeRDMA>,
     rdma: Arc<Lamellae>,
@@ -731,11 +743,11 @@ pub(crate) struct MemoryRegion<T: Dist> {
 impl<T: Dist> MemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn new(
-        size: usize, //number of elements of type T
+        num_elems: usize, //number of elements of type T
         lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
-        if let Ok(memreg) = MemoryRegion::try_new(size, lamellae, alloc) {
+        if let Ok(memreg) = MemoryRegion::try_new(num_elems, lamellae, alloc) {
             memreg
         } else {
             unsafe { std::ptr::null_mut::<i32>().write(1) };
@@ -744,7 +756,7 @@ impl<T: Dist> MemoryRegion<T> {
     }
     //#[tracing::instrument(skip_all)]
     pub(crate) fn try_new(
-        size: usize, //number of elements of type T
+        num_elems: usize, //number of elements of type T
         lamellae: Arc<Lamellae>,
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
@@ -754,13 +766,13 @@ impl<T: Dist> MemoryRegion<T> {
         //     std::mem::align_of::<T>()
         // );
         let mut mode = Mode::Shared;
-        let addr = if size > 0 {
+        let alloc = if num_elems > 0 {
             if let AllocationType::Local = alloc {
                 mode = Mode::Local;
-                lamellae.comm().rt_alloc(size * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
+                lamellae.comm().rt_alloc(num_elems * std::mem::size_of::<T>(), std::mem::align_of::<T>())?
             } else {
                 lamellae.comm().alloc(
-                    size * std::mem::size_of::<T>(),
+                    num_elems * std::mem::size_of::<T>(),
                     alloc,
                     std::mem::align_of::<T>(),
                 )? //did we call team barrer before this?
@@ -774,10 +786,9 @@ impl<T: Dist> MemoryRegion<T> {
             // return Err(anyhow::anyhow!("cant have negative sized memregion"));
         };
         let temp = MemoryRegion {
-            addr: addr,
+            alloc,
             pe: lamellae.comm().my_pe(),
-            size: size,
-            num_bytes: size * std::mem::size_of::<T>(),
+            num_elems,
             backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: mode,
@@ -792,16 +803,19 @@ impl<T: Dist> MemoryRegion<T> {
     }
     //#[tracing::instrument(skip_all)]
     pub(crate) fn from_remote_addr(
-        addr: usize,
+        addr: CommAllocAddr,
         pe: usize,
-        size: usize,
+        num_elems: usize,
         lamellae: Arc<Lamellae>,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         Ok(MemoryRegion {
-            addr: addr,
+            alloc: CommAlloc {
+                addr: addr.into(),
+                size: num_elems * std::mem::size_of::<T>(),
+                alloc_type: CommAllocType::Remote,
+            },
             pe: pe,
-            size: size,
-            num_bytes: size * std::mem::size_of::<T>(),
+            num_elems,
             backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: Mode::Remote,
@@ -814,7 +828,7 @@ impl<T: Dist> MemoryRegion<T> {
     pub(crate) unsafe fn to_base<B: Dist>(mut self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
-            self.num_bytes % std::mem::size_of::<B>(),
+            self.alloc.size % std::mem::size_of::<B>(),
             0,
             "Error converting memregion to new base, does not align"
         );
@@ -828,7 +842,7 @@ impl<T: Dist> MemoryRegion<T> {
         //     mode: self.mode,
         //     phantom: PhantomData,
         // }
-        self.size = self.num_bytes / std::mem::size_of::<B>();
+        self.num_elems = self.alloc.size / std::mem::size_of::<B>();
         std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
 
@@ -850,24 +864,21 @@ impl<T: Dist> MemoryRegion<T> {
         pe: usize,
         index: usize,
         data: U,
-    ) -> RdmaFuture{
-        //todo make return a result?
+    ) -> RdmaHandle<R>{
         let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            if let Ok(ptr) = data.as_ptr() {
-                let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0{
+            if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma
-                    .comm().put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+                    .comm().put(pe, data_slice, self.alloc.comm_addr() + index * std::mem::size_of::<R>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
         } else {
             println!(
                 "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.num_bytes,
+                self.alloc.size,
                 std::mem::size_of::<T>(),
-                self.size
+                self.num_elems
             );
             println!(
                 "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
@@ -880,51 +891,49 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
-    /// copy data from local memory location into a remote memory localtion
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer is free to be reused upon return of this function.
-    //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn blocking_put<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) {
-        //todo make return a result?
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            if let Ok(ptr) = data.as_ptr() {
-                let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
-                self.rdma
-                    .comm().iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
-            } else {
-                panic!("ERROR: put data src is not local");
-            }
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len());
-            panic!("index out of bounds");
-        }
-    }
+    // /// copy data from local memory location into a remote memory localtion
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    // /// the data buffer is free to be reused upon return of this function.
+    // //#[tracing::instrument(skip_all)]
+    // pub(crate) unsafe fn blocking_put<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // ) {
+    //     //todo make return a result?
+    //     let data = data.into();
+    //     if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //         let num_bytes = data.len() * std::mem::size_of::<R>();
+    //         if let Ok(ptr) = data.as_ptr() {
+    //             let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
+    //             self.rdma
+    //                 .comm().iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+    //         } else {
+    //             panic!("ERROR: put data src is not local");
+    //         }
+    //     } else {
+    //         println!("{:?} {:?} {:?}", self.size, index, data.len());
+    //         panic!("index out of bounds");
+    //     }
+    // }
 
     //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn put_all<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         index: usize,
         data: U,
-    ) -> RdmaFuture {
+    ) -> RdmaHandle<R> {
         let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            if let Ok(ptr) = data.as_ptr() {
-                let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0{
+            if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma
-                    .comm().put_all(bytes, self.addr + index * std::mem::size_of::<R>());
+                    .comm().put_all(data_slice, self.alloc.comm_addr() + index * std::mem::size_of::<R>())
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -949,76 +958,71 @@ impl<T: Dist> MemoryRegion<T> {
         pe: usize,
         index: usize,
         data: U,
-    ) {
+    ) -> RdmaHandle<R> {
         let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            if let Ok(ptr) = data.as_mut_ptr() {
-                let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
-                // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0{
+            if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma
-                    .comm().get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
-            //(remote pe, src, dst)
-            // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
+                    .comm().get(pe, self.alloc.comm_addr() + index * std::mem::size_of::<R>(), data_slice)
             } else {
                 panic!("ERROR: get data dst is not local");
             }
         } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
+            println!("{:?} {:?} {:?}", self.alloc.size, index, data.len(),);
             panic!("index out of bounds");
         }
     }
 
-    /// copy data from remote memory location into provided data buffer
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    ///    data will be present within the buffer once this returns.
-    //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn blocking_get<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) {
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            if let Ok(ptr) = data.as_mut_ptr() {
-                let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
-                // println!(
-                //     "getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-                //     pe,
-                //     index,
-                //     std::mem::size_of::<R>(),
-                //     data.len(),
-                //     num_bytes,
-                //     self.size,
-                //     self.num_bytes
-                // );
-                self.rdma
-                    .comm().iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
-            //(remote pe, src, dst)
-            // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
-            } else {
-                panic!("ERROR: get data dst is not local");
-            }
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
-            panic!("index out of bounds");
-        }
-    }
+    // /// copy data from remote memory location into provided data buffer
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    // ///    data will be present within the buffer once this returns.
+    // //#[tracing::instrument(skip_all)]
+    // pub(crate) unsafe fn blocking_get<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // ) {
+    //     let data = data.into();
+    //     if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //         let num_bytes = data.len() * std::mem::size_of::<R>();
+    //         if let Ok(ptr) = data.as_mut_ptr() {
+    //             let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
+    //             // println!(
+    //             //     "getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+    //             //     pe,
+    //             //     index,
+    //             //     std::mem::size_of::<R>(),
+    //             //     data.len(),
+    //             //     num_bytes,
+    //             //     self.size,
+    //             //     self.num_bytes
+    //             // );
+    //             self.rdma
+    //                 .comm().iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+    //         //(remote pe, src, dst)
+    //         // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
+    //         } else {
+    //             panic!("ERROR: get data dst is not local");
+    //         }
+    //     } else {
+    //         println!("{:?} {:?} {:?}", self.size, index, data.len(),);
+    //         panic!("index out of bounds");
+    //     }
+    // }
 
     //we must ensure the the slice will live long enough and that it already exsists in registered memory
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn put_slice<R: Dist>(&self, pe: usize, index: usize, data: &[R]) {
-        //todo make return a result?
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
+    pub(crate) unsafe fn put_comm_slice<R: Dist>(&self, pe: usize, index: usize, data: CommSlice<R>) -> RdmaHandle<R> {
+        
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0{
+            // let num_bytes = data.len() * std::mem::size_of::<R>();
+            // let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
             // println!(
             //     "mem region len: {:?} index: {:?} data len{:?} num_bytes {:?}  from {:?} to {:x} ({:x} [{:?}])",
             //     self.size,
@@ -1030,12 +1034,12 @@ impl<T: Dist> MemoryRegion<T> {
             //     self.addr + index * std::mem::size_of::<T>(),
             //     pe,
             // );
-            self.rdma
-                .put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+            self.rdma.comm()
+                .put(pe, data, self.alloc.comm_addr() + index * std::mem::size_of::<R>())
         } else {
             println!(
                 "mem region len: {:?} index: {:?} data len{:?}",
-                self.size,
+                self.num_elems,
                 index,
                 data.len()
             );
@@ -1050,25 +1054,25 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
-    //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn blocking_get_slice<R: Dist>(
+    // #[tracing::instrument(skip_all)]
+    pub(crate) unsafe fn get_comm_slice<R: Dist>(
         &self,
         pe: usize,
         index: usize,
-        data: &mut [R],
-    ) {
+        data: CommSlice<R>,
+    ) -> RdmaHandle<R> {
         // let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = data.len() * std::mem::size_of::<R>();
-            let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes);
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size  && data.len() > 0 {
+            // let num_bytes = data.len() * std::mem::size_of::<R>();
+            // let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes);
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
             self.rdma
-                .comm().iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+                .comm().get(pe, self.alloc.comm_addr() + index * std::mem::size_of::<R>(), data)
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
         } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
+            println!("{:?} {:?} {:?}", self.alloc.size, index, data.len(),);
             panic!("index out of bounds");
         }
     }
@@ -1088,19 +1092,19 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) {
-        //todo make return a result?
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.comm().atomic_op(
-                AtomcicOp::Store,
-                pe,
-                data.as_slice().expect("memory should be local"),
-                self.addr + index * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len());
-            panic!("index out of bounds");
-        }
+        // //todo make return a result?
+        // let data = data.into();
+        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+        //     self.rdma.comm().atomic_op(
+        //         AtomcicOp::Store,
+        //         pe,
+        //         data.as_slice(),
+        //         self.addr + index * std::mem::size_of::<R>(),
+        //     )
+        // } else {
+        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+        //     panic!("index out of bounds");
+        // }
     }
 
     /// atomically (element-wise)copy data from local memory location into a remote memory localtion
@@ -1119,17 +1123,17 @@ impl<T: Dist> MemoryRegion<T> {
         data: U,
     ) {
         //todo make return a result?
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.comm().atomic_store(
-                pe,
-                data.as_slice().expect("memory should be local"),
-                self.addr + index * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len());
-            panic!("index out of bounds");
-        }
+        // let data = data.into();
+        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+        //     self.rdma.comm().atomic_store(
+        //         pe,
+        //         data.as_slice(),
+        //         self.addr + index * std::mem::size_of::<R>(),
+        //     )
+        // } else {
+        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+        //     panic!("index out of bounds");
+        // }
     }
 
     /// atomically(element-wise) copy data from remote memory location into provided data buffer
@@ -1147,16 +1151,16 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) {
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma
-                .atomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
-                    data.as_mut_slice().expect("memory should be local")
-                })
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len());
-            panic!("index out of bounds");
-        }
+        // let data = data.into();
+        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+        //     self.rdma
+        //         .atomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
+        //             data.as_mut_slice()
+        //         })
+        // } else {
+        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+        //     panic!("index out of bounds");
+        // }
     }
 
     /// atomically(element-wise) copy data from remote memory location into provided data buffer
@@ -1174,16 +1178,16 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) {
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma
-                .comm().iatomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
-                    data.as_mut_slice().expect("memory should be local")
-                })
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, data.len());
-            panic!("index out of bounds");
-        }
+        // let data = data.into();
+        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+        //     self.rdma
+        //         .comm().iatomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
+        //             data.as_mut_slice()
+        //         })
+        // } else {
+        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+        //     panic!("index out of bounds");
+        // }
     }
 
     /// atomically (element-wise)copy data from local memory location into a remote memory localtion
@@ -1203,19 +1207,19 @@ impl<T: Dist> MemoryRegion<T> {
         result: U,
     ) {
         //todo make return a result?
-        let operand = operand.into();
-        let result = result.into();
-        if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.comm().atomic_swap(
-                pe,
-                operand.as_slice().expect("memory should be local"),
-                self.addr + index * std::mem::size_of::<R>(),
-                result.as_mut_slice().expect("memory should be local"),
-            )
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, result.len());
-            panic!("index out of bounds");
-        }
+        // let operand = operand.into();
+        // let result = result.into();
+        // if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+        //     self.rdma.comm().atomic_swap(
+        //         pe,
+        //         operand.as_slice(),
+        //         self.addr + index * std::mem::size_of::<R>(),
+        //         result.as_mut_slice(),
+        //     )
+        // } else {
+        //     println!("{:?} {:?} {:?}", self.size, index, result.len());
+        //     panic!("index out of bounds");
+        // }
     }
 
     /// atomically (element-wise)copy data from local memory location into a remote memory localtion
@@ -1235,157 +1239,162 @@ impl<T: Dist> MemoryRegion<T> {
         result: U,
     ) {
         //todo make return a result?
-        let operand = operand.into();
-        let result = result.into();
-        if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-            self.rdma.comm().iatomic_swap(
-                pe,
-                operand.as_slice().expect("memory should be local"),
-                self.addr + index * std::mem::size_of::<R>(),
-                result.as_mut_slice().expect("memory should be local"),
-            )
-        } else {
-            println!("{:?} {:?} {:?}", self.size, index, result.len());
-            panic!("index out of bounds");
-        }
+        // let operand = operand.into();
+        // let result = result.into();
+        // if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+        //     self.rdma.comm().iatomic_swap(
+        //         pe,
+        //         operand.as_slice(),
+        //         self.addr() + index * std::mem::size_of::<R>(),
+        //         result.as_mut_slice(),
+        //     )
+        // } else {
+        //     println!("{:?} {:?} {:?}", self.alloc.size, index, result.len());
+        //     panic!("index out of bounds");
+        // }
     }
 
-    #[allow(dead_code)]
+    // #[allow(dead_code)]
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn fill_from_remote_addr<R: Dist>(
-        &self,
-        my_index: usize,
-        pe: usize,
-        addr: usize,
-        len: usize,
-    ) {
-        if (my_index + len) * std::mem::size_of::<R>() <= self.num_bytes {
-            let num_bytes = len * std::mem::size_of::<R>();
-            let my_offset = self.addr + my_index * std::mem::size_of::<R>();
-            let bytes = std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes);
-            let local_addr = self.rdma.comm().local_addr(pe, addr);
-            self.rdma.comm().iget(pe, local_addr, bytes);
-        } else {
-            println!(
-                "mem region len: {:?} index: {:?} data len{:?}",
-                self.size, my_index, len
-            );
-            panic!("index out of bounds");
-        }
-    }
+    // pub(crate) unsafe fn fill_from_remote_addr<R: Dist>(
+    //     &self,
+    //     my_index: usize,
+    //     pe: usize,
+    //     addr: usize,
+    //     len: usize,
+    // ) {
+    //     if (my_index + len) * std::mem::size_of::<R>() <= self.num_bytes {
+    //         let num_bytes = len * std::mem::size_of::<R>();
+    //         let my_offset = self.addr + my_index * std::mem::size_of::<R>();
+    //         let bytes = std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes);
+    //         let local_addr = self.rdma.comm().local_addr(pe, addr);
+    //         self.rdma.comm().iget(pe, local_addr, bytes);
+    //     } else {
+    //         println!(
+    //             "mem region len: {:?} index: {:?} data len{:?}",
+    //             self.size, my_index, len
+    //         );
+    //         panic!("index out of bounds");
+    //     }
+    // }
 
     #[allow(dead_code)]
     //#[tracing::instrument(skip_all)]
     pub(crate) fn len(&self) -> usize {
-        self.size
+        self.alloc.size
     }
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn addr(&self) -> MemResult<usize> {
-        Ok(self.addr)
+        if self.mode == Mode::Remote {
+            return Err(MemRegionError::MemNotLocalError);
+        }
+       Ok(self.alloc.addr)
     }
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn casted_at<R: Dist>(&self, index: usize) -> MemResult<&R> {
-        if self.addr != 0 {
-            let num_bytes = self.size * std::mem::size_of::<T>();
-            assert_eq!(
-                num_bytes % std::mem::size_of::<R>(),
-                0,
-                "Error converting memregion to new base, does not align"
-            );
-            Ok(unsafe {
-                &std::slice::from_raw_parts(
-                    self.addr as *const R,
-                    num_bytes / std::mem::size_of::<R>(),
-                )[index]
-            })
-        } else {
-            Err(MemNotLocalError {})
+        if self.mode == Mode::Remote {
+            return Err(MemRegionError::MemNotLocalError);
         }
+        let num_bytes = self.alloc.size * std::mem::size_of::<T>();
+        assert_eq!(
+            num_bytes % std::mem::size_of::<R>(),
+            0,
+            "Error converting memregion to new base, does not align"
+        );
+        Ok(unsafe {
+            &std::slice::from_raw_parts(
+                self.alloc.addr as *const R,
+                num_bytes / std::mem::size_of::<R>(),
+            )[index]
+        })
     }
 
     //#[tracing::instrument(skip_all)]
-    pub(crate) fn as_slice(&self) -> MemResult<&[T]> {
-        if self.addr != 0 {
-            Ok(unsafe { std::slice::from_raw_parts(self.addr as *const T, self.size) })
-        } else {
-            Ok(&[])
-        }
+    pub(crate) fn as_slice(&self) -> &[T] {
+       unsafe {self.as_mut_slice()}
     }
     //#[tracing::instrument(skip_all)]
     pub(crate) fn as_casted_slice<R: Dist>(&self) -> MemResult<&[R]> {
-        if self.addr != 0 {
-            let num_bytes = self.size * std::mem::size_of::<T>();
-            assert_eq!(
-                num_bytes % std::mem::size_of::<R>(),
-                0,
-                "Error converting memregion to new base, does not align"
-            );
-            Ok(unsafe {
-                std::slice::from_raw_parts(
-                    self.addr as *const R,
-                    num_bytes / std::mem::size_of::<R>(),
-                )
-            })
-        } else {
-            Ok(&[])
-        }
+        unsafe {Ok(self.as_casted_mut_slice()?)}
     }
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
-        if self.addr != 0 {
-            Ok(std::slice::from_raw_parts_mut(
-                self.addr as *mut T,
-                self.size,
-            ))
-        } else {
-            Ok(&mut [])
+    pub(crate) unsafe fn as_mut_slice(&self) -> &mut [T] {
+        if self.mode == Mode::Remote {
+            return &mut [];
         }
+       std::slice::from_raw_parts_mut(
+            self.alloc.addr as *mut T,
+            self.alloc.size / std::mem::size_of::<T>(),
+        )
+        
     }
     //#[tracing::instrument(skip_all)]
     pub(crate) unsafe fn as_casted_mut_slice<R: Dist>(&self) -> MemResult<&mut [R]> {
-        if self.addr != 0 {
-            let num_bytes = self.size * std::mem::size_of::<T>();
-            assert_eq!(
-                num_bytes % std::mem::size_of::<R>(),
-                0,
-                "Error converting memregion to new base, does not align"
-            );
-            Ok(std::slice::from_raw_parts_mut(
-                self.addr as *mut R,
-                num_bytes / std::mem::size_of::<R>(),
-            ))
-        } else {
-            Ok(&mut [])
+        if self.mode == Mode::Remote {
+            return Ok(&mut []);
         }
+        if self.alloc.size % std::mem::size_of::<R>() != 0 {
+            return Err(MemRegionError::MemNotAlignedError);
+        }
+        Ok(std::slice::from_raw_parts_mut(
+            self.alloc.addr as *mut R,
+            self.alloc.size / std::mem::size_of::<R>(),
+        ))
     }
-    #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
-    pub(crate) fn as_ptr(&self) -> MemResult<*const T> {
-        Ok(self.addr as *const T)
-    }
-    #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
-    pub(crate) fn as_casted_ptr<R: Dist>(&self) -> MemResult<*const R> {
-        Ok(self.addr as *const R)
-    }
-    #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
+    // #[allow(dead_code)]
+    // //#[tracing::instrument(skip_all)]
+    // pub(crate) fn as_ptr(&self) -> MemResult<*const T> {
+    //     Ok(self.addr as *const T)
+    // }
+    // #[allow(dead_code)]
+    // //#[tracing::instrument(skip_all)]
+    // pub(crate) fn as_casted_ptr<R: Dist>(&self) -> MemResult<*const R> {
+    //     Ok(self.addr as *const R)
+    // }
+    // #[allow(dead_code)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        Ok(self.addr as *mut T)
+        if self.mode == Mode::Remote{
+            return Err(MemRegionError::MemNotLocalError);
+        }
+        unsafe {Ok(self.alloc.as_mut_ptr())}
+        
     }
-    #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
+    // #[allow(dead_code)]
+    // //#[tracing::instrument(skip_all)]
     pub(crate) fn as_casted_mut_ptr<R: Dist>(&self) -> MemResult<*mut R> {
-        Ok(self.addr as *mut R)
+        if self.mode == Mode::Remote{
+            return Err(MemRegionError::MemNotLocalError);
+        }
+        unsafe {Ok(self.alloc.as_mut_ptr())}
+    }
+
+    pub(crate) unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
+        if self.mode == Mode::Remote {
+            return Err(MemRegionError::MemNotLocalError);
+        }
+        Ok(self.alloc.as_slice())
+    }
+    pub(crate) unsafe fn as_casted_comm_slice<R: Dist>(&self) -> MemResult<CommSlice<R>> {
+        if self.mode == Mode::Remote {
+            return Err(MemRegionError::MemNotLocalError);
+        }
+        Ok(self.alloc.as_slice())
+    }
+    pub(crate) unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr> {
+        if self.mode == Mode::Remote {
+            return Err(MemRegionError::MemNotLocalError);
+        }
+        Ok(self.alloc.comm_addr())
     }
 }
 
 impl<T: Dist> MemRegionId for MemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
     fn id(&self) -> usize {
-        self.addr //probably should be key
+        self.alloc.addr //probably should be key
     }
 }
 
@@ -1464,13 +1473,12 @@ impl<T: Dist> Drop for MemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("trying to dropping mem region {:?}",self);
-        if self.addr != 0 {
+      
             match self.mode {
-                Mode::Local => self.rdma.comm().rt_free(self.addr), // - self.rdma.comm().base_addr());
-                Mode::Shared => self.rdma.comm().free(self.addr),
+                Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()), // - self.rdma.comm().base_addr());
+                Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
                 Mode::Remote => {}
             }
-        }
         // println!("dropping mem region {:?}",self);
     }
 }
@@ -1481,8 +1489,8 @@ impl<T: Dist> std::fmt::Debug for MemoryRegion<T> {
         write!(
             f,
             "addr {:#x} size {:?} backend {:?}", // cnt: {:?}",
-            self.addr,
-            self.size,
+            self.alloc.addr,
+            self.alloc.size,
             self.backend,
             // self.cnt.load(Ordering::SeqCst)
         )

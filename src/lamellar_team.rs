@@ -928,7 +928,6 @@ impl LamellarTeamRT {
             for e in team
                 .dropped
                 .as_mut_slice()
-                .expect("data should exist on pe")
                 .iter_mut()
             {
                 *e = 0;
@@ -1072,6 +1071,10 @@ impl LamellarTeamRT {
         self.arch.team_pe(self.world_pe)
     }
 
+    pub(crate) fn counters(&self) -> Vec<Arc<AMCounters>> {
+        vec![self.world_counters.clone(), self.team_counters.clone()]
+    }
+
     //#[tracing::instrument(skip_all)]
     pub(crate) fn create_subteam_from_arch<L>(
         world: Pin<Arc<LamellarTeamRT>>,
@@ -1107,13 +1110,13 @@ impl LamellarTeamRT {
                 parent.lamellae.clone(),
                 AllocationType::Local,
             );
-            let temp_array_slice =
-                unsafe { temp_array.as_mut_slice().expect("data should exist on pe") };
+            let mut temp_array_slice =
+                unsafe { temp_array.as_comm_slice().expect("data should exist on pe") };
             for e in temp_array_slice.iter_mut() {
                 *e = 0;
             }
             unsafe {
-                temp_buf.put_slice(parent.world_pe, 0, &temp_array_slice[..parent.num_pes]);
+                temp_buf.put_comm_slice(parent.world_pe, 0, temp_array_slice.sub_slice(..parent.num_pes));
             }
             let s = Instant::now();
             parent.barrier();
@@ -1125,7 +1128,7 @@ impl LamellarTeamRT {
                 for world_pe in parent.arch.team_iter() {
                     if world_pe != parent.world_pe {
                         unsafe {
-                            temp_buf.put_slice(world_pe, parent_world_pe, &temp_array_slice[0..1]);
+                            temp_buf.put_comm_slice(world_pe, parent_world_pe, temp_array_slice.sub_slice(0..1));
                         }
                     }
                 }
@@ -1188,7 +1191,6 @@ impl LamellarTeamRT {
                 for e in team
                     .dropped
                     .as_mut_slice()
-                    .expect("data should exist on pe")
                     .iter_mut()
                 {
                     *e = 0;
@@ -1239,7 +1241,6 @@ impl LamellarTeamRT {
 
         for (pe, hash_val) in hash_buf
             .as_slice()
-            .expect("data should exist on pe")
             .iter()
             .enumerate()
         {
@@ -1250,7 +1251,6 @@ impl LamellarTeamRT {
                     if s.elapsed().as_secs_f64() > config().deadlock_timeout {
                         let status = hash_buf
                             .as_slice()
-                            .expect("data should exist on pe")
                             .iter()
                             .enumerate()
                             .map(|(i, elem)| (i, *elem == hash))
@@ -1276,7 +1276,7 @@ impl LamellarTeamRT {
                         "[{:?}] ({:?})  hash: {:?}",
                         self.world_pe,
                         hash,
-                        hash_buf.as_slice().expect("data should exist on pe")
+                        hash_buf.as_slice()
                     );
                     panic!("team creating mismatch! Ensure teams are constructed in same order on every pe");
                 } else {
@@ -1292,9 +1292,9 @@ impl LamellarTeamRT {
     fn put_dropped(&self) {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
-                let temp_slice = unsafe {
+                let mut temp_slice = unsafe {
                     self.dropped
-                        .as_mut_slice()
+                        .as_comm_slice()
                         .expect("data should exist on pe")
                 };
 
@@ -1306,29 +1306,29 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            self.dropped.put_slice(
+                            self.dropped.put_comm_slice(
                                 world_pe,
                                 my_index,
-                                &temp_slice[my_index..=my_index],
-                            );
+                                temp_slice.sub_slice(my_index..=my_index),
+                            ).spawn(&self.scheduler,self.counters());
                         }
                     }
                 }
             } else {
-                let temp_slice = unsafe {
+                let mut temp_slice = unsafe {
                     self.dropped
-                        .as_mut_slice()
+                        .as_comm_slice()
                         .expect("data should exist on pe")
                 };
                 temp_slice[self.world_pe] = 1;
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            self.dropped.put_slice(
+                            self.dropped.put_comm_slice(
                                 world_pe,
                                 self.world_pe,
-                                &temp_slice[self.world_pe..=self.world_pe],
-                            );
+                                temp_slice.sub_slice(self.world_pe..=self.world_pe),
+                            ).spawn(&self.scheduler,self.counters());
                         }
                     }
                 }
@@ -1340,7 +1340,7 @@ impl LamellarTeamRT {
     fn drop_barrier(&self) {
         let mut s = Instant::now();
         if self.panic.load(Ordering::SeqCst) == 0 {
-            for pe in self.dropped.as_slice().expect("data should exist on pe") {
+            for pe in self.dropped.as_slice().iter() {
                 while *pe != 1 {
                     // std::thread::yield_now();
                     if s.elapsed().as_secs_f64() > config().deadlock_timeout {
@@ -2332,7 +2332,7 @@ impl Drop for LamellarTeamRT {
         //     Arc::strong_count(&self.world_counters)
         // );
         // println!("removing {:?} ", self.team_hash);
-        self.lamellae.comm().free(self.remote_ptr_alloc);
+        self.lamellae.comm().free(self.remote_ptr_alloc.clone());
         // println!("Lamellae Cnt: {:?}", Arc::strong_count(&self.lamellae));
         // println!("scheduler Cnt: {:?}", Arc::strong_count(&self.scheduler));
         // println!("LamellarTeamRT dropped {:?}", self.team_hash);
@@ -2383,9 +2383,9 @@ impl Drop for LamellarTeam {
                     // println!("after drop barrier");
                     // println!("removing {:?} ", self.team.id);
                     parent.sub_teams.write().remove(&self.team.id);
-                    let team_ptr = unsafe{self.team.remote_ptr_alloc.as_ptr()};
+                    let team_ptr: *const LamellarTeamRT = unsafe{self.team.remote_ptr_alloc.as_ptr()};
                     unsafe {
-                        let arc_team = Arc::from_raw(*team_ptr);
+                        let arc_team = Arc::from_raw(team_ptr);
                         // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
                         Pin::new_unchecked(arc_team); //allows us to drop the inner team
                     }

@@ -1,14 +1,18 @@
 use std::collections::VecDeque;
 
-use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
-use crate::array::r#unsafe::*;
-use crate::array::*;
-use crate::lamellae::comm::CommProgress;
-use crate::memregion::{
-    AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
+use crate::{
+    array::{private::{ArrayExecAm, LamellarArrayPrivate}, r#unsafe::*, *},
+    lamellae::{comm::CommProgress, CommSlice},
+    memregion::{
+        AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
+    }
 };
 
+
+
+
 // //use tracing::*;
+   
 
 impl<T: Dist> UnsafeArray<T> {
     fn block_op<U: Into<LamellarMemoryRegion<T>>>(
@@ -16,7 +20,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //relative to inner
         buf: U,
-    ) -> VecDeque<AmHandle<()>> {
+    ) ->InnerRdmaHandle<T> {
         let global_index = index + self.inner.offset;
         // let buf = buf.team_into(&self.inner.data.team);
         let buf = buf.into();
@@ -41,7 +45,8 @@ impl<T: Dist> UnsafeArray<T> {
         let mut dist_index = global_index;
         // let mut subarray_index = index;
         let mut buf_index = 0;
-        let mut reqs = VecDeque::new();
+        // let mut am_reqs = VecDeque::new();
+        let mut transfer_requests = InnerRdmaHandle::new(&op);
         for pe in start_pe..=end_pe {
             let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
             if pe < self.inner.orig_remaining_elems {
@@ -62,26 +67,31 @@ impl<T: Dist> UnsafeArray<T> {
                 // println!("pe {:?} offset {:?} range: {:?}-{:?} dist_index {:?} pe_full_start_index {:?} num_elems {:?} len {:?}", pe, offset, buf_index, buf_index+len, dist_index, pe_full_start_index, full_num_elems_on_pe, len);
                 match op {
                     ArrayRdmaCmd::Put => unsafe {
-                        self.inner.data.mem_region.blocking_put(
+                        transfer_requests.add_rdma(self.inner.data.mem_region.put(
                             pe,
                             offset,
                             buf.sub_region(buf_index..(buf_index + len)),
-                        )
+                        ));
                     },
                     ArrayRdmaCmd::Get(immediate) => unsafe {
-                        if immediate {
-                            self.inner.data.mem_region.blocking_get(
-                                pe,
-                                offset,
-                                buf.sub_region(buf_index..(buf_index + len)),
-                            )
-                        } else {
-                            self.inner.data.mem_region.get_unchecked(
-                                pe,
-                                offset,
-                                buf.sub_region(buf_index..(buf_index + len)),
-                            )
-                        }
+                        transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
+                            pe,
+                            offset,
+                            buf.sub_region(buf_index..(buf_index + len))
+                        ));
+                        // if immediate {
+                        //     self.inner.data.mem_region.blocking_get(
+                        //         pe,
+                        //         offset,
+                        //         buf.sub_region(buf_index..(buf_index + len)),
+                        //     )
+                        // } else {
+                        //     self.inner.data.mem_region.get_unchecked(
+                        //         pe,
+                        //         offset,
+                        //         buf.sub_region(buf_index..(buf_index + len)),
+                        //     )
+                        // }
                     },
                     ArrayRdmaCmd::PutAm => {
                         // println!("di ({:?}-{:?}), bi ({:?}-{:?})",dist_index,(dist_index + len),buf_index,(buf_index + len));
@@ -100,7 +110,7 @@ impl<T: Dist> UnsafeArray<T> {
                                 },
                                 pe: self.inner.data.my_pe,
                             };
-                            reqs.push_back(self.spawn_am_pe_tg(pe, am));
+                            transfer_requests.add_am(self.spawn_am_pe_tg(pe, am));
                         } else {
                             let am = UnsafeSmallPutAm {
                                 array: self.clone().into(),
@@ -110,11 +120,10 @@ impl<T: Dist> UnsafeArray<T> {
                                     buf.sub_region(buf_index..(buf_index + len))
                                         .to_base::<u8>()
                                         .as_slice()
-                                        .expect("array data to exist on PE")
                                         .to_vec()
                                 },
                             };
-                            reqs.push_back(self.spawn_am_pe_tg(pe, am));
+                            transfer_requests.add_am(self.spawn_am_pe_tg(pe, am));
                         }
                     }
                     ArrayRdmaCmd::GetAm => {
@@ -129,7 +138,7 @@ impl<T: Dist> UnsafeArray<T> {
                             },
                             pe: pe,
                         };
-                        reqs.push_back(self.exec_am_local(am).into());
+                        transfer_requests.add_am(self.exec_am_local(am).into());
                         // }
                         // else {
                         //     let am = UnsafeSmallBlockGetAm {
@@ -150,14 +159,14 @@ impl<T: Dist> UnsafeArray<T> {
                 dist_index += len;
             }
         }
-        reqs
+        transfer_requests
     }
     fn cyclic_op<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         op: ArrayRdmaCmd,
         index: usize, //global_index
         buf: U,
-    ) -> VecDeque<AmHandle<()>> {
+    ) -> InnerRdmaHandle<T> {
         let global_index = index + self.inner.offset;
         // let buf = buf.team_into(&self.inner.data.team);
         let buf = buf.into();
@@ -166,7 +175,8 @@ impl<T: Dist> UnsafeArray<T> {
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
         let start_pe = global_index % num_pes;
-        let mut reqs = VecDeque::new();
+        // let mut reqs = VecDeque::new();
+        let mut transfer_requests = InnerRdmaHandle::new(&op);
         // println!("start_pe {:?} num_elems_pe {:?} buf len {:?}",start_pe,num_elems_pe,buf.len());
         match op {
             ArrayRdmaCmd::Put => {
@@ -184,11 +194,11 @@ impl<T: Dist> UnsafeArray<T> {
                             temp_memreg.put(k, buf.sub_region(j..=j));
                             k += 1;
                         }
-                        self.inner.data.mem_region.blocking_put(
+                        transfer_requests.add_rdma(self.inner.data.mem_region.put(
                             pe,
                             offset,
                             temp_memreg.sub_region(0..k),
-                        );
+                        ));
                         if pe + 1 == num_pes {
                             overflow += 1;
                         }
@@ -220,7 +230,7 @@ impl<T: Dist> UnsafeArray<T> {
                             data: unsafe { temp_memreg.to_base::<u8>().into() },
                             pe: self.inner.data.my_pe,
                         };
-                        reqs.push_back(self.spawn_am_pe_tg(pe, am));
+                        transfer_requests.add_am(self.spawn_am_pe_tg(pe, am));
                     } else {
                         let am = UnsafeSmallPutAm {
                             array: self.clone().into(),
@@ -231,11 +241,10 @@ impl<T: Dist> UnsafeArray<T> {
                                     .to_base::<u8>()
                                     .to_base::<u8>()
                                     .as_slice()
-                                    .expect("array data to exist on PE")
                                     .to_vec()
                             },
                         };
-                        reqs.push_back(self.spawn_am_pe_tg(pe, am));
+                        transfer_requests.add_am(self.spawn_am_pe_tg(pe, am));
                     }
                     if pe + 1 == num_pes {
                         overflow += 1;
@@ -257,11 +266,11 @@ impl<T: Dist> UnsafeArray<T> {
                             let offset = global_index / num_pes + overflow;
                             let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
                             // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
-                            self.inner.data.mem_region.blocking_get(
+                            transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
                                 pe,
                                 offset,
                                 temp_memreg.sub_region(0..num_elems),
-                            );
+                            ));
                             // let mut k = 0;
                             // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
 
@@ -274,11 +283,11 @@ impl<T: Dist> UnsafeArray<T> {
                         }
                     } else {
                         for i in 0..buf.len() {
-                            self.inner.data.mem_region.get_unchecked(
+                            transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
                                 (index + i) % num_pes,
                                 (index + i) / num_pes,
                                 buf.sub_region(i..=i),
-                            )
+                            ));
                         }
                     }
                 }
@@ -308,7 +317,7 @@ impl<T: Dist> UnsafeArray<T> {
                         num_pes: num_pes,
                         offset: offset,
                     };
-                    reqs.push_back(self.exec_am_local(am).into());
+                    transfer_requests.add_am(self.exec_am_local(am).into());
                     if pe + 1 == num_pes {
                         overflow += 1;
                     }
@@ -325,7 +334,7 @@ impl<T: Dist> UnsafeArray<T> {
                 // }
             }
         }
-        reqs
+        transfer_requests
     }
 
     pub(crate) fn pes_for_range(
@@ -625,7 +634,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle
+    pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle<T>
     where
         U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
@@ -633,7 +642,7 @@ impl<T: Dist> UnsafeArray<T> {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
         }
@@ -723,7 +732,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         let buf = buf.into();
         let reqs = if buf.len() * std::mem::size_of::<T>() > config().am_size_threshold {
             match self.inner.distribution {
@@ -738,7 +747,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
             });
             let mut reqs = VecDeque::new();
             reqs.push_back(req.into());
-            reqs
+            InnerRdmaHandle::from_am_reqs(reqs)
         };
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
@@ -757,7 +766,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         let reqs = match self.inner.distribution {
             Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf.into()),
             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf.into()),
@@ -775,12 +784,12 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
         }
@@ -795,7 +804,17 @@ impl UnsafeByteArray {
     ) -> Option<(&mut [u8], Box<dyn Iterator<Item = usize>>)> {
         self.inner.local_elements_for_range(index, len)
     }
+
+    pub(crate) fn comm_slice_for_range(
+        &self,
+        index: usize,
+        len: usize,
+    ) ->  CommSlice<u8>{
+        self.inner.comm_slice_for_range(index, len)
+    }
 }
+
+
 
 impl UnsafeArrayInner {
     pub(crate) fn pes_for_range(
@@ -926,6 +945,20 @@ impl UnsafeArrayInner {
         }
     }
 
+    pub(crate) fn comm_slice_for_range(
+        &self,
+        index: usize,
+        len: usize,
+    ) ->  CommSlice<u8>{
+        unsafe{//safe as these elements are local (and in registered memory) to the calling pe,
+            match self.local_elements_for_range(index, len) {
+                Some((slice, _)) => CommSlice::from_slice(slice),
+                None => CommSlice::from_slice(&self.local_as_mut_slice()[0..0]),
+            }
+        }
+        
+    }
+
     //index with respect to subarray
     pub(crate) fn num_elements_on_pe_for_range(
         &self,
@@ -1013,11 +1046,11 @@ struct UnsafeBlockGetAm {
 impl LamellarAm for UnsafeBlockGetAm {
     async fn exec(self) {
         unsafe {
-            self.array.inner.data.mem_region.blocking_get(
+            self.array.inner.data.mem_region.get_unchecked(
                 self.pe,
                 self.offset * self.array.inner.elem_size,
                 self.data.clone(),
-            )
+            ).await;
         };
     }
 }
@@ -1038,11 +1071,11 @@ struct UnsafeCyclicGetAm {
 impl LamellarAm for UnsafeCyclicGetAm {
     async fn exec(self) {
         unsafe {
-            self.array.inner.data.mem_region.blocking_get(
+            self.array.inner.data.mem_region.get_unchecked(
                 self.pe,
                 self.offset * self.array.inner.elem_size,
                 self.temp_data.clone(),
-            );
+            ).await;
         }
         for (k, j) in (self.i..self.data.len() / self.array.inner.elem_size)
             .step_by(self.num_pes)
@@ -1100,15 +1133,17 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
+                    let team_rt = self.array.team_rt();
+
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}", data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        u8_buf.put_comm_slice(lamellar::current_pe, cur_index, CommSlice::from_slice(&data)).spawn(&team_rt.scheduler,team_rt.counters() );//we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice().expect("array data exists on PE");
+                    let buf_slice = self.buf.as_mut_slice();//.expect("array data exists on PE");
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
@@ -1172,17 +1207,24 @@ struct UnsafePutAm {
 impl LamellarAm for UnsafePutAm {
     async fn exec(self) {
         unsafe {
+            let comm_slice = self
+            .array
+            .inner
+            .comm_slice_for_range(self.start_index, self.len);
+            self.data.get_comm_slice(self.pe, 0, comm_slice).await;
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
-            match self
-                .array
-                .inner
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, _)) => {
-                    self.data.blocking_get_slice(self.pe, 0, elems);
-                }
-                None => {}
-            }
+            // match self
+            //     .array
+            //     .inner
+            //     .comm_slice(self.start_index, self.len)
+            // {
+                
+            //     Some((elems, _)) => {
+            //         let comm_slice = CommSlice::from_slice(elems);
+            //          //alright to do this conversion because we spawn the get immediately, ensuring elems stays in scope until the RDMA is finished
+            //     }
+            //     None => {}
+            // }
         };
     }
 }
@@ -1245,7 +1287,7 @@ impl<T: Dist> UnsafeArray<T> {
         let team = self.team_rt();
         async move {
             team.lamellae.comm().wait();
-            unsafe { buf.as_slice().unwrap()[0] }
+            unsafe { buf.as_slice()[0] }
         }
     }
 
@@ -1253,13 +1295,13 @@ impl<T: Dist> UnsafeArray<T> {
         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         unsafe {
             self.blocking_get(index, &buf);
-            buf.as_slice().unwrap()[0]
+            buf.as_slice()[0]
         }
     }
 
     pub fn rdma_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
         let buf = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe { buf.as_mut_slice().unwrap()[0] = val };
+        unsafe { buf.as_mut_slice()[0] = val };
         unsafe { self.put_unchecked(index, &buf) };
         let team = self.team_rt();
         async move {
@@ -1269,29 +1311,29 @@ impl<T: Dist> UnsafeArray<T> {
 
     pub fn blocking_rdma_put(&self, index: usize, val: T) {
         let buf = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe { buf.as_mut_slice().unwrap()[0] = val };
+        unsafe { buf.as_mut_slice()[0] = val };
         unsafe { self.put_unchecked(index, buf) };
     }
 
     pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().unwrap()[0] = val;
+            buf.as_mut_slice()[0] = val;
         }
         self.network_atomic_swap(index, &buf);
         let team = self.team_rt();
         async move {
             team.lamellae.comm().wait();
-            unsafe { buf.as_slice().unwrap()[0] }
+            unsafe { buf.as_slice()[0] }
         }
     }
 
     pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().unwrap()[0] = val;
+            buf.as_mut_slice()[0] = val;
         }
         self.network_iatomic_swap(index, &buf);
-        unsafe { buf.as_slice().unwrap()[0] }
+        unsafe { buf.as_slice()[0] }
     }
 }

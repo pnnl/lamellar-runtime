@@ -200,13 +200,13 @@ impl LamellarWorld {
     // #[doc(hidden)]
     // #[allow(non_snake_case)]
     // //#[tracing::instrument(skip_all)]
-    // pub fn MB_sent(&self) -> f64 {
-    //     let mut sent = vec![];
-    //     for (_backend, lamellae) in LAMELLAES.read().iter() {
-    //         sent.push(lamellae.comm().MB_sent());
-    //     }
-    //     sent[0]
-    // }
+    pub fn MB_sent(&self) -> f64 {
+        let mut sent = vec![];
+        for (_backend, lamellae) in LAMELLAES.read().iter() {
+            sent.push(lamellae.comm().MB_sent());
+        }
+        sent[0]
+    }
 
     #[doc(alias = "Collective")]
     /// Create a team containing any number of pe's from the world using the provided LamellarArch (layout)

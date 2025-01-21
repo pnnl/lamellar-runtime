@@ -5,6 +5,7 @@ use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::lamellae::comm::{CommProgress,CommAtomic};
+use crate::lamellae::CommSlice;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
@@ -12,7 +13,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
             index: index,
@@ -20,7 +21,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
         });
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: VecDeque::from([req.into()]),
+            reqs: InnerRdmaHandle::Am(VecDeque::from([req.into()])),
             spawned: false,
         }
     }
@@ -56,12 +57,12 @@ impl<T: Dist> LamellarArrayGet<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.array.team()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
         }
@@ -76,7 +77,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
             index: index,
@@ -84,7 +85,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
         });
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: VecDeque::from([req.into()]),
+            reqs: InnerRdmaHandle::Am(VecDeque::from([req.into()])),
             spawned: false,
         }
     }
@@ -95,12 +96,12 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.array.team()) {
             Ok(buf) => self.internal_put(index, buf),
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
         }
@@ -136,20 +137,24 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
             };
             reqs.push(self.array.spawn_am_pe_tg(pe, remote_am));
         }
+
         unsafe {
             match self.array.array.inner.distribution {
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
+                    let team_rt = self.array.team_rt();
+
                     for req in reqs.drain(..) {
                         let data = req.await;
+
                         // println!("data recv {:?}",data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        u8_buf.put_comm_slice(lamellar::current_pe, cur_index, CommSlice::from_slice(&data)).spawn(&team_rt.scheduler,team_rt.counters());//we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice().expect("array data should be on PE");
+                    let buf_slice = self.buf.as_mut_slice();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
@@ -243,7 +248,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
                                 len: self.buf.len(),
-                                data: u8_buf.as_slice().expect("array data should be on PE")
+                                data: u8_buf.as_slice()
                                     [cur_index..(cur_index + u8_buf_len)]
                                     .to_vec(),
                             };
@@ -258,7 +263,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     let num_pes = ArrayExecAm::team_rt(&self.array).num_pes();
                     let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
                     let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();
-                    let buf_slice = self.buf.as_slice().expect("array data should be on PE");
+                    let buf_slice = self.buf.as_slice();
                     for pe in self
                         .array
                         .array
@@ -361,7 +366,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
 
             unsafe {
-                buf.as_mut_slice().unwrap()[0] = val;
+                buf.as_mut_slice()[0] = val;
                 if pe == self.array.my_pe() {
                     self.local_data().at(index).store(val);
                 } else {
@@ -382,7 +387,7 @@ impl<T: Dist> NativeAtomicArray<T> {
             let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
 
             unsafe {
-                buf.as_mut_slice().unwrap()[0] = val;
+                buf.as_mut_slice()[0] = val;
                 if pe == self.array.my_pe() {
                     self.local_data().at(index).store(val);
                 } else {
@@ -456,14 +461,14 @@ impl<T: Dist> NativeAtomicArray<T> {
         let team = self.team_rt();
         async move {
             team.lamellae.comm().wait();
-            unsafe { buf.as_slice().unwrap()[0] }
+            unsafe { buf.as_slice()[0] }
         }
     }
 
     pub fn blocking_atomic_get(&self, index: usize) -> T {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         self.network_iatomic_load(index, &buf);
-        unsafe { buf.as_slice().unwrap()[0] }
+        unsafe { buf.as_slice()[0] }
     }
 
     pub fn atomic_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
@@ -481,22 +486,22 @@ impl<T: Dist> NativeAtomicArray<T> {
     pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().unwrap()[0] = val;
+            buf.as_mut_slice()[0] = val;
         }
         self.network_atomic_swap(index, &buf);
         let team = self.team_rt();
         async move {
             team.lamellae.comm().wait();
-            unsafe { buf.as_slice().unwrap()[0] }
+            unsafe { buf.as_slice()[0] }
         }
     }
 
     pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().unwrap()[0] = val;
+            buf.as_mut_slice()[0] = val;
         }
         self.network_iatomic_swap(index, &buf);
-        unsafe { buf.as_slice().unwrap()[0] }
+        unsafe { buf.as_slice()[0] }
     }
 }

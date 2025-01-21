@@ -32,7 +32,7 @@ struct ReduceAM {
 #[lamellar::am]
 impl LamellarAM for ReduceAM {
     async fn exec(self) -> f64 {
-        unsafe { self.spectrum.as_slice().unwrap().iter().sum::<f64>() }
+        unsafe { self.spectrum.as_slice().iter().sum::<f64>() }
     }
 }
 
@@ -48,9 +48,9 @@ struct LocalSumAM {
 #[lamellar::local_am]
 impl LamellarAM for LocalSumAM {
     async fn exec() {
-        let spectrum_slice = unsafe { self.spectrum.as_mut_slice().unwrap() };
+        let spectrum_slice = unsafe { self.spectrum.as_mut_slice() };
         let k_prime = self.k + self.pe * spectrum_slice.len();
-        let signal = unsafe { self.signal.as_slice().unwrap() };
+        let signal = unsafe { self.signal.as_slice() };
         let mut sum = 0.0;
         for (i, &x) in signal.iter().enumerate() {
             let i_prime = i + lamellar::current_pe as usize * signal.len();
@@ -77,7 +77,7 @@ struct LocalSumAM2 {
 impl LamellarAM for LocalSumAM2 {
     async fn exec() -> f64 {
         let k_prime = self.k + self.pe * self.local_len;
-        let signal = unsafe { self.signal.as_slice().unwrap() };
+        let signal = unsafe { self.signal.as_slice() };
         let mut sum = 0.0;
         for (i, &x) in signal.iter().enumerate() {
             let i_prime = i + lamellar::current_pe as usize * signal.len();
@@ -104,7 +104,7 @@ struct LocalSumAM2Static {
 impl LamellarAM for LocalSumAM2Static {
     async fn exec() -> f64 {
         let k_prime = self.k + self.pe * self.local_len;
-        let signal = unsafe { self.signal.as_slice().unwrap() };
+        let signal = unsafe { self.signal.as_slice() };
         let mut sum = 0.0;
         for (i, &x) in signal.iter().enumerate() {
             let i_prime = i + lamellar::current_pe as usize * signal.len();
@@ -127,7 +127,7 @@ struct RemoteSumAM {
 impl LamellarAM for RemoteSumAM {
     async fn exec(self) {
         let _lock = LOCK.lock();
-        for (k, spec_bin) in unsafe { self.spectrum.as_mut_slice().unwrap().iter_mut().enumerate() }
+        for (k, spec_bin) in unsafe { self.spectrum.as_mut_slice().iter_mut().enumerate() }
         {
             *spec_bin += self.add_spec[k];
         }
@@ -142,7 +142,7 @@ fn dft_lamellar(
     global_sig_len: usize,
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
-    let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
+    let spectrum_slice = unsafe { spectrum.as_slice() };
     let add_spec = world
         .alloc_shared_mem_region::<f64>(spectrum_slice.len())
         .block();
@@ -162,7 +162,7 @@ fn dft_lamellar(
         }
         let mut add_spec_vec = vec![0.0; spectrum_slice.len()];
         world.wait_all();
-        add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice().unwrap() });
+        add_spec_vec.copy_from_slice(unsafe { add_spec.as_slice() });
         let _ = world
             .exec_am_pe(
                 pe,
@@ -188,7 +188,7 @@ fn dft_lamellar_am_group(
     global_sig_len: usize,
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
-    let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
+    let spectrum_slice = unsafe { spectrum.as_slice() };
     let local_len = spectrum_slice.len();
 
     let timer = Instant::now();
@@ -247,7 +247,7 @@ fn dft_lamellar_am_group_static(
     global_sig_len: usize,
     spectrum: SharedMemoryRegion<f64>,
 ) -> f64 {
-    let spectrum_slice = unsafe { spectrum.as_slice().unwrap() };
+    let spectrum_slice = unsafe { spectrum.as_slice() };
     let local_len = spectrum_slice.len();
 
     let timer = Instant::now();
@@ -649,14 +649,14 @@ fn main() {
             UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
 
         unsafe {
-            for i in full_signal.as_mut_slice().unwrap() {
+            for i in full_signal.as_mut_slice() {
                 *i = rng.gen_range(0.0..1.0);
             }
             let full_signal_clone = full_signal.clone();
             full_signal_array
                 .dist_iter_mut()
                 .enumerate()
-                .for_each(move |(i, x)| *x = full_signal_clone.as_mut_slice().unwrap()[i])
+                .for_each(move |(i, x)| *x = full_signal_clone.as_mut_slice()[i])
                 .block();
             full_signal_array.barrier();
 
@@ -668,7 +668,7 @@ fn main() {
                 full_signal.sub_region(my_pe * array_len..my_pe * array_len + array_len),
             );
 
-            for i in magic.as_mut_slice().unwrap() {
+            for i in magic.as_mut_slice() {
                 *i = MAGIC;
             }
         }
@@ -696,14 +696,13 @@ fn main() {
             ));
             if my_pe == 0 {
                 println!("am i: {:?} {:?} sum: {:?}", _i, times[ti].last(), unsafe {
-                    partial_spectrum.as_slice().unwrap().iter().sum::<f64>()
+                    partial_spectrum.as_slice().iter().sum::<f64>()
                 });
             }
             //-----------------------------------------------------
             unsafe {
                 partial_spectrum
                     .as_mut_slice()
-                    .unwrap()
                     .iter_mut()
                     .for_each(|e| *e = 0.0);
             }
@@ -724,13 +723,12 @@ fn main() {
                     "am group i: {:?} {:?} sum: {:?}",
                     _i,
                     times[ti].last(),
-                    unsafe { partial_spectrum.as_slice().unwrap().iter().sum::<f64>() }
+                    unsafe { partial_spectrum.as_slice().iter().sum::<f64>() }
                 );
             }
             unsafe {
                 partial_spectrum
                     .as_mut_slice()
-                    .unwrap()
                     .iter_mut()
                     .for_each(|e| *e = 0.0);
             }
@@ -753,13 +751,12 @@ fn main() {
                     "am group static i: {:?} {:?} sum: {:?}",
                     _i,
                     times[ti].last(),
-                    unsafe { partial_spectrum.as_slice().unwrap().iter().sum::<f64>() }
+                    unsafe { partial_spectrum.as_slice().iter().sum::<f64>() }
                 );
             }
             unsafe {
                 partial_spectrum
                     .as_mut_slice()
-                    .unwrap()
                     .iter_mut()
                     .for_each(|e| *e = 0.0);
             }

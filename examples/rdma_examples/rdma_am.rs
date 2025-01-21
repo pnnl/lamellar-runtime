@@ -28,12 +28,12 @@ struct RdmaLocalMRAM {
 impl LamellarAM for RdmaAM {
     async fn exec(&self) {
         unsafe {
-            println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice().unwrap()[0..10], &self.array.as_slice().unwrap()[ARRAY_LEN-10..]);
+            println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice()[0..10], &self.array.as_slice()[ARRAY_LEN-10..]);
         }
 
         //get the original nodes data
         let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
-        let local_slice = unsafe { local.as_mut_slice().unwrap() };
+        let local_slice = unsafe { local.as_mut_slice() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
             self.array.get_unchecked(self.orig_pe, 0, local.clone());
@@ -67,7 +67,7 @@ impl LamellarAM for RdmaLocalMRAM {
 
         //get the original nodes data
         let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
-        let local_slice = unsafe { local.as_mut_slice().unwrap() };
+        let local_slice = unsafe { local.as_mut_slice() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
             self.array.get_unchecked(0, local.clone());
@@ -108,10 +108,10 @@ fn main() {
     let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
     let local_array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
-        for i in array.as_mut_slice().unwrap() {
+        for i in array.as_mut_slice() {
             *i = 255_u8;
         }
-        for i in local_array.as_mut_slice().unwrap() {
+        for i in local_array.as_mut_slice() {
             *i = 255_u8;
         }
     }

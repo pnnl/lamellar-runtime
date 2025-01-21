@@ -69,6 +69,7 @@ libc = { version = "0.2.137", optional = true }
 async-global-executor = "2.4.1"
 envy = "0.4.2"
 derive_more = { version = "1.0.0", features = ["add", "from", "into"] }
+take_mut = "0.2.2"
 
 
 [dev-dependencies]
@@ -371,9 +372,9 @@ path = "examples/array_examples/array_ops.rs"
 name = "atomic_compare_exchange"
 path = "examples/array_examples/atomic_compare_exchange.rs"
 
-[[example]]
-name = "network_atomic_ops"
-path = "examples/array_examples/network_atomic_ops.rs"
+#[[example]]
+#name = "network_atomic_ops"
+#path = "examples/array_examples/network_atomic_ops.rs"
 
 [[example]]
 name = "array_first_last_global_indices"
