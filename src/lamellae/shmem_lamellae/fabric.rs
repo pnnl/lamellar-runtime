@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 use shared_memory::*;
 
-use crate::lamellae::{CommAlloc, CommAllocAddr,CommAllocType};
+use crate::lamellae::{CommAlloc, CommAllocAddr, CommAllocType};
 
 pub(crate) struct MyShmem {
     // pub(crate) data: *mut u8,
@@ -22,10 +22,10 @@ unsafe impl Send for MyShmem {}
 
 impl MyShmem {
     pub(crate) fn as_ptr(&self) -> *const u8 {
-        unsafe {self.alloc.as_ptr()}
+        unsafe { self.alloc.as_ptr() }
     }
     pub(crate) fn as_mut_ptr(&mut self) -> *mut u8 {
-        unsafe {self.alloc.as_mut_ptr()}
+        unsafe { self.alloc.as_mut_ptr() }
     }
     pub(crate) fn base_addr(&self) -> CommAllocAddr {
         self.alloc.comm_addr()
@@ -118,10 +118,10 @@ fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: 
         MyShmem {
             // data: m.as_ptr().add(std::mem::size_of::<usize>()),
             // len: size,
-            alloc: CommAlloc{
+            alloc: CommAlloc {
                 addr: m.as_ptr().add(std::mem::size_of::<usize>()) as usize,
                 size,
-                alloc_type: CommAllocType::Fabric
+                alloc_type: CommAllocType::Fabric,
             },
             _shmem: m,
         }

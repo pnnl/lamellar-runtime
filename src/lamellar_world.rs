@@ -1,6 +1,6 @@
 use crate::{
     barrier::BarrierHandle,
-    lamellae::{create_lamellae, Backend, Lamellae, LamellaeInit,CommInfo, CommProgress},
+    lamellae::{create_lamellae, Backend, CommInfo, CommProgress, Lamellae, LamellaeInit},
     lamellar_arch::LamellarArch,
     lamellar_env::LamellarEnv,
     lamellar_team::{LamellarTeam, LamellarTeamRT},

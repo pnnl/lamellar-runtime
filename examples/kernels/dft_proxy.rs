@@ -127,8 +127,7 @@ struct RemoteSumAM {
 impl LamellarAM for RemoteSumAM {
     async fn exec(self) {
         let _lock = LOCK.lock();
-        for (k, spec_bin) in unsafe { self.spectrum.as_mut_slice().iter_mut().enumerate() }
-        {
+        for (k, spec_bin) in unsafe { self.spectrum.as_mut_slice().iter_mut().enumerate() } {
             *spec_bin += self.add_spec[k];
         }
     }

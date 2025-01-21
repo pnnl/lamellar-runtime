@@ -19,7 +19,7 @@ use super::global_rw_darc::{
     DistRwLock, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
 use super::local_rw_darc::LocalRwDarcWriteGuard;
-use super::{DarcCommPtr};
+use super::DarcCommPtr;
 
 #[pin_project(project = StateProj)]
 enum State<T> {

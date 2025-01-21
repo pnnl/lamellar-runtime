@@ -17,7 +17,11 @@ impl std::fmt::Display for AllocError {
                 write!(f, "pe {} must be part of team of sub allocation", pe)
             }
             AllocError::LocalNotFound(addr) => {
-                write!(f, "Allocation not found locally for given address {:x}", addr)
+                write!(
+                    f,
+                    "Allocation not found locally for given address {:x}",
+                    addr
+                )
             }
         }
     }

@@ -15,9 +15,9 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
-use crate::lamellae::{CommProgress,AllocationType};
+use crate::lamellae::{AllocationType, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{Dist, MemoryRegion,RegisteredMemoryRegion};
+use crate::memregion::{Dist, MemoryRegion, RegisteredMemoryRegion};
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::LamellarTaskGroup;
@@ -212,7 +212,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             } else {
                 // Otherwise we can be really fast and just fill everthing with zeros.
                 let len = std::mem::size_of_val::<[T]>(
-                    rmr_t.as_mut_slice(),//.expect("data should exist on pe"),
+                    rmr_t.as_mut_slice(), //.expect("data should exist on pe"),
                 );
                 std::ptr::write_bytes(
                     rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,

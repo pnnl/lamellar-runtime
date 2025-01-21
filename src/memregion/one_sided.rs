@@ -58,7 +58,8 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         let mrh = match mrh_map.get(&parent_id) {
             Some(mrh) => mrh.clone(),
             None => {
-                let local_mem_region_addr = lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
+                let local_mem_region_addr =
+                    lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
                 let mem_region = MemoryRegion::from_remote_addr(
                     local_mem_region_addr,
                     net_handle.mr_pe,
@@ -512,7 +513,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     // ///             std::thread::yield_now();
     // ///         }
     // ///         assert_eq!(pe,*elem);
-    // ///     }      
+    // ///     }
     // /// }
     // ///```
     // pub unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
@@ -723,7 +724,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
     /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_slice(&self) -> &[T]{
+    pub unsafe fn as_slice(&self) -> &[T] {
         RegisteredMemoryRegion::as_slice(self)
     }
 
@@ -747,7 +748,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
     /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_mut_slice(&self) -> &mut [T]{
+    pub unsafe fn as_mut_slice(&self) -> &mut [T] {
         RegisteredMemoryRegion::as_mut_slice(self)
     }
 
@@ -771,7 +772,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
     /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_ptr(&self) -> MemResult<*const T>{
+    pub unsafe fn as_ptr(&self) -> MemResult<*const T> {
         RegisteredMemoryRegion::as_ptr(self)
     }
 
@@ -795,7 +796,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
     /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>{
+    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         RegisteredMemoryRegion::as_mut_ptr(self)
     }
 
@@ -833,7 +834,7 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     }
     fn addr(&self) -> MemResult<usize> {
         if self.pe == self.mr.inner.my_id.1 {
-            let addr= self.mr.inner.mr.addr()?; 
+            let addr = self.mr.inner.mr.addr()?;
             Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
         } else {
             Err(MemRegionError::MemNotLocalError)
@@ -849,29 +850,30 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     unsafe fn as_mut_slice(&self) -> &mut [T] {
         // println!("pe {:?} mr_pe {:?}",self.pe , self.mr.inner.my_id.1);
         if self.pe == self.mr.inner.my_id.1 {
-            let slice = self.mr.inner.mr.as_casted_mut_slice().expect("should be aligned");
-            if slice.len() ==0{
+            let slice = self
+                .mr
+                .inner
+                .mr
+                .as_casted_mut_slice()
+                .expect("should be aligned");
+            if slice.len() == 0 {
                 slice
-            }
-            else{
+            } else {
                 if slice.len() >= self.sub_region_size + self.sub_region_offset {
-
-                    &mut slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)]
-                }
-                else {
+                    &mut slice
+                        [self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)]
+                } else {
                     &mut slice[self.sub_region_offset..]
                 }
             }
-        } 
-        else {
+        } else {
             &mut []
         }
     }
     unsafe fn as_ptr(&self) -> MemResult<*const T> {
         if self.pe == self.mr.inner.my_id.1 {
             let addr = self.addr()?;
-                Ok(addr as *const T)
-            
+            Ok(addr as *const T)
         } else {
             Err(MemRegionError::MemNotLocalError)
         }
@@ -879,18 +881,18 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         if self.pe == self.mr.inner.my_id.1 {
             let addr = self.addr()?;
-                Ok(addr as *mut T)
+            Ok(addr as *mut T)
         } else {
             Err(MemRegionError::MemNotLocalError)
         }
     }
 
-     unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
+    unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
         if self.pe == self.mr.inner.my_id.1 {
             let slice = self.mr.inner.mr.as_casted_comm_slice()?;
-            Ok(slice.sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)))
-        }
-        else{
+            Ok(slice
+                .sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)))
+        } else {
             Err(MemRegionError::MemNotLocalError)
         }
     }
@@ -906,7 +908,7 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr> {
         if self.pe == self.mr.inner.my_id.1 {
             let addr = self.mr.inner.mr.comm_addr()?;
-               Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
+            Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
         } else {
             Err(MemRegionError::MemNotLocalError)
         }
@@ -968,7 +970,12 @@ impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) -> RdmaHandle<T>{
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner
@@ -1002,7 +1009,11 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
     //         // Err(MemNotLocalError {})
     //     }
     // }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> RdmaHandle<T>{
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         self.mr
             .inner
             .mr
@@ -1013,7 +1024,7 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         pe: usize,
         index: usize,
         data: U,
-    ) -> RdmaHandle<T>{
+    ) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner
@@ -1063,7 +1074,7 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn get_comm_slice(&self, pe: usize, index: usize, data:CommSlice<T>) -> RdmaHandle<T> {
+    unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner

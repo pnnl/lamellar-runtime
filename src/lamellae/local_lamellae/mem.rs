@@ -1,4 +1,7 @@
-use crate::{ lamellae::{comm::{error::AllocResult, CommMem}, AllocError, CommAlloc, CommAllocAddr, CommAllocType}};
+use crate::lamellae::{
+    comm::{error::AllocResult, CommMem},
+    AllocError, CommAlloc, CommAllocAddr, CommAllocType,
+};
 
 use super::{
     comm::{LocalComm, MyPtr},
@@ -6,7 +9,12 @@ use super::{
 };
 
 impl CommMem for LocalComm {
-    fn alloc(&self, size: usize, _alloc_type: AllocationType, align: usize) -> AllocResult<CommAlloc> {
+    fn alloc(
+        &self,
+        size: usize,
+        _alloc_type: AllocationType,
+        align: usize,
+    ) -> AllocResult<CommAlloc> {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         let data_addr = data_ptr as usize;
@@ -99,23 +107,26 @@ impl CommMem for LocalComm {
         CommAllocAddr(local_addr)
     }
     fn local_alloc(&self, _remote_pe: usize, remote_addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        let  allocs: parking_lot::lock_api::MutexGuard<'_, parking_lot::RawMutex, std::collections::HashMap<usize, MyPtr>> = self.allocs.lock();
+        let allocs: parking_lot::lock_api::MutexGuard<
+            '_,
+            parking_lot::RawMutex,
+            std::collections::HashMap<usize, MyPtr>,
+        > = self.allocs.lock();
         if let Some(alloc) = allocs.get(&remote_addr.0) {
             return Ok(CommAlloc {
                 addr: remote_addr.into(),
                 size: alloc.layout.size(),
                 alloc_type: CommAllocType::Fabric,
-            })
+            });
         }
-        let  allocs = self.heap_allocs.lock();
-        if  let Some(alloc) = allocs.get(&remote_addr.0) {
+        let allocs = self.heap_allocs.lock();
+        if let Some(alloc) = allocs.get(&remote_addr.0) {
             return Ok(CommAlloc {
                 addr: remote_addr.into(),
                 size: alloc.layout.size(),
                 alloc_type: CommAllocType::RtHeap,
-            })
+            });
         }
         Err(AllocError::LocalNotFound(remote_addr))
-
     }
 }

@@ -5,9 +5,10 @@ pub(crate) mod mem;
 pub(crate) mod rdma;
 
 use super::{
-    comm::{CommInfo,CmdQStatus, CommShutdown}, command_queues::CommandQueue, Comm, Lamellae, LamellaeAM, LamellaeInit,
-    LamellaeShutdown, Ser, SerializeHeader, SerializedData,
-    SERIALIZE_HEADER_LEN
+    comm::{CmdQStatus, CommInfo, CommShutdown},
+    command_queues::CommandQueue,
+    Comm, Lamellae, LamellaeAM, LamellaeInit, LamellaeShutdown, Ser, SerializeHeader,
+    SerializedData, SERIALIZE_HEADER_LEN,
 };
 use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::ShmemComm;
@@ -16,7 +17,7 @@ use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::{sync::Arc};
+use std::sync::Arc;
 
 pub(crate) struct ShmemBuilder {
     my_pe: usize,
@@ -47,7 +48,8 @@ impl LamellaeInit for ShmemBuilder {
         let scheduler_clone = scheduler.clone();
         let cq_clone = cq.clone();
         scheduler.submit_task(async move {
-            cq_clone.recv_data(scheduler_clone.clone(), shmem_clone.clone())
+            cq_clone
+                .recv_data(scheduler_clone.clone(), shmem_clone.clone())
                 .await;
         });
 
@@ -161,7 +163,8 @@ impl Ser for Shmem {
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
-        let mut ser_data = SerializedData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
+        let mut ser_data =
+            SerializedData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
         crate::serialize_into(&mut ser_data.header_as_bytes_mut(), &header, false)?; //we want header to be a fixed size
         Ok(ser_data)
     }

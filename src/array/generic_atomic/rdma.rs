@@ -134,14 +134,18 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}",data.len());
-                        u8_buf.put_comm_slice(lamellar::current_pe, cur_index, CommSlice::from_slice(&data)).spawn(&team_rt.scheduler,team_rt.counters());//we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
+                        u8_buf
+                            .put_comm_slice(
+                                lamellar::current_pe,
+                                cur_index,
+                                CommSlice::from_slice(&data),
+                            )
+                            .spawn(&team_rt.scheduler, team_rt.counters()); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self
-                        .buf
-                        .as_mut_slice();
+                    let buf_slice = self.buf.as_mut_slice();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
@@ -250,8 +254,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
                                 len: self.buf.len(),
-                                data: u8_buf.as_slice()
-                                    [cur_index..(cur_index + u8_buf_len)]
+                                data: u8_buf.as_slice()[cur_index..(cur_index + u8_buf_len)]
                                     .to_vec(),
                             };
                             reqs.push(self.array.spawn_am_pe_tg(pe, remote_am));

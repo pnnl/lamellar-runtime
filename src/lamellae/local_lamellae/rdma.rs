@@ -1,18 +1,24 @@
 use std::{
-    pin::Pin, sync::{atomic::Ordering, Arc}, task::{Context, Poll}
+    pin::Pin,
+    sync::{atomic::Ordering, Arc},
+    task::{Context, Poll},
 };
 
 use futures_util::Future;
 
-use crate::{active_messaging::{AMCounters, ActiveMessaging}, lamellae::comm::{
-    rdma::{CommRdma, RdmaHandle, Remote},
-    CommAllocAddr, CommSlice
-}, LamellarTask, LamellarTeamRT};
+use crate::{
+    active_messaging::{AMCounters, ActiveMessaging},
+    lamellae::comm::{
+        rdma::{CommRdma, RdmaHandle, Remote},
+        CommAllocAddr, CommSlice,
+    },
+    LamellarTask, LamellarTeamRT,
+};
 
 use super::{comm::LocalComm, Scheduler};
 
-pub(super) enum Op<T>{
-    Put( CommSlice<T>, CommAllocAddr), //for local lamellae put_all is equivalent to put
+pub(super) enum Op<T> {
+    Put(CommSlice<T>, CommAllocAddr), //for local lamellae put_all is equivalent to put
     Get(CommAllocAddr, CommSlice<T>),
     Atomic,
 }
@@ -21,7 +27,7 @@ pub(crate) struct LocalFuture<T> {
 }
 
 impl<T: Remote> LocalFuture<T> {
-    fn inner_put(&self,  src: &CommSlice<T>, dst: &CommAllocAddr) {
+    fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
         if !(src.contains(dst) || src.contains(dst + src.len())) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len());
@@ -45,24 +51,27 @@ impl<T: Remote> LocalFuture<T> {
     }
     fn exec_op(&self) {
         match &self.op {
-            Op::Put(src,dst) => {
-                self.inner_put(src,dst);
+            Op::Put(src, dst) => {
+                self.inner_put(src, dst);
             }
-            Op::Get(src,dst) => {
-                self.inner_get(src,dst);
+            Op::Get(src, dst) => {
+                self.inner_get(src, dst);
             }
             Op::Atomic => {}
         }
     }
-    pub(crate) fn block( self)  {
+    pub(crate) fn block(self) {
         self.exec_op();
         // Ok(())
     }
-    pub(crate) fn spawn(mut self,scheduler: &Arc<Scheduler>, outstanding_reqs: Vec<Arc<AMCounters>>) -> LamellarTask<()> {
-        scheduler.spawn_task(self,outstanding_reqs)
+    pub(crate) fn spawn(
+        mut self,
+        scheduler: &Arc<Scheduler>,
+        outstanding_reqs: Vec<Arc<AMCounters>>,
+    ) -> LamellarTask<()> {
+        scheduler.spawn_task(self, outstanding_reqs)
     }
 }
-
 
 impl<T: Remote> Future for LocalFuture<T> {
     type Output = ();
@@ -72,7 +81,7 @@ impl<T: Remote> Future for LocalFuture<T> {
     }
 }
 
-impl<T: Remote> From<LocalFuture<T>> for RdmaHandle<T>{
+impl<T: Remote> From<LocalFuture<T>> for RdmaHandle<T> {
     fn from(f: LocalFuture<T>) -> RdmaHandle<T> {
         RdmaHandle::Local(f)
     }
@@ -80,15 +89,29 @@ impl<T: Remote> From<LocalFuture<T>> for RdmaHandle<T>{
 
 impl CommRdma for LocalComm {
     fn put<T: Remote>(&self, _pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T> {
-        self.put_amt.fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        LocalFuture {op: Op::Put(src,dst)}.into()
+        self.put_amt
+            .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+        LocalFuture {
+            op: Op::Put(src, dst),
+        }
+        .into()
     }
     fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T> {
-        self.put_amt.fetch_add(src.len() * std::mem::size_of::<T>() * self.num_pes, Ordering::SeqCst);
-        LocalFuture {op: Op::Put(src,dst)}.into()
+        self.put_amt.fetch_add(
+            src.len() * std::mem::size_of::<T>() * self.num_pes,
+            Ordering::SeqCst,
+        );
+        LocalFuture {
+            op: Op::Put(src, dst),
+        }
+        .into()
     }
     fn get<T: Remote>(&self, _pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaHandle<T> {
-        self.get_amt.fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        LocalFuture {op: Op::Get(src,dst)}.into()
+        self.get_amt
+            .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+        LocalFuture {
+            op: Op::Get(src, dst),
+        }
+        .into()
     }
 }

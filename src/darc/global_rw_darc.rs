@@ -7,10 +7,10 @@ use std::sync::Arc;
 
 use crate::{
     active_messaging::RemotePtr,
-    darc::{Darc, DarcInner, DarcMode, __NetworkDarc, DarcCommPtr},
+    darc::{Darc, DarcCommPtr, DarcInner, DarcMode, __NetworkDarc},
+    lamellae::{CommAllocAddr, CommMem},
     lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
     IdError, LamellarEnv, LamellarTeam,
-    lamellae::{CommMem,CommAllocAddr},
 };
 
 use super::handle::{
@@ -280,7 +280,7 @@ impl LamellarAM for UnlockAm {
     async fn exec() {
         // println!("In unlock am {:?}", self);
         // let inner = unsafe { &*(self.rwlock_addr as *mut DarcInner<DistRwLock<()>>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
-        let inner: &DarcInner<DistRwLock<()>> = unsafe { &*(self.rwlock_addr.as_ptr()) };                                                                              // inner.deserialize_update_cnts(self.orig_pe);
+        let inner: &DarcInner<DistRwLock<()>> = unsafe { &*(self.rwlock_addr.as_ptr()) }; // inner.deserialize_update_cnts(self.orig_pe);
         let rwlock = inner.item();
 
         unsafe {
@@ -550,7 +550,7 @@ impl<T> GlobalRwDarc<T> {
     #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner.addr()  - (*self.inner().team).lamellae.comm().base_addr() };
+            unsafe { self.darc.inner.addr() - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
             "--------\norig: {:?} 0x{:x} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,
@@ -830,8 +830,8 @@ impl<T: Send> GlobalRwDarc<T> {
         //         .expect("invalid darc pointer"),
         // };
         let inner = self.darc.inner.clone();
-        let wrapped_lock = DarcCommPtr{
-            alloc: CommAlloc{
+        let wrapped_lock = DarcCommPtr {
+            alloc: CommAlloc {
                 addr: inner.alloc.addr,
                 size: inner.alloc.size,
                 alloc_type: inner.alloc.alloc_type,
@@ -879,8 +879,8 @@ impl<T: Send> GlobalRwDarc<T> {
         //         .expect("invalid darc pointer"),
         // };
         let inner = self.darc.inner.clone();
-        let wrapped_lock = DarcCommPtr{
-            alloc: CommAlloc{
+        let wrapped_lock = DarcCommPtr {
+            alloc: CommAlloc {
                 addr: inner.alloc.addr,
                 size: inner.alloc.size,
                 alloc_type: inner.alloc.alloc_type,

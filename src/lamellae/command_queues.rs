@@ -1,6 +1,6 @@
 use super::{
-    comm::{CmdQStatus, CommMem, CommProgress, CommRdma, CommInfo, CommAlloc, CommSlice},
-    Comm, Lamellae, SerializedData,RemoteSerializedData,
+    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommRdma, CommSlice},
+    Comm, Lamellae, RemoteSerializedData, SerializedData,
 };
 use crate::{env_var::config, scheduler::Scheduler};
 use parking_lot::Mutex;
@@ -99,7 +99,7 @@ impl CmdMsg {
         slice
     }
     fn cmd_as_comm_slice(&self) -> CommSlice<Cmd> {
-        let pointer = &self.cmd as *const Cmd ;
+        let pointer = &self.cmd as *const Cmd;
         let size = std::mem::size_of::<Cmd>();
         let slice: CommSlice<Cmd> = unsafe { CommSlice::from_raw_parts(pointer, 1) };
         slice
@@ -455,7 +455,7 @@ impl InnerCQ {
             )));
             pe += 1;
         }
-        let mut send_buffer:CommSlice<CmdMsg> = send_buffer_alloc.as_slice();
+        let mut send_buffer: CommSlice<CmdMsg> = send_buffer_alloc.as_slice();
         for cmd in send_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -464,7 +464,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut recv_buffer:CommSlice<CmdMsg> =recv_buffer_alloc.as_slice();
+        let mut recv_buffer: CommSlice<CmdMsg> = recv_buffer_alloc.as_slice();
         for cmd in recv_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -473,7 +473,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut free_buffer:CommSlice<CmdMsg> = free_buffer_alloc.as_slice();
+        let mut free_buffer: CommSlice<CmdMsg> = free_buffer_alloc.as_slice();
         for cmd in free_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -482,7 +482,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut alloc_buffer:CommSlice<CmdMsg> = alloc_buffer_alloc.as_slice();
+        let mut alloc_buffer: CommSlice<CmdMsg> = alloc_buffer_alloc.as_slice();
         for cmd in alloc_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -491,7 +491,7 @@ impl InnerCQ {
             (*cmd).calc_hash();
         }
 
-        let mut panic_buffer:CommSlice<CmdMsg> = panic_buffer_alloc.as_slice();
+        let mut panic_buffer: CommSlice<CmdMsg> = panic_buffer_alloc.as_slice();
         for cmd in panic_buffer.iter_mut() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -655,7 +655,6 @@ impl InnerCQ {
                         // recv_buffer[self.my_pe].as_addr(),
                         send_buf.sub_slice(dst..=dst),
                         recv_buffer.index_addr(self.my_pe),
-                        
                     );
                     self.put_amt
                         .fetch_add(send_buf[dst].as_bytes().len(), Ordering::Relaxed);
@@ -807,7 +806,11 @@ impl InnerCQ {
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
                         // println!("putting alloc cmd to pe {:?}", pe);
-                        self.comm.put(pe,  alloc_buf.sub_slice(self.my_pe..=self.my_pe), alloc_buf.index_addr(self.my_pe));
+                        self.comm.put(
+                            pe,
+                            alloc_buf.sub_slice(self.my_pe..=self.my_pe),
+                            alloc_buf.index_addr(self.my_pe),
+                        );
                     }
                 }
             }
@@ -835,7 +838,11 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting clear cmd to pe {:?}", pe);
-                    self.comm.put(pe,  alloc_buf.sub_slice(self.my_pe..=self.my_pe), alloc_buf.index_addr(self.my_pe));
+                    self.comm.put(
+                        pe,
+                        alloc_buf.sub_slice(self.my_pe..=self.my_pe),
+                        alloc_buf.index_addr(self.my_pe),
+                    );
 
                     // self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
                 }
@@ -868,7 +875,11 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    self.comm.put(pe,  panic_buf.sub_slice(self.my_pe..=self.my_pe), panic_buf.index_addr(self.my_pe));
+                    self.comm.put(
+                        pe,
+                        panic_buf.sub_slice(self.my_pe..=self.my_pe),
+                        panic_buf.index_addr(self.my_pe),
+                    );
 
                     // self.comm.put(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
                 }
@@ -967,9 +978,7 @@ impl InnerCQ {
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: CommSlice<u8>) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting data from {src}, {:?}", cmd.daddr);
-        self.comm
-            .get(src, local_daddr, data_slice)
-            .await;
+        self.comm.get(src, local_daddr, data_slice).await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
@@ -999,9 +1008,7 @@ impl InnerCQ {
         let data_slice = ser_data.header_and_data_as_bytes_mut();
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
-        self.comm
-            .get(src, local_daddr , data_slice)
-            .await;
+        self.comm.get(src, local_daddr, data_slice).await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
@@ -1307,15 +1314,12 @@ impl CommandQueue {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn send_data(&self, data: RemoteSerializedData, dst: usize) {
-        
         let hash = calc_hash(data.ser_data_bytes.addr(), data.len());
 
         // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
         data.increment_cnt(); //or we could implement something like an into_raw here...
                               // println!("sending data {:?}",data.header_and_data_as_bytes());
-        self.cq
-            .send(data.ser_data_bytes, dst, hash)
-            .await;
+        self.cq.send(data.ser_data_bytes, dst, hash).await;
         //     }
         //     _ => {}
         // }
@@ -1401,7 +1405,7 @@ impl CommandQueue {
                                     // println!("src: {:?} cmd_buf len {:?}", src, len);
 
                                     for cmd in cmd_buf.iter() {
-                                        let cmd  = *cmd;
+                                        let cmd = *cmd;
                                         if cmd.dsize != 0 {
                                             let cq = cq.clone();
                                             let lamellae = lamellae.clone();

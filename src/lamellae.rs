@@ -32,11 +32,9 @@ use {
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
-use std::{
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
 };
 
 lazy_static! {
@@ -137,7 +135,6 @@ pub(crate) struct SerializedData {
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
-
 #[derive(Debug)]
 pub(crate) struct SubSerializedData {
     pub(crate) alloc: CommAlloc,
@@ -147,7 +144,6 @@ pub(crate) struct SubSerializedData {
     pub(crate) payload_bytes: CommSlice<u8>,
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
-
 
 #[derive(Debug)]
 pub(crate) struct RemoteSerializedData {
@@ -159,17 +155,15 @@ pub(crate) struct RemoteSerializedData {
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
-
-
 // we have allocated this memory out of fabric memory and thus are responsible for managing it,
 // we will not move the underlying data, reallocate it, nor free it until all references are dropped
-unsafe impl Send for SerializedData {} 
+unsafe impl Send for SerializedData {}
 unsafe impl Sync for SerializedData {}
 
-unsafe impl Send for SubSerializedData {} 
+unsafe impl Send for SubSerializedData {}
 unsafe impl Sync for SubSerializedData {}
 
-unsafe impl Send for RemoteSerializedData {} 
+unsafe impl Send for RemoteSerializedData {}
 unsafe impl Sync for RemoteSerializedData {}
 
 impl SerializedData {
@@ -179,7 +173,7 @@ impl SerializedData {
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         let ref_cnt = alloc.addr as *const AtomicUsize;
         let mut ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
-        let header_bytes = ser_data_bytes.sub_slice(0.. *SERIALIZE_HEADER_LEN);
+        let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
         // let ser_data_addr = addr + ref_cnt_size;
         // let raw_data_addr = ser_data_addr + *SERIALIZE_HEADER_LEN;
@@ -239,7 +233,7 @@ impl SerializedData {
         self.header_bytes
     }
 
-    pub(crate) fn data_as_bytes(&self) ->  CommSlice<u8> {
+    pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
         // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
@@ -252,7 +246,7 @@ impl SerializedData {
         // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
         self.ser_data_bytes
     }
-    pub(crate) fn header_and_data_as_bytes_mut(&mut self) ->  CommSlice<u8> {
+    pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         // unsafe {
         //     std::slice::from_raw_parts_mut(
         //         (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
@@ -264,7 +258,12 @@ impl SerializedData {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn increment_cnt(&self) {
-        unsafe { self.ref_cnt.as_ref().expect("valid serialized data").fetch_add(1, Ordering::SeqCst) };
+        unsafe {
+            self.ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .fetch_add(1, Ordering::SeqCst)
+        };
     }
 
     //#[tracing::instrument(skip_all)]
@@ -295,10 +294,9 @@ impl Des for SerializedData {
 }
 
 // impl SubData for SubSerializedData {
-    impl SerializedData {
-
+impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
-    pub(crate)  fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
+    pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
         // let mut sub = self.clone();
         self.increment_cnt();
         SubSerializedData {
@@ -315,21 +313,27 @@ impl Des for SerializedData {
 impl Drop for SerializedData {
     fn drop(&mut self) {
         unsafe {
-            if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
+            if self
+                .ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .fetch_sub(1, Ordering::SeqCst)
+                == 1
+            {
                 self.comm.rt_free(self.alloc.clone());
             }
         }
     }
 }
 
-impl SubSerializedData{
-    pub(crate) fn header_as_bytes(&self) ->  CommSlice<u8> {
+impl SubSerializedData {
+    pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
         // let header_size = *SERIALIZE_HEADER_LEN;
         // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
-    
-    pub(crate) fn data_as_bytes(&self) ->  CommSlice<u8> {
+
+    pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
         // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
@@ -347,7 +351,13 @@ impl Des for SubSerializedData {
 impl Drop for SubSerializedData {
     fn drop(&mut self) {
         unsafe {
-            if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
+            if self
+                .ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .fetch_sub(1, Ordering::SeqCst)
+                == 1
+            {
                 self.comm.rt_free(self.alloc.clone());
             }
         }
@@ -356,10 +366,15 @@ impl Drop for SubSerializedData {
 
 impl RemoteSerializedData {
     pub(crate) fn increment_cnt(&self) {
-        unsafe { self.ref_cnt.as_ref().expect("valid serialized data").fetch_add(1, Ordering::SeqCst) };
+        unsafe {
+            self.ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .fetch_add(1, Ordering::SeqCst)
+        };
     }
 
-    pub(crate)  fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.alloc.size - std::mem::size_of::<AtomicUsize>()
     }
 }
@@ -378,16 +393,21 @@ impl Clone for RemoteSerializedData {
     }
 }
 
-impl Drop for RemoteSerializedData{
+impl Drop for RemoteSerializedData {
     fn drop(&mut self) {
         unsafe {
-            if self.ref_cnt.as_ref().expect("valid serialized data").fetch_sub(1, Ordering::SeqCst) == 1 {
+            if self
+                .ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .fetch_sub(1, Ordering::SeqCst)
+                == 1
+            {
                 self.comm.rt_free(self.alloc.clone());
             }
         }
     }
 }
-
 
 #[enum_dispatch]
 pub(crate) trait Des {
@@ -495,7 +515,7 @@ pub(crate) trait LamellaeAM: Send {
 }
 
 #[allow(unused_variables)]
-pub(crate) fn create_lamellae(backend: Backend, ) -> LamellaeBuilder {
+pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "rofi")]
         Backend::Rofi => {

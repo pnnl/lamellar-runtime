@@ -186,7 +186,6 @@ impl LamellarAlloc for LinearAlloc {
             }
         }
         None
-        
     }
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
@@ -510,7 +509,7 @@ impl LamellarAlloc for BTreeAlloc {
         }
     }
 
-    fn find (&self, addr: usize) -> Option<usize> {
+    fn find(&self, addr: usize) -> Option<usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
         let mut allocated_addrs = lock.lock();
         // println!("trying to free: {:x?} {:?}", addr, addr);
@@ -618,8 +617,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         match free_entries.iter().position(|x| *x == addr) {
             Some(i) => None, //means its available to be allocated
             None => Some(1),
-        }   
-
+        }
     }
 
     fn space_avail(&self) -> usize {

@@ -4,21 +4,22 @@ use crate::{
     lamellae::{
         comm::{
             error::{AllocError, AllocResult},
-            CommMem,
-            CommAlloc,
-            CommAllocType,
-            CommAllocAddr,
-            
+            CommAlloc, CommAllocAddr, CommAllocType, CommMem,
         },
         AllocationType,
     },
-    lamellar_alloc::{LamellarAlloc,BTreeAlloc},
+    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
 use super::comm::{ShmemComm, SHMEM_SIZE};
 
 impl CommMem for ShmemComm {
-    fn alloc(&self, size: usize, alloc_type: AllocationType, align: usize) -> AllocResult<CommAlloc> {
+    fn alloc(
+        &self,
+        size: usize,
+        alloc_type: AllocationType,
+        align: usize,
+    ) -> AllocResult<CommAlloc> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
         let (ret, index, remote_addrs) = match alloc_type {
@@ -46,7 +47,7 @@ impl CommMem for ShmemComm {
         }
         let addr = ret.as_ptr() as usize + size * index;
         alloc.0.insert(addr, (ret, size, addr_map));
-        Ok(CommAlloc{
+        Ok(CommAlloc {
             addr,
             size,
             alloc_type: CommAllocType::Fabric,
@@ -65,7 +66,7 @@ impl CommMem for ShmemComm {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                return Ok(CommAlloc{
+                return Ok(CommAlloc {
                     addr,
                     size,
                     alloc_type: CommAllocType::RtHeap,
@@ -167,25 +168,24 @@ impl CommMem for ShmemComm {
     }
 
     fn local_alloc(&self, pe: usize, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        let  alloc = self.alloc_lock.read();
-        if let Some((_,size,_)) = alloc.0.get(&addr.0) {
-            return Ok(CommAlloc{
+        let alloc = self.alloc_lock.read();
+        if let Some((_, size, _)) = alloc.0.get(&addr.0) {
+            return Ok(CommAlloc {
                 addr: addr.0,
                 size: *size,
-                alloc_type: CommAllocType::Fabric
-            })
+                alloc_type: CommAllocType::Fabric,
+            });
         }
         let allocs = self.alloc.read();
-        for alloc in allocs.iter(){
+        for alloc in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
-                return Ok(CommAlloc{
+                return Ok(CommAlloc {
                     addr: addr.0,
                     size,
-                    alloc_type: CommAllocType::RtHeap
-                })
+                    alloc_type: CommAllocType::RtHeap,
+                });
             }
         }
         Err(AllocError::LocalNotFound(addr))
     }
-       
 }

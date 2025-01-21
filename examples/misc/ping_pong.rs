@@ -170,18 +170,13 @@ impl LamellarAm for SendAm {
                 buffer.idx_send_buffer.sub_region(start..end),
             );
 
-            while buffer
-                .res_recv_buffer
-                .sub_region(start..end)
-                .as_mut_slice()[self.buffer_size - 1]
+            while buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1]
                 == usize::MAX
             {
                 async_std::task::yield_now().await;
             }
-            buffer
-                .res_recv_buffer
-                .sub_region(start..end)
-                .as_mut_slice()[self.buffer_size - 1] = usize::MAX;
+            buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1] =
+                usize::MAX;
             // for _i in 0..self.indices.len() {
             // let mut first = true;
             // for (i, elem) in buffer

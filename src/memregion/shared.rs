@@ -109,7 +109,9 @@ impl<T: Dist> SharedMemoryRegion<T> {
                     MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
-                    team.lamellae.comm().alloc_pool(size * std::mem::size_of::<T>());
+                    team.lamellae
+                        .comm()
+                        .alloc_pool(size * std::mem::size_of::<T>());
                     mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
                 }
 
@@ -187,7 +189,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_slice(&self) -> &[T]{
+    pub unsafe fn as_slice(&self) -> &[T] {
         RegisteredMemoryRegion::as_slice(self)
     }
 
@@ -211,7 +213,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_mut_slice(&self) -> &mut [T]{
+    pub unsafe fn as_mut_slice(&self) -> &mut [T] {
         RegisteredMemoryRegion::as_mut_slice(self)
     }
 
@@ -235,7 +237,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_ptr(&self) -> MemResult<*const T>{
+    pub unsafe fn as_ptr(&self) -> MemResult<*const T> {
         RegisteredMemoryRegion::as_ptr(self)
     }
 
@@ -259,7 +261,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
     /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
     ///```
-    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>{
+    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         RegisteredMemoryRegion::as_mut_ptr(self)
     }
 
@@ -295,16 +297,18 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
         self.as_mut_slice()
     }
     unsafe fn as_mut_slice(&self) -> &mut [T] {
-        let slice = self.mr.as_casted_mut_slice::<T>().expect("should be aligned");
+        let slice = self
+            .mr
+            .as_casted_mut_slice::<T>()
+            .expect("should be aligned");
         if slice.len() >= self.sub_region_size + self.sub_region_offset {
             &mut slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)]
-        }
-        else{
+        } else {
             &mut slice[self.sub_region_offset..]
         }
     }
     unsafe fn as_ptr(&self) -> MemResult<*const T> {
-        let addr = self.addr() ?;
+        let addr = self.addr()?;
         Ok(addr as *const T)
     }
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
@@ -313,7 +317,10 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     }
     unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
         let mut slice = self.mr.as_casted_comm_slice()?;
-        Ok(slice.sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)))
+        Ok(
+            slice
+                .sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)),
+        )
     }
     // unsafe fn as_casted_comm_slice<R:Dist>(&self) -> MemResult<CommSlice<R>> {
     //     let mut slice = self.mr.as_casted_comm_slice()?;
@@ -378,7 +385,12 @@ impl<T: Dist> AsBase for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) -> RdmaHandle<T>{
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         self.mr.put(pe, self.sub_region_offset + index, data)
     }
     // unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
@@ -390,15 +402,19 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     //     self.mr
     //         .blocking_put(pe, self.sub_region_offset + index, data);
     // }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> RdmaHandle<T>{
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         self.mr.put_all(self.sub_region_offset + index, data)
     }
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>> (
+    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
-    ) -> RdmaHandle<T>{
+    ) -> RdmaHandle<T> {
         self.mr
             .get_unchecked(pe, self.sub_region_offset + index, data)
     }
@@ -415,7 +431,8 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
 
 impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
-        self.mr.put_comm_slice(pe, self.sub_region_offset + index, data)
+        self.mr
+            .put_comm_slice(pe, self.sub_region_offset + index, data)
     }
     unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
         // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);

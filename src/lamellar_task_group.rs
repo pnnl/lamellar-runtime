@@ -3,7 +3,7 @@ use crate::{
     active_messaging::*,
     barrier::BarrierHandle,
     env_var::config,
-    lamellae::{Des,CommProgress},
+    lamellae::{CommProgress, Des},
     lamellar_arch::LamellarArchRT,
     lamellar_request::LamellarRequest,
     lamellar_request::*,

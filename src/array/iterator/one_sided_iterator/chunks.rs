@@ -44,7 +44,10 @@ where
         array: <I as OneSidedIteratorInner>::Array,
         index: usize,
         size: usize,
-    ) -> (OneSidedMemoryRegion<I::ElemType>, ArrayRdmaHandle<I::ElemType>) {
+    ) -> (
+        OneSidedMemoryRegion<I::ElemType>,
+        ArrayRdmaHandle<I::ElemType>,
+    ) {
         // println!(" get chunk of len: {:?}", size);
         let mem_region: OneSidedMemoryRegion<I::ElemType> =
             array.team().team.alloc_one_sided_mem_region(size);

@@ -5,7 +5,8 @@ use crate::{
     },
     config,
     lamellae::{
-        comm::error::AllocError, Backend, CommMem, CommInfo,Lamellae, LamellaeAM, Ser, SerializeHeader, SerializedData
+        comm::error::AllocError, Backend, CommInfo, CommMem, Lamellae, LamellaeAM, Ser,
+        SerializeHeader, SerializedData,
     },
 };
 
@@ -227,7 +228,7 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
     }
 
     //#[tracing::instrument(skip_all)]
-    async fn exec_msg(self, msg: Msg, mut ser_data:  SerializedData, lamellae: Arc<Lamellae>) {
+    async fn exec_msg(self, msg: Msg, mut ser_data: SerializedData, lamellae: Arc<Lamellae>) {
         // println!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         // let data = ser_data.data_as_bytes();
         let mut i = 0;
@@ -236,7 +237,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                 self.exec_am(&msg, &ser_data, &mut i, &lamellae).await;
             }
             Cmd::ReturnAm => {
-                self.exec_return_am(&msg, &ser_data, &mut i, &lamellae).await;
+                self.exec_return_am(&msg, &ser_data, &mut i, &lamellae)
+                    .await;
             }
             Cmd::Data => {
                 self.exec_data_am(&msg, &mut i, &mut ser_data).await;
@@ -452,7 +454,7 @@ impl RegisteredActiveMessages {
         lamellae: &Arc<Lamellae>,
     ) {
         // println!("exec_am");
-        let data =  ser_data.data_as_bytes();
+        let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =
@@ -511,7 +513,7 @@ impl RegisteredActiveMessages {
         lamellae: &Arc<Lamellae>,
     ) {
         // println!("exec_return_am");
-        let data =  ser_data.data_as_bytes();
+        let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
         let (team, world) =
@@ -539,7 +541,7 @@ impl RegisteredActiveMessages {
         msg: &Msg,
         // data_buf: &[u8],
         i: &mut usize,
-        ser_data:  &mut SerializedData,
+        ser_data: &mut SerializedData,
     ) {
         // println!("exec_data_am");
         let data_buf = ser_data.data_as_bytes();
@@ -551,7 +553,7 @@ impl RegisteredActiveMessages {
             crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
         *i += data_header.darc_list_size;
 
-        let data =   ser_data.sub_data(*i, *i + data_header.size) ; // i is incermented preventing overlapping sub_data
+        let data = ser_data.sub_data(*i, *i + data_header.size); // i is incermented preventing overlapping sub_data
         *i += data_header.size;
 
         self.send_data_to_user_handle(
@@ -562,9 +564,13 @@ impl RegisteredActiveMessages {
     }
 
     // #[tracing::instrument(skip_all)]
-    pub(crate) async fn exec_unit_am(&self, msg: &Msg, 
-        //data: &[u8], 
-        ser_data:  &SerializedData, i: &mut usize) {
+    pub(crate) async fn exec_unit_am(
+        &self,
+        msg: &Msg,
+        //data: &[u8],
+        ser_data: &SerializedData,
+        i: &mut usize,
+    ) {
         // println!("exec_unit_am");
         let data = ser_data.data_as_bytes();
         let unit_header: UnitHeader =

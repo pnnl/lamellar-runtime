@@ -38,6 +38,6 @@ pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;
 pub use crate::lamellar_world::LamellarWorld;
 pub use crate::lamellar_world::LamellarWorldBuilder;
-pub use crate::memregion::{Dist};
+pub use crate::memregion::Dist;
 pub use crate::scheduler::LamellarTask;
 pub use crate::LamellarEnv;

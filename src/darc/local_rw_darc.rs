@@ -7,9 +7,9 @@ use std::sync::Arc;
 use crate::{
     active_messaging::RemotePtr,
     darc::{Darc, DarcInner, DarcMode, __NetworkDarc},
+    lamellae::CommMem,
     lamellar_team::IntoLamellarTeam,
     IdError, LamellarEnv, LamellarTeam,
-    lamellae::CommMem,
 };
 
 use super::handle::LocalRwDarcHandle;
@@ -178,7 +178,7 @@ impl<T> LocalRwDarc<T> {
     #[doc(hidden)]
     pub fn print(&self) {
         let rel_addr =
-            unsafe { self.darc.inner.addr()  - (*self.inner().team).lamellae.comm().base_addr() };
+            unsafe { self.darc.inner.addr() - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
             "--------\norig: {:?} 0x{:x} (0x{:x}) {:?}\n--------",
             self.darc.src_pe,

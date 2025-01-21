@@ -272,11 +272,7 @@ crate::inventory::collect!(multi_val_single_idx_ops);
 
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
-        let slice = self
-            .inner
-            .data
-            .mem_region
-            .as_slice();
+        let slice = self.inner.data.mem_region.as_slice();
         assert!(slice.len() > 0 && slice.len() % std::mem::size_of::<T>() == 0);
         unsafe {
             std::slice::from_raw_parts(

@@ -5,100 +5,111 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-use futures_util::{stream::{FuturesUnordered,StreamExt}, Future, Stream,};
+use futures_util::{
+    stream::{FuturesUnordered, StreamExt},
+    Future, Stream,
+};
 
 use pin_project::{pin_project, pinned_drop};
 
 use crate::{
-    active_messaging::{AmHandle, LocalAmHandle}, array::LamellarByteArray, lamellae::{CommProgress, Lamellae, RdmaHandle}, lamellar_request::LamellarRequest, memregion::RegisteredMemoryRegion, scheduler::{LamellarTask, Scheduler}, warnings::RuntimeWarning, Dist, LamellarTeamRT, OneSidedMemoryRegion
+    active_messaging::{AmHandle, LocalAmHandle},
+    array::LamellarByteArray,
+    lamellae::{CommProgress, Lamellae, RdmaHandle},
+    lamellar_request::LamellarRequest,
+    memregion::RegisteredMemoryRegion,
+    scheduler::{LamellarTask, Scheduler},
+    warnings::RuntimeWarning,
+    Dist, LamellarTeamRT, OneSidedMemoryRegion,
 };
 
 use super::{
-    private::ArrayExecAm, AMCounters, ArrayRdmaCmd, AtomicArray, GlobalLockArray, LocalLockArray, NativeAtomicArray, ReadOnlyArray, UnsafeArray
+    private::ArrayExecAm, AMCounters, ArrayRdmaCmd, AtomicArray, GlobalLockArray, LocalLockArray,
+    NativeAtomicArray, ReadOnlyArray, UnsafeArray,
 };
 
-
 #[pin_project(project = InnerRdmaHandleProj)]
-pub(crate) enum InnerRdmaHandle<T>{
+pub(crate) enum InnerRdmaHandle<T> {
     Am(VecDeque<AmHandle<()>>),
     Rdma(VecDeque<RdmaHandle<T>>),
     Spawned(#[pin] FuturesUnordered<LamellarTask<()>>),
 }
 
-impl<T: Dist> InnerRdmaHandle<T>{
-    pub(crate)fn new( op: &ArrayRdmaCmd) -> Self{
-        match op{
+impl<T: Dist> InnerRdmaHandle<T> {
+    pub(crate) fn new(op: &ArrayRdmaCmd) -> Self {
+        match op {
             ArrayRdmaCmd::PutAm => InnerRdmaHandle::Am(VecDeque::new()),
             ArrayRdmaCmd::GetAm => InnerRdmaHandle::Am(VecDeque::new()),
             ArrayRdmaCmd::Put => InnerRdmaHandle::Rdma(VecDeque::new()),
             ArrayRdmaCmd::Get(_) => InnerRdmaHandle::Rdma(VecDeque::new()),
         }
     }
-    pub(crate)fn from_am_reqs(am_reqs: VecDeque<AmHandle<()>>) -> Self{
+    pub(crate) fn from_am_reqs(am_reqs: VecDeque<AmHandle<()>>) -> Self {
         InnerRdmaHandle::Am(am_reqs)
     }
-    pub(crate)fn add_am(&mut self, am: AmHandle<()>) {
-        match self{
+    pub(crate) fn add_am(&mut self, am: AmHandle<()>) {
+        match self {
             InnerRdmaHandle::Am(reqs) => reqs.push_back(am),
             InnerRdmaHandle::Rdma(_) => panic!("cannot add am to rdma future"),
             InnerRdmaHandle::Spawned(_) => panic!("cannot add am to spawned task"),
         }
     }
-    pub(crate)fn add_rdma(&mut self, rdma: RdmaHandle<T>) {
-        match self{
+    pub(crate) fn add_rdma(&mut self, rdma: RdmaHandle<T>) {
+        match self {
             InnerRdmaHandle::Am(_) => panic!("cannot add rdma to am future"),
             InnerRdmaHandle::Rdma(reqs) => reqs.push_back(rdma),
             InnerRdmaHandle::Spawned(_) => panic!("cannot add rdma to spawned task"),
         }
     }
-    pub(crate)fn drain(&mut self) {
-        match self{
+    pub(crate) fn drain(&mut self) {
+        match self {
             InnerRdmaHandle::Am(reqs) => for _ in reqs.drain(0..) {},
-            InnerRdmaHandle::Rdma(reqs) =>  for _ in reqs.drain(0..) {},
-            InnerRdmaHandle::Spawned(reqs) =>  reqs.clear() ,
-        } 
+            InnerRdmaHandle::Rdma(reqs) => for _ in reqs.drain(0..) {},
+            InnerRdmaHandle::Spawned(reqs) => reqs.clear(),
+        }
     }
-    pub(crate) fn launch(&mut self, scheduler: &Arc<Scheduler>, am_counters: Vec<Arc<AMCounters>>) { 
+    pub(crate) fn launch(&mut self, scheduler: &Arc<Scheduler>, am_counters: Vec<Arc<AMCounters>>) {
         take_mut::take(self, |this| match this {
             InnerRdmaHandle::Am(mut reqs) => {
-                for am in reqs.iter_mut(){
+                for am in reqs.iter_mut() {
                     am.launch();
                 }
                 InnerRdmaHandle::Am(reqs)
-            },
+            }
             InnerRdmaHandle::Rdma(mut reqs) => {
                 let mut tasks = FuturesUnordered::new();
-                for rdma in reqs.drain(..){
+                for rdma in reqs.drain(..) {
                     tasks.push(rdma.spawn(scheduler, am_counters.clone()));
                 }
                 InnerRdmaHandle::Spawned(tasks)
-            },
-            InnerRdmaHandle::Spawned(reqs) => {
-                InnerRdmaHandle::Spawned(reqs)
-            },
+            }
+            InnerRdmaHandle::Spawned(reqs) => InnerRdmaHandle::Spawned(reqs),
         });
     }
-    pub(crate) fn blocking_wait(&mut self, scheduler: &Arc<Scheduler>, am_counters: Vec<Arc<AMCounters>>, lamellae: &Arc<Lamellae>) {
-        match self{
-            InnerRdmaHandle::Am(reqs) => for req in reqs.drain(..) {
+    pub(crate) fn blocking_wait(
+        &mut self,
+        scheduler: &Arc<Scheduler>,
+        am_counters: Vec<Arc<AMCounters>>,
+        lamellae: &Arc<Lamellae>,
+    ) {
+        match self {
+            InnerRdmaHandle::Am(reqs) => {
+                for req in reqs.drain(..) {
                     req.blocking_wait();
-            },
+                }
+            }
             InnerRdmaHandle::Rdma(reqs) => {
-                for req in reqs.drain(..){
+                for req in reqs.drain(..) {
                     let _ = req.spawn(scheduler, am_counters.clone());
                 }
-                lamellae.comm().wait();// block until all rdma ops are complete
-            },
+                lamellae.comm().wait(); // block until all rdma ops are complete
+            }
             InnerRdmaHandle::Spawned(reqs) => {
-                lamellae.comm().wait();// block until all rdma ops are complete
-            },
+                lamellae.comm().wait(); // block until all rdma ops are complete
+            }
         }
-        
     }
 }
-
-
-
 
 /// a task handle for an array rdma (put/get) operation
 #[pin_project(PinnedDrop)]
@@ -170,7 +181,8 @@ impl<T: Dist> LamellarRequest for ArrayRdmaHandle<T> {
     fn blocking_wait(mut self) -> Self::Output {
         self.spawned = true;
         let team_rt = self.array.team();
-        self.reqs.blocking_wait(&team_rt.scheduler, team_rt.counters(),&team_rt.lamellae);
+        self.reqs
+            .blocking_wait(&team_rt.scheduler, team_rt.counters(), &team_rt.lamellae);
         // for req in self.reqs.drain(0..) {
         //     req.blocking_wait();
         // }
@@ -183,12 +195,10 @@ impl<T: Dist> LamellarRequest for ArrayRdmaHandle<T> {
             }
             self.spawned = true;
             ready
-        }
-        else{
+        } else {
             // TODO: maybe implement this for rdma futures as well
             false
         }
-        
     }
     fn val(&self) -> Self::Output {
         if let InnerRdmaHandle::Am(reqs) = &self.reqs {
@@ -210,24 +220,21 @@ impl<T: Dist> Future for ArrayRdmaHandle<T> {
                         req.ready_or_set_waker(cx.waker());
                     }
                     InnerRdmaHandle::Am(reqs)
-                },
+                }
                 InnerRdmaHandle::Rdma(mut reqs) => {
-                    let  tasks = FuturesUnordered::new();
-                    
+                    let tasks = FuturesUnordered::new();
+
                     for req in reqs.drain(..) {
-                        tasks.push(req.spawn(&team_rt.scheduler,team_rt.counters() ));
+                        tasks.push(req.spawn(&team_rt.scheduler, team_rt.counters()));
                     }
                     InnerRdmaHandle::Spawned(tasks)
-
                 }
-                InnerRdmaHandle::Spawned(reqs) => {
-                    InnerRdmaHandle::Spawned(reqs)
-                },
+                InnerRdmaHandle::Spawned(reqs) => InnerRdmaHandle::Spawned(reqs),
             });
             self.spawned = true;
         }
         let this = self.project();
-        
+
         match this.reqs.project() {
             InnerRdmaHandleProj::Am(reqs) => {
                 while let Some(mut req) = reqs.pop_front() {
@@ -249,7 +256,7 @@ impl<T: Dist> Future for ArrayRdmaHandle<T> {
                 return Poll::Pending;
             }
         }
-        
+
         Poll::Ready(())
     }
 }
@@ -477,9 +484,7 @@ impl<T: Dist> Future for ArrayAtHandle<T> {
             ArrayAtHandleState::Atomic(op) => {
                 let mut task = op.spawn(buf);
                 if let Poll::Ready(_res) = Future::poll(Pin::new(&mut task), cx) {
-                    return Poll::Ready(unsafe {
-                        self.buf.as_slice()[0]
-                    });
+                    return Poll::Ready(unsafe { self.buf.as_slice()[0] });
                 } else {
                     self.state = ArrayAtHandleState::Launched(task);
                     cx.waker().wake_by_ref();
@@ -488,9 +493,7 @@ impl<T: Dist> Future for ArrayAtHandle<T> {
             ArrayAtHandleState::Get(op) => {
                 let mut task = op.spawn(buf);
                 if let Poll::Ready(_res) = Future::poll(Pin::new(&mut task), cx) {
-                    return Poll::Ready(unsafe {
-                        self.buf.as_slice()[0]
-                    });
+                    return Poll::Ready(unsafe { self.buf.as_slice()[0] });
                 } else {
                     self.state = ArrayAtHandleState::Launched(task);
                     cx.waker().wake_by_ref();
@@ -498,9 +501,7 @@ impl<T: Dist> Future for ArrayAtHandle<T> {
             }
             ArrayAtHandleState::Launched(task) => {
                 if let Poll::Ready(_res) = Future::poll(Pin::new(task), cx) {
-                    return Poll::Ready(unsafe {
-                        self.buf.as_slice()[0]
-                    });
+                    return Poll::Ready(unsafe { self.buf.as_slice()[0] });
                 }
             }
         }

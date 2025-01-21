@@ -1,6 +1,9 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
-    lamellae::{comm::error::AllocError,  Lamellae, LamellaeAM, Ser,Des, SerializeHeader,CommMem,CommSlice},
+    lamellae::{
+        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeAM, Ser,
+        SerializeHeader,
+    },
 };
 use batching::*;
 
@@ -28,7 +31,13 @@ impl SimpleBatcherInner {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn add(&self, req_data: ReqMetaData, data: LamellarData, payload_size: usize, header_size: usize) -> usize {
+    fn add(
+        &self,
+        req_data: ReqMetaData,
+        data: LamellarData,
+        payload_size: usize,
+        header_size: usize,
+    ) -> usize {
         // println!("adding to batch");
         //return true if this is the first am in the batch
         let mut batch = self.batch.lock();
@@ -81,7 +90,8 @@ impl Batcher for SimpleBatcher {
         let size = batch.add(
             req_data,
             LamellarData::Am(am, am_id, am_size),
-            am_size, *AM_HEADER_LEN,
+            am_size,
+            *AM_HEADER_LEN,
         );
         if size == 0 {
             //first data in batch, schedule a transfer task
@@ -135,8 +145,9 @@ impl Batcher for SimpleBatcher {
         }
         let size = batch.add(
             req_data,
-            LamellarData::Return(am, am_id,am_size),
-            am_size , *AM_HEADER_LEN,
+            LamellarData::Return(am, am_id, am_size),
+            am_size,
+            *AM_HEADER_LEN,
         );
         if size == 0 {
             //first data in batch, schedule a transfer task
@@ -193,7 +204,8 @@ impl Batcher for SimpleBatcher {
         let size = batch.add(
             req_data,
             LamellarData::Data(data, darcs, data_size, darc_list_size),
-            data_size , darc_list_size + *DATA_HEADER_LEN,
+            data_size,
+            darc_list_size + *DATA_HEADER_LEN,
         );
         if size == 0 {
             //first data in batch, schedule a transfer task
@@ -238,7 +250,7 @@ impl Batcher for SimpleBatcher {
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
-        let size = batch.add(req_data, LamellarData::Unit, 0,*UNIT_HEADER_LEN);
+        let size = batch.add(req_data, LamellarData::Unit, 0, *UNIT_HEADER_LEN);
         if size == 0 {
             //first data in batch, schedule a transfer task
             let batch_id = batch.batch_id.load(Ordering::SeqCst);
@@ -275,7 +287,7 @@ impl Batcher for SimpleBatcher {
     async fn exec_batched_msg(
         &self,
         msg: Msg,
-        mut ser_data:  SerializedData,
+        mut ser_data: SerializedData,
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
@@ -283,19 +295,20 @@ impl Batcher for SimpleBatcher {
         let mut i = 0;
         let data_len = ser_data.len();
         // println!("executing batched msg {:?}", data.len());
-        while i < data_len { //data.len() { 
+        while i < data_len {
+            //data.len() {
             // let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
-            let cmd: Cmd  = ser_data.sub_data(i, *CMD_LEN).deserialize_data().unwrap();
+            let cmd: Cmd = ser_data.sub_data(i, *CMD_LEN).deserialize_data().unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => self.exec_am(&msg,&ser_data, &mut i, &lamellae, ame),
+                Cmd::Am => self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame),
                 Cmd::ReturnAm => {
                     self.exec_return_am(&msg, &ser_data, &mut i, &lamellae, ame)
                         .await
                 }
-                Cmd::Data => ame.exec_data_am(&msg,  &mut i, &mut ser_data).await,
+                Cmd::Data => ame.exec_data_am(&msg, &mut i, &mut ser_data).await,
                 Cmd::Unit => ame.exec_unit_am(&msg, &ser_data, &mut i).await,
                 Cmd::BatchedMsg => {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")
@@ -339,10 +352,10 @@ impl SimpleBatcher {
             let mut cnts = HashMap::new();
 
             let mut i = 0;
-            for (req_data, data, _size) in buf { 
-                let  req_data_slice = data_slice.sub_slice(i..);
+            for (req_data, data, _size) in buf {
+                let req_data_slice = data_slice.sub_slice(i..);
                 match data {
-                    LamellarData::Am(am, id,am_size) => {
+                    LamellarData::Am(am, id, am_size) => {
                         i += SimpleBatcher::serialize_am(
                             req_data,
                             am_size,
@@ -353,7 +366,7 @@ impl SimpleBatcher {
                         );
                         cnts.entry(Cmd::Am).and_modify(|e| *e += 1).or_insert(1);
                     }
-                    LamellarData::Return(am, id,am_size) => {
+                    LamellarData::Return(am, id, am_size) => {
                         i += SimpleBatcher::serialize_am(
                             req_data,
                             am_size,
@@ -403,7 +416,7 @@ impl SimpleBatcher {
         am_id: AmId,
         mut data_buf: CommSlice<u8>,
         cmd: Cmd,
-    ) ->usize{
+    ) -> usize {
         // println!("serialize_am");
         let mut i = 0;
         crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &cmd, false).unwrap();
@@ -450,12 +463,7 @@ impl SimpleBatcher {
             req_id: req_data.id,
             darc_list_size: darc_list_size,
         };
-        crate::serialize_into(
-            &mut data_buf[i..i + *DATA_HEADER_LEN],
-            &data_header,
-            false,
-        )
-        .unwrap();
+        crate::serialize_into(&mut data_buf[i..i + *DATA_HEADER_LEN], &data_header, false).unwrap();
         i += *DATA_HEADER_LEN;
 
         crate::serialize_into(&mut data_buf[i..(i + darc_list_size)], &darcs, false).unwrap();
@@ -466,7 +474,7 @@ impl SimpleBatcher {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>, ) -> usize{
+    fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
         // println!("serialize_unit");
         let mut i = 0;
         crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &Cmd::Unit, false).unwrap();
@@ -475,12 +483,7 @@ impl SimpleBatcher {
         let unit_header = UnitHeader {
             req_id: req_data.id,
         };
-        crate::serialize_into(
-            &mut data_buf[i..i + *UNIT_HEADER_LEN],
-            &unit_header,
-            false,
-        )
-        .unwrap();
+        crate::serialize_into(&mut data_buf[i..i + *UNIT_HEADER_LEN], &unit_header, false).unwrap();
         i + *UNIT_HEADER_LEN
     }
 

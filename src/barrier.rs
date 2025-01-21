@@ -5,7 +5,8 @@ use crate::{
     lamellar_request::LamellarRequest,
     memregion::MemoryRegion,
     scheduler::Scheduler,
-    warnings::RuntimeWarning, LamellarTeamRT,
+    warnings::RuntimeWarning,
+    LamellarTeamRT,
 };
 
 use futures_util::Future;
@@ -153,7 +154,6 @@ impl Barrier {
                     unsafe {
                         self.barrier_buf[i - 1]
                             .as_mut_slice()
-                           
                     }
             );
             self.print_bar();
@@ -212,12 +212,14 @@ impl Barrier {
                                 // );
                                 // println!("barrier put_slice 1");
                                 unsafe {
-                                    self.barrier_buf[i - 1].put_comm_slice(
-                                        send_pe,
-                                        round,
-                                        CommSlice::from_slice(barrier_slice),
-                                    ).spawn(&self.scheduler,vec![]); //no need to pass in counters as we wont leave until the barrier is complete anyway
-                                    //safe as we are the only ones writing to our index
+                                    self.barrier_buf[i - 1]
+                                        .put_comm_slice(
+                                            send_pe,
+                                            round,
+                                            CommSlice::from_slice(barrier_slice),
+                                        )
+                                        .spawn(&self.scheduler, vec![]); //no need to pass in counters as we wont leave until the barrier is complete anyway
+                                                                         //safe as we are the only ones writing to our index
                                 }
                             }
                         }
@@ -245,10 +247,7 @@ impl Barrier {
                                 // );
                                 unsafe {
                                     //safe as  each pe is only capable of writing to its own index
-                                    while self.barrier_buf[i - 1]
-                                        .as_mut_slice()
-                                        [round]
-                                        < barrier_id
+                                    while self.barrier_buf[i - 1].as_mut_slice()[round] < barrier_id
                                     {
                                         self.barrier_timeout(
                                             &mut s,
@@ -403,7 +402,9 @@ impl BarrierHandle {
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                 unsafe {
-                    self.barrier_buf[i - 1].put_comm_slice(send_pe, round, CommSlice::from_slice(barrier_slice)).spawn(&self.scheduler, vec![]);
+                    self.barrier_buf[i - 1]
+                        .put_comm_slice(send_pe, round, CommSlice::from_slice(barrier_slice))
+                        .spawn(&self.scheduler, vec![]);
                     //safe as we are the only ones writing to our index
                 }
             }
@@ -421,11 +422,7 @@ impl BarrierHandle {
             if team_recv_pe as usize != self.my_index {
                 unsafe {
                     //safe as  each pe is only capable of writing to its own index
-                    if self.barrier_buf[i - 1]
-                        .as_mut_slice()
-                       [round]
-                        < self.barrier_id
-                    {
+                    if self.barrier_buf[i - 1].as_mut_slice()[round] < self.barrier_id {
                         self.lamellae.comm().flush();
                         return Some(i);
                     }

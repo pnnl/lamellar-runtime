@@ -1,18 +1,18 @@
 use std::collections::VecDeque;
 
 use crate::{
-    array::{private::{ArrayExecAm, LamellarArrayPrivate}, r#unsafe::*, *},
+    array::{
+        private::{ArrayExecAm, LamellarArrayPrivate},
+        r#unsafe::*,
+        *,
+    },
     lamellae::{comm::CommProgress, CommSlice},
     memregion::{
         AsBase, Dist, MemoryRegionRDMA, RTMemoryRegionRDMA, RegisteredMemoryRegion, SubRegion,
-    }
+    },
 };
 
-
-
-
 // //use tracing::*;
-   
 
 impl<T: Dist> UnsafeArray<T> {
     fn block_op<U: Into<LamellarMemoryRegion<T>>>(
@@ -20,7 +20,7 @@ impl<T: Dist> UnsafeArray<T> {
         op: ArrayRdmaCmd,
         index: usize, //relative to inner
         buf: U,
-    ) ->InnerRdmaHandle<T> {
+    ) -> InnerRdmaHandle<T> {
         let global_index = index + self.inner.offset;
         // let buf = buf.team_into(&self.inner.data.team);
         let buf = buf.into();
@@ -77,7 +77,7 @@ impl<T: Dist> UnsafeArray<T> {
                         transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
                             pe,
                             offset,
-                            buf.sub_region(buf_index..(buf_index + len))
+                            buf.sub_region(buf_index..(buf_index + len)),
                         ));
                         // if immediate {
                         //     self.inner.data.mem_region.blocking_get(
@@ -805,16 +805,10 @@ impl UnsafeByteArray {
         self.inner.local_elements_for_range(index, len)
     }
 
-    pub(crate) fn comm_slice_for_range(
-        &self,
-        index: usize,
-        len: usize,
-    ) ->  CommSlice<u8>{
+    pub(crate) fn comm_slice_for_range(&self, index: usize, len: usize) -> CommSlice<u8> {
         self.inner.comm_slice_for_range(index, len)
     }
 }
-
-
 
 impl UnsafeArrayInner {
     pub(crate) fn pes_for_range(
@@ -945,18 +939,14 @@ impl UnsafeArrayInner {
         }
     }
 
-    pub(crate) fn comm_slice_for_range(
-        &self,
-        index: usize,
-        len: usize,
-    ) ->  CommSlice<u8>{
-        unsafe{//safe as these elements are local (and in registered memory) to the calling pe,
+    pub(crate) fn comm_slice_for_range(&self, index: usize, len: usize) -> CommSlice<u8> {
+        unsafe {
+            //safe as these elements are local (and in registered memory) to the calling pe,
             match self.local_elements_for_range(index, len) {
                 Some((slice, _)) => CommSlice::from_slice(slice),
                 None => CommSlice::from_slice(&self.local_as_mut_slice()[0..0]),
             }
         }
-        
     }
 
     //index with respect to subarray
@@ -1046,11 +1036,16 @@ struct UnsafeBlockGetAm {
 impl LamellarAm for UnsafeBlockGetAm {
     async fn exec(self) {
         unsafe {
-            self.array.inner.data.mem_region.get_unchecked(
-                self.pe,
-                self.offset * self.array.inner.elem_size,
-                self.data.clone(),
-            ).await;
+            self.array
+                .inner
+                .data
+                .mem_region
+                .get_unchecked(
+                    self.pe,
+                    self.offset * self.array.inner.elem_size,
+                    self.data.clone(),
+                )
+                .await;
         };
     }
 }
@@ -1071,11 +1066,16 @@ struct UnsafeCyclicGetAm {
 impl LamellarAm for UnsafeCyclicGetAm {
     async fn exec(self) {
         unsafe {
-            self.array.inner.data.mem_region.get_unchecked(
-                self.pe,
-                self.offset * self.array.inner.elem_size,
-                self.temp_data.clone(),
-            ).await;
+            self.array
+                .inner
+                .data
+                .mem_region
+                .get_unchecked(
+                    self.pe,
+                    self.offset * self.array.inner.elem_size,
+                    self.temp_data.clone(),
+                )
+                .await;
         }
         for (k, j) in (self.i..self.data.len() / self.array.inner.elem_size)
             .step_by(self.num_pes)
@@ -1138,12 +1138,18 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}", data.len());
-                        u8_buf.put_comm_slice(lamellar::current_pe, cur_index, CommSlice::from_slice(&data)).spawn(&team_rt.scheduler,team_rt.counters() );//we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
+                        u8_buf
+                            .put_comm_slice(
+                                lamellar::current_pe,
+                                cur_index,
+                                CommSlice::from_slice(&data),
+                            )
+                            .spawn(&team_rt.scheduler, team_rt.counters()); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice();//.expect("array data exists on PE");
+                    let buf_slice = self.buf.as_mut_slice(); //.expect("array data exists on PE");
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
@@ -1208,9 +1214,9 @@ impl LamellarAm for UnsafePutAm {
     async fn exec(self) {
         unsafe {
             let comm_slice = self
-            .array
-            .inner
-            .comm_slice_for_range(self.start_index, self.len);
+                .array
+                .inner
+                .comm_slice_for_range(self.start_index, self.len);
             self.data.get_comm_slice(self.pe, 0, comm_slice).await;
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
             // match self
@@ -1218,7 +1224,7 @@ impl LamellarAm for UnsafePutAm {
             //     .inner
             //     .comm_slice(self.start_index, self.len)
             // {
-                
+
             //     Some((elems, _)) => {
             //         let comm_slice = CommSlice::from_slice(elems);
             //          //alright to do this conversion because we spawn the get immediately, ensuring elems stays in scope until the RDMA is finished

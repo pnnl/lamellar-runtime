@@ -1,10 +1,15 @@
 use crate::{
-    lamellae::comm::{CommInfo, CommProgress, CommShutdown}, lamellar_alloc::LamellarAlloc, Backend,
+    lamellae::comm::{CommInfo, CommProgress, CommShutdown},
+    lamellar_alloc::LamellarAlloc,
+    Backend,
 };
 
 use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
 
 #[derive(Debug)]
 pub(crate) struct MyPtr {
