@@ -1091,7 +1091,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
                     j,
                     self.temp_data
                         .sub_region(k..(k + self.array.inner.elem_size)),
-                ).spawn(&team_rt.scheduler, team_rt.counters());
+                ).spawn();
             }
         }
         team_rt.lamellae.comm().wait();
@@ -1146,7 +1146,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                                 cur_index,
                                 CommSlice::from_slice(&data),
                             )
-                            .spawn(&team_rt.scheduler, team_rt.counters()); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
+                            .spawn(); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
                         println!("InitSmallGetAm put_comm_slice after: {:?}",data.as_ptr());
                     }

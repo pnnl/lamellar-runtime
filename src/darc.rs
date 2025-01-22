@@ -535,6 +535,8 @@ impl<T: 'static> DarcInner<T> {
             //     inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
             // );
             txs.push(rdma.put::<DarcMode>(
+                &team.scheduler,
+                team.counters(),
                 pe,
                 inner.mode_slice.sub_slice(my_pe..=my_pe),
                 inner.mode_slice.index_addr(inner.my_pe),
@@ -659,6 +661,8 @@ impl<T: 'static> DarcInner<T> {
                         let send_pe = team.arch.single_iter(pe).next().unwrap();
 
                         rdma.put(
+                            &team.scheduler,
+                            team.counters(),
                             send_pe,
                             // poor mans way of essentially doing a "scoped" async task, we guarantee
                             // the ref_cnt underlying data is valid since we will await the put immediately
@@ -702,6 +706,8 @@ impl<T: 'static> DarcInner<T> {
                     let send_pe = team.arch.single_iter(pe).next().unwrap();
 
                     rdma.put(
+                        &team.scheduler,
+                        team.counters(),
                         send_pe,
                         // barrier_id_slice,
                         // poor mans way of essentially doing a "scoped" async task, we guarantee
@@ -1292,11 +1298,13 @@ macro_rules! launch_drop {
         for pe in team.arch.team_iter() {
             // println!("darc block_on_outstanding put 3");
             let _ = rdma.put(
+                &team.scheduler,
+                team.counters(),
                 pe,
                 $inner.mode_slice.sub_slice($inner.my_pe..=$inner.my_pe),
                 // &mode_refs[$inner.my_pe..=$inner.my_pe],
                 $inner.mode_slice.index_addr( $inner.my_pe),// * std::mem::size_of::<DarcMode>(),
-            ).spawn(&team.scheduler, team.counters());
+            ).spawn();
         }
         // team.print_cnt();
         team.team_counters.inc_outstanding(1);

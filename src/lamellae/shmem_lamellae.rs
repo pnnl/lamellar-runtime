@@ -10,7 +10,7 @@ use super::{
     Comm, Lamellae, LamellaeAM, LamellaeInit, LamellaeShutdown, Ser, SerializeHeader,
     SerializedData, SERIALIZE_HEADER_LEN,
 };
-use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use crate::{lamellar_arch::LamellarArchRT, scheduler::{self, Scheduler}};
 use comm::ShmemComm;
 
 use async_trait::async_trait;
@@ -41,27 +41,24 @@ impl LamellaeInit for ShmemBuilder {
         (self.my_pe, self.num_pes)
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
-        let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone());
+        let shmem = Shmem::new(self.my_pe, self.num_pes, self.shmem_comm.clone(), scheduler.clone());
         let cq = shmem.cq();
         let shmem = Arc::new(Lamellae::Shmem(shmem));
         let shmem_clone = shmem.clone();
-        let scheduler_clone = scheduler.clone();
         let cq_clone = cq.clone();
         scheduler.submit_task(async move {
             cq_clone
-                .recv_data(scheduler_clone.clone(), shmem_clone.clone())
+                .recv_data( shmem_clone.clone())
                 .await;
         });
 
         let cq_clone = cq.clone();
-        let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq_clone.alloc_task(scheduler_clone.clone()).await;
+            cq_clone.alloc_task().await;
         });
         let cq_clone = cq.clone();
-        let scheduler_clone = scheduler.clone();
         scheduler.submit_task(async move {
-            cq_clone.panic_task(scheduler_clone.clone()).await;
+            cq_clone.panic_task().await;
         });
         shmem
     }
@@ -86,7 +83,7 @@ impl std::fmt::Debug for Shmem {
 }
 
 impl Shmem {
-    fn new(my_pe: usize, num_pes: usize, shmem_comm: Arc<Comm>) -> Shmem {
+    fn new(my_pe: usize, num_pes: usize, shmem_comm: Arc<Comm>, scheduler: Arc<Scheduler>) -> Shmem {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
         let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
         Shmem {
@@ -94,7 +91,7 @@ impl Shmem {
             num_pes: num_pes,
             shmem_comm: shmem_comm.clone(),
             active: active.clone(),
-            cq: Arc::new(CommandQueue::new(shmem_comm, my_pe, num_pes, active)),
+            cq: Arc::new(CommandQueue::new(shmem_comm, scheduler, my_pe, num_pes, active)),
         }
     }
     fn cq(&self) -> Arc<CommandQueue> {

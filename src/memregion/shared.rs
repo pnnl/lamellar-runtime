@@ -106,13 +106,13 @@ impl<T: Dist> SharedMemoryRegion<T> {
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
                 let mut mr_t =
-                    MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
+                    MemoryRegion::<T>::try_new(size, &team.scheduler,team.counters(), &team.lamellae, alloc.clone());
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
                     team.lamellae
                         .comm()
                         .alloc_pool(size * std::mem::size_of::<T>());
-                    mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
+                    mr_t = MemoryRegion::try_new(size, &team.scheduler,team.counters(), &team.lamellae, alloc.clone());
                 }
 
                 let mr = unsafe {
@@ -149,7 +149,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
                 let mr_t: MemoryRegion<T> =
-                    MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
+                    MemoryRegion::try_new(size, &team.scheduler,team.counters(), &team.lamellae, alloc)?;
                 let mr = unsafe { mr_t.to_base::<u8>() };
                 let res: Result<SharedMemoryRegion<T>, anyhow::Error> = Ok(SharedMemoryRegion {
                     mr: Darc::async_try_new_with_drop(

@@ -887,8 +887,9 @@ impl LamellarTeamRT {
         // println!("barrier created");
 
         let alloc = AllocationType::Global;
+        let team_counters= Arc::new(AMCounters::new());
 
-        let dropped = MemoryRegion::new(num_pes, lamellae.clone(), alloc.clone());
+        let dropped = MemoryRegion::new(num_pes,&scheduler,vec![team_counters.clone(), world_counters.clone()], &lamellae, alloc.clone());
 
         let remote_ptr_alloc = lamellae
             .comm()
@@ -912,7 +913,7 @@ impl LamellarTeamRT {
             team_pe: Ok(world_pe),
             num_world_pes: num_pes,
             num_pes: num_pes,
-            team_counters: Arc::new(AMCounters::new()),
+            team_counters,
             world_counters: world_counters,
             id: 0,
             team_hash: 0, //easy id to look up for global
@@ -1096,17 +1097,23 @@ impl LamellarTeamRT {
             parent.barrier();
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
+
+            let team_counters= Arc::new(AMCounters::new());
             // println!("allocating temp_buf");
             let temp_buf = MemoryRegion::<usize>::new(
                 parent.num_pes,
-                parent.lamellae.clone(),
+                &parent.scheduler,
+                vec![team_counters.clone(), parent.world_counters.clone()],
+                &parent.lamellae,
                 parent_alloc.clone(),
             );
 
             // println!("allocating temp_array");
             let temp_array = MemoryRegion::<usize>::new(
                 parent.num_pes,
-                parent.lamellae.clone(),
+                &parent.scheduler,
+                vec![],
+                &parent.lamellae,
                 AllocationType::Local,
             );
             let mut temp_array_slice =
@@ -1119,7 +1126,7 @@ impl LamellarTeamRT {
                     parent.world_pe,
                     0,
                     temp_array_slice.sub_slice(..parent.num_pes),
-                );
+                ).block();
             }
             let s = Instant::now();
             parent.barrier();
@@ -1174,7 +1181,7 @@ impl LamellarTeamRT {
                 num_world_pes: parent.num_world_pes,
                 team_pe: archrt.team_pe(parent.world_pe),
                 num_pes: num_pes,
-                team_counters: Arc::new(AMCounters::new()),
+                team_counters,
                 world_counters: parent.world_counters.clone(),
                 id: id,
                 sub_team_id_cnt: AtomicUsize::new(0),
@@ -1314,7 +1321,7 @@ impl LamellarTeamRT {
                                     my_index,
                                     temp_slice.sub_slice(my_index..=my_index),
                                 )
-                                .spawn(&self.scheduler, self.counters());
+                                .spawn();
                         }
                     }
                 }
@@ -1334,7 +1341,7 @@ impl LamellarTeamRT {
                                     self.world_pe,
                                     temp_slice.sub_slice(self.world_pe..=self.world_pe),
                                 )
-                                .spawn(&self.scheduler, self.counters());
+                                .spawn();
                         }
                     }
                 }

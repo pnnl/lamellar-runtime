@@ -25,6 +25,8 @@ pub(super) enum Op<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LocalFuture<T> {
     pub(crate) op: Op<T>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
 }
 
@@ -72,13 +74,13 @@ impl<T: Remote> LocalFuture<T> {
     }
     
     pub(crate) fn spawn(
-        mut self,
-        scheduler: &Arc<Scheduler>,
-        outstanding_reqs: Vec<Arc<AMCounters>>,
+        mut self
     ) -> LamellarTask<()> {
         self.exec_op();
         self.spawned = true;
-        scheduler.spawn_task(self, outstanding_reqs)
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.spawn_task(async {}, counters)
     }
 }
 
@@ -111,29 +113,35 @@ impl<T: Remote> From<LocalFuture<T>> for RdmaHandle<T> {
 }
 
 impl CommRdma for LocalComm {
-    fn put<T: Remote>(&self, _pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T> {
+    fn put<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, _pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T> {
         self.put_amt
             .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         LocalFuture {
-            op: Op::Put(src, dst), spawned: false
+            op: Op::Put(src, dst), spawned: false,
+            scheduler: scheduler.clone(),
+            counters
         }
         .into()
     }
-    fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T> {
+    fn put_all<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T> {
         self.put_amt.fetch_add(
             src.len() * std::mem::size_of::<T>() * self.num_pes,
             Ordering::SeqCst,
         );
         LocalFuture {
-            op: Op::Put(src, dst), spawned: false
+            op: Op::Put(src, dst), spawned: false,
+            scheduler: scheduler.clone(),
+            counters
         }
         .into()
     }
-    fn get<T: Remote>(&self, _pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaHandle<T> {
+    fn get<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, _pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaHandle<T> {
         self.get_amt
             .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         LocalFuture {
-            op: Op::Get(src, dst), spawned: false
+            op: Op::Get(src, dst), spawned: false,
+            scheduler: scheduler.clone(),
+            counters
         }
         .into()
     }

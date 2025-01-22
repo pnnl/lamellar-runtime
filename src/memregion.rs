@@ -6,20 +6,16 @@
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
 use crate::{
-    active_messaging::{AmDist, RemotePtr},
-    array::{
+    active_messaging::{AMCounters, AmDist, RemotePtr}, array::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
-    },
-    lamellae::{
+    }, lamellae::{
         AllocationType, Backend, CommAlloc, CommAllocAddr, CommAllocType, CommAtomic, CommInfo,
         CommMem, CommRdma, CommSlice, Lamellae, RdmaHandle,
-    },
-    lamellar_team::{LamellarTeam, LamellarTeamRT},
-    LamellarEnv,
+    }, lamellar_team::{LamellarTeam, LamellarTeamRT}, scheduler::Scheduler, LamellarEnv
 };
 use core::marker::PhantomData;
-use std::hash::{Hash, Hasher};
+use std::{hash::{Hash, Hasher}, pin::Pin};
 use std::sync::Arc;
 
 //#[doc(hidden)]
@@ -747,7 +743,8 @@ pub(crate) struct MemoryRegion<T: Dist> {
     num_elems: usize,
     pe: usize,
     backend: Backend,
-    // rdma: Arc<dyn LamellaeRDMA>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
     rdma: Arc<Lamellae>,
     mode: Mode,
     phantom: PhantomData<T>,
@@ -757,10 +754,12 @@ impl<T: Dist> MemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn new(
         num_elems: usize, //number of elements of type T
-        lamellae: Arc<Lamellae>,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
-        if let Ok(memreg) = MemoryRegion::try_new(num_elems, lamellae, alloc) {
+        if let Ok(memreg) = MemoryRegion::try_new(num_elems, scheduler, counters, lamellae,alloc) {
             memreg
         } else {
             unsafe { std::ptr::null_mut::<i32>().write(1) };
@@ -770,7 +769,9 @@ impl<T: Dist> MemoryRegion<T> {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn try_new(
         num_elems: usize, //number of elements of type T
-        lamellae: Arc<Lamellae>,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         // println!(
@@ -805,8 +806,10 @@ impl<T: Dist> MemoryRegion<T> {
             alloc,
             pe: lamellae.comm().my_pe(),
             num_elems,
+            scheduler: scheduler.clone(),
+            counters: counters,
             backend: lamellae.comm().backend(),
-            rdma: lamellae,
+            rdma: lamellae.clone(),
             mode: mode,
             phantom: PhantomData,
         };
@@ -822,6 +825,7 @@ impl<T: Dist> MemoryRegion<T> {
         addr: CommAllocAddr,
         pe: usize,
         num_elems: usize,
+        team: Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         Ok(MemoryRegion {
@@ -832,6 +836,8 @@ impl<T: Dist> MemoryRegion<T> {
             },
             pe: pe,
             num_elems,
+            scheduler: team.scheduler.clone(),
+            counters: team.counters(),
             backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: Mode::Remote,
@@ -886,6 +892,8 @@ impl<T: Dist> MemoryRegion<T> {
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma.comm().put(
+                    &self.scheduler,
+                    self.counters.clone(),
                     pe,
                     data_slice,
                     self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
@@ -953,6 +961,8 @@ impl<T: Dist> MemoryRegion<T> {
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma.comm().put_all(
+                    &self.scheduler,
+                    self.counters.clone(),
                     data_slice,
                     self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
                 )
@@ -986,6 +996,8 @@ impl<T: Dist> MemoryRegion<T> {
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma.comm().get(
+                    &self.scheduler,
+                    self.counters.clone(),
                     pe,
                     self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
                     data_slice,
@@ -1066,6 +1078,8 @@ impl<T: Dist> MemoryRegion<T> {
             //     pe,
             // );
             self.rdma.comm().put(
+                &self.scheduler,
+                    self.counters.clone(),
                 pe,
                 data,
                 self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
@@ -1102,6 +1116,8 @@ impl<T: Dist> MemoryRegion<T> {
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
             self.rdma.comm().get(
+                &self.scheduler,
+                    self.counters.clone(),
                 pe,
                 self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
                 data,

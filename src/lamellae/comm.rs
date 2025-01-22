@@ -26,6 +26,8 @@ use crate::{
         SerializedData,
     },
     Deserialize, Serialize,
+    scheduler::Scheduler,
+    active_messaging::AMCounters
 };
 
 use derive_more::{Add, From, Into, Sub};
@@ -75,25 +77,29 @@ impl CommAtomic for Comm {
     }
     fn atomic_op<T: NetworkAtomic>(
         &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         _op: AtomicOp<T>,
         _pe: usize,
         _remote_addr: usize,
     ) -> RdmaHandle<T> {
         match self {
-            Comm::Shmem(comm) => comm.atomic_op(_op, _pe, _remote_addr),
-            Comm::Local(comm) => comm.atomic_op(_op, _pe, _remote_addr),
+            Comm::Shmem(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
+            Comm::Local(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
         }
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         _op: AtomicOp<T>,
         _pe: usize,
         _remote_addr: usize,
         _result: &mut [T],
     ) -> RdmaHandle<T> {
         match self {
-            Comm::Shmem(comm) => comm.atomic_fetch_op(_op, _pe, _remote_addr, _result),
-            Comm::Local(comm) => comm.atomic_fetch_op(_op, _pe, _remote_addr, _result),
+            Comm::Shmem(comm) => comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result),
+            Comm::Local(comm) => comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result),
         }
     }
 }

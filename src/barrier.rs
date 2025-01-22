@@ -62,12 +62,16 @@ impl Barrier {
                 for _ in 0..n {
                     buffs.push(MemoryRegion::new(
                         num_rounds,
-                        lamellae.clone(),
+                        &scheduler,
+                        vec![],
+                        &lamellae,
                         alloc.clone(),
                     ));
                 }
 
-                let send_buf = MemoryRegion::new(1, lamellae.clone(), alloc);
+                let send_buf = MemoryRegion::new(1, &scheduler,
+                    vec![],
+                    &lamellae, alloc);
 
                 unsafe {
                     for buff in &buffs {
@@ -216,7 +220,7 @@ impl Barrier {
                                             round,
                                             CommSlice::from_slice(barrier_slice),
                                         )
-                                        .spawn(&self.scheduler, vec![]); //no need to pass in counters as we wont leave until the barrier is complete anyway
+                                        .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
                                                                          //safe as we are the only ones writing to our index
                                 }
                             }
@@ -402,7 +406,7 @@ impl BarrierHandle {
                 unsafe {
                     self.barrier_buf[i - 1]
                         .put_comm_slice(send_pe, round, CommSlice::from_slice(barrier_slice))
-                        .spawn(&self.scheduler, vec![]);
+                        .spawn();
                     //safe as we are the only ones writing to our index
                 }
             }

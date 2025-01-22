@@ -139,7 +139,7 @@ pub(crate) struct SerializedData {
 pub(crate) struct SubSerializedData {
     pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
-    pub(crate) ser_data_bytes: CommSlice<u8>,
+    pub(crate) _ser_data_bytes: CommSlice<u8>,
     pub(crate) header_bytes: CommSlice<u8>,
     pub(crate) payload_bytes: CommSlice<u8>,
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
@@ -242,10 +242,10 @@ impl SerializedData {
         self.payload_bytes
     }
 
-    pub(crate) fn header_and_data_as_bytes(&self) -> CommSlice<u8> {
-        // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
-        self.ser_data_bytes
-    }
+    // pub(crate) fn header_and_data_as_bytes(&self) -> CommSlice<u8> {
+    //     // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
+    //     self.ser_data_bytes
+    // }
     pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         // unsafe {
         //     std::slice::from_raw_parts_mut(
@@ -302,7 +302,7 @@ impl SerializedData {
         SubSerializedData {
             alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
-            ser_data_bytes: self.ser_data_bytes,
+            _ser_data_bytes: self.ser_data_bytes,
             header_bytes: self.header_bytes,
             payload_bytes: self.payload_bytes.sub_slice(start..end),
             comm: self.comm.clone(),

@@ -26,6 +26,8 @@ pub(super) enum Op<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemFuture<T> {
     pub(crate) op: Op<T>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
 }
 
@@ -75,13 +77,13 @@ impl<T: Remote> ShmemFuture<T> {
         // Ok(())
     }
     pub(crate) fn spawn(
-        mut self,
-        scheduler: &Arc<Scheduler>,
-        outstanding_reqs: Vec<Arc<AMCounters>>,
+        mut self
     ) -> LamellarTask<()> {
         self.exec_op();
         self.spawned = true;
-        scheduler.spawn_task(async {}, outstanding_reqs)
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.spawn_task(async {}, counters)
     }
 }
 
@@ -117,6 +119,7 @@ impl<T: Remote> Future for ShmemFuture<T> {
 impl CommRdma for ShmemComm {
     fn put<T: Remote>(
         &self,
+        scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>,
         pe: usize,
         src: CommSlice<T>,
         remote_addr: CommAllocAddr,
@@ -129,7 +132,9 @@ impl CommRdma for ShmemComm {
                 let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
                 return ShmemFuture {
-                    op: Op::Put( src, real_dst_addr), spawned: false
+                    op: Op::Put( src, real_dst_addr), spawned: false,
+                    scheduler: scheduler.clone(),
+            counters
                     
                 }
                 .into();
@@ -137,7 +142,7 @@ impl CommRdma for ShmemComm {
         }
         panic!("shmem segment invalid for put");
     }
-    fn put_all<T: Remote>(&self, src: CommSlice<T>, remote_addr: CommAllocAddr) -> RdmaHandle<T> {
+    fn put_all<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, src: CommSlice<T>, remote_addr: CommAllocAddr) -> RdmaHandle<T> {
         self.put_amt.fetch_add(
             src.len() * std::mem::size_of::<T>() * self.num_pes,
             Ordering::SeqCst,
@@ -153,7 +158,9 @@ impl CommRdma for ShmemComm {
                     })
                     .collect::<Vec<_>>();
                 return ShmemFuture {
-                    op: Op::PutAll(src, pe_addrs), spawned: false
+                    op: Op::PutAll(src, pe_addrs), spawned: false,
+                    scheduler: scheduler.clone(),
+            counters
                 }
                 .into();
             }
@@ -162,6 +169,7 @@ impl CommRdma for ShmemComm {
     }
     fn get<T: Remote>(
         &self,
+        scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>,
         pe: usize,
         src_addr: CommAllocAddr,
         dst: CommSlice<T>,
@@ -174,7 +182,9 @@ impl CommRdma for ShmemComm {
                 let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_src_addr = real_src_base + (src_addr.0 - addr);
                 return ShmemFuture {
-                    op: Op::Get( real_src_addr, dst), spawned: false
+                    op: Op::Get( real_src_addr, dst), spawned: false,
+                    scheduler: scheduler.clone(),
+            counters
                 }
                 .into();
             }

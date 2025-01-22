@@ -1,6 +1,7 @@
 use crate::{lamellae::comm::rdma::RdmaHandle};
 
-use super::Remote;
+use super::{AMCounters, Remote, Scheduler};
+use std::sync::Arc;
 pub(crate) trait NetworkAtomic: Remote {}
 impl NetworkAtomic for u8 {}
 impl NetworkAtomic for u16 {}
@@ -36,12 +37,16 @@ pub(crate) trait CommAtomic {
 
     fn atomic_op<T: NetworkAtomic>(
         &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,
     ) -> RdmaHandle<T>;
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,

@@ -13,7 +13,7 @@ use std::{
     task::{Context, Poll},
 };
 
-pub(crate) trait Remote: Copy + Send + 'static {}
+pub trait Remote: Copy + Send + 'static {}
 impl<T: Copy + Send + 'static> Remote for T {}
 
 /// A task handle for raw RMDA (put/get) operation
@@ -42,7 +42,7 @@ pub(crate) enum RdmaFuture<T> {
 
 impl<T: Remote> RdmaHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
-    pub(crate) fn block(self, _scheduler: &Arc<Scheduler>, _outstanding_reqs: Vec<Arc<AMCounters>>) {
+    pub fn block(self) {
         match self.future {
             #[cfg(feature = "rofi")]
             RdmaFuture::Rofi(f) => f.block(),
@@ -64,10 +64,8 @@ impl<T: Remote> RdmaHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub(crate) fn spawn(
-        self,
-        scheduler: &Arc<Scheduler>,
-        outstanding_reqs: Vec<Arc<AMCounters>>,
+    pub fn spawn(
+        self
     ) -> LamellarTask<()> {
         match self.future {
             #[cfg(feature = "rofi")]
@@ -80,8 +78,8 @@ impl<T: Remote> RdmaHandle<T> {
             RdmaFuture::LibFab(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
             RdmaFuture::LibFabAsync(f) => f.spawn(),
-            RdmaFuture::Shmem(f) => f.spawn(scheduler, outstanding_reqs),
-            RdmaFuture::Local(f) => f.spawn(scheduler, outstanding_reqs),
+            RdmaFuture::Shmem(f) => f.spawn(),
+            RdmaFuture::Local(f) => f.spawn(),
         }
     }
 }
@@ -110,7 +108,7 @@ impl<T: Remote> Future for RdmaHandle<T> {
 
 #[enum_dispatch]
 pub(crate) trait CommRdma {
-    fn put<T: Remote>(&self, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T>;
-    fn put_all<T: Remote>(&self, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T>;
-    fn get<T: Remote>(&self, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaHandle<T>;
+    fn put<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T>;
+    fn put_all<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T>;
+    fn get<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaHandle<T>;
 }

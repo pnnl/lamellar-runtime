@@ -82,7 +82,6 @@ impl LamellaeInit for Local {
 
 impl LamellaeShutdown for Local {
     fn shutdown(&self) {}
-
     fn force_shutdown(&self) {}
     fn force_deinit(&self) {}
 }

@@ -59,15 +59,17 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
             Some(mrh) => mrh.clone(),
             None => {
                 let local_mem_region_addr =
-                    lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
+                    lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle)
+                let team: Pin<Arc<LamellarTeamRT>> = net_handle.team.into();
                 let mem_region = MemoryRegion::from_remote_addr(
                     local_mem_region_addr,
                     net_handle.mr_pe,
                     net_handle.mr_size,
-                    lamellae.clone(),
+                    team.clone(),
+                    lamellae,
                 )
                 .unwrap();
-                let team: Pin<Arc<LamellarTeamRT>> = net_handle.team.into();
+                
                 let mrh = Arc::new(MemRegionHandleInner {
                     mr: mem_region,
                     team: team.clone(),
@@ -368,7 +370,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, lamellae, AllocationType::Local)?;
+        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, &team.scheduler,team.counters(), &team.lamellae, AllocationType::Local)?;
         let mr = unsafe { mr_t.to_base::<u8>() };
         let pe = mr.pe;
 

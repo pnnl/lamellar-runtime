@@ -64,7 +64,7 @@ impl<T: Dist> InnerRdmaHandle<T> {
     pub(crate) fn add_rdma_cyclic_get(&mut self, rdma: RdmaHandle<T>, mem_region: OneSidedMemoryRegion<T>, buf: LamellarMemoryRegion<T>, elems: Enumerate<StepBy<Range<usize>>>) {
         match self {
             InnerRdmaHandle::Am(_) => panic!("cannot add rdma cyclic get to am future"),
-            InnerRdmaHandle::Rdma(reqs) => panic!("cannot add rdma cyclic get to rdma"),
+            InnerRdmaHandle::Rdma(_) => panic!("cannot add rdma cyclic get to rdma"),
             InnerRdmaHandle::RdmaCyclicGet(reqs) => reqs.push_back((rdma,mem_region,buf,elems)),
             InnerRdmaHandle::Spawned(_) => panic!("cannot add rdma cyclic get to spawned task"),
         }
@@ -88,14 +88,14 @@ impl<T: Dist> InnerRdmaHandle<T> {
             InnerRdmaHandle::Rdma(mut reqs) => {
                 let  tasks = FuturesUnordered::new();
                 for rdma in reqs.drain(..) {
-                    tasks.push(rdma.spawn(scheduler, am_counters.clone()));
+                    tasks.push(rdma.spawn());
                 }
                 InnerRdmaHandle::Spawned(tasks)
             }
             InnerRdmaHandle::RdmaCyclicGet(mut reqs) => {
                 let  tasks = FuturesUnordered::new();
                 for (rdma,mem_region,buf,elems) in reqs.drain(..) {
-                    let rdma_task = rdma.spawn(scheduler, am_counters.clone());
+                    let rdma_task = rdma.spawn();
                     let task = scheduler.spawn_task(async move{
                         rdma_task.await;
                         for (k,j) in elems{
@@ -124,13 +124,13 @@ impl<T: Dist> InnerRdmaHandle<T> {
             }
             InnerRdmaHandle::Rdma(reqs) => {
                 for req in reqs.drain(..) {
-                    let _ = req.spawn(scheduler, am_counters.clone());
+                    let _ = req.spawn();
                 }
                 lamellae.comm().wait(); // block until all rdma ops are complete
             }
             InnerRdmaHandle::RdmaCyclicGet(reqs) => {
                 let mut mem_regions = reqs.drain(..).map(|(rdma,mem_region,buf,elems)| {
-                    let _ = rdma.spawn(scheduler, am_counters.clone());
+                    let _ = rdma.spawn();
                     (mem_region,buf,elems)
                 }).collect::<Vec<_>>();
                 
@@ -264,14 +264,14 @@ impl<T: Dist> Future for ArrayRdmaHandle<T> {
                     let tasks = FuturesUnordered::new();
 
                     for req in reqs.drain(..) {
-                        tasks.push(req.spawn(&team_rt.scheduler, team_rt.counters()));
+                        tasks.push(req.spawn());
                     }
                     InnerRdmaHandle::Spawned(tasks)
                 }
                 InnerRdmaHandle::RdmaCyclicGet(mut reqs) => {
                     let  tasks = FuturesUnordered::new();
                 for (rdma,mem_region,buf,elems) in reqs.drain(..) {
-                    let rdma_task = rdma.spawn(&team_rt.scheduler, team_rt.counters());
+                    let rdma_task = rdma.spawn();
                     let task = team_rt.scheduler.spawn_task(async move{
                         rdma_task.await;
                         for (k,j) in elems{
