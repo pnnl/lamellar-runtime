@@ -333,7 +333,6 @@ pub(crate) trait CommMem {
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> CommAllocAddr;
     fn local_alloc(
         &self,
-        remote_pe: usize,
         remote_addr: CommAllocAddr,
     ) -> error::AllocResult<CommAlloc>;
 }
@@ -350,5 +349,6 @@ pub(crate) trait CommInfo {
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
     fn backend(&self) -> Backend;
+    #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
 }

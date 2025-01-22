@@ -77,6 +77,9 @@ impl UnsafeByteArray {
             inner: UnsafeArrayInner::downgrade(&array.inner),
         }
     }
+    pub(crate) fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+        self.inner.data.team.clone()
+    }
 }
 
 #[doc(hidden)]

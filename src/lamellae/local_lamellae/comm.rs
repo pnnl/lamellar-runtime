@@ -1,6 +1,5 @@
 use crate::{
     lamellae::comm::{CommInfo, CommProgress, CommShutdown},
-    lamellar_alloc::LamellarAlloc,
     Backend,
 };
 

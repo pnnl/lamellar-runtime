@@ -18,8 +18,14 @@ impl<T: Copy + Send + 'static> Remote for T {}
 
 /// A task handle for raw RMDA (put/get) operation
 #[must_use = " RdmaHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
-#[pin_project(project = RdmaHandleProj)]
-pub enum RdmaHandle<T> {
+#[pin_project]
+pub struct RdmaHandle<T>{
+    #[pin]
+    pub(crate) future: RdmaFuture<T>,
+}
+
+#[pin_project(project = RdmaFutureProj)]
+pub(crate) enum RdmaFuture<T> {
     #[cfg(feature = "rofi")]
     Rofi(#[pin] RofiFuture),
     #[cfg(feature = "enable-rofi-rust")]
@@ -36,20 +42,20 @@ pub enum RdmaHandle<T> {
 
 impl<T: Remote> RdmaHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
-    pub(crate) fn block(self, scheduler: &Arc<Scheduler>, outstanding_reqs: Vec<Arc<AMCounters>>) {
-        match self {
+    pub(crate) fn block(self, _scheduler: &Arc<Scheduler>, _outstanding_reqs: Vec<Arc<AMCounters>>) {
+        match self.future {
             #[cfg(feature = "rofi")]
-            RdmaHandle::Rofi(f) => f.block(),
+            RdmaFuture::Rofi(f) => f.block(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaHandle::RofiRust(f) => f.block(),
+            RdmaFuture::RofiRust(f) => f.block(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaHandle::RofiRustAsync(f) => f.block(),
+            RdmaFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaHandle::LibFab(f) => f.block(),
+            RdmaFuture::LibFab(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaHandle::LibFabAsync(f) => f.block(),
-            RdmaHandle::Shmem(f) => f.block(),
-            RdmaHandle::Local(f) => f.block(),
+            RdmaFuture::LibFabAsync(f) => f.block(),
+            RdmaFuture::Shmem(f) => f.block(),
+            RdmaFuture::Local(f) => f.block(),
         }
     }
 
@@ -63,19 +69,19 @@ impl<T: Remote> RdmaHandle<T> {
         scheduler: &Arc<Scheduler>,
         outstanding_reqs: Vec<Arc<AMCounters>>,
     ) -> LamellarTask<()> {
-        match self {
+        match self.future {
             #[cfg(feature = "rofi")]
-            RdmaHandle::Rofi(f) => f.spawn(),
+            RdmaFuture::Rofi(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaHandle::RofiRust(f) => f.spawn(),
+            RdmaFuture::RofiRust(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaHandle::RofiRustAsync(f) => f.spawn(),
+            RdmaFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaHandle::LibFab(f) => f.spawn(),
+            RdmaFuture::LibFab(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaHandle::LibFabAsync(f) => f.spawn(),
-            RdmaHandle::Shmem(f) => f.spawn(scheduler, outstanding_reqs),
-            RdmaHandle::Local(f) => f.spawn(scheduler, outstanding_reqs),
+            RdmaFuture::LibFabAsync(f) => f.spawn(),
+            RdmaFuture::Shmem(f) => f.spawn(scheduler, outstanding_reqs),
+            RdmaFuture::Local(f) => f.spawn(scheduler, outstanding_reqs),
         }
     }
 }
@@ -84,19 +90,20 @@ impl<T: Remote> Future for RdmaHandle<T> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.project() {
+        let this = self.project();
+        match this.future.project() {
             #[cfg(feature = "rofi")]
-            RdmaHandleProj::Rofi(f) => f.poll(cx),
+            RdmaFutureProj::Rofi(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaHandleProj::RofiRust(f) => f.poll(cx),
+            RdmaFutureProj::RofiRust(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaHandleProj::RofiRustAsync(f) => f.poll(cx),
+            RdmaFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            RdmaHandleProj::LibFab(f) => f.poll(cx),
+            RdmaFutureProj::LibFab(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            RdmaHandleProj::LibFabAsync(f) => f.poll(cx),
-            RdmaHandleProj::Shmem(f) => f.poll(cx),
-            RdmaHandleProj::Local(f) => f.poll(cx),
+            RdmaFutureProj::LibFabAsync(f) => f.poll(cx),
+            RdmaFutureProj::Shmem(f) => f.poll(cx),
+            RdmaFutureProj::Local(f) => f.poll(cx),
         }
     }
 }

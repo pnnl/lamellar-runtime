@@ -8,8 +8,8 @@ use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 
 use crate::{
-    active_messaging::{AMCounters}, lamellae::comm::{
-        rdma::{CommRdma, RdmaHandle, Remote},
+    active_messaging::AMCounters, lamellae::comm::{
+        rdma::{CommRdma, RdmaHandle, RdmaFuture, Remote},
         CommAllocAddr, CommSlice,
     }, warnings::RuntimeWarning, LamellarTask
 };
@@ -93,7 +93,7 @@ impl<T> PinnedDrop for LocalFuture<T> {
 
 impl<T: Remote> Future for LocalFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
             *self.project().spawned = true;
@@ -104,7 +104,9 @@ impl<T: Remote> Future for LocalFuture<T> {
 
 impl<T: Remote> From<LocalFuture<T>> for RdmaHandle<T> {
     fn from(f: LocalFuture<T>) -> RdmaHandle<T> {
-        RdmaHandle::Local(f)
+        RdmaHandle{
+            future: RdmaFuture::Local(f)
+        }
     }
 }
 

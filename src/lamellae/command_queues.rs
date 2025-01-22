@@ -100,7 +100,6 @@ impl CmdMsg {
     }
     fn cmd_as_comm_slice(&self) -> CommSlice<Cmd> {
         let pointer = &self.cmd as *const Cmd;
-        let size = std::mem::size_of::<Cmd>();
         let slice: CommSlice<Cmd> = unsafe { CommSlice::from_raw_parts(pointer, 1) };
         slice
     }
@@ -333,7 +332,7 @@ impl CmdMsgBuffer {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn check_free_data(&mut self, comm: Arc<Comm>) {
+    fn check_free_data(&mut self) {
         let mut freed_bufs = vec![];
 
         for (addr, buf) in self.waiting_bufs.iter() {
@@ -678,12 +677,12 @@ impl InnerCQ {
             send_buf[dst].msg_hash = 0;
             send_buf[dst].calc_hash();
         }
-        cmd_buffer.check_free_data(self.comm.clone());
+        cmd_buffer.check_free_data();
     }
 
     //#[tracing::instrument(skip_all)]
     async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
-        let mut timer = std::time::Instant::now();
+        // let mut timer = std::time::Instant::now();
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
@@ -1118,7 +1117,7 @@ impl Drop for InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("dropping InnerCQ");
-        let mut send_buf = self.send_buffer.lock();
+        // let mut send_buf = self.send_buffer.lock();
         // let old = std::mem::take(&mut *send_buf);
         // let _ = Box::into_raw(old);
         // let mut recv_buf = self.recv_buffer.lock();

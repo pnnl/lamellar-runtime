@@ -27,7 +27,7 @@ use zip::*;
 
 use crate::array::{ArrayRdmaHandle, LamellarArray, LamellarArrayInternalGet};
 use crate::lamellar_request::LamellarRequest;
-use crate::memregion::{Dist, OneSidedMemoryRegion, RegisteredMemoryRegion, SubRegion};
+use crate::memregion::{Dist, OneSidedMemoryRegion, SubRegion};
 
 use crate::warnings::RuntimeWarning;
 use crate::LamellarTeamRT;

@@ -32,7 +32,7 @@ impl std::error::Error for AllocError {}
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
 #[derive(Debug, Clone, Copy)]
-pub struct RdmaError {}
+pub(crate) struct RdmaError {}
 
 pub(crate) type RdmaResult = Result<(), RdmaError>;
 

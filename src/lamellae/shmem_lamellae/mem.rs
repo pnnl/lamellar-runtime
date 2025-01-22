@@ -18,7 +18,7 @@ impl CommMem for ShmemComm {
         &self,
         size: usize,
         alloc_type: AllocationType,
-        align: usize,
+        _align: usize,
     ) -> AllocResult<CommAlloc> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
@@ -167,7 +167,7 @@ impl CommMem for ShmemComm {
         panic!("not sure i should be here...means address not found");
     }
 
-    fn local_alloc(&self, pe: usize, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+    fn local_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         let alloc = self.alloc_lock.read();
         if let Some((_, size, _)) = alloc.0.get(&addr.0) {
             return Ok(CommAlloc {

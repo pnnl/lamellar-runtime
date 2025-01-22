@@ -456,8 +456,8 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///     }      
     /// }
     ///```
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::put(self, self.pe, index, data);
+    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> RdmaHandle<T> {
+        MemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -574,8 +574,8 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> RdmaHandle<T> {
+        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data)
     }
 
     // #[doc(alias("One-sided", "onesided"))]

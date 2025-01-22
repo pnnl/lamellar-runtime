@@ -316,7 +316,7 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
         Ok(addr as *mut T)
     }
     unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
-        let mut slice = self.mr.as_casted_comm_slice()?;
+        let  slice = self.mr.as_casted_comm_slice()?;
         Ok(
             slice
                 .sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)),

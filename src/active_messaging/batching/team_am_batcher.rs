@@ -571,7 +571,7 @@ impl TeamAmBatcher {
     //#[tracing::instrument(skip_all)]
     fn serialize_non_am_batch(
         non_am_batch: Vec<(ReqMetaData, LamellarData)>,
-        mut data_slice: CommSlice<u8>,
+        data_slice: CommSlice<u8>,
     ) -> usize {
         let mut i = 0;
         for (req_data, data) in non_am_batch {

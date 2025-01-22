@@ -3,7 +3,7 @@ use crate::{
     barrier::{Barrier, BarrierHandle},
     env_var::config,
     lamellae::{
-        AllocationType, CommAlloc, CommInfo, CommMem, CommProgress, CommShutdown, Lamellae,
+        AllocationType, CommAlloc, CommInfo, CommMem, CommProgress, Lamellae,
         LamellaeShutdown,
     },
     lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT},
@@ -1052,7 +1052,7 @@ impl LamellarTeamRT {
         //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
-        let team_ptr: *const LamellarTeamRT = unsafe { unsafe {*self.remote_ptr_alloc.as_ptr()} };
+        let team_ptr: *const LamellarTeamRT = unsafe { *self.remote_ptr_alloc.as_ptr()} ;
         println!("dropping team_ptr: {:?}", team_ptr);
         unsafe {
             let arc_team = Arc::from_raw(team_ptr);
@@ -2392,7 +2392,7 @@ impl Drop for LamellarTeam {
                     // println!("removing {:?} ", self.team.id);
                     parent.sub_teams.write().remove(&self.team.id);
                     let team_ptr: *const LamellarTeamRT =
-                        unsafe { unsafe {*self.team.remote_ptr_alloc.as_ptr()} };
+                        unsafe {*self.team.remote_ptr_alloc.as_ptr()} ;
                     unsafe {
                         let arc_team = Arc::from_raw(team_ptr);
                         // println!("arc_team: {:?}", Arc::strong_count(&arc_team));

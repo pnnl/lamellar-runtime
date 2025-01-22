@@ -149,7 +149,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                         let data = req.await;
 
                         // println!("data recv {:?}",data.len());
-                        u8_buf
+                        let _ =u8_buf
                             .put_comm_slice(
                                 lamellar::current_pe,
                                 cur_index,
@@ -365,148 +365,148 @@ impl LamellarAm for NativeAtomicRemotePutAm {
     }
 }
 
-impl<T: Dist> NativeAtomicArray<T> {
-    pub(crate) fn network_atomic_store(&self, index: usize, val: T) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+// impl<T: Dist> NativeAtomicArray<T> {
+//     pub(crate) fn network_atomic_store(&self, index: usize, val: T) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
 
-            unsafe {
-                buf.as_mut_slice()[0] = val;
-                if pe == self.array.my_pe() {
-                    self.local_data().at(index).store(val);
-                } else {
-                    self.array
-                        .inner
-                        .data
-                        .mem_region
-                        .atomic_store(pe, offset, buf);
-                }
-            }
-        } else {
-            panic!("invalid index");
-        }
-    }
+//             unsafe {
+//                 buf.as_mut_slice()[0] = val;
+//                 if pe == self.array.my_pe() {
+//                     self.local_data().at(index).store(val);
+//                 } else {
+//                     self.array
+//                         .inner
+//                         .data
+//                         .mem_region
+//                         .atomic_store(pe, offset, buf);
+//                 }
+//             }
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub(crate) fn network_iatomic_store(&self, index: usize, val: T) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+//     pub(crate) fn network_iatomic_store(&self, index: usize, val: T) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
 
-            unsafe {
-                buf.as_mut_slice()[0] = val;
-                if pe == self.array.my_pe() {
-                    self.local_data().at(index).store(val);
-                } else {
-                    self.array
-                        .inner
-                        .data
-                        .mem_region
-                        .iatomic_store(pe, offset, buf);
-                }
-            }
-        } else {
-            panic!("invalid index");
-        }
-    }
+//             unsafe {
+//                 buf.as_mut_slice()[0] = val;
+//                 if pe == self.array.my_pe() {
+//                     self.local_data().at(index).store(val);
+//                 } else {
+//                     self.array
+//                         .inner
+//                         .data
+//                         .mem_region
+//                         .iatomic_store(pe, offset, buf);
+//                 }
+//             }
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub(crate) fn network_atomic_load(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .inner
-                .data
-                .mem_region
-                .atomic_load(pe, offset, val);
-        } else {
-            panic!("invalid index");
-        }
-    }
+//     pub(crate) fn network_atomic_load(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             self.array
+//                 .inner
+//                 .data
+//                 .mem_region
+//                 .atomic_load(pe, offset, val);
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub(crate) fn network_iatomic_load(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .inner
-                .data
-                .mem_region
-                .iatomic_load(pe, offset, val);
-        } else {
-            panic!("invalid index");
-        }
-    }
+//     pub(crate) fn network_iatomic_load(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             self.array
+//                 .inner
+//                 .data
+//                 .mem_region
+//                 .iatomic_load(pe, offset, val);
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub(crate) fn network_atomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                self.array
-                    .inner
-                    .data
-                    .mem_region
-                    .atomic_swap(pe, offset, val, val)
-            }
-        } else {
-            panic!("invalid index");
-        }
-    }
+//     pub(crate) fn network_atomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             unsafe {
+//                 self.array
+//                     .inner
+//                     .data
+//                     .mem_region
+//                     .atomic_swap(pe, offset, val, val)
+//             }
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub(crate) fn network_iatomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                self.array
-                    .inner
-                    .data
-                    .mem_region
-                    .iatomic_swap(pe, offset, val, val)
-            }
-        } else {
-            panic!("invalid index");
-        }
-    }
+//     pub(crate) fn network_iatomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             unsafe {
+//                 self.array
+//                     .inner
+//                     .data
+//                     .mem_region
+//                     .iatomic_swap(pe, offset, val, val)
+//             }
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub fn atomic_get(&self, index: usize) -> impl Future<Output = T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        self.network_atomic_load(index, &buf);
-        let team = self.team_rt();
-        async move {
-            team.lamellae.comm().wait();
-            unsafe { buf.as_slice()[0] }
-        }
-    }
+//     pub fn atomic_get(&self, index: usize) -> impl Future<Output = T> {
+//         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+//         self.network_atomic_load(index, &buf);
+//         let team = self.team_rt();
+//         async move {
+//             team.lamellae.comm().wait();
+//             unsafe { buf.as_slice()[0] }
+//         }
+//     }
 
-    pub fn blocking_atomic_get(&self, index: usize) -> T {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        self.network_iatomic_load(index, &buf);
-        unsafe { buf.as_slice()[0] }
-    }
+//     pub fn blocking_atomic_get(&self, index: usize) -> T {
+//         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+//         self.network_iatomic_load(index, &buf);
+//         unsafe { buf.as_slice()[0] }
+//     }
 
-    pub fn atomic_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
-        self.network_atomic_store(index, val);
-        let team = self.team_rt();
-        async move {
-            team.lamellae.comm().wait();
-        }
-    }
+//     pub fn atomic_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
+//         self.network_atomic_store(index, val);
+//         let team = self.team_rt();
+//         async move {
+//             team.lamellae.comm().wait();
+//         }
+//     }
 
-    pub fn blocking_atomic_put(&self, index: usize, val: T) {
-        self.network_iatomic_store(index, val);
-    }
+//     pub fn blocking_atomic_put(&self, index: usize, val: T) {
+//         self.network_iatomic_store(index, val);
+//     }
 
-    pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        unsafe {
-            buf.as_mut_slice()[0] = val;
-        }
-        self.network_atomic_swap(index, &buf);
-        let team = self.team_rt();
-        async move {
-            team.lamellae.comm().wait();
-            unsafe { buf.as_slice()[0] }
-        }
-    }
+//     pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
+//         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe {
+//             buf.as_mut_slice()[0] = val;
+//         }
+//         self.network_atomic_swap(index, &buf);
+//         let team = self.team_rt();
+//         async move {
+//             team.lamellae.comm().wait();
+//             unsafe { buf.as_slice()[0] }
+//         }
+//     }
 
-    pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        unsafe {
-            buf.as_mut_slice()[0] = val;
-        }
-        self.network_iatomic_swap(index, &buf);
-        unsafe { buf.as_slice()[0] }
-    }
-}
+//     pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
+//         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe {
+//             buf.as_mut_slice()[0] = val;
+//         }
+//         self.network_iatomic_swap(index, &buf);
+//         unsafe { buf.as_slice()[0] }
+//     }
+// }

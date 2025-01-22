@@ -511,7 +511,7 @@ impl LamellarAlloc for BTreeAlloc {
 
     fn find(&self, addr: usize) -> Option<usize> {
         let &(ref lock, ref _cvar) = &*self.allocated_addrs;
-        let mut allocated_addrs = lock.lock();
+        let  allocated_addrs = lock.lock();
         // println!("trying to free: {:x?} {:?}", addr, addr);
         if let Some((size, _padding)) = allocated_addrs.get(&addr) {
             return Some(*size);
@@ -615,7 +615,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         let &(ref lock, ref _cvar) = &*self.free_entries;
         let free_entries = lock.lock();
         match free_entries.iter().position(|x| *x == addr) {
-            Some(i) => None, //means its available to be allocated
+            Some(_i) => None, //means its available to be allocated
             None => Some(1),
         }
     }

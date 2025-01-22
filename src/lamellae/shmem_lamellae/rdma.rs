@@ -9,7 +9,7 @@ use pin_project::{pin_project, pinned_drop};
 
 use crate::{
     active_messaging::AMCounters, lamellae::{
-        comm::rdma::{CommRdma, RdmaHandle, Remote},
+        comm::rdma::{CommRdma, RdmaHandle, RdmaFuture, Remote},
         CommAllocAddr, CommSlice,
     }, warnings::RuntimeWarning, LamellarTask
 };
@@ -17,9 +17,9 @@ use crate::{
 use super::{comm::ShmemComm, Scheduler};
 
 pub(super) enum Op<T> {
-    Put(usize, CommSlice<T>, CommAllocAddr),
-    PutAll(CommSlice<T>, Vec<(usize, CommAllocAddr)>),
-    Get(usize, CommAllocAddr, CommSlice<T>),
+    Put(CommSlice<T>, CommAllocAddr),
+    PutAll(CommSlice<T>, Vec< CommAllocAddr>),
+    Get( CommAllocAddr, CommSlice<T>),
     Atomic,
 }
 
@@ -30,7 +30,7 @@ pub(crate) struct ShmemFuture<T> {
 }
 
 impl<T: Remote> ShmemFuture<T> {
-    fn inner_put(&self, pe: usize, src: &CommSlice<T>, dst: &CommAllocAddr) {
+    fn inner_put(&self,  src: &CommSlice<T>, dst: &CommAllocAddr) {
         if !(src.contains(dst) || src.contains(dst + src.len())) {
             unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
         } else {
@@ -39,12 +39,12 @@ impl<T: Remote> ShmemFuture<T> {
             }
         }
     }
-    fn inner_put_all(&self, src: &CommSlice<T>, dsts: &Vec<(usize, CommAllocAddr)>) {
-        for (pe, dst) in dsts {
-            self.inner_put(*pe, &src, dst);
+    fn inner_put_all(&self, src: &CommSlice<T>, dsts: &Vec<CommAllocAddr>) {
+        for dst in dsts {
+            self.inner_put(&src, dst);
         }
     }
-    fn inner_get(&self, pe: usize, src: &CommAllocAddr, dst: &CommSlice<T>) {
+    fn inner_get(&self, src: &CommAllocAddr, dst: &CommSlice<T>) {
         if !(dst.contains(src) || dst.contains(src + dst.len())) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
@@ -57,14 +57,14 @@ impl<T: Remote> ShmemFuture<T> {
     }
     fn exec_op(&self) {
         match &self.op {
-            Op::Put(pe, src, dst) => {
-                self.inner_put(*pe, src, dst);
+            Op::Put( src, dst) => {
+                self.inner_put(src, dst);
             }
             Op::PutAll(src, dst) => {
                 self.inner_put_all(src, dst);
             }
-            Op::Get(pe, src, dst) => {
-                self.inner_get(*pe, src, dst);
+            Op::Get( src, dst) => {
+                self.inner_get( src, dst);
             }
             Op::Atomic => {}
         }
@@ -96,13 +96,15 @@ impl<T> PinnedDrop for ShmemFuture<T> {
 
 impl<T: Remote> From<ShmemFuture<T>> for RdmaHandle<T> {
     fn from(f: ShmemFuture<T>) -> RdmaHandle<T> {
-        RdmaHandle::Shmem(f)
+        RdmaHandle{
+            future: RdmaFuture::Shmem(f)
+        }
     }
 }
 
 impl<T: Remote> Future for ShmemFuture<T> {
     type Output = ();
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll( self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             
             self.exec_op();
@@ -127,7 +129,7 @@ impl CommRdma for ShmemComm {
                 let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
                 return ShmemFuture {
-                    op: Op::Put(pe, src, real_dst_addr), spawned: false
+                    op: Op::Put( src, real_dst_addr), spawned: false
                     
                 }
                 .into();
@@ -147,7 +149,7 @@ impl CommRdma for ShmemComm {
                     .map(|pe| {
                         let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
                         let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
-                        (pe, real_dst_addr)
+                        real_dst_addr
                     })
                     .collect::<Vec<_>>();
                 return ShmemFuture {
@@ -172,7 +174,7 @@ impl CommRdma for ShmemComm {
                 let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_src_addr = real_src_base + (src_addr.0 - addr);
                 return ShmemFuture {
-                    op: Op::Get(pe, real_src_addr, dst), spawned: false
+                    op: Op::Get( real_src_addr, dst), spawned: false
                 }
                 .into();
             }

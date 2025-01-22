@@ -1,8 +1,5 @@
 use std::{
-    collections::VecDeque,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll, Waker},
+    collections::VecDeque, iter::{Enumerate, StepBy}, ops::Range, pin::Pin, sync::Arc, task::{Context, Poll, Waker}
 };
 
 use futures_util::{
@@ -13,13 +10,7 @@ use futures_util::{
 use pin_project::{pin_project, pinned_drop};
 
 use crate::{
-    active_messaging::{AmHandle, LocalAmHandle},
-    array::LamellarByteArray,
-    lamellae::{CommProgress, Lamellae, RdmaHandle},
-    lamellar_request::LamellarRequest,
-    scheduler::{LamellarTask, Scheduler},
-    warnings::RuntimeWarning,
-    Dist, LamellarTeamRT, OneSidedMemoryRegion,
+    active_messaging::{AmHandle, LocalAmHandle}, array::LamellarByteArray, lamellae::{CommProgress, Lamellae, RdmaHandle}, lamellar_request::LamellarRequest, scheduler::{LamellarTask, Scheduler}, warnings::RuntimeWarning, Dist, LamellarMemoryRegion, LamellarTeamRT, OneSidedMemoryRegion
 };
 
 use super::{
@@ -28,19 +19,27 @@ use super::{
 };
 
 #[pin_project(project = InnerRdmaHandleProj)]
-pub(crate) enum InnerRdmaHandle<T> {
+pub(crate) enum InnerRdmaHandle<T: Dist> {
     Am(VecDeque<AmHandle<()>>),
     Rdma(VecDeque<RdmaHandle<T>>),
+    RdmaCyclicGet(VecDeque<(RdmaHandle<T>,OneSidedMemoryRegion<T>,LamellarMemoryRegion<T>,Enumerate<StepBy<Range<usize>>>)>),
     Spawned(#[pin] FuturesUnordered<LamellarTask<()>>),
 }
 
 impl<T: Dist> InnerRdmaHandle<T> {
-    pub(crate) fn new(op: &ArrayRdmaCmd) -> Self {
+    pub(crate) fn new(op: &ArrayRdmaCmd, cyclic: bool) -> Self {
         match op {
             ArrayRdmaCmd::PutAm => InnerRdmaHandle::Am(VecDeque::new()),
             ArrayRdmaCmd::GetAm => InnerRdmaHandle::Am(VecDeque::new()),
             ArrayRdmaCmd::Put => InnerRdmaHandle::Rdma(VecDeque::new()),
-            ArrayRdmaCmd::Get(_) => InnerRdmaHandle::Rdma(VecDeque::new()),
+            ArrayRdmaCmd::Get(_) => {
+                if cyclic {
+                    InnerRdmaHandle::RdmaCyclicGet(VecDeque::new())
+                }
+                else{
+                    InnerRdmaHandle::Rdma(VecDeque::new())
+                }
+            },
         }
     }
     pub(crate) fn from_am_reqs(am_reqs: VecDeque<AmHandle<()>>) -> Self {
@@ -50,6 +49,7 @@ impl<T: Dist> InnerRdmaHandle<T> {
         match self {
             InnerRdmaHandle::Am(reqs) => reqs.push_back(am),
             InnerRdmaHandle::Rdma(_) => panic!("cannot add am to rdma future"),
+            InnerRdmaHandle::RdmaCyclicGet(_) => panic!("cannot add am to rdma cyclic get future"),
             InnerRdmaHandle::Spawned(_) => panic!("cannot add am to spawned task"),
         }
     }
@@ -57,13 +57,23 @@ impl<T: Dist> InnerRdmaHandle<T> {
         match self {
             InnerRdmaHandle::Am(_) => panic!("cannot add rdma to am future"),
             InnerRdmaHandle::Rdma(reqs) => reqs.push_back(rdma),
+            InnerRdmaHandle::RdmaCyclicGet(_) => panic!("cannot add rdma to rdma cyclic get future"),
             InnerRdmaHandle::Spawned(_) => panic!("cannot add rdma to spawned task"),
+        }
+    }
+    pub(crate) fn add_rdma_cyclic_get(&mut self, rdma: RdmaHandle<T>, mem_region: OneSidedMemoryRegion<T>, buf: LamellarMemoryRegion<T>, elems: Enumerate<StepBy<Range<usize>>>) {
+        match self {
+            InnerRdmaHandle::Am(_) => panic!("cannot add rdma cyclic get to am future"),
+            InnerRdmaHandle::Rdma(reqs) => panic!("cannot add rdma cyclic get to rdma"),
+            InnerRdmaHandle::RdmaCyclicGet(reqs) => reqs.push_back((rdma,mem_region,buf,elems)),
+            InnerRdmaHandle::Spawned(_) => panic!("cannot add rdma cyclic get to spawned task"),
         }
     }
     pub(crate) fn drain(&mut self) {
         match self {
             InnerRdmaHandle::Am(reqs) => for _ in reqs.drain(0..) {},
             InnerRdmaHandle::Rdma(reqs) => for _ in reqs.drain(0..) {},
+            InnerRdmaHandle::RdmaCyclicGet(reqs) => for _ in reqs.drain(0..) {},
             InnerRdmaHandle::Spawned(reqs) => reqs.clear(),
         }
     }
@@ -76,9 +86,24 @@ impl<T: Dist> InnerRdmaHandle<T> {
                 InnerRdmaHandle::Am(reqs)
             }
             InnerRdmaHandle::Rdma(mut reqs) => {
-                let mut tasks = FuturesUnordered::new();
+                let  tasks = FuturesUnordered::new();
                 for rdma in reqs.drain(..) {
                     tasks.push(rdma.spawn(scheduler, am_counters.clone()));
+                }
+                InnerRdmaHandle::Spawned(tasks)
+            }
+            InnerRdmaHandle::RdmaCyclicGet(mut reqs) => {
+                let  tasks = FuturesUnordered::new();
+                for (rdma,mem_region,buf,elems) in reqs.drain(..) {
+                    let rdma_task = rdma.spawn(scheduler, am_counters.clone());
+                    let task = scheduler.spawn_task(async move{
+                        rdma_task.await;
+                        for (k,j) in elems{
+                            unsafe{ buf.as_mut_slice()[j] = mem_region.as_slice()[k]; }
+                        }
+
+                    },am_counters.clone());
+                    tasks.push(task);
                 }
                 InnerRdmaHandle::Spawned(tasks)
             }
@@ -103,7 +128,22 @@ impl<T: Dist> InnerRdmaHandle<T> {
                 }
                 lamellae.comm().wait(); // block until all rdma ops are complete
             }
-            InnerRdmaHandle::Spawned(reqs) => {
+            InnerRdmaHandle::RdmaCyclicGet(reqs) => {
+                let mut mem_regions = reqs.drain(..).map(|(rdma,mem_region,buf,elems)| {
+                    let _ = rdma.spawn(scheduler, am_counters.clone());
+                    (mem_region,buf,elems)
+                }).collect::<Vec<_>>();
+                
+                lamellae.comm().wait(); // block until all rdma ops are complete
+                for (mem_region,buf,elems) in mem_regions.drain(..) {
+                    for (k,j) in elems{
+                        unsafe{ buf.as_mut_slice()[j] = mem_region.as_slice()[k]; }
+                    }
+                }
+
+                
+            }
+            InnerRdmaHandle::Spawned(_reqs) => {
                 lamellae.comm().wait(); // block until all rdma ops are complete
             }
         }
@@ -228,6 +268,21 @@ impl<T: Dist> Future for ArrayRdmaHandle<T> {
                     }
                     InnerRdmaHandle::Spawned(tasks)
                 }
+                InnerRdmaHandle::RdmaCyclicGet(mut reqs) => {
+                    let  tasks = FuturesUnordered::new();
+                for (rdma,mem_region,buf,elems) in reqs.drain(..) {
+                    let rdma_task = rdma.spawn(&team_rt.scheduler, team_rt.counters());
+                    let task = team_rt.scheduler.spawn_task(async move{
+                        rdma_task.await;
+                        for (k,j) in elems{
+                            unsafe{ buf.as_mut_slice()[j] = mem_region.as_slice()[k]; }
+                        }
+
+                    },team_rt.counters());
+                    tasks.push(task);
+                }
+                InnerRdmaHandle::Spawned(tasks)
+                }
                 InnerRdmaHandle::Spawned(reqs) => InnerRdmaHandle::Spawned(reqs),
             });
             self.spawned = true;
@@ -243,8 +298,11 @@ impl<T: Dist> Future for ArrayRdmaHandle<T> {
                     }
                 }
             }
-            InnerRdmaHandleProj::Rdma(reqs) => {
+            InnerRdmaHandleProj::Rdma(_reqs) => {
                 panic!("Rdma should already have been converted to spawned");
+            }
+            InnerRdmaHandleProj::RdmaCyclicGet( _reqs) => {
+                panic!("RdmaCyclicGet should already have been converted to spawned");
             }
             InnerRdmaHandleProj::Spawned(mut reqs) => {
                 while let Poll::Ready(req) = reqs.as_mut().poll_next(cx) {
@@ -266,16 +324,16 @@ pub(crate) struct ArrayRdmaAtomicLoadHandle<T: Dist> {
 }
 
 impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
-    fn spawn(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
-        self.array.network_atomic_load(self.index, &buf);
+    fn spawn(&self, _buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+        // self.array.network_atomic_load(self.index, &buf);
         let team = self.array.team_rt();
         team.clone().spawn(async move {
             team.lamellae.comm().wait();
         })
     }
 
-    fn block(&self, buf: OneSidedMemoryRegion<T>) {
-        self.array.network_iatomic_load(self.index, &buf);
+    fn block(&self, _buf: OneSidedMemoryRegion<T>) {
+        // self.array.network_iatomic_load(self.index, &buf);
         // let team = self.array.team_rt().lamellae().wait;
         // team.clone().spawn(async move {
         //     team.lamellae.comm().wait();
@@ -314,7 +372,7 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
 
     fn block(&self, buf: OneSidedMemoryRegion<T>) {
         unsafe { self.array.get_unchecked(self.index, &buf) };
-        let team = self.array.team_rt().lamellae.comm().wait();
+        self.array.team_rt().lamellae.comm().wait();
         // team.clone().spawn(async move {
         //     team.lamellae.comm().wait();
         // })

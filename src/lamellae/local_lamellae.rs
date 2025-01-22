@@ -34,7 +34,7 @@ impl LamellaeInit for LocalBuilder {
     fn init_fabric(&mut self) -> (usize, usize) {
         (self.my_pe, self.num_pes)
     }
-    fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
+    fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         Arc::new(Lamellae::Local(Local::new(self.local_comm.clone())))
     }
 }

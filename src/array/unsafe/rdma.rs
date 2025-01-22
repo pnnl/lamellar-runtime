@@ -46,7 +46,7 @@ impl<T: Dist> UnsafeArray<T> {
         // let mut subarray_index = index;
         let mut buf_index = 0;
         // let mut am_reqs = VecDeque::new();
-        let mut transfer_requests = InnerRdmaHandle::new(&op);
+        let mut transfer_requests = InnerRdmaHandle::new(&op,false);
         for pe in start_pe..=end_pe {
             let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
             if pe < self.inner.orig_remaining_elems {
@@ -73,7 +73,7 @@ impl<T: Dist> UnsafeArray<T> {
                             buf.sub_region(buf_index..(buf_index + len)),
                         ));
                     },
-                    ArrayRdmaCmd::Get(immediate) => unsafe {
+                    ArrayRdmaCmd::Get(_immediate) => unsafe {
                         transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
                             pe,
                             offset,
@@ -176,22 +176,23 @@ impl<T: Dist> UnsafeArray<T> {
         let mut overflow = 0;
         let start_pe = global_index % num_pes;
         // let mut reqs = VecDeque::new();
-        let mut transfer_requests = InnerRdmaHandle::new(&op);
+        let mut transfer_requests = InnerRdmaHandle::new(&op,true);
+        let team_rt = self
+                    .inner
+                    .data
+                    .team();
         // println!("start_pe {:?} num_elems_pe {:?} buf len {:?}",start_pe,num_elems_pe,buf.len());
         match op {
             ArrayRdmaCmd::Put => {
-                let temp_memreg = self
-                    .inner
-                    .data
-                    .team
-                    .alloc_one_sided_mem_region::<T>(num_elems_pe);
+                let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems_pe);
                 unsafe {
                     for i in 0..std::cmp::min(buf.len(), num_pes) {
                         let mut k = 0;
                         let pe = (start_pe + i) % num_pes;
                         let offset = global_index / num_pes + overflow;
                         for j in (i..buf.len()).step_by(num_pes) {
-                            temp_memreg.put(k, buf.sub_region(j..=j));
+                            // temp_memreg.put(k, buf.sub_region(j..=j)).block(&team_rt.scheduler, team_rt.counters());
+                            temp_memreg.as_mut_slice()[k]=buf.as_slice()[j];
                             k += 1;
                         }
                         transfer_requests.add_rdma(self.inner.data.mem_region.put(
@@ -207,16 +208,14 @@ impl<T: Dist> UnsafeArray<T> {
             }
             ArrayRdmaCmd::PutAm => {
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
-                    let temp_memreg = self
-                        .inner
-                        .data
-                        .team
-                        .alloc_one_sided_mem_region::<T>(num_elems_pe);
+                    
+                    let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_memreg.put(k, buf.sub_region(j..=j)) };
+                        // unsafe { temp_memreg.put(k, buf.sub_region(j..=j)).block(&team_rt.scheduler, team_rt.counters()) };
+                        unsafe {temp_memreg.as_mut_slice()[k]=buf.as_slice()[j]};
                         k += 1;
                     }
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
@@ -228,7 +227,7 @@ impl<T: Dist> UnsafeArray<T> {
                             start_index: index,
                             len: buf.len(),
                             data: unsafe { temp_memreg.to_base::<u8>().into() },
-                            pe: self.inner.data.my_pe,
+                            pe: my_pe,
                         };
                         transfer_requests.add_am(self.spawn_am_pe_tg(pe, am));
                     } else {
@@ -251,56 +250,53 @@ impl<T: Dist> UnsafeArray<T> {
                     }
                 }
             }
-            ArrayRdmaCmd::Get(immediate) => {
+            ArrayRdmaCmd::Get(_immediate) => {
                 unsafe {
-                    if immediate {
-                        let temp_memreg = self
-                            .inner
-                            .data
-                            .team
-                            .alloc_one_sided_mem_region::<T>(num_elems_pe);
+                    // if immediate {
+                       
                         let rem = buf.len() % num_pes;
                         // let temp_buf: LamellarMemoryRegion<T> = buf.team_into(&self.inner.data.team);
+                        
                         for i in 0..std::cmp::min(buf.len(), num_pes) {
                             let pe = (start_pe + i) % num_pes;
                             let offset = global_index / num_pes + overflow;
                             let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
+                            let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems);
                             // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
-                            transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
-                                pe,
-                                offset,
-                                temp_memreg.sub_region(0..num_elems),
-                            ));
+                            transfer_requests.add_rdma_cyclic_get(
+                                self.inner.data.mem_region.get_unchecked(
+                                    pe,
+                                    offset,
+                                    temp_memreg.clone(),
+                                ),temp_memreg,buf.clone(),(i..buf.len()).step_by(num_pes).enumerate(),
+                            );
                             // let mut k = 0;
                             // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
 
-                            for (k, j) in (i..buf.len()).step_by(num_pes).enumerate() {
-                                buf.put(my_pe, j, temp_memreg.sub_region(k..=k));
-                            }
+                            // for (k, j) in (i..buf.len()).step_by(num_pes).enumerate() {
+                            //     let _ =buf.put(my_pe, j, temp_memreg.sub_region(k..=k)).block(&team_rt.scheduler,team_rt.counters());
+                            // }
                             if pe + 1 == num_pes {
                                 overflow += 1;
                             }
                         }
-                    } else {
-                        for i in 0..buf.len() {
-                            transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
-                                (index + i) % num_pes,
-                                (index + i) / num_pes,
-                                buf.sub_region(i..=i),
-                            ));
-                        }
-                    }
+
+                    // } else {
+                    //     for i in 0..buf.len() {
+                    //         transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
+                    //             (index + i) % num_pes,
+                    //             (index + i) / num_pes,
+                    //             buf.sub_region(i..=i),
+                    //         ));
+                    //     }
+                    // }
                 }
             }
             ArrayRdmaCmd::GetAm => {
                 // if buf.len()*std::mem::size_of::<T>() > config().am_size_threshold{
                 let rem = buf.len() % num_pes;
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
-                    let temp_memreg = self
-                        .inner
-                        .data
-                        .team
-                        .alloc_one_sided_mem_region::<T>(num_elems_pe);
+                    let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let pe = (start_pe + i) % num_pes;
                     let offset = global_index / num_pes + overflow;
                     let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
@@ -313,7 +309,7 @@ impl<T: Dist> UnsafeArray<T> {
                         },
                         i: i,
                         pe: pe,
-                        my_pe: self.inner.data.my_pe,
+                        my_pe: my_pe,
                         num_pes: num_pes,
                         offset: offset,
                     };
@@ -1078,6 +1074,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
                 )
                 .await;
         }
+        let team_rt = self.array.team_rt();
         for (k, j) in (self.i..self.data.len() / self.array.inner.elem_size)
             .step_by(self.num_pes)
             .enumerate()
@@ -1089,14 +1086,15 @@ impl LamellarAm for UnsafeCyclicGetAm {
             })
         {
             unsafe {
-                self.data.put(
+                let _ = self.data.put(
                     self.my_pe,
                     j,
                     self.temp_data
                         .sub_region(k..(k + self.array.inner.elem_size)),
-                )
-            };
+                ).spawn(&team_rt.scheduler, team_rt.counters());
+            }
         }
+        team_rt.lamellae.comm().wait();
     }
 }
 
@@ -1142,7 +1140,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                         println!("InitSmallGetAm put_comm_slice: {:?}",data.as_ptr());
 
                         
-                        u8_buf
+                        let _ =u8_buf
                             .put_comm_slice(
                                 lamellar::current_pe,
                                 cur_index,
@@ -1270,81 +1268,81 @@ impl LamellarAm for UnsafeSmallPutAm {
     }
 }
 
-impl<T: Dist> UnsafeArray<T> {
-    pub(crate) fn network_atomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe { self.inner.data.mem_region.atomic_swap(pe, offset, val, val) }
-        } else {
-            panic!("invalid index");
-        }
-    }
+// impl<T: Dist> UnsafeArray<T> {
+//     pub(crate) fn network_atomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             unsafe { self.inner.data.mem_region.atomic_swap(pe, offset, val, val) }
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub(crate) fn network_iatomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                self.inner
-                    .data
-                    .mem_region
-                    .iatomic_swap(pe, offset, val, val)
-            }
-        } else {
-            panic!("invalid index");
-        }
-    }
+//     pub(crate) fn network_iatomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
+//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+//             unsafe {
+//                 self.inner
+//                     .data
+//                     .mem_region
+//                     .iatomic_swap(pe, offset, val, val)
+//             }
+//         } else {
+//             panic!("invalid index");
+//         }
+//     }
 
-    pub fn rdma_get(&self, index: usize) -> impl Future<Output = T> {
-        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe { self.get_unchecked(index, &buf) };
-        let team = self.team_rt();
-        async move {
-            team.lamellae.comm().wait();
-            unsafe { buf.as_slice()[0] }
-        }
-    }
+//     pub fn rdma_get(&self, index: usize) -> impl Future<Output = T> {
+//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe { self.get_unchecked(index, &buf) };
+//         let team = self.team_rt();
+//         async move {
+//             team.lamellae.comm().wait();
+//             unsafe { buf.as_slice()[0] }
+//         }
+//     }
 
-    pub fn blocking_rdma_get(&self, index: usize) -> T {
-        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe {
-            self.blocking_get(index, &buf);
-            buf.as_slice()[0]
-        }
-    }
+//     pub fn blocking_rdma_get(&self, index: usize) -> T {
+//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe {
+//             self.blocking_get(index, &buf);
+//             buf.as_slice()[0]
+//         }
+//     }
 
-    pub fn rdma_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
-        let buf = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe { buf.as_mut_slice()[0] = val };
-        unsafe { self.put_unchecked(index, &buf) };
-        let team = self.team_rt();
-        async move {
-            team.lamellae.comm().wait();
-        }
-    }
+//     pub fn rdma_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
+//         let buf = self.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe { buf.as_mut_slice()[0] = val };
+//         unsafe { self.put_unchecked(index, &buf) };
+//         let team = self.team_rt();
+//         async move {
+//             team.lamellae.comm().wait();
+//         }
+//     }
 
-    pub fn blocking_rdma_put(&self, index: usize, val: T) {
-        let buf = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe { buf.as_mut_slice()[0] = val };
-        unsafe { self.put_unchecked(index, buf) };
-    }
+//     pub fn blocking_rdma_put(&self, index: usize, val: T) {
+//         let buf = self.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe { buf.as_mut_slice()[0] = val };
+//         unsafe { self.put_unchecked(index, buf) };
+//     }
 
-    pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
-        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe {
-            buf.as_mut_slice()[0] = val;
-        }
-        self.network_atomic_swap(index, &buf);
-        let team = self.team_rt();
-        async move {
-            team.lamellae.comm().wait();
-            unsafe { buf.as_slice()[0] }
-        }
-    }
+//     pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
+//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe {
+//             buf.as_mut_slice()[0] = val;
+//         }
+//         self.network_atomic_swap(index, &buf);
+//         let team = self.team_rt();
+//         async move {
+//             team.lamellae.comm().wait();
+//             unsafe { buf.as_slice()[0] }
+//         }
+//     }
 
-    pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
-        let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-        unsafe {
-            buf.as_mut_slice()[0] = val;
-        }
-        self.network_iatomic_swap(index, &buf);
-        unsafe { buf.as_slice()[0] }
-    }
-}
+//     pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
+//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
+//         unsafe {
+//             buf.as_mut_slice()[0] = val;
+//         }
+//         self.network_iatomic_swap(index, &buf);
+//         unsafe { buf.as_slice()[0] }
+//     }
+// }

@@ -311,7 +311,7 @@ impl<T> WeakDarc<T> {
     /// attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped
     /// returns `None` if the value has been dropped
     pub fn upgrade(&self) -> Option<Darc<T>> {
-        let inner = unsafe { &*self.inner };
+        let inner =  &*self.inner ;
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);
         if inner.valid.load(Ordering::SeqCst) {
@@ -328,7 +328,7 @@ impl<T> WeakDarc<T> {
 
 impl<T> Drop for WeakDarc<T> {
     fn drop(&mut self) {
-        let inner = unsafe { &*self.inner };
+        let inner = &*self.inner;
         // println!("dropping weak darc\n {:?}", inner);
         inner.weak_local_cnt.fetch_sub(1, Ordering::SeqCst);
     }
@@ -336,7 +336,7 @@ impl<T> Drop for WeakDarc<T> {
 
 impl<T> Clone for WeakDarc<T> {
     fn clone(&self) -> Self {
-        let inner = unsafe { &*self.inner };
+        let inner = &*self.inner;
         inner.weak_local_cnt.fetch_add(1, Ordering::SeqCst);
         WeakDarc {
             inner: self.inner.clone(),
@@ -1679,12 +1679,12 @@ impl<T> From<&Darc<T>> for __NetworkDarc {
 impl<T> From<__NetworkDarc> for Darc<T> {
     fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
-            let alloc = unsafe {
+            let alloc = 
                 lamellae
                     .comm()
-                    .local_alloc(ndarc.orig_world_pe, ndarc.inner_addr)
-                    .expect("alloc to be valid on remote PE")
-            };
+                    .local_alloc(ndarc.inner_addr)
+                    .expect("alloc to be valid on remote PE");
+            
             let darc = Darc {
                 inner: DarcCommPtr {
                     alloc,

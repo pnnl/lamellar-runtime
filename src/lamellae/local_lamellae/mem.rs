@@ -110,7 +110,7 @@ impl CommMem for LocalComm {
     fn remote_addr(&self, _pe: usize, local_addr: usize) -> CommAllocAddr {
         CommAllocAddr(local_addr)
     }
-    fn local_alloc(&self, _remote_pe: usize, remote_addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+    fn local_alloc(&self, remote_addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         let allocs: parking_lot::lock_api::MutexGuard<
             '_,
             parking_lot::RawMutex,

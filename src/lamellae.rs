@@ -172,7 +172,7 @@ impl SerializedData {
         let alloc_size = size + ref_cnt_size;
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         let ref_cnt = alloc.addr as *const AtomicUsize;
-        let mut ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
+        let ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
         // let ser_data_addr = addr + ref_cnt_size;
@@ -304,7 +304,7 @@ impl SerializedData {
             ref_cnt: self.ref_cnt,
             ser_data_bytes: self.ser_data_bytes,
             header_bytes: self.header_bytes,
-            payload_bytes: self.payload_bytes,
+            payload_bytes: self.payload_bytes.sub_slice(start..end),
             comm: self.comm.clone(),
         }
     }

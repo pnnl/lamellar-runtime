@@ -89,7 +89,7 @@ impl ArrayBatchOpHandle {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
-            BatchOpState::Launched(reqs_) => self.array.team().block_on(self),
+            BatchOpState::Launched(_reqs) => self.array.team().block_on(self),
         }
     }
 }
