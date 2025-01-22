@@ -102,7 +102,7 @@ impl RofiRustComm {
         };
 
         libfab.alloc.write()[0].init(addr as usize, total_mem);
-        println!("Libfab is ready");
+        println!("rofirust is ready");
         Ok(libfab)
     }
 

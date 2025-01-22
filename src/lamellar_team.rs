@@ -825,7 +825,7 @@ impl LamellarTeamRT {
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
             num_pes: num_pes,
         });
-        lamellae.barrier();
+        lamellae.barrier().block();
 
         let barrier = Barrier::new(
             world_pe,
@@ -847,6 +847,7 @@ impl LamellarTeamRT {
                 alloc,
                 std::mem::align_of::<*const LamellarTeamRT>(),
             )
+            .block()
             .unwrap();
 
         let team = LamellarTeamRT {
@@ -911,7 +912,7 @@ impl LamellarTeamRT {
         // );
 
         // println!("entering lamellae barrier");
-        lamellae.barrier(); // need to make sure barriers are done before we return
+        lamellae.barrier().block(); // need to make sure barriers are done before we return
                             // println!("entering team barrier");
                             // team.barrier.barrier();
         team
@@ -1099,6 +1100,7 @@ impl LamellarTeamRT {
                     parent_alloc,
                     std::mem::align_of::<*const LamellarTeamRT>(),
                 )
+                .block()
                 .unwrap();
             // ------------------------------------------------------------------------------------------------- //
             // println!("passed remote_ptr_addr");

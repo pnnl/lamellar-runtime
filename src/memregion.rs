@@ -757,7 +757,8 @@ impl<T: Dist> MemoryRegion<T> {
                     size * std::mem::size_of::<T>(),
                     alloc,
                     std::mem::align_of::<T>(),
-                )? //did we call team barrer before this?
+                )
+                .block()? //did we call team barrer before this?
             }
         } else {
             println!(
@@ -896,7 +897,7 @@ impl<T: Dist> MemoryRegion<T> {
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>()).block()
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -985,7 +986,7 @@ impl<T: Dist> MemoryRegion<T> {
                 let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
                 // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
                 self.rdma
-                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes).block();
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
             } else {
@@ -1049,7 +1050,7 @@ impl<T: Dist> MemoryRegion<T> {
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
             self.rdma
-                .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+                .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes).block();
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
         } else {
@@ -1072,7 +1073,7 @@ impl<T: Dist> MemoryRegion<T> {
             let my_offset = self.addr + my_index * std::mem::size_of::<R>();
             let bytes = std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes);
             let local_addr = self.rdma.local_addr(pe, addr);
-            self.rdma.iget(pe, local_addr, bytes);
+            self.rdma.iget(pe, local_addr, bytes).block();
         } else {
             println!(
                 "mem region len: {:?} index: {:?} data len{:?}",

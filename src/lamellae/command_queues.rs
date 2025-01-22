@@ -865,7 +865,7 @@ impl InnerCQ {
             }
             // panic!("exiting");
 
-            self.comm.alloc_pool(min_size);
+            self.comm.alloc_pool(min_size).block();
             let cmd = &mut alloc_buf[self.my_pe];
             cmd.daddr = 0;
             cmd.dsize = 0;
@@ -906,7 +906,7 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
+                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()).block(); // not sure if we need to make this put incase the other PEs are already down
                 }
             }
         }
@@ -997,7 +997,7 @@ impl InnerCQ {
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting data from {src}, {:?}", cmd.daddr);
-        self.comm.iget(src, local_daddr as usize, data_slice);
+        self.comm.iget(src, local_daddr as usize, data_slice).await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
@@ -1026,7 +1026,7 @@ impl InnerCQ {
         let data_slice = ser_data.header_and_data_as_bytes();
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
-        self.comm.iget(src, local_daddr as usize, data_slice);
+        self.comm.iget(src, local_daddr as usize, data_slice).await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash

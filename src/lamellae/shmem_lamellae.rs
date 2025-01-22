@@ -3,7 +3,7 @@ use crate::env_var::HeapMode;
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
 use crate::lamellae::shmem::shmem_comm::*;
-
+use crate::lamellae::comm::CommOpHandle;
 use crate::lamellae::{
     AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
     Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,
@@ -124,7 +124,7 @@ impl LamellaeComm for Shmem {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a>{
         self.shmem_comm.barrier()
     }
     fn backend(&self) -> Backend {
@@ -216,8 +216,9 @@ impl LamellaeRDMA for Shmem {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.shmem_comm.put(pe, src, dst);
     }
-    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
-        self.shmem_comm.iput(pe, src, dst);
+    
+    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        self.shmem_comm.iput(pe, src, dst)
     }
     fn put_all(&self, src: &[u8], dst: usize) {
         self.shmem_comm.put_all(src, dst);
@@ -226,8 +227,8 @@ impl LamellaeRDMA for Shmem {
         self.shmem_comm.get(pe, src, dst);
     }
 
-    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.shmem_comm.get(pe, src, dst);
+    fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
+        self.shmem_comm.iget(pe, src, dst)
     }
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.shmem_comm.rt_alloc(size, align)
@@ -238,7 +239,7 @@ impl LamellaeRDMA for Shmem {
     fn rt_free(&self, addr: usize) {
         self.shmem_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<usize> {
+    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType, _align: usize) -> CommOpHandle<'a, AllocResult<usize>> {
         self.shmem_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {

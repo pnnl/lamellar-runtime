@@ -583,7 +583,7 @@ impl LamellarWorldBuilder {
         // println!("{:?}: init_counters", timer.elapsed());
 
         // timer = std::time::Instant::now();
-        lamellae.barrier();
+        lamellae.barrier().block();
         // println!("{:?}: lamellae barrier", timer.elapsed());
 
         // timer = std::time::Instant::now();

@@ -6,7 +6,6 @@ use crate::lamellae::{
     SERIALIZE_HEADER_LEN,
 };
 use crate::lamellar_alloc::{BTreeAlloc, LamellarAlloc};
-
 use parking_lot::RwLock;
 use shared_memory::*;
 use std::collections::HashMap;
@@ -371,11 +370,14 @@ impl CommOps for ShmemComm {
     fn MB_sent(&self) -> f64 {
         0.0
     }
-    fn barrier(&self) {
-        let alloc = self.alloc_lock.write();
-        unsafe {
-            alloc.1.alloc(1, 0..self.num_pes);
-        }
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a>{
+        let fut = async move { let alloc = self.alloc_lock.write();
+            unsafe {
+                alloc.1.alloc(1, 0..self.num_pes);
+            }
+        };
+
+        CommOpHandle::new(fut)
     }
     fn occupied(&self) -> usize {
         let mut occupied = 0;
@@ -403,20 +405,26 @@ impl CommOps for ShmemComm {
             );
         }
     }
-    fn alloc_pool(&self, min_size: usize) {
-        let mut allocs = self.alloc.write();
-        let size = std::cmp::max(
-            min_size * 2 * self.num_pes,
-            SHMEM_SIZE.load(Ordering::SeqCst),
-        ) / self.num_pes;
-        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
-            // println!("addr: {:x} - {:x}",addr, addr+size);
-            let mut new_alloc = BTreeAlloc::new("shmem".to_string());
-            new_alloc.init(addr, size);
-            allocs.push(new_alloc)
-        } else {
-            panic!("[Error] out of system memory");
-        }
+    fn alloc_pool<'a>(&'a self, min_size: usize) -> CommOpHandle<'a> {
+        let fut = async move {
+
+            let mut allocs = self.alloc.write();
+            let size = std::cmp::max(
+                min_size * 2 * self.num_pes,
+                SHMEM_SIZE.load(Ordering::SeqCst),
+            ) / self.num_pes;
+            if let Ok(addr) = self.alloc(size, AllocationType::Global)
+                .await {
+                // println!("addr: {:x} - {:x}",addr, addr+size);
+                let mut new_alloc = BTreeAlloc::new("shmem".to_string());
+                new_alloc.init(addr, size);
+                allocs.push(new_alloc)
+            } else {
+                panic!("[Error] out of system memory");
+            }
+        };
+
+        CommOpHandle::new(fut)
     }
 
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
@@ -455,35 +463,39 @@ impl CommOps for ShmemComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
-    fn alloc(&self, size: usize, alloc_type: AllocationType) -> AllocResult<usize> {
+    fn alloc<'a>(&'a self, size: usize, alloc_type: AllocationType) -> CommOpHandle<'a, AllocResult<usize>> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
-        let mut alloc = self.alloc_lock.write();
-        let (ret, index, remote_addrs) = match alloc_type {
-            AllocationType::Sub(pes) => {
-                // println!("pes: {:?}",pes);
-                if pes.contains(&self.my_pe) {
-                    let ret = unsafe { alloc.1.alloc(size, pes.iter().cloned()) };
-                    // println!("{:?}",ret.2);
-                    ret
-                } else {
-                    return Err(AllocError::IdError(self.my_pe));
+        let fut = async move {
+            let mut alloc = self.alloc_lock.write();
+            let (ret, index, remote_addrs) = match alloc_type {
+                AllocationType::Sub(pes) => {
+                    // println!("pes: {:?}",pes);
+                    if pes.contains(&self.my_pe) {
+                        let ret = unsafe { alloc.1.alloc(size, pes.iter().cloned()) };
+                        // println!("{:?}",ret.2);
+                        ret
+                    } else {
+                        return Err(AllocError::IdError(self.my_pe));
+                    }
+                }
+                AllocationType::Global => unsafe { alloc.1.alloc(size, 0..self.num_pes) },
+                _ => panic!("unexpected allocation type {:?} in rofi_alloc", alloc_type),
+            };
+            let mut addr_map = HashMap::new();
+            let mut relative_index = 0;
+            for pe in 0..self.num_pes {
+                if remote_addrs[pe] > 0 {
+                    // let local_addr = ret.as_ptr() as usize + size*relative_index;
+                    addr_map.insert(pe, (remote_addrs[pe], relative_index));
+                    relative_index += 1;
                 }
             }
-            AllocationType::Global => unsafe { alloc.1.alloc(size, 0..self.num_pes) },
-            _ => panic!("unexpected allocation type {:?} in rofi_alloc", alloc_type),
+            let addr = ret.as_ptr() as usize + size * index;
+            alloc.0.insert(addr, (ret, size, addr_map));
+            Ok(addr)
         };
-        let mut addr_map = HashMap::new();
-        let mut relative_index = 0;
-        for pe in 0..self.num_pes {
-            if remote_addrs[pe] > 0 {
-                // let local_addr = ret.as_ptr() as usize + size*relative_index;
-                addr_map.insert(pe, (remote_addrs[pe], relative_index));
-                relative_index += 1;
-            }
-        }
-        let addr = ret.as_ptr() as usize + size * index;
-        alloc.0.insert(addr, (ret, size, addr_map));
-        Ok(addr)
+
+        CommOpHandle::new(fut)
     }
 
     fn free(&self, addr: usize) {
@@ -545,8 +557,9 @@ impl CommOps for ShmemComm {
             }
         }
     }
-    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
-        self.put(pe, src_addr, dst_addr);
+    fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
+        let fut = async move {self.put(pe, src_addr, dst_addr)};
+        CommOpHandle::new(fut)
     }
 
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
@@ -576,9 +589,10 @@ impl CommOps for ShmemComm {
         }
     }
 
-    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a> {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
-        self.get(pe, src_addr, dst_addr);
+        let fut = async move {self.get(pe, src_addr, dst_addr)};
+        CommOpHandle::new(fut)
     }
     // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
     //     self.get(pe, src_addr + self.base_addr(), dst_addr);

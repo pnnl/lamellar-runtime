@@ -8,7 +8,7 @@ use crate::scheduler::Scheduler;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
-
+use crate::lamellae::comm::CommOpHandle;
 use async_trait::async_trait;
 
 #[derive(Clone)]
@@ -100,7 +100,10 @@ impl LamellaeComm for Local {
     fn num_pes(&self) -> usize {
         1
     }
-    fn barrier(&self) {}
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a> { 
+        let fut = async move {};
+        CommOpHandle::new(fut)
+    }
     fn backend(&self) -> Backend {
         Backend::Local
     }
@@ -139,10 +142,11 @@ impl LamellaeRDMA for Local {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
         }
     }
-    fn iput(&self, _pe: usize, src: &[u8], dst: usize) {
-        unsafe {
+    fn iput<'a> (&self, _pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        let fut = async move {unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
-        }
+        }};
+        CommOpHandle::new(fut)
     }
     fn put_all(&self, src: &[u8], dst: usize) {
         unsafe {
@@ -155,10 +159,11 @@ impl LamellaeRDMA for Local {
         }
     }
 
-    fn iget(&self, _pe: usize, src: usize, dst: &mut [u8]) {
-        unsafe {
+    fn iget<'a>(&'a self, _pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
+        let fut = async move {unsafe {
             std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
-        }
+        }};
+        CommOpHandle::new(fut)
     }
 
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
@@ -190,21 +195,25 @@ impl LamellaeRDMA for Local {
             }; //it will free when dropping from scope
         }
     }
-    fn alloc(&self, size: usize, _alloc: AllocationType, align: usize) -> AllocResult<usize> {
-        let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
-        let data_ptr = unsafe { std::alloc::alloc(layout) };
-        // let data = vec![0u8; size].into_boxed_slice();
-        // let data_ptr = Box::into_raw(data);
-        let data_addr = data_ptr as usize;
-        let mut allocs = self.allocs.lock();
-        allocs.insert(
-            data_addr,
-            MyPtr {
-                ptr: data_ptr as *mut u8,
-                layout: layout,
-            },
-        );
-        Ok(data_addr)
+    fn alloc<'a>(&'a self, size: usize, _alloc: AllocationType, align: usize) -> CommOpHandle<'a, AllocResult<usize>> {
+        let fut = async move {
+            let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
+            let data_ptr = unsafe { std::alloc::alloc(layout) };
+            // let data = vec![0u8; size].into_boxed_slice();
+            // let data_ptr = Box::into_raw(data);
+            let data_addr = data_ptr as usize;
+            let mut allocs = self.allocs.lock();
+            allocs.insert(
+                data_addr,
+                MyPtr {
+                    ptr: data_ptr as *mut u8,
+                    layout: layout,
+                },
+            );
+            Ok(data_addr)
+        };
+
+        CommOpHandle::new(fut)
     }
     fn free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();

@@ -17,11 +17,12 @@ use crate::scheduler::Scheduler;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
-
+use std::pin::Pin;
 pub(crate) mod comm;
 pub(crate) mod command_queues;
 use comm::AllocResult;
 use comm::Comm;
+use comm::CommOpHandle;
 
 pub(crate) mod local_lamellae;
 use local_lamellae::{Local, LocalData};
@@ -273,7 +274,9 @@ pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
-    fn barrier(&self);
+
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a>;
     fn backend(&self) -> Backend;
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
@@ -297,14 +300,17 @@ pub(crate) trait LamellaeAM: Send {
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn flush(&self);
     fn put(&self, pe: usize, src: &[u8], dst: usize);
-    fn iput(&self, pe: usize, src: &[u8], dst: usize);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>;
     fn put_all(&self, src: &[u8], dst: usize);
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
-    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>;
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize>;
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType, align: usize) -> CommOpHandle<'a, AllocResult<usize>>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
@@ -352,3 +358,94 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
         Backend::Local => LamellaeBuilder::Local(Local::new()),
     }
 }
+
+
+// #[pin_project(project = StateProj)]
+// enum State<'a> {
+//     Init,
+//     TryingPut(#[pin] Pin<Box<dyn Future<Output =()> + Send + 'a> >),
+// }
+
+// // #[pin_project]
+// pub(crate) struct CommPutHandle<'a> {
+//     fut: Pin<Box<dyn Future<Output =()> + Send + 'a> >
+//     // pe: usize, 
+//     // src: &'a [u8],
+//     // dst: usize,
+//     // comm: Option<Arc<Comm>>,
+//     // #[pin]
+//     // state: State<'a>,
+//     // put_future: Pin<Box<dyn Future<Output = ()>>>,
+// }
+
+// impl<'a> CommPutHandle<'a> {
+//     pub(crate) fn new(fut: impl Future<Output =()> + Send + 'a) -> Self {
+//         Self {
+//             fut: Box::pin(fut)
+//         }
+//     }
+//     // pub(crate) fn new(comm: Arc<Comm>, pe: usize, src: &'a [u8], dst: usize) -> Self {
+//     //     Self{
+//     //         pe,
+//     //         src,
+//     //         dst,
+//     //         state: State::Init,
+//     //         comm: Some(comm),
+//     //     }
+//     // }
+    
+//     // pub(crate) fn no_comm(pe: usize, src: &'a [u8], dst: usize) -> Self {
+//     //     Self{
+//     //         pe,
+//     //         src,
+//     //         dst,
+//     //         state: State::Init,
+//     //         comm: None,
+//     //     }
+//     // }
+
+//     pub(crate) fn block(self) {
+//         // match self.comm {
+//             // Some(comm) => {
+//                 async_std::task::block_on(async {self.fut.await});
+//         //     }
+//         //     None => {}
+//         // }
+//     }
+// }
+
+// impl<'a> Future for CommPutHandle<'a> {
+//         type Output = ();
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         let mut this = self.get_mut();
+//         let _guard = ready!(this.fut.as_mut().poll(cx));
+//         Poll::Ready(())
+//     }
+// }
+// impl<'a> Future for CommPutHandle<'a> {
+//     type Output = ();
+//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+//         // let comm = self.comm.clone();
+//         let mut this = self.project();
+//         match this.comm {
+//             None => return Poll::Ready(()),
+//             Some(comm) => {
+
+//                 match this.state.as_mut().project() {
+//                     StateProj::Init => {
+//                         let fut = Box::pin(comm.iput(*this.pe, this.src, *this.dst));
+//                         *this.state = State::TryingPut(fut);
+//                         cx.waker().wake_by_ref();
+//                         Poll::Pending
+//                     }
+//                     StateProj::TryingPut(fut) => {
+//                         let _guard = ready!(fut.poll(cx));
+//                         Poll::Ready(())
+//                     }
+//                     _ => unreachable!(),
+//                 }
+//             }
+//         }
+
+//     }
+// }

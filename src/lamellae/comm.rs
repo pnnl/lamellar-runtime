@@ -17,7 +17,13 @@ use crate::lamellae::RofiRustAsyncData;
 use crate::lamellae::RofiRustData;
 use crate::lamellae::{AllocationType, SerializedData};
 // use crate::lamellae::shmem::ShmemComm;
-
+use futures_util::{ready, Future};
+use std::task::{Context, Poll};
+use std::pin::Pin;
+#[cfg(feature="tokio-executor")]
+use tokio::runtime::Handle;
+#[cfg(not(feature="tokio-executor"))]
+use async_std::task::block_on;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
@@ -127,27 +133,60 @@ impl Comm {
 pub(crate) trait CommOps {
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
-    fn barrier(&self);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a>;
     fn occupied(&self) -> usize;
     fn num_pool_allocs(&self) -> usize;
     fn print_pools(&self);
-    fn alloc_pool(&self, min_size: usize);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn alloc_pool<'a>(&'a self, min_size: usize) -> CommOpHandle<'a>;
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize>;
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType) -> CommOpHandle<'a, AllocResult<usize>>;
     fn free(&self, addr: usize);
     fn base_addr(&self) -> usize;
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
     fn flush(&self);
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
-    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> ;
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
-    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>;
     // fn iget_relative<T: Remote>(& self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
     fn force_shutdown(&self);
+}
+
+pub(crate) struct CommOpHandle<'a, T = ()> {
+    fut: Pin<Box<dyn Future<Output =T> + Send + 'a> >
+}
+
+impl<'a, T> CommOpHandle<'a, T> {
+    pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a) -> Self {
+        Self {
+            fut: Box::pin(fut)
+        }
+    }
+
+    pub(crate) fn block(self) -> T{
+        #[cfg(feature="tokio-executor")]
+        return Handle::current().block_on(async {self.fut.await});
+        #[cfg(not(feature="tokio-executor"))]
+        return block_on(async {self.fut.await});
+    }
+}
+
+impl<'a, T> Future for CommOpHandle<'a, T> {
+        type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.get_mut();
+        let guard = ready!(this.fut.as_mut().poll(cx));
+        Poll::Ready(guard)
+    }
 }

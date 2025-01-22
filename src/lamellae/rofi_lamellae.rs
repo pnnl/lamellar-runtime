@@ -10,6 +10,7 @@ use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
+use crate::lamellae::comm::CommOpHandle;
 
 use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
@@ -127,7 +128,7 @@ impl LamellaeComm for Rofi {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a>{
         self.rofi_comm.barrier()
     }
     fn backend(&self) -> Backend {
@@ -227,8 +228,8 @@ impl LamellaeRDMA for Rofi {
     fn put(&self, pe: usize, src: &[u8], dst: usize) {
         self.rofi_comm.put(pe, src, dst);
     }
-    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
-        self.rofi_comm.iput(pe, src, dst);
+    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        self.rofi_comm.iput(pe, src, dst)
     }
     fn put_all(&self, src: &[u8], dst: usize) {
         self.rofi_comm.put_all(src, dst);
@@ -236,8 +237,8 @@ impl LamellaeRDMA for Rofi {
     fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
         self.rofi_comm.get(pe, src, dst);
     }
-    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.rofi_comm.iget(pe, src, dst);
+    fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
+        self.rofi_comm.iget(pe, src, dst)
     }
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size, align)
@@ -248,7 +249,7 @@ impl LamellaeRDMA for Rofi {
     fn rt_free(&self, addr: usize) {
         self.rofi_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
+    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType, align: usize) -> CommOpHandle<'a, AllocResult<usize>> {
         self.rofi_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {

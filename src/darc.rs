@@ -534,7 +534,7 @@ impl<T: 'static> DarcInner<T> {
                 pe,
                 &mode_refs[inner.my_pe..=inner.my_pe],
                 inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
-            );
+            ).block();
         }
     }
 
@@ -673,7 +673,7 @@ impl<T: 'static> DarcInner<T> {
                             send_pe,
                             ref_cnt_u8,
                             inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>(), //this is barrier_ref_cnt_slice
-                        );
+                        ).await;
                         // dist_cnts_changed = true;
                         outstanding_refs = true;
                         barrier_id = 0;
@@ -769,7 +769,7 @@ impl<T: 'static> DarcInner<T> {
                         send_pe,
                         barrier_id_slice,
                         inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
-                    );
+                    ).await;
                 }
                 //maybe we need to change the above to a get?
                 rdma.flush();
@@ -1133,6 +1133,7 @@ impl<T> Darc<T> {
         let addr = team_rt
             .lamellae
             .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
+            .await
             .expect("out of memory");
         // let temp_team = team_rt.clone();
         // team_rt.print_cnt();
@@ -1274,6 +1275,7 @@ impl<T> Darc<T> {
         let addr = team_rt
             .lamellae
             .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
+            .block()
             .expect("out of memory");
         // let temp_team = team_rt.clone();
         // team_rt.print_cnt();
