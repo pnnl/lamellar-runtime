@@ -197,11 +197,18 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         let array_counters = Arc::new(AMCounters::new());
         team_counters.push(array_counters.clone());
         let rmr_t: MemoryRegion<T> = if team.num_world_pes == team.num_pes {
-            MemoryRegion::new(per_pe_size, &team.scheduler, team_counters,&team.lamellae, AllocationType::Global)
+            MemoryRegion::new(
+                per_pe_size,
+                &team.scheduler,
+                team_counters,
+                &team.lamellae,
+                AllocationType::Global,
+            )
         } else {
             MemoryRegion::new(
                 per_pe_size,
-                &team.scheduler, team_counters,
+                &team.scheduler,
+                team_counters,
                 &team.lamellae,
                 AllocationType::Sub(team.get_pes()),
             )

@@ -66,10 +66,7 @@
 use crate::barrier::BarrierHandle;
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::{
-    one_sided::OneSidedMemoryRegion,
-    shared::SharedMemoryRegion,
-    Dist,
-    LamellarMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
 };
 use crate::scheduler::LamellarTask;
 use crate::{active_messaging::*, LamellarTeam, LamellarTeamRT};

@@ -1,7 +1,8 @@
 use super::{CommAllocAddr, CommSlice};
 use crate::{
     active_messaging::AMCounters,
-    lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler}, LamellarTask,
+    lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler},
+    LamellarTask,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -19,7 +20,7 @@ impl<T: Copy + Send + 'static> Remote for T {}
 /// A task handle for raw RMDA (put/get) operation
 #[must_use = " RdmaHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
-pub struct RdmaHandle<T>{
+pub struct RdmaHandle<T> {
     #[pin]
     pub(crate) future: RdmaFuture<T>,
 }
@@ -64,9 +65,7 @@ impl<T: Remote> RdmaHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(
-        self
-    ) -> LamellarTask<()> {
+    pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
             #[cfg(feature = "rofi")]
             RdmaFuture::Rofi(f) => f.spawn(),
@@ -108,7 +107,27 @@ impl<T: Remote> Future for RdmaHandle<T> {
 
 #[enum_dispatch]
 pub(crate) trait CommRdma {
-    fn put<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T>;
-    fn put_all<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, src: CommSlice<T>, dst: CommAllocAddr) -> RdmaHandle<T>;
-    fn get<T: Remote>(&self,scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, src: CommAllocAddr, dst: CommSlice<T>) -> RdmaHandle<T>;
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: CommSlice<T>,
+        dst: CommAllocAddr,
+    ) -> RdmaHandle<T>;
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: CommSlice<T>,
+        dst: CommAllocAddr,
+    ) -> RdmaHandle<T>;
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: CommAllocAddr,
+        dst: CommSlice<T>,
+    ) -> RdmaHandle<T>;
 }

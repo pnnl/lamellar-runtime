@@ -4,7 +4,7 @@ use crate::array::native_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
-use crate::lamellae::comm::{CommAtomic, CommProgress};
+use crate::lamellae::comm::CommAtomic;
 use crate::lamellae::CommSlice;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
@@ -149,7 +149,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                         let data = req.await;
 
                         // println!("data recv {:?}",data.len());
-                        let _ =u8_buf
+                        let _ = u8_buf
                             .put_comm_slice(
                                 lamellar::current_pe,
                                 cur_index,

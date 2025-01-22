@@ -1,11 +1,15 @@
-use crate::{active_messaging::AMCounters, lamellae::comm::{
-    atomic::{AtomicOp, CommAtomic, NetworkAtomic},
-    rdma::RdmaHandle,
-}};
+use crate::{
+    active_messaging::AMCounters,
+    lamellae::comm::{
+        atomic::{AtomicOp, CommAtomic, NetworkAtomic},
+        rdma::RdmaHandle,
+    },
+};
 
 use super::{
     comm::LocalComm,
-    rdma::{LocalFuture, Op}, Scheduler
+    rdma::{LocalFuture, Op},
+    Scheduler,
 };
 
 use std::sync::Arc;
@@ -22,7 +26,13 @@ impl CommAtomic for LocalComm {
         pe: usize,
         remote_addr: usize,
     ) -> RdmaHandle<T> {
-        LocalFuture { op: Op::Atomic, spawned: false,scheduler: scheduler.clone(), counters }.into()
+        LocalFuture {
+            op: Op::Atomic,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
         &self,
@@ -33,6 +43,12 @@ impl CommAtomic for LocalComm {
         remote_addr: usize,
         result: &mut [T],
     ) -> RdmaHandle<T> {
-        LocalFuture { op: Op::Atomic, spawned: false , scheduler: scheduler.clone(), counters }.into()
+        LocalFuture {
+            op: Op::Atomic,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
     }
 }

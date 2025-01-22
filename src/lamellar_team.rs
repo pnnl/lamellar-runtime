@@ -3,8 +3,7 @@ use crate::{
     barrier::{Barrier, BarrierHandle},
     env_var::config,
     lamellae::{
-        AllocationType, CommAlloc, CommInfo, CommMem, CommProgress, Lamellae,
-        LamellaeShutdown,
+        AllocationType, CommAlloc, CommInfo, CommMem, CommProgress, Lamellae, LamellaeShutdown,
     },
     lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT},
     lamellar_env::LamellarEnv,
@@ -887,9 +886,15 @@ impl LamellarTeamRT {
         // println!("barrier created");
 
         let alloc = AllocationType::Global;
-        let team_counters= Arc::new(AMCounters::new());
+        let team_counters = Arc::new(AMCounters::new());
 
-        let dropped = MemoryRegion::new(num_pes,&scheduler,vec![team_counters.clone(), world_counters.clone()], &lamellae, alloc.clone());
+        let dropped = MemoryRegion::new(
+            num_pes,
+            &scheduler,
+            vec![team_counters.clone(), world_counters.clone()],
+            &lamellae,
+            alloc.clone(),
+        );
 
         let remote_ptr_alloc = lamellae
             .comm()
@@ -927,7 +932,7 @@ impl LamellarTeamRT {
             _pin: PhantomPinned,
         };
 
-        println!("team addr {:?}",team.remote_ptr_alloc);
+        println!("team addr {:?}", team.remote_ptr_alloc);
         unsafe {
             for e in team.dropped.as_mut_slice().iter_mut() {
                 *e = 0;
@@ -940,7 +945,7 @@ impl LamellarTeamRT {
             let team_ptr = Arc::into_raw(pinned_team); //we consume the arc to get access to raw ptr (this ensures we wont drop the team until destroy is called)
                                                        // std::ptr::copy_nonoverlapping(&(&team as *const Pin<Arc<LamellarTeamRT>>), team.remote_ptr_alloc as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
                                                        // we are copying the address of the team into the remote ptr address, because of the two previous calls, we ensure its location is pinned and its lifetime will live until the team is destroyed.
-            // std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_alloc.as_mut_ptr(), 1);
+                                                       // std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_alloc.as_mut_ptr(), 1);
 
             *team.remote_ptr_alloc.as_mut_ptr() = team_ptr;
 
@@ -1053,7 +1058,7 @@ impl LamellarTeamRT {
         //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
-        let team_ptr: *const LamellarTeamRT = unsafe { *self.remote_ptr_alloc.as_ptr()} ;
+        let team_ptr: *const LamellarTeamRT = unsafe { *self.remote_ptr_alloc.as_ptr() };
         println!("dropping team_ptr: {:?}", team_ptr);
         unsafe {
             let arc_team = Arc::from_raw(team_ptr);
@@ -1098,7 +1103,7 @@ impl LamellarTeamRT {
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
 
-            let team_counters= Arc::new(AMCounters::new());
+            let team_counters = Arc::new(AMCounters::new());
             // println!("allocating temp_buf");
             let temp_buf = MemoryRegion::<usize>::new(
                 parent.num_pes,
@@ -1122,11 +1127,13 @@ impl LamellarTeamRT {
                 *e = 0;
             }
             unsafe {
-                temp_buf.put_comm_slice(
-                    parent.world_pe,
-                    0,
-                    temp_array_slice.sub_slice(..parent.num_pes),
-                ).block();
+                temp_buf
+                    .put_comm_slice(
+                        parent.world_pe,
+                        0,
+                        temp_array_slice.sub_slice(..parent.num_pes),
+                    )
+                    .block();
             }
             let s = Instant::now();
             parent.barrier();
@@ -1219,7 +1226,7 @@ impl LamellarTeamRT {
                 *team.remote_ptr_alloc.as_mut_ptr() = team_ptr;
                 println!("team_ptr {:?}", team_ptr);
             }
-           
+
             // println!("team created in {:?}", s.elapsed());
 
             let mut sub_teams = parent.sub_teams.write();
@@ -1711,7 +1718,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
@@ -1781,7 +1788,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team am group exec all", std::thread::current().id());
@@ -1854,7 +1861,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
 
         AmHandle {
@@ -1920,7 +1927,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
 
         self.scheduler.submit_am(Am::Remote(req_data, func));
@@ -1991,7 +1998,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
 
         // println!(
@@ -2061,7 +2068,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
 
         // println!(
@@ -2124,7 +2131,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
@@ -2189,7 +2196,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
@@ -2266,7 +2273,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe {*self.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
         };
         // println!("[{:?}] team exec am local", std::thread::current().id());
         // self.scheduler.submit_am(Am::Local(req_data, func));
@@ -2399,7 +2406,7 @@ impl Drop for LamellarTeam {
                     // println!("removing {:?} ", self.team.id);
                     parent.sub_teams.write().remove(&self.team.id);
                     let team_ptr: *const LamellarTeamRT =
-                        unsafe {*self.team.remote_ptr_alloc.as_ptr()} ;
+                        unsafe { *self.team.remote_ptr_alloc.as_ptr() };
                     unsafe {
                         let arc_team = Arc::from_raw(team_ptr);
                         // println!("arc_team: {:?}", Arc::strong_count(&arc_team));

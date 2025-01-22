@@ -1,4 +1,4 @@
-use crate::{lamellae::comm::rdma::RdmaHandle};
+use crate::lamellae::comm::rdma::RdmaHandle;
 
 use super::{AMCounters, Remote, Scheduler};
 use std::sync::Arc;

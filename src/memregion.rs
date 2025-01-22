@@ -6,17 +6,25 @@
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
 use crate::{
-    active_messaging::{AMCounters, AmDist, RemotePtr}, array::{
+    active_messaging::{AMCounters, AmDist, RemotePtr},
+    array::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
-    }, lamellae::{
+    },
+    lamellae::{
         AllocationType, Backend, CommAlloc, CommAllocAddr, CommAllocType, CommAtomic, CommInfo,
         CommMem, CommRdma, CommSlice, Lamellae, RdmaHandle,
-    }, lamellar_team::{LamellarTeam, LamellarTeamRT}, scheduler::Scheduler, LamellarEnv
+    },
+    lamellar_team::{LamellarTeam, LamellarTeamRT},
+    scheduler::Scheduler,
+    LamellarEnv,
 };
 use core::marker::PhantomData;
-use std::{hash::{Hash, Hasher}, pin::Pin};
 use std::sync::Arc;
+use std::{
+    hash::{Hash, Hasher},
+    pin::Pin,
+};
 
 //#[doc(hidden)]
 /// Prelude for using the [LamellarMemoryRegion] module
@@ -759,7 +767,7 @@ impl<T: Dist> MemoryRegion<T> {
         lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> MemoryRegion<T> {
-        if let Ok(memreg) = MemoryRegion::try_new(num_elems, scheduler, counters, lamellae,alloc) {
+        if let Ok(memreg) = MemoryRegion::try_new(num_elems, scheduler, counters, lamellae, alloc) {
             memreg
         } else {
             unsafe { std::ptr::null_mut::<i32>().write(1) };
@@ -887,7 +895,7 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) -> RdmaHandle<R> {
-        println!("put memregion {:?} index: {:?}", self.alloc,index);
+        println!("put memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
@@ -991,7 +999,7 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: U,
     ) -> RdmaHandle<R> {
-        println!("get memregion {:?} index: {:?}", self.alloc,index);
+        println!("get memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             if let Ok(data_slice) = data.as_comm_slice() {
@@ -1062,7 +1070,13 @@ impl<T: Dist> MemoryRegion<T> {
         index: usize,
         data: CommSlice<R>,
     ) -> RdmaHandle<R> {
-        println!("put commslice memregion {:?} index: {:?} {:?} {:?}", self.alloc,index, data.addr,data.len());
+        println!(
+            "put commslice memregion {:?} index: {:?} {:?} {:?}",
+            self.alloc,
+            index,
+            data.addr,
+            data.len()
+        );
         if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
             // let num_bytes = data.len() * std::mem::size_of::<R>();
             // let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
@@ -1079,7 +1093,7 @@ impl<T: Dist> MemoryRegion<T> {
             // );
             self.rdma.comm().put(
                 &self.scheduler,
-                    self.counters.clone(),
+                self.counters.clone(),
                 pe,
                 data,
                 self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
@@ -1117,7 +1131,7 @@ impl<T: Dist> MemoryRegion<T> {
 
             self.rdma.comm().get(
                 &self.scheduler,
-                    self.counters.clone(),
+                self.counters.clone(),
                 pe,
                 self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
                 data,

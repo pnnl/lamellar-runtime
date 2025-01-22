@@ -46,7 +46,7 @@ impl<T: Dist> UnsafeArray<T> {
         // let mut subarray_index = index;
         let mut buf_index = 0;
         // let mut am_reqs = VecDeque::new();
-        let mut transfer_requests = InnerRdmaHandle::new(&op,false);
+        let mut transfer_requests = InnerRdmaHandle::new(&op, false);
         for pe in start_pe..=end_pe {
             let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
             if pe < self.inner.orig_remaining_elems {
@@ -176,11 +176,8 @@ impl<T: Dist> UnsafeArray<T> {
         let mut overflow = 0;
         let start_pe = global_index % num_pes;
         // let mut reqs = VecDeque::new();
-        let mut transfer_requests = InnerRdmaHandle::new(&op,true);
-        let team_rt = self
-                    .inner
-                    .data
-                    .team();
+        let mut transfer_requests = InnerRdmaHandle::new(&op, true);
+        let team_rt = self.inner.data.team();
         // println!("start_pe {:?} num_elems_pe {:?} buf len {:?}",start_pe,num_elems_pe,buf.len());
         match op {
             ArrayRdmaCmd::Put => {
@@ -192,7 +189,7 @@ impl<T: Dist> UnsafeArray<T> {
                         let offset = global_index / num_pes + overflow;
                         for j in (i..buf.len()).step_by(num_pes) {
                             // temp_memreg.put(k, buf.sub_region(j..=j)).block(&team_rt.scheduler, team_rt.counters());
-                            temp_memreg.as_mut_slice()[k]=buf.as_slice()[j];
+                            temp_memreg.as_mut_slice()[k] = buf.as_slice()[j];
                             k += 1;
                         }
                         transfer_requests.add_rdma(self.inner.data.mem_region.put(
@@ -208,14 +205,13 @@ impl<T: Dist> UnsafeArray<T> {
             }
             ArrayRdmaCmd::PutAm => {
                 for i in 0..std::cmp::min(buf.len(), num_pes) {
-                    
                     let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems_pe);
                     let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
                         // unsafe { temp_memreg.put(k, buf.sub_region(j..=j)).block(&team_rt.scheduler, team_rt.counters()) };
-                        unsafe {temp_memreg.as_mut_slice()[k]=buf.as_slice()[j]};
+                        unsafe { temp_memreg.as_mut_slice()[k] = buf.as_slice()[j] };
                         k += 1;
                     }
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
@@ -253,33 +249,36 @@ impl<T: Dist> UnsafeArray<T> {
             ArrayRdmaCmd::Get(_immediate) => {
                 unsafe {
                     // if immediate {
-                       
-                        let rem = buf.len() % num_pes;
-                        // let temp_buf: LamellarMemoryRegion<T> = buf.team_into(&self.inner.data.team);
-                        
-                        for i in 0..std::cmp::min(buf.len(), num_pes) {
-                            let pe = (start_pe + i) % num_pes;
-                            let offset = global_index / num_pes + overflow;
-                            let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
-                            let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems);
-                            // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
-                            transfer_requests.add_rdma_cyclic_get(
-                                self.inner.data.mem_region.get_unchecked(
-                                    pe,
-                                    offset,
-                                    temp_memreg.clone(),
-                                ),temp_memreg,buf.clone(),(i..buf.len()).step_by(num_pes).enumerate(),
-                            );
-                            // let mut k = 0;
-                            // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
 
-                            // for (k, j) in (i..buf.len()).step_by(num_pes).enumerate() {
-                            //     let _ =buf.put(my_pe, j, temp_memreg.sub_region(k..=k)).block(&team_rt.scheduler,team_rt.counters());
-                            // }
-                            if pe + 1 == num_pes {
-                                overflow += 1;
-                            }
+                    let rem = buf.len() % num_pes;
+                    // let temp_buf: LamellarMemoryRegion<T> = buf.team_into(&self.inner.data.team);
+
+                    for i in 0..std::cmp::min(buf.len(), num_pes) {
+                        let pe = (start_pe + i) % num_pes;
+                        let offset = global_index / num_pes + overflow;
+                        let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
+                        let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems);
+                        // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
+                        transfer_requests.add_rdma_cyclic_get(
+                            self.inner.data.mem_region.get_unchecked(
+                                pe,
+                                offset,
+                                temp_memreg.clone(),
+                            ),
+                            temp_memreg,
+                            buf.clone(),
+                            (i..buf.len()).step_by(num_pes).enumerate(),
+                        );
+                        // let mut k = 0;
+                        // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
+
+                        // for (k, j) in (i..buf.len()).step_by(num_pes).enumerate() {
+                        //     let _ =buf.put(my_pe, j, temp_memreg.sub_region(k..=k)).block(&team_rt.scheduler,team_rt.counters());
+                        // }
+                        if pe + 1 == num_pes {
+                            overflow += 1;
                         }
+                    }
 
                     // } else {
                     //     for i in 0..buf.len() {
@@ -1086,12 +1085,15 @@ impl LamellarAm for UnsafeCyclicGetAm {
             })
         {
             unsafe {
-                let _ = self.data.put(
-                    self.my_pe,
-                    j,
-                    self.temp_data
-                        .sub_region(k..(k + self.array.inner.elem_size)),
-                ).spawn();
+                let _ = self
+                    .data
+                    .put(
+                        self.my_pe,
+                        j,
+                        self.temp_data
+                            .sub_region(k..(k + self.array.inner.elem_size)),
+                    )
+                    .spawn();
             }
         }
         team_rt.lamellae.comm().wait();
@@ -1137,10 +1139,9 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}", data.len());
-                        println!("InitSmallGetAm put_comm_slice: {:?}",data.as_ptr());
+                        println!("InitSmallGetAm put_comm_slice: {:?}", data.as_ptr());
 
-                        
-                        let _ =u8_buf
+                        let _ = u8_buf
                             .put_comm_slice(
                                 lamellar::current_pe,
                                 cur_index,
@@ -1148,7 +1149,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                             )
                             .spawn(); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
-                        println!("InitSmallGetAm put_comm_slice after: {:?}",data.as_ptr());
+                        println!("InitSmallGetAm put_comm_slice after: {:?}", data.as_ptr());
                     }
                 }
                 Distribution::Cyclic => {

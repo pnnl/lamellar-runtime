@@ -63,8 +63,8 @@ use crate::{
     barrier::Barrier,
     env_var::config,
     lamellae::{
-        AllocationType, Backend, CommAllocAddr, CommInfo, CommMem, CommProgress, CommRdma,
-        CommSlice,CommAlloc
+        AllocationType, Backend, CommAlloc, CommAllocAddr, CommInfo, CommMem, CommProgress,
+        CommRdma, CommSlice,
     },
     lamellar_request::LamellarRequest,
     lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
@@ -311,7 +311,7 @@ impl<T> WeakDarc<T> {
     /// attempts to upgrade the `WeakDarc` to a [Darc], if the inner value has not been dropped
     /// returns `None` if the value has been dropped
     pub fn upgrade(&self) -> Option<Darc<T>> {
-        let inner =  &*self.inner ;
+        let inner = &*self.inner;
         inner.local_cnt.fetch_add(1, Ordering::SeqCst);
         inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);
         if inner.valid.load(Ordering::SeqCst) {
@@ -516,7 +516,7 @@ impl<T: 'static> DarcInner<T> {
 
     async fn broadcast_state(
         // mut inner: WrappedInner<T>,
-         inner: DarcCommPtr<T>,
+        inner: DarcCommPtr<T>,
         team: Pin<Arc<LamellarTeamRT>>,
         state: DarcMode,
     ) {
@@ -1687,12 +1687,11 @@ impl<T> From<&Darc<T>> for __NetworkDarc {
 impl<T> From<__NetworkDarc> for Darc<T> {
     fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
-            let alloc = 
-                lamellae
-                    .comm()
-                    .local_alloc(ndarc.inner_addr)
-                    .expect("alloc to be valid on remote PE");
-            
+            let alloc = lamellae
+                .comm()
+                .local_alloc(ndarc.inner_addr)
+                .expect("alloc to be valid on remote PE");
+
             let darc = Darc {
                 inner: DarcCommPtr {
                     alloc,

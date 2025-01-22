@@ -5,13 +5,16 @@ use crate::{
     lamellar_request::LamellarRequest,
     memregion::MemoryRegion,
     scheduler::Scheduler,
-    warnings::RuntimeWarning
+    warnings::RuntimeWarning,
 };
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
-use std::sync::{Arc,atomic::{AtomicU8, AtomicUsize, Ordering}};
+use std::sync::{
+    atomic::{AtomicU8, AtomicUsize, Ordering},
+    Arc,
+};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
 
@@ -69,9 +72,7 @@ impl Barrier {
                     ));
                 }
 
-                let send_buf = MemoryRegion::new(1, &scheduler,
-                    vec![],
-                    &lamellae, alloc);
+                let send_buf = MemoryRegion::new(1, &scheduler, vec![], &lamellae, alloc);
 
                 unsafe {
                     for buff in &buffs {
@@ -221,7 +222,7 @@ impl Barrier {
                                             CommSlice::from_slice(barrier_slice),
                                         )
                                         .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
-                                                                         //safe as we are the only ones writing to our index
+                                                  //safe as we are the only ones writing to our index
                                 }
                             }
                         }

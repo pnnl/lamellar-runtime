@@ -105,14 +105,25 @@ impl<T: Dist> SharedMemoryRegion<T> {
             launched: false,
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
-                let mut mr_t =
-                    MemoryRegion::<T>::try_new(size, &team.scheduler,team.counters(), &team.lamellae, alloc.clone());
+                let mut mr_t = MemoryRegion::<T>::try_new(
+                    size,
+                    &team.scheduler,
+                    team.counters(),
+                    &team.lamellae,
+                    alloc.clone(),
+                );
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
                     team.lamellae
                         .comm()
                         .alloc_pool(size * std::mem::size_of::<T>());
-                    mr_t = MemoryRegion::try_new(size, &team.scheduler,team.counters(), &team.lamellae, alloc.clone());
+                    mr_t = MemoryRegion::try_new(
+                        size,
+                        &team.scheduler,
+                        team.counters(),
+                        &team.lamellae,
+                        alloc.clone(),
+                    );
                 }
 
                 let mr = unsafe {
@@ -148,8 +159,13 @@ impl<T: Dist> SharedMemoryRegion<T> {
             launched: false,
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
-                let mr_t: MemoryRegion<T> =
-                    MemoryRegion::try_new(size, &team.scheduler,team.counters(), &team.lamellae, alloc)?;
+                let mr_t: MemoryRegion<T> = MemoryRegion::try_new(
+                    size,
+                    &team.scheduler,
+                    team.counters(),
+                    &team.lamellae,
+                    alloc,
+                )?;
                 let mr = unsafe { mr_t.to_base::<u8>() };
                 let res: Result<SharedMemoryRegion<T>, anyhow::Error> = Ok(SharedMemoryRegion {
                     mr: Darc::async_try_new_with_drop(
@@ -316,7 +332,7 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
         Ok(addr as *mut T)
     }
     unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
-        let  slice = self.mr.as_casted_comm_slice()?;
+        let slice = self.mr.as_casted_comm_slice()?;
         Ok(
             slice
                 .sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)),

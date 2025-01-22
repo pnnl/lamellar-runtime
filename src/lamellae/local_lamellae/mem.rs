@@ -26,7 +26,7 @@ impl CommMem for LocalComm {
                 layout: layout,
             },
         );
-        println!("new alloc: {:x} {}", data_addr,size);
+        println!("new alloc: {:x} {}", data_addr, size);
         Ok(CommAlloc {
             addr: data_addr,
             size,
@@ -57,7 +57,7 @@ impl CommMem for LocalComm {
                 layout,
             },
         );
-        println!("new rt alloc: {:x} {}", data_addr,size);
+        println!("new rt alloc: {:x} {}", data_addr, size);
         Ok(CommAlloc {
             addr: data_addr,
             size,

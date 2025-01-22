@@ -490,7 +490,7 @@ impl TeamAmBatcher {
             }
             let header = TeamAmBatcher::create_header(my_pe);
             let mut data_buf = TeamAmBatcher::create_data_buf(header, size, &lamellae).await;
-            let  data_slice = data_buf.data_as_bytes_mut();
+            let data_slice = data_buf.data_as_bytes_mut();
 
             // println!(
             //     "[{:?}] total batch size: {}",
@@ -826,7 +826,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe {*team.team.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
         };
 
         let ame = ame.clone();
@@ -883,7 +883,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe {*team.team.remote_ptr_alloc.as_ptr()},
+            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
         };
 
         ame.clone()

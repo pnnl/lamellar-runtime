@@ -69,7 +69,7 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                     lamellae,
                 )
                 .unwrap();
-                
+
                 let mrh = Arc::new(MemRegionHandleInner {
                     mr: mem_region,
                     team: team.clone(),
@@ -370,7 +370,13 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, &team.scheduler,team.counters(), &team.lamellae, AllocationType::Local)?;
+        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(
+            size,
+            &team.scheduler,
+            team.counters(),
+            &team.lamellae,
+            AllocationType::Local,
+        )?;
         let mr = unsafe { mr_t.to_base::<u8>() };
         let pe = mr.pe;
 
@@ -458,7 +464,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///     }      
     /// }
     ///```
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> RdmaHandle<T> {
+    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         MemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
@@ -576,7 +586,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> RdmaHandle<T> {
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data)
     }
 
