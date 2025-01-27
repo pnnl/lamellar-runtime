@@ -102,9 +102,9 @@ pub(crate) struct UnitHeader {
 
 #[async_trait]
 impl ActiveMessageEngine for RegisteredActiveMessages {
-    // #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn process_msg(self, am: Am, stall_mark: usize, immediate: bool) {
-        // println!("[{:?}] process_msg {am:?}", std::thread::current().id());
+        trace!("[{:?}] process_msg {am:?}", std::thread::current().id());
 
         match am {
             Am::All(req_data, am) => {
@@ -227,9 +227,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exec_msg(self, msg: Msg, mut ser_data: SerializedData, lamellae: Arc<Lamellae>) {
-        // println!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
+        trace!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         // let data = ser_data.data_as_bytes();
         let mut i = 0;
         match msg.cmd {
@@ -256,12 +256,12 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
 }
 
 impl RegisteredActiveMessages {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(batcher: BatcherType, executor: Arc<Executor>) -> RegisteredActiveMessages {
         RegisteredActiveMessages { batcher, executor }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn send_am(
         &self,
         req_data: ReqMetaData,
@@ -270,10 +270,10 @@ impl RegisteredActiveMessages {
         am_size: usize,
         cmd: Cmd,
     ) {
-        // println!(
-        //     "send_am {:?} {:?} {:?} ({:?})",
-        //     am_id, am_size, cmd, *AM_HEADER_LEN
-        // );
+        trace!(
+            "send_am {:?} {:?} {:?} ({:?})",
+            am_id, am_size, cmd, *AM_HEADER_LEN
+        );
         let header = self.create_header(&req_data, cmd);
         let mut data_buf = self
             .create_data_buf(header, am_size + *AM_HEADER_LEN, &req_data.lamellae)
@@ -309,8 +309,9 @@ impl RegisteredActiveMessages {
     }
 
     // #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn send_data_am(&self, req_data: ReqMetaData, data: LamellarResultArc, data_size: usize) {
-        // println!("send_data_am");
+        trace!("send_data_am");
         let header = self.create_header(&req_data, Cmd::Data);
         let mut darcs = vec![];
         data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
@@ -344,8 +345,9 @@ impl RegisteredActiveMessages {
     }
 
     // #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn send_unit_am(&self, req_data: ReqMetaData) {
-        // println!("send_unit_am");
+        trace!("send_unit_am");
 
         let header = self.create_header(&req_data, Cmd::Unit);
         let mut data_buf = self
@@ -372,7 +374,7 @@ impl RegisteredActiveMessages {
         SerializeHeader { msg: msg }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn create_data_buf(
         &self,
         header: SerializeHeader,
@@ -398,7 +400,7 @@ impl RegisteredActiveMessages {
 
     //we can remove this by cloning self and submitting to the executor
     #[async_recursion]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_local_am(
         &self,
         req_data: ReqMetaData,
@@ -406,7 +408,7 @@ impl RegisteredActiveMessages {
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
     ) {
-        // println!("[{:?}] exec_local_am", std::thread::current().id());
+        trace!("[{:?}] exec_local_am", std::thread::current().id());
         world.team.world_counters.inc_outstanding(1);
         team.team.team_counters.inc_outstanding(1);
         match am
@@ -444,7 +446,7 @@ impl RegisteredActiveMessages {
         team.team.team_counters.dec_outstanding(1);
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_am(
         &self,
         msg: &Msg,
@@ -453,7 +455,7 @@ impl RegisteredActiveMessages {
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
     ) {
-        // println!("exec_am");
+        trace!("ame exec_am");
         let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -471,7 +473,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
 
         world.team.world_counters.inc_outstanding(1);
@@ -503,7 +505,7 @@ impl RegisteredActiveMessages {
         // ame.process_msg(am, 0, true).await;
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_return_am(
         &self,
         msg: &Msg,
@@ -512,7 +514,7 @@ impl RegisteredActiveMessages {
         i: &mut usize,
         lamellae: &Arc<Lamellae>,
     ) {
-        // println!("exec_return_am");
+        trace!("ame exec_return_am");
         let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -529,13 +531,13 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
         self.exec_local_am(req_data, am.as_local(), world, team)
             .await;
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_data_am(
         &self,
         msg: &Msg,
@@ -543,7 +545,7 @@ impl RegisteredActiveMessages {
         i: &mut usize,
         ser_data: &mut SerializedData,
     ) {
-        // println!("exec_data_am");
+        trace!("ame exec_data_am");
         let data_buf = ser_data.data_as_bytes();
         let data_header: DataHeader =
             crate::deserialize(&data_buf[*i..*i + *DATA_HEADER_LEN], false).unwrap();
@@ -564,6 +566,8 @@ impl RegisteredActiveMessages {
     }
 
     // #[tracing::instrument(skip_all)]
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_unit_am(
         &self,
         msg: &Msg,
@@ -571,7 +575,7 @@ impl RegisteredActiveMessages {
         ser_data: &SerializedData,
         i: &mut usize,
     ) {
-        // println!("exec_unit_am");
+        trace!("ame exec_unit_am");
         let data = ser_data.data_as_bytes();
         let unit_header: UnitHeader =
             crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();

@@ -148,7 +148,7 @@ impl Batcher for BatcherType {
             }
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
         &self,
         msg: Msg,

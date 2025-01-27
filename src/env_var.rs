@@ -164,7 +164,7 @@ where
 pub struct Config {
     /// A general timeout in seconds for various operations which may indicate a deadlock, default: 600.0 seconds
     #[serde(default = "default_deadlock_warning_timeout")]
-    pub deadlock_timeout: f64,
+    pub deadlock_warning_timeout: f64,
 
     /// The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
     #[serde(default = "default_am_group_batch_size")]

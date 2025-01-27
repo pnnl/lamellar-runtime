@@ -106,7 +106,7 @@ impl RofiRustComm {
         Ok(libfab)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
         let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
         let r_ptr = dst_addr.as_ptr() as *mut T as *mut R;
@@ -114,7 +114,7 @@ impl RofiRustComm {
             r_ptr.offset(i as isize).write_unaligned(val);
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn init_buffer<T>(&self, dst_addr: &mut [T]) {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         // println!("{:?} {:?}", dst_addr.as_ptr(), bytes_len);
@@ -130,7 +130,7 @@ impl RofiRustComm {
             }
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn check_buffer_elems<R: std::cmp::PartialEq + std::fmt::Debug, T>(
         &self,
         dst_addr: &mut [T],
@@ -171,7 +171,7 @@ impl RofiRustComm {
         }
         Ok(())
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn check_buffer<T>(&self, dst_addr: &mut [T]) -> TxResult<()> {
         let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
         unsafe {
@@ -187,7 +187,7 @@ impl RofiRustComm {
         }
         Ok(())
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         // println!("iget_data {:?} {:x} {:?}", pe, src_addr, dst_addr.as_ptr());
         // let _lock = self.comm_mutex.write();
@@ -405,7 +405,7 @@ impl CommOps for RofiRustComm {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         if pe != self.my_pe {
             let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
@@ -535,7 +535,7 @@ pub(crate) struct RofiRustData {
 }
 
 impl RofiRustData {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(libfab_comm: Arc<Comm>, size: usize) -> Result<RofiRustData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
@@ -559,7 +559,7 @@ impl RofiRustData {
 }
 
 impl SerializedDataOps for RofiRustData {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn header_as_bytes(&self) -> &mut [u8] {
         let header_size = *SERIALIZE_HEADER_LEN;
         // println!("header_as_bytes header_size: {:?}", header_size);
@@ -571,31 +571,31 @@ impl SerializedDataOps for RofiRustData {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn increment_cnt(&self) {
         unsafe { (*(self.addr as *const AtomicUsize)).fetch_add(1, Ordering::SeqCst) };
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn len(&self) -> usize {
         self.len
     }
 }
 
 impl Des for RofiRustData {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(self.header_as_bytes(), false).unwrap()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         Ok(crate::deserialize(self.data_as_bytes(), true)?)
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn header_and_data_as_bytes(&self) -> &mut [u8] {
         unsafe {
             std::slice::from_raw_parts_mut(
@@ -604,7 +604,7 @@ impl Des for RofiRustData {
             )
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn print(&self) {
         println!(
             "addr: {:x} relative addr {:x} len {:?} data_start {:x} data_len {:?} alloc_size {:?}",
@@ -619,7 +619,7 @@ impl Des for RofiRustData {
 }
 
 impl SubData for RofiRustData {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn sub_data(&self, start: usize, end: usize) -> SerializedData {
         let mut sub = self.clone();
         sub.data_start += start;
@@ -629,7 +629,7 @@ impl SubData for RofiRustData {
 }
 
 impl Clone for RofiRustData {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn clone(&self) -> Self {
         unsafe {
             let ref_cnt = self.addr as *const AtomicUsize;
@@ -648,7 +648,7 @@ impl Clone for RofiRustData {
 }
 
 impl Drop for RofiRustData {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };
         if cnt == 1 {

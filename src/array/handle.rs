@@ -138,8 +138,6 @@ impl<T: Dist> InnerRdmaHandle<T> {
     }
     pub(crate) fn blocking_wait(
         &mut self,
-        scheduler: &Arc<Scheduler>,
-        am_counters: Vec<Arc<AMCounters>>,
         lamellae: &Arc<Lamellae>,
     ) {
         match self {
@@ -250,7 +248,7 @@ impl<T: Dist> LamellarRequest for ArrayRdmaHandle<T> {
         self.spawned = true;
         let team_rt = self.array.team();
         self.reqs
-            .blocking_wait(&team_rt.scheduler, team_rt.counters(), &team_rt.lamellae);
+            .blocking_wait( &team_rt.lamellae);
         // for req in self.reqs.drain(0..) {
         //     req.blocking_wait();
         // }

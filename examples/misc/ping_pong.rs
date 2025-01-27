@@ -106,7 +106,7 @@ impl LamellarAm for RecvAm {
                 // );
                 self.buffer
                     .res_recv_buffer
-                    .put(self.remote_pe, my_start, res_send_buf.clone());
+                    .put(self.remote_pe, my_start, res_send_buf.clone()).await;
             }
             println!("{} recv_cnt: {}", self.remote_pe, cnt);
         }
@@ -168,7 +168,7 @@ impl LamellarAm for SendAm {
                 self.remote_pe,
                 my_start,
                 buffer.idx_send_buffer.sub_region(start..end),
-            );
+            ).await;
 
             while buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1]
                 == usize::MAX

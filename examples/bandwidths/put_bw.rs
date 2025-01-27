@@ -49,7 +49,7 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                unsafe { array.put(num_pes - 1, j, data.sub_region(..num_bytes as usize)) };
+                unsafe { let _ = array.put(num_pes - 1, j, data.sub_region(..num_bytes as usize)).spawn(); }
 
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
@@ -62,6 +62,7 @@ fn main() {
         }
         if my_pe == num_pes - 1 {
             let array_slice = unsafe { array.as_slice() };
+            // TODO: Not Needed
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
                     std::thread::yield_now()

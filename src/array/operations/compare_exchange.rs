@@ -121,7 +121,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let req = array.compare_exchange(idx,current,val);
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn compare_exchange<'a>(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
         self.inner_array()
             .initiate_batch_result_op_2(
@@ -161,7 +161,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let req = array.batch_compare_exchange(indices,current,10);
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -287,7 +287,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = array.compare_exchange_epsilon(idx,current,val,epsilon);
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
@@ -334,7 +334,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon);
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -449,7 +449,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let req = unsafe{ array.compare_exchange(idx,current,val)};
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn compare_exchange<'a>(
         &self,
         index: usize,
@@ -494,7 +494,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let req = unsafe{ array.batch_compare_exchange(indices,current,10)};
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -617,7 +617,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = unsafe{ array.compare_exchange_epsilon(idx,current,val,epsilon)};
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
@@ -664,7 +664,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = unsafe{ array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon)};
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,

@@ -6,6 +6,7 @@ use std::{
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
+use tracing::trace;
 
 use crate::{
     active_messaging::AMCounters,
@@ -27,19 +28,21 @@ pub(super) enum Op<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LocalFuture<T> {
-    pub(crate) op: Op<T>,
+    pub(super) op: Op<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> LocalFuture<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
-        println!(
-            "putting src: {:?} dst: {:?} len: {}",
+        trace!(
+            "putting src: {:?} dst: {:?} len: {} num bytes {}",
             src.addr,
             dst,
-            src.len()
+            src.len(),
+            src.len() * std::mem::size_of::<T>()
         );
         if !(src.contains(dst) || src.contains(dst + src.len())) {
             unsafe {
@@ -51,8 +54,9 @@ impl<T: Remote> LocalFuture<T> {
             }
         }
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn inner_get(&self, src: &CommAllocAddr, dst: &CommSlice<T>) {
-        println!(
+        trace!(
             "getting src: {:?} dst: {:?} len: {}",
             src,
             dst.addr,

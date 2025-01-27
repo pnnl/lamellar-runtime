@@ -21,6 +21,7 @@ use futures_util::future::join_all;
 use futures_util::{Future, StreamExt};
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
+use tracing::{trace, warn};
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -162,9 +163,11 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
 }
 
 impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn launch(&mut self) {
         self.launch_am_if_needed();
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn blocking_wait(mut self) -> Self::Output {
         self.launch_am_if_needed();
         let mut res = self.inner.data.lock().remove(&self.sub_id);
@@ -175,6 +178,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
         self.process_result(res.expect("result should exist"))
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let data = self.inner.data.lock();
@@ -188,7 +192,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
                 .entry(self.sub_id)
                 .and_modify(|w| {
                     if !w.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", w);
+                        warn!("WARNING: overwriting waker {:?}", w);
                         w.wake_by_ref();
                     }
                     w.clone_from(waker);
@@ -198,6 +202,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupAmHandle<T> {
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn val(&self) -> Self::Output {
         let res = self
             .inner
@@ -414,6 +419,8 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
         res
     }
 
+
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let data = self.inner.data.lock();
@@ -430,7 +437,7 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
                 .entry(self.sub_id)
                 .and_modify(|w| {
                     if !w.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", w);
+                        warn!("WARNING: overwriting waker {:?}", w);
                         w.wake_by_ref();
                     }
                     w.clone_from(waker);
@@ -697,7 +704,7 @@ impl ActiveMessaging for LamellarTaskGroup {
     type MultiAmHandle<R: AmDist> = TaskGroupMultiAmHandle<R>;
     type LocalAmHandle<L> = TaskGroupLocalAmHandle<L>;
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         self.wait_all();
     }
@@ -706,7 +713,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.await_all()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         self.team.barrier();
     }
@@ -715,7 +722,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.team.async_barrier()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -724,7 +731,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_all_inner(am)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -732,7 +739,7 @@ impl ActiveMessaging for LamellarTaskGroup {
         self.exec_am_pe_inner(pe, am)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -877,7 +884,7 @@ impl LamellarTaskGroup {
                 if std::thread::current().id() == *crate::MAIN_THREAD {
                     self.team.scheduler.exec_task();
                 }
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                     "in task group wait_all mype: {:?} cnt: team {:?} team {:?} tg {:?} tg {:?}",
                     self.team.world_pe,
@@ -935,7 +942,7 @@ impl LamellarTaskGroup {
                 orig_launched = self.counters.launched_req_cnt.load(Ordering::SeqCst);
                 // self.team.flush();
                 async_std::task::yield_now().await;
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                     "in task group wait_all mype: {:?} cnt: team {:?} team {:?} tg {:?} tg {:?}",
                     self.team.world_pe,
@@ -1011,7 +1018,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: unsafe { *self.team.remote_ptr_alloc.as_ptr() },
+            team_addr: self.team.remote_ptr_alloc.addr,
         };
         // println!("[{:?}] task group am all", std::thread::current().id());
         // self.team.scheduler.submit_am();
@@ -1053,7 +1060,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: unsafe { *self.team.remote_ptr_alloc.as_ptr() },
+            team_addr: self.team.remote_ptr_alloc.addr,
         };
         // println!("[{:?}] task group am pe", std::thread::current().id());
         // self.team.scheduler.submit_am(Am::Remote(req_data, func));
@@ -1101,7 +1108,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: unsafe { *self.team.remote_ptr_alloc.as_ptr() },
+            team_addr: self.team.remote_ptr_alloc.addr,
         };
         // println!("[{:?}] task group am local", std::thread::current().id());
         // self.team.scheduler.submit_am(Am::Local(req_data, func));
@@ -1208,6 +1215,7 @@ impl LamellarResultSerde for AmGroupAm {
 }
 
 impl LamellarActiveMessage for AmGroupAm {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec(
         self: Arc<Self>,
         __lamellar_current_pe: usize,
@@ -1218,6 +1226,7 @@ impl LamellarActiveMessage for AmGroupAm {
     ) -> std::pin::Pin<Box<dyn Future<Output = LamellarReturn> + Send>> {
         Box::pin(async move {
             // let timer = std::time::Instant::now();
+            trace!("AmGroupAm exec");
             self.ams[self.si..self.ei]
                 .iter()
                 .map(|e| {
@@ -1232,6 +1241,7 @@ impl LamellarActiveMessage for AmGroupAm {
                 .collect::<futures_util::stream::FuturesOrdered<_>>()
                 .collect::<Vec<_>>()
                 .await;
+            trace!("AmGroupAm exec done");
             // for am in self.ams[self.si..self.ei].iter() {
             //     am.clone().exec(__lamellar_current_pe,__lamellar_num_pes,__local,__lamellar_world.clone(),__lamellar_team.clone()).await;
             // }
@@ -1548,8 +1558,9 @@ impl AmGroup {
     ///     world.block_on(am_group.exec());
     /// }
     /// ```
+    #[tracing::instrument(skip_all, level = "debug")]
     pub async fn exec(&mut self) {
-        // let _timer = std::time::Instant::now();
+        let timer = std::time::Instant::now();
         let mut reqs = vec![];
         let mut reqs_all = vec![];
         // let mut all_req = None;
@@ -1644,14 +1655,16 @@ impl AmGroup {
 
             reqs_pes.push(pe);
         }
-        // println!(
-        //     "launch time: {:?} cnt: {:?} {:?}",
-        //     timer.elapsed().as_secs_f64(),
-        //     reqs.len(),
-        //     reqs_all.len()
-        // );
+        trace!(
+            "launch time: {:?} cnt: {:?} {:?}",
+            timer.elapsed().as_secs_f64(),
+            reqs.len(),
+            reqs_all.len()
+        );
         futures_util::future::join_all(reqs).await;
+        trace!("all reqs done");
         futures_util::future::join_all(reqs_all).await;
+        trace!("all all reqs done");
         // if let Some(req) = all_req{
         //     req.await;
         // }

@@ -132,7 +132,6 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
-                    let team_rt = self.array.team_rt();
 
                     for req in reqs.drain(..) {
                         let data = req.await;

@@ -10,6 +10,7 @@ use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures_util::Future;
 use rand::prelude::*;
+use tracing::{trace_span, Instrument};
 use std::panic;
 use std::pin::Pin;
 use std::process;
@@ -33,7 +34,7 @@ pub(crate) struct WorkStealingThread {
 }
 
 impl WorkStealingThread {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level ="debug")]
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
@@ -44,7 +45,7 @@ impl WorkStealingThread {
         builder
             .spawn(move || {
                 // println!("TestSchdulerWorker thread running {:?} core: {:?}", std::thread::current().id(), id);
-                // let _span = trace_span!("WorkStealingThread::run");
+                let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
                 let mut rng = rand::thread_rng();
@@ -84,11 +85,11 @@ impl WorkStealingThread {
 
                     if let Some(runnable) = omsg {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+                            && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
                         {
                             println!("runnable {:?}", runnable);
                             println!(
-                                "work_q size {:?} work inj size {:?}", // num_tasks {:?}",
+                               "work_q size {:?} work inj size {:?}", // num_tasks {:?}",
                                 worker.work_q.len(),
                                 worker.work_inj.len(),
                                 // num_tasks.load(Ordering::SeqCst)
@@ -98,11 +99,11 @@ impl WorkStealingThread {
                         runnable.run();
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+                        && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
                         && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
-                            "work_q size {:?} work inj size {:?} ", // num_tasks {:?}",
+                           "work_q size {:?} work inj size {:?}", // num_tasks {:?}",
                             worker.work_q.len(),
                             worker.work_inj.len(),
                             // num_tasks.load(Ordering::SeqCst)
@@ -138,16 +139,17 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        // trace_span!("submit_task").in_scope(|| {
+        let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace_span!("spawn_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
-            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
+            .metadata(task_id)
             .spawn(
                 move |_task_id| async move {
                     let res = task.await;
                     res
-                },
+                }.instrument(trace_span!("Spawned Task", task_id = task_id)),
                 schedule,
             );
 
@@ -156,19 +158,20 @@ impl LamellarExecutor for WorkStealing {
             task: LamellarTaskInner::LamellarTask(Some(task)),
             executor,
         }
-        // });
+        // })
     }
     fn submit_task<F>(&self, task: F)
     where
         F: Future + Send + 'static,
         F::Output: Send,
     {
+        let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("submit_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
-            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .metadata(task_id)
+            .spawn(move |_task_id| async move { task.await }.instrument(trace_span!("Submitted Task", task_id = task_id)), schedule);
 
         runnable.schedule();
         task.detach();
@@ -180,12 +183,13 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        // trace_span!("submit_task").in_scope(|| {
+        let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace_span!("submit_io_task:").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
-            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .metadata(task_id)
+            .spawn(move |_task_id| async move { task.await }.instrument(trace_span!("IO Task", task_id = task_id)), schedule);
 
         runnable.schedule();
         task.detach();
@@ -197,12 +201,13 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        // trace_span!("submit_task").in_scope(|| {
+        let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
+        // trace_span!("submit_immediate_task").in_scope(|| {
         let imm_inj = self.imm_inj.clone();
         let schedule = move |runnable| imm_inj.push(runnable);
         let (runnable, task) = Builder::new()
-            .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .metadata(task_id)
+            .spawn(move |_task_id| async move { task.await }.instrument(trace_span!("Immediate Task", task_id = task_id)), schedule);
 
         runnable.schedule();
         // runnable.run(); //try to run immediately
@@ -210,18 +215,20 @@ impl LamellarExecutor for WorkStealing {
         // });
     }
 
+    
     fn block_on<F: Future>(&self, fut: F) -> F::Output {
+        let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("block_on").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, mut task) = unsafe {
             Builder::new()
-                .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
+                .metadata(task_id)
                 .spawn_unchecked(
                     move |_task_id| async move {
                         let res = fut.await;
                         res
-                    },
+                    }.instrument(trace_span!("Block OnTask", task_id = task_id)),
                     schedule,
                 )
         };
@@ -235,7 +242,7 @@ impl LamellarExecutor for WorkStealing {
             output
         } else {
             println!(
-                "[{:?}] work stealing block on failed --  task id{:?}",
+               "[{:?}] work stealing block on failed --  task id{:?}",
                 std::thread::current().id(),
                 task.metadata()
             );
@@ -244,7 +251,7 @@ impl LamellarExecutor for WorkStealing {
         // })
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level ="debug")]
     fn shutdown(&self) {
         while self.panic.load(Ordering::SeqCst) == 0 && self.active_cnt.load(Ordering::Relaxed) > 0
         {
@@ -254,7 +261,7 @@ impl LamellarExecutor for WorkStealing {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level ="debug")]
     fn force_shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.status());
 
@@ -270,14 +277,14 @@ impl LamellarExecutor for WorkStealing {
             }
         }
         // println!(
-        //     "work stealing shut down {:?} {:?} {:?}",
+        //    "work stealing shut down {:?} {:?} {:?}",
         //     self.status(),
         //     self.active_cnt.load(Ordering::Relaxed),
         //     self.active_cnt.load(Ordering::Relaxed)
         // );
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level ="debug")]
     fn exec_task(&self) {
         let mut rng = rand::thread_rng();
         let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
@@ -311,6 +318,7 @@ impl LamellarExecutor for WorkStealing {
 }
 
 impl WorkStealing {
+    
     pub(crate) fn new(
         num_workers: usize,
         status: Arc<AtomicU8>,
@@ -381,7 +389,7 @@ impl WorkStealing {
 
 impl Drop for WorkStealing {
     //when is this called with respect to world?
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level ="debug")]
     fn drop(&mut self) {
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {

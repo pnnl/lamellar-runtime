@@ -19,6 +19,7 @@ use local_lamellae::{Local, LocalBuilder};
 #[cfg(feature = "enable-rofi")]
 use rofi_lamellae::{Rofi, RofiBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
+use tracing::trace;
 #[cfg(feature = "enable-libfabric")]
 use {
     libfab_lamellae::{LibFab, LibFabBuilder},
@@ -120,7 +121,7 @@ pub(crate) struct SerializeHeader {
     pub(crate) msg: Msg,
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub(crate) struct SerializedData {
     // pub(crate) addr: usize, // process space address)
     // pub(crate) alloc_size: usize,
@@ -135,7 +136,7 @@ pub(crate) struct SerializedData {
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub(crate) struct SubSerializedData {
     pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
@@ -145,7 +146,7 @@ pub(crate) struct SubSerializedData {
     pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub(crate) struct RemoteSerializedData {
     pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
@@ -167,17 +168,29 @@ unsafe impl Send for RemoteSerializedData {}
 unsafe impl Sync for RemoteSerializedData {}
 
 impl SerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
-        let alloc_size = size + ref_cnt_size;
+        let ser_data_size_size = std::mem::size_of::<usize>();
+        let ser_data_offset = ref_cnt_size + ser_data_size_size;
+        let alloc_size = size + ref_cnt_size + ser_data_size_size;
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
         let ref_cnt = alloc.addr as *const AtomicUsize;
-        let ser_data_bytes = alloc.slice_at_offset(ref_cnt_size, size);
+        let ser_data_size = (alloc.addr + ref_cnt_size) as *mut usize;
+        let ser_data_bytes = alloc.slice_at_byte_offset(ser_data_offset, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
         // let ser_data_addr = addr + ref_cnt_size;
         // let raw_data_addr = ser_data_addr + *SERIALIZE_HEADER_LEN;
 
+        unsafe { 
+            ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
+            *ser_data_size = alloc.size; 
+            trace!("creating new serialized data {:?} {:?} {:?} {:?} serialized data offset {:?} ref_cnt_addr {:x} size_addr {:x} size {:?}",
+            alloc,ser_data_bytes,header_bytes,payload_bytes,
+            alloc.addr+ser_data_offset, alloc.addr,alloc.addr + ref_cnt_size, *ser_data_size);
+        }
+        
         Ok(SerializedData {
             // addr,
             // alloc_size,
@@ -193,20 +206,25 @@ impl SerializedData {
         })
     }
 
-    pub(crate) unsafe fn from_raw(addr: usize) -> Self {
-        let data = (addr as *const Self)
-            .as_ref()
-            .expect("valid serialized data");
-        SerializedData {
-            alloc: data.alloc.clone(),
-            ref_cnt: data.ref_cnt,
-            ser_data_bytes: data.ser_data_bytes,
-            header_bytes: data.header_bytes,
-            payload_bytes: data.payload_bytes,
-            comm: data.comm.clone(),
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) unsafe fn decrement_cnt_from_addr(comm: &Arc<Comm>, addr: usize) {
+        let alloc_addr = addr - std::mem::size_of::<usize>() - std::mem::size_of::<AtomicUsize>();
+        let alloc_size = (alloc_addr + std::mem::size_of::<AtomicUsize>()) as *const usize;
+        let alloc_size = alloc_size.as_ref().expect("valid serialized data");
+        let ref_cnt = alloc_addr as *const AtomicUsize;
+        let ref_cnt = ref_cnt.as_ref().expect("valid serialized data");
+        trace!("alloc_addr {:x}  alloc_size {:?} ref_cnt {:?}",alloc_addr,alloc_size,ref_cnt.load(Ordering::SeqCst));
+        if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1  {
+            trace!("freeing serialized data from addr {:x} ",alloc_addr);
+            comm.rt_free(CommAlloc{
+                addr: alloc_addr,
+                size: *alloc_size,
+                alloc_type: CommAllocType::RtHeap
+            }); 
         }
     }
 
+    #[tracing::instrument(level = "debug")]
     pub(crate) fn into_remote(self) -> RemoteSerializedData {
         self.increment_cnt();
         RemoteSerializedData {
@@ -222,30 +240,45 @@ impl SerializedData {
 
 // impl SerializedDataOps for SerializedData {
 impl SerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
         // let header_size = *SERIALIZE_HEADER_LEN;
         // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
         // let header_size = *SERIALIZE_HEADER_LEN;
         // unsafe { std::slice::from_raw_parts_mut((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) fn header_len(&self) -> usize {
+        self.header_bytes.len()
+    }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
         // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         // unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) fn data_len(&self) -> usize {
+        self.payload_bytes.len()
     }
 
     // pub(crate) fn header_and_data_as_bytes(&self) -> CommSlice<u8> {
     //     // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
     //     self.ser_data_bytes
     // }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         // unsafe {
         //     std::slice::from_raw_parts_mut(
@@ -256,7 +289,7 @@ impl SerializedData {
         self.ser_data_bytes
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn increment_cnt(&self) {
         unsafe {
             self.ref_cnt
@@ -266,28 +299,42 @@ impl SerializedData {
         };
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn len(&self) -> usize {
-        self.alloc.size - std::mem::size_of::<AtomicUsize>()
+        self.ser_data_bytes.len()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn print(&self) {
         println!(
-            "addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            "{:?}",self
+        );
+    }
+}
+
+impl std::fmt::Debug for SerializedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SeralizedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            unsafe {self
+                .ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .load(Ordering::SeqCst) },
             self.alloc.addr,
             self.ser_data_bytes.as_ptr(),
             self.ser_data_bytes.len(),
             self.payload_bytes.as_ptr(),
             self.payload_bytes.len(),
-            self.alloc.size
-        );
+            self.alloc.size)
     }
 }
 
 impl Des for SerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(&self.header_as_bytes(), false).unwrap()
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
@@ -296,6 +343,7 @@ impl Des for SerializedData {
 // impl SubData for SubSerializedData {
 impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
+    #[tracing::instrument(level = "debug")]
     pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
         // let mut sub = self.clone();
         self.increment_cnt();
@@ -311,8 +359,11 @@ impl SerializedData {
 }
 
 impl Drop for SerializedData {
+    #[tracing::instrument( level = "debug")]
     fn drop(&mut self) {
+        
         unsafe {
+            trace!("dropping SerializedData {:?} ",self);
             if self
                 .ref_cnt
                 .as_ref()
@@ -327,30 +378,54 @@ impl Drop for SerializedData {
 }
 
 impl SubSerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
         // let header_size = *SERIALIZE_HEADER_LEN;
         // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
-
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
         // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
+
+}
+
+impl std::fmt::Debug for SubSerializedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "SubSeralizedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            unsafe {self
+                .ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .load(Ordering::SeqCst) },
+            self.alloc.addr,
+            self._ser_data_bytes.as_ptr(),
+            self._ser_data_bytes.len(),
+            self.payload_bytes.as_ptr(),
+            self.payload_bytes.len(),
+            self.alloc.size)
+    }
 }
 
 impl Des for SubSerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(&self.header_as_bytes(), false).unwrap()
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
         Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
 }
 
 impl Drop for SubSerializedData {
+    #[tracing::instrument( level = "debug")]
     fn drop(&mut self) {
+        
         unsafe {
+            trace!("dropping SubSerializedData {:?}",self);
             if self
                 .ref_cnt
                 .as_ref()
@@ -365,6 +440,7 @@ impl Drop for SubSerializedData {
 }
 
 impl RemoteSerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn increment_cnt(&self) {
         unsafe {
             self.ref_cnt
@@ -374,12 +450,31 @@ impl RemoteSerializedData {
         };
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn len(&self) -> usize {
-        self.alloc.size - std::mem::size_of::<AtomicUsize>()
+        self.ser_data_bytes.len()
+    }
+}
+
+impl std::fmt::Debug for RemoteSerializedData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RemoteSerializedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            unsafe {self
+                .ref_cnt
+                .as_ref()
+                .expect("valid serialized data")
+                .load(Ordering::SeqCst) },
+            self.alloc.addr,
+            self.ser_data_bytes.as_ptr(),
+            self.ser_data_bytes.len(),
+            self.payload_bytes.as_ptr(),
+            self.payload_bytes.len(),
+            self.alloc.size)
     }
 }
 
 impl Clone for RemoteSerializedData {
+    #[tracing::instrument( level = "debug")]
     fn clone(&self) -> Self {
         self.increment_cnt();
         RemoteSerializedData {
@@ -394,8 +489,11 @@ impl Clone for RemoteSerializedData {
 }
 
 impl Drop for RemoteSerializedData {
+    #[tracing::instrument( level = "debug")]
     fn drop(&mut self) {
+        
         unsafe {
+            trace!("dropping RemoteSerializedData {:?}",self);
             if self
                 .ref_cnt
                 .as_ref()
@@ -515,6 +613,7 @@ pub(crate) trait LamellaeAM: Send {
 }
 
 #[allow(unused_variables)]
+#[tracing::instrument(skip_all, level = "debug")]
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "rofi")]

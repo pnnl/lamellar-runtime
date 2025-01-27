@@ -65,7 +65,7 @@ pub(crate) struct WorkStealingThread {
 }
 
 impl WorkStealingThread {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn run(
         worker: WorkStealingThread,
         active_cnt: Arc<AtomicUsize>,
@@ -112,7 +112,7 @@ impl WorkStealingThread {
 
                     if let Some(runnable) = omsg {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+                            && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
                         {
                             println!("runnable {:?}", runnable);
                             println!(
@@ -126,7 +126,7 @@ impl WorkStealingThread {
                         runnable.run();
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+                        && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
                         && !worker.group_queue.is_empty()
                     {
                         println!(
@@ -155,7 +155,7 @@ impl WorkStealingThread {
 // }
 
 // impl IoThread {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn run(worker: IoThread, active_cnt: Arc<AtomicUsize>, id: CoreId) -> thread::JoinHandle<()> {
 //         let builder = thread::Builder::new().name("io_thread".into());
 //         builder
@@ -173,7 +173,7 @@ impl WorkStealingThread {
 //                         .or_else(|| worker.io_inj.steal_batch_and_pop(&worker.io_q).success());
 //                     if let Some(runnable) = io_task {
 //                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-//                             && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+//                             && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
 //                         {
 //                             println!(
 //                                 "io_q size {:?} io inj size {:?} ", // num_tasks {:?}",
@@ -187,7 +187,7 @@ impl WorkStealingThread {
 //                     }
 
 //                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-//                         && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+//                         && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
 //                         && (worker.io_q.len() > 0 || worker.io_inj.len() > 0)
 //                     {
 //                         println!(
@@ -320,7 +320,7 @@ impl LamellarExecutor for WorkStealing2 {
         // })
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn shutdown(&self) {
         while self.panic.load(Ordering::SeqCst) == 0 && self.active_cnt.load(Ordering::Relaxed) > 0
         {
@@ -330,7 +330,7 @@ impl LamellarExecutor for WorkStealing2 {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn force_shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.status());
 
@@ -353,7 +353,7 @@ impl LamellarExecutor for WorkStealing2 {
         // );
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_task(&self) {
         let mut rng = rand::thread_rng();
         let t = rand::distributions::Uniform::new(0, self.work_stealers.len());
@@ -532,7 +532,7 @@ impl WorkStealing2 {
 
 impl Drop for WorkStealing2 {
     //when is this called with respect to world?
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {

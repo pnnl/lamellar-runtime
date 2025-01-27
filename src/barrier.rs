@@ -141,7 +141,7 @@ impl Barrier {
     ) {
         RuntimeWarning::BarrierTimeout(s.elapsed().as_secs_f64()).print();
 
-        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+        if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
             println!(
                 "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
                 std::thread::current().id(),
@@ -186,7 +186,7 @@ impl Barrier {
                     // );
                     while barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
                         wait_func();
-                        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+                        if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                             break;
                         }
                     }
@@ -215,7 +215,7 @@ impl Barrier {
                                 // );
                                 // println!("barrier put_slice 1");
                                 unsafe {
-                                    self.barrier_buf[i - 1]
+                                     let _ = self.barrier_buf[i - 1]
                                         .put_comm_slice(
                                             send_pe,
                                             round,
@@ -405,7 +405,7 @@ impl BarrierHandle {
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                 unsafe {
-                    self.barrier_buf[i - 1]
+                    let _ = self.barrier_buf[i - 1]
                         .put_comm_slice(send_pe, round, CommSlice::from_slice(barrier_slice))
                         .spawn();
                     //safe as we are the only ones writing to our index

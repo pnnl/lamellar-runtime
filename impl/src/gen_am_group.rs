@@ -365,16 +365,21 @@ fn impl_am_group_user(
                 }
             }
 
+            #[#lamellar::tracing::instrument(skip_all, level = "debug")]
             pub async fn exec(mut self) -> #typed_am_group_result_return_type{
 
+                #lamellar::tracing::trace!("typed_am_group exec");
                 // let timer = std::time::Instant::now();
 
                 for pe in 0..(self.team.num_pes()+1){
                     self.send_pe_buffer(pe);
                 }
 
-                // println!("{} pending reqs", self.pending_reqs.len());
-                let results = #lamellar::futures_util::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
+                #lamellar::tracing::trace!("{} pending reqs", self.pending_reqs.len());
+                let results = #lamellar::futures_util::future::join_all(self.pending_reqs.drain(..).map(|req| async { let req = req.into_result().await; 
+                    #lamellar::tracing::trace!("got result");
+                    req
+                })).await;
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
             }

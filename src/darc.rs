@@ -381,6 +381,7 @@ impl<T: 'static> DarcInner<T> {
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
         // if self.ref_cnt_addr + pe * std::mem::size_of::<AtomicUsize>() < 10 {
         if self.ref_cnt_slice[pe] < 10 {
@@ -421,6 +422,7 @@ impl<T: 'static> DarcInner<T> {
         unsafe { &(*self.item) }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn send_finished(&self) -> Vec<LamellarTask<()>> {
         let ref_cnts = unsafe {
             std::slice::from_raw_parts_mut(
@@ -465,6 +467,7 @@ impl<T: 'static> DarcInner<T> {
         reqs
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn wait_on_state(
         // inner: WrappedInner<T>,
         inner: DarcCommPtr<T>,
@@ -478,7 +481,7 @@ impl<T: 'static> DarcInner<T> {
                 if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                     join_all(inner.send_finished()).await;
                 }
-                if !reset && timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if !reset && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     // let ref_cnts_slice = unsafe {
                     //     std::slice::from_raw_parts_mut(
                     //         inner.ref_cnt_addr as *mut usize,
@@ -498,11 +501,11 @@ impl<T: 'static> DarcInner<T> {
                         inner.local_cnt.load(Ordering::SeqCst),
                         inner.dist_cnt.load(Ordering::SeqCst),
                         inner.ref_cnt_slice,
-                        config().deadlock_timeout,
+                        config().deadlock_warning_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                 }
-                if reset && timer.elapsed().as_secs_f64() > config().deadlock_timeout / 2.0 {
+                if reset && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout / 2.0 {
                     return false;
                 }
                 if reset && inner.mode_slice.iter().any(|x| *x == DarcMode::RestartDrop) {
@@ -514,6 +517,7 @@ impl<T: 'static> DarcInner<T> {
         true
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn broadcast_state(
         // mut inner: WrappedInner<T>,
         inner: DarcCommPtr<T>,
@@ -545,6 +549,7 @@ impl<T: 'static> DarcInner<T> {
         join_all(txs).await;
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn block_on_outstanding(
         // mut inner: WrappedInner<T>
         mut inner: DarcCommPtr<T>,
@@ -767,6 +772,7 @@ impl<T: 'static> DarcInner<T> {
         // self.debug_print();
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
         self.team().lamellae.comm().wait();
         let mut temp_now = Instant::now();
@@ -783,7 +789,7 @@ impl<T: 'static> DarcInner<T> {
                 orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
                 orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
                 async_std::task::yield_now().await;
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                         "in darc await_all mype: {:?} cnt: {:?} {:?}",
                         self.team().world_pe,
@@ -840,6 +846,7 @@ impl<T: 'static> fmt::Debug for DarcInner<T> {
 impl<T> Darc<T> {
     //#[doc(hidden)]
     /// downgrade a darc to a weak darc
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn downgrade(the_darc: &Darc<T>) -> WeakDarc<T> {
         // println!("downgrading darc ");
         // the_darc.print();
@@ -854,6 +861,7 @@ impl<T> Darc<T> {
         // the_darc.print();
         weak
     }
+    
     pub(crate) fn inner(&self) -> &DarcInner<T> {
         self.inner.as_ref().expect("invalid darc inner ptr")
     }
@@ -889,6 +897,7 @@ impl<T> Darc<T> {
     // }
 
     #[doc(hidden)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn serialize_update_cnts(&self, cnt: usize) {
         // println!("serialize darc cnts");
         self.inner()
@@ -902,6 +911,7 @@ impl<T> Darc<T> {
     }
 
     #[doc(hidden)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         self.inner().inc_pe_ref_count(self.src_pe, 1);
@@ -913,6 +923,7 @@ impl<T> Darc<T> {
     }
 
     #[doc(hidden)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn inc_local_cnt(&self, cnt: usize) {
         self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
         self.inner()
@@ -974,6 +985,7 @@ impl<T: Send + Sync> Darc<T> {
     ///
     /// let five = Darc::new(&world,5).block().expect("PE in world team");
     /// ```
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn new<U: Into<IntoLamellarTeam>>(team: U, item: T) -> DarcHandle<T> {
         let team = team.into().team.clone();
         DarcHandle {
@@ -1007,6 +1019,7 @@ impl<T: Send + Sync> Darc<T> {
     //     Darc::try_new_with_drop(team, item, state, None)
     // }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn async_try_new_with_drop<U: Into<IntoLamellarTeam>>(
         team: U,
         item: T,
@@ -1086,11 +1099,11 @@ impl<T: Send + Sync> Darc<T> {
             weak_local_cnt: AtomicUsize::new(0),
             dist_cnt: AtomicUsize::new(0),
             total_dist_cnt: AtomicUsize::new(0),
-            ref_cnt_slice: darc_alloc.slice_at_offset(ref_cnt_offset, team_rt.num_pes),
-            total_ref_cnt_slice: darc_alloc.slice_at_offset(total_ref_cnt_offset, team_rt.num_pes),
-            mode_slice: darc_alloc.slice_at_offset(mode_offset, team_rt.num_pes),
-            mode_ref_cnt_slice: darc_alloc.slice_at_offset(mode_ref_cnt_offset, team_rt.num_pes),
-            mode_barrier_slice: darc_alloc.slice_at_offset(mode_barrier_offset, team_rt.num_pes),
+            ref_cnt_slice: darc_alloc.slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes),
+            total_ref_cnt_slice: darc_alloc.slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes),
+            mode_slice: darc_alloc.slice_at_byte_offset(mode_offset, team_rt.num_pes),
+            mode_ref_cnt_slice: darc_alloc.slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes),
+            mode_barrier_slice: darc_alloc.slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes),
             barrier: barrier_ptr,
             // mode_barrier_rounds: num_rounds,
             am_counters: am_counters_ptr,
@@ -1324,6 +1337,7 @@ macro_rules! launch_drop {
 }
 
 impl<T: 'static> Drop for Darc<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
@@ -1503,6 +1517,7 @@ impl<T> std::ops::DerefMut for DarcCommPtr<T> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exec(self) {
         // let mode_refs = unsafe {
         //     std::slice::from_raw_parts_mut(self.mode_addr as *mut DarcMode, self.num_pes)
@@ -1539,7 +1554,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     join_all(self.inner.send_finished()).await;
                 }
 
-                if timeout.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if timeout.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     // let ref_cnts_slice = unsafe {
                     //     std::slice::from_raw_parts_mut(
                     //         wrapped.ref_cnt_addr as *mut usize,
@@ -1558,7 +1573,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         self.inner.local_cnt.load(Ordering::SeqCst),
                         self.inner.ref_cnt_slice.as_slice(),
                         self.inner.dist_cnt.load(Ordering::SeqCst),
-                        config().deadlock_timeout,
+                        config().deadlock_warning_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();
@@ -1582,7 +1597,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                     // wrapped.send_finished()
                     join_all(self.inner.send_finished()).await;
                 }
-                if timeout.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if timeout.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     // let ref_cnts_slice = std::slice::from_raw_parts_mut(
                     //     wrapped.ref_cnt_addr as *mut usize,
                     //     wrapped.num_pes,
@@ -1599,7 +1614,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                         self.inner.local_cnt.load(Ordering::SeqCst),
                         self.inner.ref_cnt_slice.as_slice(),
                         self.inner.dist_cnt.load(Ordering::SeqCst),
-                        config().deadlock_timeout,
+                        config().deadlock_warning_timeout,
                         std::backtrace::Backtrace::capture()
                     );
                     timeout = std::time::Instant::now();

@@ -1,3 +1,5 @@
+use tracing::trace;
+
 use crate::lamellae::{
     comm::{error::AllocResult, CommMem},
     AllocError, CommAlloc, CommAllocAddr, CommAllocType,
@@ -9,6 +11,7 @@ use super::{
 };
 
 impl CommMem for LocalComm {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn alloc(
         &self,
         size: usize,
@@ -26,7 +29,7 @@ impl CommMem for LocalComm {
                 layout: layout,
             },
         );
-        println!("new alloc: {:x} {}", data_addr, size);
+        trace!("new alloc: {:x} {}", data_addr, size);
         Ok(CommAlloc {
             addr: data_addr,
             size,
@@ -34,17 +37,19 @@ impl CommMem for LocalComm {
         })
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn free(&self, alloc: CommAlloc) {
         debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.addr) {
-            println!("freeing alloc: {:x}", alloc.addr);
+            trace!("freeing alloc: {:x}", alloc.addr);
             unsafe {
                 std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
             };
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
@@ -57,7 +62,7 @@ impl CommMem for LocalComm {
                 layout,
             },
         );
-        println!("new rt alloc: {:x} {}", data_addr, size);
+        trace!("new rt alloc: {:x} {}", data_addr, size);
         Ok(CommAlloc {
             addr: data_addr,
             size,
@@ -69,12 +74,13 @@ impl CommMem for LocalComm {
         true
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
         debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
         let mut allocs = self.heap_allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.addr) {
             unsafe {
-                println!("freeing rt alloc: {:x}", alloc.addr);
+                trace!("freeing rt alloc: {:x}", alloc.addr);
                 std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
                 // let _ = Box::from_raw(data_ptr.ptr);
             }; //it will free when dropping from scope

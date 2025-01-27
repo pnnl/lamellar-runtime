@@ -108,7 +108,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.bit_and(idx,val);
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
@@ -143,7 +143,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_bit_and(indices,10);
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -182,7 +182,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.fetch_bit_and(idx,val);
     /// let old = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -220,7 +220,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_fetch_bit_and(indices,10);
     /// let old_vals = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -257,7 +257,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.bit_or(idx,val);
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
@@ -292,7 +292,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_bit_or(indices,10);
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -331,7 +331,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.fetch_bit_or(idx,val);
     /// let old = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -369,7 +369,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_fetch_bit_or(indices,10);
     /// let old_vals = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -406,7 +406,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.bit_xor(idx,val);
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
@@ -441,7 +441,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_bit_xor(indices,10);
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_bit_xor<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -480,7 +480,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.fetch_bit_xor(idx,val);
     /// let old = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -518,7 +518,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.batch_fetch_bit_xor(indices,10);
     /// let old_vals = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_fetch_bit_xor<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -619,7 +619,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.bit_and(idx,val)};
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
@@ -654,7 +654,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.batch_bit_and(indices,10)};
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -693,7 +693,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.fetch_bit_and(idx,val)};
     /// let old = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -731,7 +731,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.batch_fetch_bit_and(indices,10)};
     /// let old_vals = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_bit_and<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -768,7 +768,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.bit_or(idx,val)};
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
@@ -803,7 +803,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.batch_bit_or(indices,10)};
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -842,7 +842,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.fetch_bit_or(idx,val)};
     /// let old = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -880,7 +880,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.batch_fetch_bit_or(indices,10)};
     /// let old_vals = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_bit_or<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -917,7 +917,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.bit_xor(idx,val)};
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
@@ -952,7 +952,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.batch_bit_xor(indices,10)};
     /// req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_bit_xor<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -991,7 +991,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.fetch_bit_xor(idx,val)};
     /// let old = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
@@ -1029,7 +1029,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let req = unsafe{ array.batch_fetch_bit_xor(indices,10)};
     /// let old_vals = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_fetch_bit_xor<'a>(
         &self,
         index: impl OpInput<'a, usize>,

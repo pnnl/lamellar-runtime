@@ -10,7 +10,7 @@ use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 // use tracing_flame::FlameLayer;
-// use tracing_subscriber::{fmt, prelude::*, registry::Registry};
+use tracing_subscriber::fmt::{self, SubscriberBuilder};
 
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
@@ -51,6 +51,7 @@ fn main() {
     //     .with_max_level(Level::TRACE)
     //     .init();
     // let _guard = setup_global_subscriber();
+    let subscriber = fmt::init();
     let start = std::time::Instant::now();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local

@@ -282,7 +282,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -348,7 +348,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_fetch_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -411,7 +411,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         ArrayFetchBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_result_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,

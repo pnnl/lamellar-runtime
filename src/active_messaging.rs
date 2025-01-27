@@ -645,6 +645,7 @@ use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, ReqId};
 use async_trait::async_trait;
 use futures_util::Future;
 use parking_lot::Mutex;
+use tracing::trace;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1363,15 +1364,18 @@ pub(crate) trait ActiveMessageEngine {
 
     async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>);
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn get_team_and_world(
         &self,
         pe: usize,
         team_addr: usize,
         lamellae: &Arc<Lamellae>,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
+        trace!("get_team_and_world: pe: {:?} team_addr: {:x} ", pe, team_addr);
         let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
         let team_rt = unsafe {
-            let team_ptr: *const LamellarTeamRT = local_team_addr.as_ptr();
+            let team_ptr=  *local_team_addr.as_ptr::<*const LamellarTeamRT>() ;
+            trace!("team_ptr from local_team_addr {:?} {:?} {:?}",local_team_addr, team_ptr,local_team_addr.as_ref::<*const LamellarTeamRT>());
             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
             Arc::increment_strong_count(team_ptr);
             Pin::new_unchecked(Arc::from_raw(team_ptr))
@@ -1386,10 +1390,11 @@ pub(crate) trait ActiveMessageEngine {
         (team, world)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn send_data_to_user_handle(&self, req_id: ReqId, pe: usize, data: InternalResult) {
-        // println!("returned req_id: {:?}", req_id);
+        trace!("returned req_id: {:?}", req_id);
         let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
-        // println!("strong count recv: {:?} ", Arc::strong_count(&req));
+        trace!("strong count recv: {:?} ", Arc::strong_count(&req));
         req.add_result(pe, req_id.sub_id, data);
     }
 }

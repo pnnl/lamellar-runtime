@@ -444,6 +444,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.data.team.clone()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
         self.inner.data.team.lamellae.comm().wait();
         let am_counters = self.inner.data.array_counters.clone();
@@ -461,7 +462,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                 orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
                 orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
                 async_std::task::yield_now().await;
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                         "in darc await_all mype: {:?} cnt: {:?} {:?}",
                         self.team_rt().world_pe,
@@ -1010,6 +1011,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             .team
             .exec_am_local_tg(am, Some(self.team_counters()))
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         self.inner.data.team.lamellae.comm().wait();
         let mut temp_now = Instant::now();
@@ -1044,7 +1046,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             // std::thread::yield_now();
             // self.inner.data.team.flush();
             self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                 //|| first{
                 println!(
                     "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
@@ -1147,7 +1149,7 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     fn num_elems_local(&self) -> usize {
         self.inner.num_elems_local()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         if self.inner.sub {
             // println!("sub array {index}");
@@ -1591,7 +1593,7 @@ impl UnsafeArrayInner {
     }
 
     //index is relative to (sub)array (i.e. index=0 doesnt necessarily live on pe=0)
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
         // println!("pe_for_dist_index {index} {}", self.size);
         if self.size > index {
@@ -1617,7 +1619,7 @@ impl UnsafeArrayInner {
     }
 
     //index relative to subarray, return offset relative to subarray
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
         // println!("pe_full_offset_for_dist_index pe {pe} index {index}");
         let global_index = self.offset + index;
@@ -1681,7 +1683,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns local offset relative to full array
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
         let global_index = self.global_index_from_local(index)?;
         match self.distribution {
@@ -1710,7 +1712,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to original full length array
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn global_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         match self.distribution {
@@ -1790,7 +1792,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to subarrayy
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         let my_start_index = self.start_index_for_pe(my_pe)?; //None means subarray doesnt exist on this PE
@@ -1829,7 +1831,7 @@ impl UnsafeArrayInner {
         }
     }
     //return index relative to the subarray
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn start_index_for_pe(&self, pe: usize) -> Option<usize> {
         match self.distribution {
             Distribution::Block => {
@@ -1884,7 +1886,7 @@ impl UnsafeArrayInner {
     }
 
     //return index relative to the subarray
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn end_index_for_pe(&self, pe: usize) -> Option<usize> {
         let start_i = self.start_index_for_pe(pe)?;
         match self.distribution {
@@ -1906,7 +1908,7 @@ impl UnsafeArrayInner {
         }
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_elems_pe(&self, pe: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
@@ -1958,12 +1960,12 @@ impl UnsafeArrayInner {
             }
         }
     }
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_elems_local(&self) -> usize {
         self.num_elems_pe(self.data.my_pe)
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn local_as_mut_slice(&self) -> &mut [u8] {
         let slice =
             self.data.mem_region.as_casted_mut_slice::<u8>().expect(
@@ -2009,7 +2011,7 @@ impl UnsafeArrayInner {
         }
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn local_as_mut_ptr(&self) -> *mut u8 {
         let ptr =
             self.data.mem_region.as_casted_mut_ptr::<u8>().expect(

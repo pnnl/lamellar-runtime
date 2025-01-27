@@ -586,7 +586,7 @@ impl Scheduler {
         //TODO maybe this should be > 2
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                 println!(
                     "shutdown timeout, tasks remaining: {:?} panic: {:?}",
                     self.num_tasks.load(Ordering::Relaxed),

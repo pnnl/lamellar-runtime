@@ -49,7 +49,7 @@ impl<'a> RuntimeWarning<'a> {
                         false
                     }
                 }
-                RuntimeWarning::BarrierTimeout(elapsed) => elapsed > &config().deadlock_timeout,
+                RuntimeWarning::BarrierTimeout(elapsed) => elapsed > &config().deadlock_warning_timeout,
             }
         } else {
             false
@@ -100,7 +100,7 @@ impl<'a> RuntimeWarning<'a> {
                     You may be seeing this message if you have called barrier within an async context (meaning it was executed on a worker thread).
                     A full list of collective operations is found at https://docs.rs/lamellar/latest/lamellar/index.html?search=collective .
                     The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds, setting this to 0 will disable this warning.",
-                        std::thread::current().id(), config().deadlock_timeout)
+                        std::thread::current().id(), config().deadlock_warning_timeout)
                 }
             };
 

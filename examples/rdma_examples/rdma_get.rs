@@ -31,7 +31,7 @@ fn main() {
         }
 
         // we can use the local_array to initialize our local portion a shared memory region
-        unsafe { array.put(my_pe, 0, data.clone()) };
+        unsafe { array.put(my_pe, 0, data.clone()).block(); };
 
         //we can "get" from a remote segment of a shared mem region into a local segment of the shared mem region
         world.barrier();
@@ -41,8 +41,9 @@ fn main() {
             );
             println!("[{:?}] Before {:?}", my_pe, array_slice);
             unsafe {
-                array.get_unchecked(num_pes - 1, 0, array.clone());
+                array.get_unchecked(num_pes - 1, 0, array.clone()).block();
             }
+            // TODO: Not Needed
             while array_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
             } // wait for data to show up
@@ -50,7 +51,7 @@ fn main() {
             println!(
                 "-------------------------------------------------------------------------------"
             );
-            unsafe { array.put(my_pe, 0, data.clone()) }; //reset our local segment
+            unsafe { array.put(my_pe, 0, data.clone()).block(); }; //reset our local segment
         }
 
         world.barrier();
@@ -62,7 +63,7 @@ fn main() {
             );
             println!("[{:?}] Before {:?}", my_pe, data_slice);
             unsafe {
-                array.get_unchecked(num_pes - 1, 0, data.clone());
+                let _ =array.get_unchecked(num_pes - 1, 0, data.clone()).spawn();
             }
             while data_slice[ARRAY_LEN - 1] == my_pe as u8 {
                 std::thread::yield_now();
@@ -72,7 +73,7 @@ fn main() {
                 "-------------------------------------------------------------------------------"
             );
             unsafe {
-                array.get_unchecked(my_pe, 0, data.clone());
+                array.get_unchecked(my_pe, 0, data.clone()).block();
             } // reset local_array;
         }
         world.barrier();
@@ -87,7 +88,7 @@ fn main() {
 
         //stripe pe ids accross all shared mem regions
         for i in 0..ARRAY_LEN {
-            unsafe { array.get_unchecked(i % num_pes, i, data.sub_region(i..=i)) };
+            unsafe { let _ = array.get_unchecked(i % num_pes, i, data.sub_region(i..=i)).spawn(); };
         }
 
         for i in 0..ARRAY_LEN {

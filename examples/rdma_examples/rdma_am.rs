@@ -36,11 +36,15 @@ impl LamellarAM for RdmaAM {
         let local_slice = unsafe { local.as_mut_slice() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
-            self.array.get_unchecked(self.orig_pe, 0, local.clone());
+            self.array.get_unchecked(self.orig_pe, 0, local.clone()).await;
         }
-        while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
-            async_std::task::yield_now().await;
+        if local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8{
+            println!("get failure")
         }
+        // TODO: Not Needed
+        // while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
+        //     async_std::task::yield_now().await;
+        // }
 
         let my_index = self.index * lamellar::num_pes + lamellar::current_pe;
         println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..10], &local_slice[ARRAY_LEN-10..],lamellar::current_pe, my_index, self.orig_pe);
@@ -50,7 +54,7 @@ impl LamellarAM for RdmaAM {
         if my_index < ARRAY_LEN {
             unsafe {
                 self.array
-                    .put(self.orig_pe, my_index, local.sub_region(0..=0));
+                    .put(self.orig_pe, my_index, local.sub_region(0..=0)).await;
             }
         }
     }
@@ -70,11 +74,15 @@ impl LamellarAM for RdmaLocalMRAM {
         let local_slice = unsafe { local.as_mut_slice() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
-            self.array.get_unchecked(0, local.clone());
+            self.array.get_unchecked(0, local.clone()).await;
         }
-        while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
-            async_std::task::yield_now().await;
+        if local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8{
+            println!("get failure")
         }
+        // TODO: Not Needed
+        // while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
+        //     async_std::task::yield_now().await;
+        // }
 
         let my_index = self.index * lamellar::num_pes + lamellar::current_pe;
         println!(
@@ -88,7 +96,7 @@ impl LamellarAM for RdmaLocalMRAM {
         local_slice[0] = lamellar::current_pe as u8;
         if my_index < ARRAY_LEN {
             unsafe {
-                self.array.put(my_index, local.sub_region(0..=0));
+                self.array.put(my_index, local.sub_region(0..=0)).await;
             }
         }
     }

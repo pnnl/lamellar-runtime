@@ -20,7 +20,7 @@ struct SimpleBatcherInner {
 }
 
 impl SimpleBatcherInner {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn new(pe: Option<usize>) -> SimpleBatcherInner {
         SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
@@ -30,7 +30,7 @@ impl SimpleBatcherInner {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn add(
         &self,
         req_data: ReqMetaData,
@@ -47,7 +47,7 @@ impl SimpleBatcherInner {
         self.size.fetch_add(size, Ordering::Relaxed)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize) {
         let mut batch = self.batch.lock();
         let size = self.size.load(Ordering::Relaxed);
@@ -125,7 +125,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    // #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn add_return_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -134,7 +134,7 @@ impl Batcher for SimpleBatcher {
         am_size: usize,
         mut stall_mark: usize,
     ) {
-        // println!("add_return_am_to_batch");
+        // trace!("add_return_am_to_batch");
         //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => self.batched_ams[dst].clone(),
@@ -283,7 +283,7 @@ impl Batcher for SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -291,14 +291,13 @@ impl Batcher for SimpleBatcher {
         lamellae: Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
-        // let data = ser_data.data_as_bytes();
         let mut i = 0;
-        let data_len = ser_data.len();
-        // println!("executing batched msg {:?}", data.len());
-        while i < data_len {
+        trace!("executing batched msg {:?}", ser_data.data_len());
+        while i < ser_data.data_len() {
+            // trace!("before i: {:?} dl {:?} cl {:?}", i, ser_data.data_len(), *CMD_LEN);
             //data.len() {
             // let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
-            let cmd: Cmd = ser_data.sub_data(i, *CMD_LEN).deserialize_data().unwrap();
+            let cmd: Cmd = ser_data.sub_data(i, i+*CMD_LEN).deserialize_data().unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
@@ -314,12 +313,13 @@ impl Batcher for SimpleBatcher {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")
                 }
             }
+            // trace!("after i: {:?} dl {:?} cl {:?}", i, ser_data.data_len(), *CMD_LEN);
         }
     }
 }
 
 impl SimpleBatcher {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         num_pes: usize,
         stall_mark: Arc<AtomicUsize>,
@@ -337,7 +337,7 @@ impl SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn create_tx_task(batch: SimpleBatcherInner) {
         // println!("[{:?}] create_tx_task", std::thread::current().id());
         let (buf, size) = batch.swap();
@@ -408,7 +408,7 @@ impl SimpleBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am(
         req_data: ReqMetaData,
         am_size: usize,
@@ -445,7 +445,7 @@ impl SimpleBatcher {
         i + am_size
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_data(
         req_data: ReqMetaData,
         data_size: usize,
@@ -473,7 +473,7 @@ impl SimpleBatcher {
         i + data_size
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
         // println!("serialize_unit");
         let mut i = 0;
@@ -487,7 +487,7 @@ impl SimpleBatcher {
         i + *UNIT_HEADER_LEN
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn create_header(src: usize) -> SerializeHeader {
         // println!("create_header");
         let msg = Msg {
@@ -497,13 +497,12 @@ impl SimpleBatcher {
         SerializeHeader { msg: msg }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
         lamellae: &Arc<Lamellae>,
     ) -> SerializedData {
-        // println!("create_data_buf");
         let header = Some(header);
         let mut data = lamellae.serialize_header(header.clone(), size);
         while let Err(err) = data {
@@ -521,6 +520,7 @@ impl SimpleBatcher {
 
     // #[tracing::instrument(skip_all)]
     // async
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am(
         &self,
         msg: &Msg,
@@ -530,7 +530,7 @@ impl SimpleBatcher {
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
-        // println!("exec_am");
+        trace!("exec_am");
         let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -548,7 +548,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
         // println!(
         //     "[{:?}] simple batcher exec_am submit task",
@@ -558,6 +558,7 @@ impl SimpleBatcher {
         world.team.world_counters.inc_outstanding(1);
         team.team.team_counters.inc_outstanding(1);
         self.executor.submit_task(async move {
+            trace!("simple batcher exec_am submit task");
             let am = match am
                 .exec(
                     team.team.world_pe,
@@ -581,7 +582,7 @@ impl SimpleBatcher {
         });
     }
 
-    // #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exec_return_am(
         &self,
         msg: &Msg,
@@ -591,7 +592,7 @@ impl SimpleBatcher {
         lamellae: &Arc<Lamellae>,
         ame: &RegisteredActiveMessages,
     ) {
-        // println!("exec_return_am");
+        trace!("exec_return_am");
         let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
             crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
@@ -608,7 +609,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
         // println!(
         //     "[{:?}] exec_return_am submit task",

@@ -164,11 +164,13 @@ impl LamellaeAM for Shmem {
 }
 
 impl Ser for Shmem {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_header(
         &self,
         header: Option<SerializeHeader>,
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
+        // trace!("serialize header");
         let header_size = *SERIALIZE_HEADER_LEN;
         let mut ser_data =
             SerializedData::new(self.shmem_comm.clone(), header_size + serialized_size)?;

@@ -66,7 +66,7 @@ impl std::fmt::Debug for TeamAmBatcherInner {
 }
 
 impl TeamAmBatcherInner {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn new(pe: Option<usize>) -> TeamAmBatcherInner {
         TeamAmBatcherInner {
             batch: Arc::new(Mutex::new((HashMap::new(), HashMap::new(), Vec::new()))),
@@ -76,7 +76,7 @@ impl TeamAmBatcherInner {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn add_am_to_batch(
         &self,
         req_data: ReqMetaData,
@@ -124,7 +124,7 @@ impl TeamAmBatcherInner {
         //println!("updated size: {:?}", self.size.load(Ordering::SeqCst));
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn add_am(&self, req_data: ReqMetaData, data: LamellarData) -> usize {
         match data {
             LamellarData::Am(am, id, am_size) => {
@@ -143,7 +143,7 @@ impl TeamAmBatcherInner {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn add_non_am(&self, req_data: ReqMetaData, data: LamellarData, size: usize) -> usize {
         let mut batch = self.batch.lock();
         let size = size + *BATCH_HEADER_LEN;
@@ -151,7 +151,7 @@ impl TeamAmBatcherInner {
         self.size.fetch_add(size, Ordering::SeqCst)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn swap(&self) -> (TeamMap, TeamMap, Vec<(ReqMetaData, LamellarData)>, usize) {
         let mut batch = self.batch.lock();
         let mut new_batch = (HashMap::new(), HashMap::new(), Vec::new());
@@ -415,7 +415,7 @@ impl Batcher for TeamAmBatcher {
         }
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
         &self,
         msg: Msg,
@@ -424,16 +424,14 @@ impl Batcher for TeamAmBatcher {
         ame: &RegisteredActiveMessages,
     ) {
         // println!("[{:?}] exec_batched_msg", std::thread::current().id());
-        // let data = ser_data.data_as_bytes();
-        let data_len = ser_data.len();
         let mut i = 0;
         // println!("i: {:?} dl {:?} cl {:?}", i, data.len(), *CMD_LEN);
-        while i < data_len {
+        while i < ser_data.data_len() {
             // println!("\ti: {:?} dl {:?} cl {:?}", i, data.len(), *CMD_LEN);
             // let batch: BatchHeader =
             //     crate::deserialize(&data[i..i + *BATCH_HEADER_LEN], false).unwrap();
             let batch: BatchHeader = ser_data
-                .sub_data(i, *BATCH_HEADER_LEN)
+                .sub_data(i, i+*BATCH_HEADER_LEN)
                 .deserialize_data()
                 .unwrap();
             // println!("batch {:?} i: {} len: {}", batch, i, data.len());
@@ -455,7 +453,7 @@ impl Batcher for TeamAmBatcher {
 }
 
 impl TeamAmBatcher {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         num_pes: usize,
         stall_mark: Arc<AtomicUsize>,
@@ -472,7 +470,7 @@ impl TeamAmBatcher {
             executor: executor,
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn create_tx_task(
         batch: TeamAmBatcherInner,
         lamellae: Arc<Lamellae>,
@@ -509,7 +507,7 @@ impl TeamAmBatcher {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am_batch(am_batch: TeamMap, mut data_slice: CommSlice<u8>, cmd: Cmd) -> usize {
         let mut i = 0;
         if am_batch.len() > 0 {
@@ -568,7 +566,7 @@ impl TeamAmBatcher {
         i
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_non_am_batch(
         non_am_batch: Vec<(ReqMetaData, LamellarData)>,
         data_slice: CommSlice<u8>,
@@ -597,7 +595,7 @@ impl TeamAmBatcher {
         i
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_am(
         req_data: ReqMetaData,
         am_size: usize,
@@ -633,7 +631,7 @@ impl TeamAmBatcher {
         i + am_size
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_data(
         req_data: ReqMetaData,
         data_size: usize,
@@ -670,7 +668,7 @@ impl TeamAmBatcher {
         i + data_size
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn serialize_unit(req_data: ReqMetaData, mut data_buf: CommSlice<u8>) -> usize {
         let mut i = 0;
         let batch_header = BatchHeader {
@@ -692,7 +690,7 @@ impl TeamAmBatcher {
         i + *UNIT_HEADER_LEN
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn create_header(src: usize) -> SerializeHeader {
         let msg = Msg {
             src: src as u16,
@@ -701,7 +699,7 @@ impl TeamAmBatcher {
         SerializeHeader { msg: msg }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn create_data_buf(
         header: SerializeHeader,
         size: usize,
@@ -738,7 +736,7 @@ impl TeamAmBatcher {
             // let team_header: TeamHeader =
             //     crate::deserialize(&data[*i..*i + *TEAM_HEADER_LEN], false).unwrap();
             let team_header: TeamHeader = ser_data
-                .sub_data(*i, *TEAM_HEADER_LEN)
+                .sub_data(*i, *i+*TEAM_HEADER_LEN)
                 .deserialize_data()
                 .unwrap();
             // println!("team header: {:?}", team_header);
@@ -750,7 +748,7 @@ impl TeamAmBatcher {
                 // let batched_am_header: BatchedAmHeader =
                 // crate::deserialize(&data[*i..*i + *BATCHED_AM_HEADER_LEN], false).unwrap();
                 let batched_am_header: BatchedAmHeader = ser_data
-                    .sub_data(*i, *BATCHED_AM_HEADER_LEN)
+                    .sub_data(*i, *i+*BATCHED_AM_HEADER_LEN)
                     .deserialize_data()
                     .unwrap();
                 // println!("batched am header: {:?}", batched_am_header);
@@ -826,7 +824,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
 
         let ame = ame.clone();
@@ -883,7 +881,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: unsafe { *team.team.remote_ptr_alloc.as_ptr() },
+            team_addr: team.team.remote_ptr_alloc.addr,
         };
 
         ame.clone()

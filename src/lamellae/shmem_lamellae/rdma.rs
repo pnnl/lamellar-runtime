@@ -6,6 +6,7 @@ use std::{
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
+use tracing::trace;
 
 use crate::{
     active_messaging::AMCounters,
@@ -28,14 +29,22 @@ pub(super) enum Op<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemFuture<T> {
-    pub(crate) op: Op<T>,
+    pub(super) op: Op<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> ShmemFuture<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
+        trace!(
+            "putting src: {:?} dst: {:?} len: {} num bytes {}",
+            src.addr,
+            dst,
+            src.len(),
+            src.len() * std::mem::size_of::<T>()
+        );
         if !(src.contains(dst) || src.contains(dst + src.len())) {
             unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
         } else {
@@ -44,12 +53,26 @@ impl<T: Remote> ShmemFuture<T> {
             }
         }
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_all(&self, src: &CommSlice<T>, dsts: &Vec<CommAllocAddr>) {
+        trace!(
+            "put all src: {:?} dsts: {:?} len: {}",
+            src.addr,
+            dsts,
+            src.len()
+        );
         for dst in dsts {
             self.inner_put(&src, dst);
         }
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn inner_get(&self, src: &CommAllocAddr, dst: &CommSlice<T>) {
+        trace!(
+            "getting src: {:?} dst: {:?} len: {}",
+            src,
+            dst.addr,
+            dst.len()
+        );
         if !(dst.contains(src) || dst.contains(src + dst.len())) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());

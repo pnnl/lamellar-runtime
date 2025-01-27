@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 
 use shared_memory::*;
+use tracing::trace;
 
 use crate::lamellae::{CommAlloc, CommAllocAddr, CommAllocType};
 
@@ -38,6 +39,7 @@ impl MyShmem {
     }
 }
 
+#[tracing::instrument(skip_all, level = "debug")]
 fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: bool) -> MyShmem {
     let size = size + std::mem::size_of::<usize>();
 
@@ -106,13 +108,13 @@ fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: 
     while (unsafe { *(m.as_ptr() as *const _ as *const usize) } != header) {
         std::thread::yield_now()
     }
-    // unsafe {
-    //     println!(
-    //         "shmem inited {:?} {:?}",
-    //         shmem_id,
-    //         *(m.as_ptr() as *const _ as *const usize)
-    //     );
-    // }
+    unsafe {
+        trace!(
+            "shmem inited {:?} {:?}",
+            shmem_id,
+            *(m.as_ptr() as *const _ as *const usize)
+        );
+    }
 
     unsafe {
         MyShmem {
@@ -145,6 +147,7 @@ unsafe impl Sync for ShmemAlloc {}
 unsafe impl Send for ShmemAlloc {}
 
 impl ShmemAlloc {
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(num_pes: usize, pe: usize, job_id: usize) -> Self {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
@@ -156,7 +159,9 @@ impl ShmemAlloc {
                 *i = 0;
             }
         }
+        
         let base_ptr = shmem.as_ptr();
+        trace!("new shmem allocated! {:?} base_pointer{:?}", shmem,base_ptr);
         ShmemAlloc {
             _shmem: shmem,
             mutex: base_ptr as *mut AtomicUsize,
@@ -178,6 +183,8 @@ impl ShmemAlloc {
             job_id: job_id,
         }
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
     where
         I: Iterator<Item = usize> + Clone,
@@ -247,7 +254,7 @@ impl ShmemAlloc {
         cnt.as_ref().unwrap().fetch_sub(1, Ordering::SeqCst);
         while cnt.as_ref().unwrap().load(Ordering::SeqCst) != 0 {}
         let addrs = barrier2.to_vec();
-        // println!("attached {:?} {:?}",self.my_pe,shmem.as_ptr());
+        trace!("attached {:?} {:?}",self.my_pe,shmem.as_ptr());
         barrier1[self.my_pe] = 0;
         for pe in pes.into_iter() {
             // println!("{:?} pe {:?} {:?} {:?}",self.my_pe, pe, barrier1,barrier2);
@@ -262,7 +269,7 @@ impl ShmemAlloc {
         if self.my_pe == first_pe {
             self.mutex.as_ref().unwrap().store(0, Ordering::SeqCst);
         }
-        // println!("{:?} {:?} {:?}",self.my_pe, barrier1,barrier2);
+        // println!("{:?} {:?} {:?}",self./my_pe, barrier1,barrier2);
         (shmem, relative_pe, addrs)
     }
 }

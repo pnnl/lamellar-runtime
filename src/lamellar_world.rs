@@ -49,14 +49,14 @@ impl ActiveMessaging for LamellarWorld {
     type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
     type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
     type LocalAmHandle<L> = LocalAmHandle<L>;
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         self.team.exec_am_all(am)
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -64,29 +64,32 @@ impl ActiveMessaging for LamellarWorld {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
         self.team.exec_am_local(am)
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         self.team.wait_all();
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn await_all(&self) -> impl Future<Output = ()> + Send {
         self.team.await_all()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         self.team.barrier();
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn async_barrier(&self) -> BarrierHandle {
         self.team.async_barrier()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
@@ -101,6 +104,7 @@ impl ActiveMessaging for LamellarWorld {
         )
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future,
@@ -110,6 +114,7 @@ impl ActiveMessaging for LamellarWorld {
         // )
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
     where
         I: IntoIterator,
@@ -133,7 +138,7 @@ impl ActiveMessaging for LamellarWorld {
 }
 
 impl RemoteMemoryRegion for LamellarWorld {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn try_alloc_shared_mem_region<T: Dist>(
         &self,
         size: usize,
@@ -141,12 +146,12 @@ impl RemoteMemoryRegion for LamellarWorld {
         self.team.try_alloc_shared_mem_region::<T>(size)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         self.team.alloc_shared_mem_region::<T>(size)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn try_alloc_one_sided_mem_region<T: Dist>(
         &self,
         size: usize,
@@ -154,7 +159,7 @@ impl RemoteMemoryRegion for LamellarWorld {
         self.team.try_alloc_one_sided_mem_region::<T>(size)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         self.team.alloc_one_sided_mem_region::<T>(size)
     }
@@ -174,7 +179,7 @@ impl LamellarWorld {
     /// let world = LamellarWorldBuilder::new().build();
     /// let my_pe = world.my_pe();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn my_pe(&self) -> usize {
         self.my_pe
     }
@@ -192,14 +197,14 @@ impl LamellarWorld {
     /// let world = LamellarWorldBuilder::new().build();
     /// let num_pes = world.num_pes();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn num_pes(&self) -> usize {
         self.num_pes
     }
 
     // #[doc(hidden)]
     // #[allow(non_snake_case)]
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub fn MB_sent(&self) -> f64 {
         let mut sent = vec![];
         for (_backend, lamellae) in LAMELLAES.read().iter() {
@@ -228,7 +233,7 @@ impl LamellarWorld {
     ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
     /// )).expect("PE in world team");
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn create_team_from_arch<L>(&self, arch: L) -> Option<Arc<LamellarTeam>>
     where
         L: LamellarArch + std::hash::Hash + 'static,
@@ -243,7 +248,7 @@ impl LamellarWorld {
         }
     }
 
-    #[doc(alias("One-sided", "onesided"))] //#[tracing::instrument(skip_all)]
+    #[doc(alias("One-sided", "onesided"))] #[tracing::instrument(skip_all, level = "debug")]
     /// Returns the underlying [LamellarTeam] for this world
     /// # Examples
     ///```
@@ -256,6 +261,7 @@ impl LamellarWorld {
         self.team.clone()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     #[doc(alias("One-sided", "onesided"))]
     /// Returns nummber of threads on this PE (including the main thread)
     ///
@@ -299,7 +305,7 @@ impl LamellarEnv for LamellarWorld {
 }
 
 impl Clone for LamellarWorld {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn clone(&self) -> Self {
         self.ref_cnt.fetch_add(1, Ordering::SeqCst);
         LamellarWorld {
@@ -315,7 +321,7 @@ impl Clone for LamellarWorld {
 }
 
 impl Drop for LamellarWorld {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
@@ -455,7 +461,7 @@ impl LamellarWorldBuilder {
     ///                             .with_executor(ExecutorType::LamellarWorkStealing)
     ///                             .build();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
@@ -500,7 +506,7 @@ impl LamellarWorldBuilder {
     /// let builder = LamellarWorldBuilder::new()
     ///                             .with_lamellae(Backend::Local);
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn with_lamellae(mut self, lamellae: Backend) -> LamellarWorldBuilder {
         self.primary_lamellae = lamellae;
         self
@@ -527,7 +533,7 @@ impl LamellarWorldBuilder {
     /// let builder = LamellarWorldBuilder::new()
     ///                             .with_executor(ExecutorType::LamellarWorkStealing);
     ///```
-    // #[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn with_executor(mut self, sched: ExecutorType) -> LamellarWorldBuilder {
         self.executor = sched;
         self
@@ -548,7 +554,7 @@ impl LamellarWorldBuilder {
     /// let builder = LamellarWorldBuilder::new()
     ///                             .set_num_threads(10);
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn set_num_threads(mut self, num_threads: usize) -> LamellarWorldBuilder {
         self.num_threads = num_threads;
         self
@@ -570,7 +576,7 @@ impl LamellarWorldBuilder {
     ///                             .with_executor(ExecutorType::LamellarWorkStealing)
     ///                             .build();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn build(self) -> LamellarWorld {
         // let mut timer = std::time::Instant::now();
         assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");

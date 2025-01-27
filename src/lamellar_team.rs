@@ -29,6 +29,7 @@ use core::pin::Pin;
 use futures_util::future::join_all;
 use futures_util::Future;
 use parking_lot::{Mutex, RwLock};
+use tracing::trace;
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
@@ -96,7 +97,7 @@ pub struct LamellarTeam {
 }
 
 impl LamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         world: Option<Arc<LamellarTeam>>,
         team: Pin<Arc<LamellarTeamRT>>,
@@ -158,7 +159,7 @@ impl LamellarTeam {
     /// }
     ///```
     #[allow(dead_code)]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn get_pes(&self) -> Vec<usize> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -188,7 +189,7 @@ impl LamellarTeam {
     ///
     /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn num_pes(&self) -> usize {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -218,7 +219,7 @@ impl LamellarTeam {
     ///
     /// assert_eq!((num_pes as f64 / 2.0).ceil() as usize,even_pes.num_pes());
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn num_threads_per_pe(&self) -> usize {
         self.team.scheduler.num_workers()
     }
@@ -247,7 +248,7 @@ impl LamellarTeam {
     ///
     /// assert_eq!(my_pe,even_pes.world_pe_id());
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn world_pe_id(&self) -> usize {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -280,7 +281,7 @@ impl LamellarTeam {
     ///    assert!(my_pe %2 == 0);
     /// }
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -308,7 +309,7 @@ impl LamellarTeam {
     ///    (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
     /// )).expect("PE in world team");
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn create_subteam_from_arch<L>(
         parent: Arc<LamellarTeam>,
         arch: L,
@@ -353,7 +354,7 @@ impl LamellarTeam {
     /// )).expect("PE in world team");
     /// even_pes.print_arch();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn print_arch(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -382,7 +383,7 @@ impl LamellarTeam {
     /// //do some work
     /// even_pes.barrier(); //block until all PEs have entered the barrier
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn barrier(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -405,6 +406,7 @@ impl LamellarTeam {
     /// //do some work
     /// world.barrier(); //block until all PEs have entered the barrier
     ///```
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn async_barrier(&self) -> BarrierHandle {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -413,6 +415,7 @@ impl LamellarTeam {
 
     //used by proc macro
     #[doc(hidden)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn exec_am_group_pe<F, O>(&self, pe: usize, am: F) -> AmHandle<O>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
@@ -423,6 +426,7 @@ impl LamellarTeam {
 
     //used by proc macro
     #[doc(hidden)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub fn exec_am_group_all<F, O>(&self, am: F) -> MultiAmHandle<O>
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
@@ -473,7 +477,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     type SinglePeAmHandle<R: AmDist> = AmHandle<R>;
     type MultiAmHandle<R: AmDist> = MultiAmHandle<R>;
     type LocalAmHandle<L> = LocalAmHandle<L>;
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_all<F>(&self, am: F) -> Self::MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -484,7 +488,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_all_tg(am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
@@ -494,7 +498,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_pe_tg(pe, am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -504,32 +508,35 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         self.team.exec_am_local_tg(am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.wait_all();
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn await_all(&self) -> impl Future<Output = ()> + Send {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.await_all()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.barrier();
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn async_barrier(&self) -> BarrierHandle {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         self.team.async_barrier()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn spawn<F>(&self, task: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
@@ -545,6 +552,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         )
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn block_on<F: Future>(&self, f: F) -> F::Output {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -553,6 +561,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         // )
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
     where
         I: IntoIterator,
@@ -575,8 +584,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 }
 
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
-    //#[tracing::instrument(skip_all)]
-
+    #[tracing::instrument(skip_all, level = "debug")]
     fn try_alloc_shared_mem_region<T: Dist>(
         &self,
         size: usize,
@@ -596,6 +604,8 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         // self.team.barrier.barrier();
         mr
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -613,6 +623,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         mr
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn try_alloc_one_sided_mem_region<T: Dist>(
         &self,
         size: usize,
@@ -622,7 +633,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone())
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
@@ -651,20 +662,20 @@ pub struct IntoLamellarTeam {
 }
 
 impl From<Pin<Arc<LamellarTeamRT>>> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self {
         IntoLamellarTeam { team: team.clone() }
     }
 }
 impl From<&Pin<Arc<LamellarTeamRT>>> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: &Pin<Arc<LamellarTeamRT>>) -> Self {
         IntoLamellarTeam { team: team.clone() }
     }
 }
 
 impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Arc<LamellarTeam>) -> Self {
         IntoLamellarTeam {
             team: team.team.clone(),
@@ -673,7 +684,7 @@ impl From<Arc<LamellarTeam>> for IntoLamellarTeam {
 }
 
 impl From<&Arc<LamellarTeam>> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: &Arc<LamellarTeam>) -> Self {
         IntoLamellarTeam {
             team: team.team.clone(),
@@ -682,7 +693,7 @@ impl From<&Arc<LamellarTeam>> for IntoLamellarTeam {
 }
 
 impl From<&LamellarWorld> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: &LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: world.team_rt.clone(),
@@ -691,7 +702,7 @@ impl From<&LamellarWorld> for IntoLamellarTeam {
 }
 
 impl From<LamellarWorld> for IntoLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: LamellarWorld) -> Self {
         IntoLamellarTeam {
             team: world.team_rt.clone(),
@@ -707,28 +718,28 @@ pub struct ArcLamellarTeam {
 }
 
 impl From<Arc<LamellarTeam>> for ArcLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Arc<LamellarTeam>) -> Self {
         ArcLamellarTeam { team }
     }
 }
 
 impl From<&Arc<LamellarTeam>> for ArcLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: &Arc<LamellarTeam>) -> Self {
         ArcLamellarTeam { team: team.clone() }
     }
 }
 
 impl From<&LamellarWorld> for ArcLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: &LamellarWorld) -> Self {
         ArcLamellarTeam { team: world.team() }
     }
 }
 
 impl From<LamellarWorld> for ArcLamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: LamellarWorld) -> Self {
         ArcLamellarTeam { team: world.team() }
     }
@@ -742,7 +753,7 @@ pub(crate) struct LamellarTeamRemotePtr {
 }
 
 impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(remote_ptr: LamellarTeamRemotePtr) -> Self {
         let lamellae = if let Some(lamellae) = crate::LAMELLAES.read().get(&remote_ptr.backend) {
             lamellae.clone()
@@ -750,9 +761,10 @@ impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
             panic!("unexepected lamellae backend {:?}", &remote_ptr.backend);
         };
         let local_team_addr = lamellae.comm().local_addr(remote_ptr.pe, remote_ptr.addr);
-        let team_ptr: *const LamellarTeamRT = unsafe { local_team_addr.as_ptr() };
-
+        
         unsafe {
+            let team_ptr=  *local_team_addr.as_ptr::<*const LamellarTeamRT>() ;
+            trace!("team_ptr from local_team_addr {:?}",team_ptr);
             Arc::increment_strong_count(team_ptr);
             Pin::new_unchecked(Arc::from_raw(team_ptr))
         }
@@ -760,10 +772,10 @@ impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
 }
 
 impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarTeamRemotePtr {
-            addr: unsafe { *team.remote_ptr_alloc.as_ptr() },
+            addr: team.remote_ptr_alloc.addr,
             pe: team.world_pe,
             backend: team.lamellae.comm().backend(),
         }
@@ -857,7 +869,7 @@ impl Hash for LamellarTeamRT {
 }
 
 impl LamellarTeamRT {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         //creates a new root team
         num_pes: usize,
@@ -932,7 +944,7 @@ impl LamellarTeamRT {
             _pin: PhantomPinned,
         };
 
-        println!("team addr {:?}", team.remote_ptr_alloc);
+        // trace!("team addr {:?}", team.remote_ptr_alloc);
         unsafe {
             for e in team.dropped.as_mut_slice().iter_mut() {
                 *e = 0;
@@ -946,8 +958,8 @@ impl LamellarTeamRT {
                                                        // std::ptr::copy_nonoverlapping(&(&team as *const Pin<Arc<LamellarTeamRT>>), team.remote_ptr_alloc as *mut (*const Pin<Arc<LamellarTeamRT>>), 1);
                                                        // we are copying the address of the team into the remote ptr address, because of the two previous calls, we ensure its location is pinned and its lifetime will live until the team is destroyed.
                                                        // std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_alloc.as_mut_ptr(), 1);
-
             *team.remote_ptr_alloc.as_mut_ptr() = team_ptr;
+            trace!("team_ptr: {:?} remote_ptr_alloc {:?} {:?} {:?}", team_ptr, team.remote_ptr_alloc, team.remote_ptr_alloc.as_ref::<*const LamellarTeamRT>(),team.remote_ptr_alloc.as_ref::<usize>());
 
             // println!{"{:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_alloc as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_alloc as *mut (*const LamellarTeamRT))).as_ref()};
         }
@@ -967,6 +979,7 @@ impl LamellarTeamRT {
         team
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn force_shutdown(&self) {
         // println!("force_shutdown {:?} {:?}",self.tid, std::thread::current().id());
         let first = self
@@ -1005,7 +1018,7 @@ impl LamellarTeamRT {
         // println!("force_shutdown done {:?} {:?}",self.tid, std::thread::current().id());
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn destroy(&self) {
         // println!("destroying team? {:?}", self.mem_regions.read().len());
         if self.panic.load(Ordering::SeqCst) == 0 {
@@ -1059,7 +1072,7 @@ impl LamellarTeamRT {
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
         let team_ptr: *const LamellarTeamRT = unsafe { *self.remote_ptr_alloc.as_ptr() };
-        println!("dropping team_ptr: {:?}", team_ptr);
+        trace!("dropping team_ptr: {:?}", team_ptr);
         unsafe {
             let arc_team = Arc::from_raw(team_ptr);
             // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
@@ -1076,11 +1089,12 @@ impl LamellarTeamRT {
         self.arch.team_pe(self.world_pe)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn counters(&self) -> Vec<Arc<AMCounters>> {
         vec![self.world_counters.clone(), self.team_counters.clone()]
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn create_subteam_from_arch<L>(
         world: Pin<Arc<LamellarTeamRT>>,
         parent: Pin<Arc<LamellarTeamRT>>,
@@ -1149,7 +1163,7 @@ impl LamellarTeamRT {
                                 world_pe,
                                 parent_world_pe,
                                 temp_array_slice.sub_slice(0..1),
-                            );
+                            ).block();
                         }
                     }
                 }
@@ -1224,7 +1238,7 @@ impl LamellarTeamRT {
                 //     1,
                 // );
                 *team.remote_ptr_alloc.as_mut_ptr() = team_ptr;
-                println!("team_ptr {:?}", team_ptr);
+                trace!("team_ptr {:?} {:?}", team_ptr, team_ptr.as_ref());
             }
 
             // println!("team created in {:?}", s.elapsed());
@@ -1240,18 +1254,18 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_pes(&self) -> usize {
         self.arch.num_pes()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_threads(&self) -> usize {
         self.scheduler.num_workers()
     }
 
     #[cfg_attr(test, allow(unreachable_code), allow(unused_variables))]
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn check_hash_vals(&self, hash: usize, hash_buf: &MemoryRegion<usize>, timeout: Duration) {
         #[cfg(test)]
         return;
@@ -1264,7 +1278,7 @@ impl LamellarTeamRT {
                 while *hash_val == 0 {
                     self.flush();
                     std::thread::yield_now();
-                    if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+                    if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                         let status = hash_buf
                             .as_slice()
                             .iter()
@@ -1276,7 +1290,7 @@ impl LamellarTeamRT {
                         The following indicates which PEs have not entered the call: {:?}\n\
                         The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                        {}",status,config().deadlock_timeout,std::backtrace::Backtrace::capture()
+                        {}",status,config().deadlock_warning_timeout,std::backtrace::Backtrace::capture()
                     );
                         // println!(
                         //     "[{:?}] ({:?})  hash: {:?}",
@@ -1304,7 +1318,7 @@ impl LamellarTeamRT {
         // println!("{:?} {:?}", hash,hash_buf.as_slice().unwrap());
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn put_dropped(&self) {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
@@ -1322,7 +1336,7 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            self.dropped
+                            let _ = self.dropped
                                 .put_comm_slice(
                                     world_pe,
                                     my_index,
@@ -1342,7 +1356,7 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            self.dropped
+                            let _ = self.dropped
                                 .put_comm_slice(
                                     world_pe,
                                     self.world_pe,
@@ -1356,21 +1370,21 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop_barrier(&self) {
         let mut s = Instant::now();
         if self.panic.load(Ordering::SeqCst) == 0 {
             for pe in self.dropped.as_slice().iter() {
                 while *pe != 1 {
                     // std::thread::yield_now();
-                    if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+                    if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                         println!("[WARNING]  Potential deadlock detected when trying to drop a LamellarTeam.\n\
                             The following indicates the dropped status on each PE: {:?}\n\
                             The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                             To view backtrace set RUST_LIB_BACKTRACE=1\n\
                             {}",
                             self.dropped.as_slice(),
-                            config().deadlock_timeout,
+                            config().deadlock_warning_timeout,
                             std::backtrace::Backtrace::capture());
                         s = Instant::now();
                     }
@@ -1379,7 +1393,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
         let mut parent = format!("");
@@ -1435,7 +1449,7 @@ impl LamellarTeamRT {
         )
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn wait_all(&self) {
         // println!("wait_all called on pe: {}", self.world_pe);
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
@@ -1476,7 +1490,7 @@ impl LamellarTeamRT {
                 if std::thread::current().id() == *crate::MAIN_THREAD {
                     self.scheduler.exec_task()
                 }; //mmight as well do useful work while we wait }
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                         "in team wait_all mype: {:?} cnt: {:?} {:?}",
                         self.world_pe,
@@ -1525,6 +1539,8 @@ impl LamellarTeamRT {
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
         // println!("await_all called on pe: {}", self.world_pe);
         self.lamellae.comm().wait();
@@ -1558,7 +1574,7 @@ impl LamellarTeamRT {
                 world_orig_reqs = self.world_counters.send_req_cnt.load(Ordering::SeqCst);
                 world_orig_launched = self.world_counters.launched_req_cnt.load(Ordering::SeqCst);
                 async_std::task::yield_now().await;
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                         "in team wait_all mype: {:?} cnt: {:?} {:?}",
                         self.world_pe,
@@ -1608,6 +1624,7 @@ impl LamellarTeamRT {
         // );
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn block_on<F>(&self, f: F) -> F::Output
     where
         F: Future + Send + 'static,
@@ -1618,6 +1635,7 @@ impl LamellarTeamRT {
         self.scheduler.block_on(f)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn block_on_all<I>(
         &self,
         iter: I,
@@ -1637,24 +1655,26 @@ impl LamellarTeamRT {
             })))
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn barrier(&self) {
         self.barrier.barrier();
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn tasking_barrier(&self) {
         self.barrier.tasking_barrier();
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn async_barrier(&self) -> BarrierHandle {
         self.barrier.barrier_handle()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn flush(&self) {
         self.lamellae.comm().flush();
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_all<F>(self: &Pin<Arc<LamellarTeamRT>>, am: F) -> MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + AmDist,
@@ -1662,7 +1682,7 @@ impl LamellarTeamRT {
         self.exec_am_all_tg(am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_all_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -1718,7 +1738,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
@@ -1730,7 +1750,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn am_group_exec_am_all_tg<F, O>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -1788,7 +1808,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team am group exec all", std::thread::current().id());
@@ -1800,7 +1820,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_pe<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -1812,7 +1832,7 @@ impl LamellarTeamRT {
         self.exec_am_pe_tg(pe, am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_pe_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -1861,7 +1881,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
 
         AmHandle {
@@ -1872,6 +1892,7 @@ impl LamellarTeamRT {
         .into()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn spawn_am_pe_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -1927,7 +1948,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
 
         self.scheduler.submit_am(Am::Remote(req_data, func));
@@ -1940,7 +1961,7 @@ impl LamellarTeamRT {
         .into()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn am_group_exec_am_pe_tg<F, O>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -1998,7 +2019,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
 
         // println!(
@@ -2018,7 +2039,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_arc_am_all<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: LamellarArcAm,
@@ -2068,7 +2089,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
 
         // println!(
@@ -2084,7 +2105,7 @@ impl LamellarTeamRT {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_arc_am_pe<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -2131,7 +2152,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
@@ -2150,6 +2171,7 @@ impl LamellarTeamRT {
     }
 
     #[allow(dead_code)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_arc_am_pe_immediately<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         pe: usize,
@@ -2196,7 +2218,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
@@ -2214,7 +2236,7 @@ impl LamellarTeamRT {
         .into()
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_local<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -2225,7 +2247,7 @@ impl LamellarTeamRT {
         self.exec_am_local_tg(am, None)
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn exec_am_local_tg<F>(
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
@@ -2273,7 +2295,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: unsafe { *self.remote_ptr_alloc.as_ptr() },
+            team_addr: self.remote_ptr_alloc.addr,
         };
         // println!("[{:?}] team exec am local", std::thread::current().id());
         // self.scheduler.submit_am(Am::Local(req_data, func));
@@ -2315,7 +2337,7 @@ impl LamellarTeamRT {
     ///
     /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
     ///
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn alloc_one_sided_mem_region<T: Dist>(
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
@@ -2343,7 +2365,7 @@ impl LamellarTeamRT {
 }
 
 impl Drop for LamellarTeamRT {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("LamellarTeamRT Drop");
         // println!("sechduler_new: {:?}", Arc::strong_count(&self.scheduler));
@@ -2373,7 +2395,7 @@ impl Drop for LamellarTeamRT {
 }
 
 impl Drop for LamellarTeam {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("team handle dropping {:?}", self.team.team_hash);
         // println!("arch: {:?}", Arc::strong_count(&self.team.arch));

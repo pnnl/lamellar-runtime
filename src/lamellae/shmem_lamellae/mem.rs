@@ -1,5 +1,7 @@
 use std::{collections::HashMap, sync::atomic::Ordering};
 
+use tracing::trace;
+
 use crate::{
     lamellae::{
         comm::{
@@ -14,6 +16,7 @@ use crate::{
 use super::comm::{ShmemComm, SHMEM_SIZE};
 
 impl CommMem for ShmemComm {
+    #[tracing::instrument(skip(self), level = "debug")]
     fn alloc(
         &self,
         size: usize,
@@ -46,7 +49,9 @@ impl CommMem for ShmemComm {
             }
         }
         let addr = ret.as_ptr() as usize + size * index;
+        trace!("new alloc: {:x} {:?} {:?} {:?}", addr,ret.as_ptr(), size,addr_map);
         alloc.0.insert(addr, (ret, size, addr_map));
+        
         Ok(CommAlloc {
             addr,
             size,
@@ -54,18 +59,22 @@ impl CommMem for ShmemComm {
         })
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn free(&self, alloc: CommAlloc) {
         //maybe need to do something more intelligent on the drop of the shmem_alloc
         debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
         let addr = alloc.addr;
         let mut alloc = self.alloc_lock.write();
+        trace!("freeing alloc: {:x}", addr);
         alloc.0.remove(&addr);
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
+                trace!("new rt alloc: {:x} {}", addr, size);  
                 return Ok(CommAlloc {
                     addr,
                     size,
@@ -76,6 +85,8 @@ impl CommMem for ShmemComm {
         Err(AllocError::OutOfMemoryError(size))
     }
 
+
+    #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
@@ -86,7 +97,9 @@ impl CommMem for ShmemComm {
         false
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
+        trace!("freeing rt alloc: {:x}", alloc.addr);
         debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
         let addr = alloc.addr;
         let allocs = self.alloc.read();
@@ -98,6 +111,7 @@ impl CommMem for ShmemComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.alloc.read();
@@ -107,6 +121,7 @@ impl CommMem for ShmemComm {
         occupied
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
         let mut allocs = self.alloc.write();
         let size = std::cmp::max(
@@ -122,10 +137,13 @@ impl CommMem for ShmemComm {
             panic!("[Error] out of system memory");
         }
     }
+
+    #[tracing::instrument(skip(self), level = "debug")]
     fn num_pool_allocs(&self) -> usize {
         self.alloc.read().len()
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn print_pools(&self) {
         let allocs = self.alloc.read();
         println!("num_pools {:?}", allocs.len());
@@ -141,21 +159,29 @@ impl CommMem for ShmemComm {
         }
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn base_addr(&self) -> CommAllocAddr {
         CommAllocAddr(*self.base_address.read())
     }
+
+    #[tracing::instrument(skip(self), level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         let alloc = self.alloc_lock.read();
+        trace!("looking for addr: {:x} from pe: {:?}", remote_addr, remote_pe);
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            // trace!("addr: {:x} shmem: {:?} size: {:?}", addr, shmem, size);
             if let Some(data) = addrs.get(&remote_pe) {
                 if data.0 <= remote_addr && remote_addr < data.0 + shmem.len() {
                     let remote_offset = remote_addr - (data.0 + size * data.1);
+                    trace!("found addr: {:x} base_addr: {:x} remote_offset: {} ",addr + remote_offset, addr, remote_offset);
                     return CommAllocAddr(addr + remote_offset);
                 }
             }
         }
         panic!("not sure i should be here...means address not found");
     }
+
+    #[tracing::instrument(skip(self), level = "debug")]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> CommAllocAddr {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
@@ -167,6 +193,7 @@ impl CommMem for ShmemComm {
         panic!("not sure i should be here...means address not found");
     }
 
+    #[tracing::instrument(skip(self), level = "debug")]
     fn local_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         let alloc = self.alloc_lock.read();
         if let Some((_, size, _)) = alloc.0.get(&addr.0) {

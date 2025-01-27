@@ -5,6 +5,7 @@ pub(crate) mod rdma;
 pub(crate) use atomic::*;
 pub(crate) use error::*;
 pub(crate) use rdma::*;
+use tracing::trace;
 
 use super::Backend;
 
@@ -63,10 +64,12 @@ pub(crate) enum Comm {
 }
 
 impl Comm {
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn new_serialized_data(
         self: &Arc<Comm>,
         size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
+        // trace!("new serialized data");
         SerializedData::new(self.clone(), size)
     }
 }
@@ -137,6 +140,7 @@ impl CommAlloc {
         debug_assert!(offset < self.size);
         CommAllocAddr(self.addr + offset)
     }
+    #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn as_slice<T>(&self) -> CommSlice<T> {
         CommSlice {
             addr: CommAllocAddr(self.addr),
@@ -144,8 +148,9 @@ impl CommAlloc {
             _phantom: std::marker::PhantomData,
         }
     }
-    pub(crate) fn slice_at_offset<T>(&self, offset: usize, num_elems: usize) -> CommSlice<T> {
-        println!(
+    #[tracing::instrument( level = "debug")]
+    pub(crate) fn slice_at_byte_offset<T>(&self, offset: usize, num_elems: usize) -> CommSlice<T> {
+        trace!(
             "{:?} offset: {}  num_elems: {} bytes: {}",
             self,
             offset,
@@ -161,6 +166,7 @@ impl CommAlloc {
             _phantom: std::marker::PhantomData,
         }
     }
+    
     pub(crate) unsafe fn as_ptr<T>(&self) -> *const T {
         self.addr as *const T
     }
@@ -260,6 +266,8 @@ impl<T> CommSlice<T> {
     pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { std::slice::from_raw_parts_mut(self.addr.as_mut_ptr(), self.size) }
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn sub_slice(&self, range: impl std::ops::RangeBounds<usize>) -> Self {
         let start = match range.start_bound() {
             std::ops::Bound::Included(&index) => index,
@@ -273,8 +281,9 @@ impl<T> CommSlice<T> {
         };
         debug_assert!(start <= end);
         debug_assert!(end <= self.len());
+        // trace!("subslice start: {} end: {} new addr: {:?} new size: {}", start, end, self.addr + start*std::mem::size_of::<T>(), end - start);
         CommSlice {
-            addr: self.addr + start,
+            addr: self.addr + start*std::mem::size_of::<T>(),
             size: end - start,
             _phantom: std::marker::PhantomData,
         }
@@ -294,7 +303,7 @@ impl<T> CommSlice<T> {
 
     pub(crate) fn index_addr(&self, index: usize) -> CommAllocAddr {
         debug_assert!(index < self.size);
-        self.addr + index
+        self.addr + index*std::mem::size_of::<T>()
     }
 
     pub(crate) unsafe fn from_raw_parts(data: *const T, len: usize) -> Self {

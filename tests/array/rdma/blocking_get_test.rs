@@ -139,7 +139,7 @@ macro_rules! blocking_get_test{
                 let num_txs = mem_seg_len/tx_size;
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                    unsafe {array.blocking_get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)));}
+                    unsafe {array.get_unchecked(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).block();}
                 }
                 array.barrier();
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
@@ -175,7 +175,7 @@ macro_rules! blocking_get_test{
                 let num_txs = half_len/tx_size;
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    unsafe {sub_array.blocking_get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)));}
+                    unsafe {sub_array.get_unchecked(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).block();}
                 }
                 sub_array.barrier();
                 // unsafe{println!("{:?}",shared_mem_region.as_slice());}
@@ -215,7 +215,7 @@ macro_rules! blocking_get_test{
                     let num_txs = len/tx_size;
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                        unsafe {sub_array.blocking_get(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)));}
+                        unsafe {sub_array.get_unchecked(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).block();}
                     }
                     sub_array.barrier();
                     unsafe{

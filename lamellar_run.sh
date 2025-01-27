@@ -1,4 +1,15 @@
 #!/bin/bash
+
+#caputure ctrl-c
+trap ctrl_c INT
+
+ctrl_c() {
+  echo "ctrl-c detected, cleaning up"
+  pkill -9 -P $$ #kill all child processes
+  rm -rf /dev/shm/lamellar_*  2> /dev/null
+  exit
+}
+
 rm -rf /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
 
 # mkdir -p output
@@ -35,8 +46,8 @@ for pe in $(seq 0 $ENDPE); do
     exit
   fi
   # LAMELLAR_BACKEND="libfab" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) srun -N ${NUMPES} --output=%t_out.txt $bin  "${@:2}" 
-  LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  $bin  "${@:2}" & 
-  
+  # RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  $bin  "${@:2}" |& tee  ./outputs/lamellar_${pe}.out& 
+  RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  $bin  "${@:2}" >&  ./outputs/lamellar_${pe}.out& 
   S_CORE=$(($E_CORE ))
   E_CORE=$(($S_CORE + $THREADS))
 done

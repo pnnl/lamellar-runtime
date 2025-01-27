@@ -281,6 +281,30 @@ impl<T: Dist> SharedMemoryRegion<T> {
         RegisteredMemoryRegion::as_mut_ptr(self)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Create a sub region of this RegisteredMemoryRegion using the provided range
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Panics
+    /// panics if the end range is larger than the length of the memory region
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
+    ///
+    /// let sub_region = mem_region.sub_region(30..70);
+    ///```
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self{
+        SubRegion::sub_region(self, range)
+    }
+
     /// Return the length of the memory region
     pub fn len(&self) -> usize {
         self.sub_region_size

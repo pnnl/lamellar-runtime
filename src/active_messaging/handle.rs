@@ -12,6 +12,7 @@ use std::{
 use futures_util::Future;
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
+use tracing::{trace, warn};
 
 use crate::{
     lamellae::Des,
@@ -49,13 +50,17 @@ impl LamellarRequestAddResult for AmHandleInner {
     fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst) > 0
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
         self.ready.store(true, Ordering::SeqCst);
         if let Some(waker) = self.waker.lock().take() {
+            trace!("notifying waker");
             waker.wake();
         }
+        trace!("request complete");
     }
     fn update_counters(&self, _sub_id: usize) {
         self.team_counters.dec_outstanding(1);
@@ -129,6 +134,7 @@ impl<T: AmDist> AmHandle<T> {
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn launch_am_if_needed(&mut self) {
         if let Some((am, num_pes)) = self.am.take() {
             self.inner.team_counters.inc_outstanding(num_pes);
@@ -140,7 +146,7 @@ impl<T: AmDist> AmHandle<T> {
                 tg_counters.inc_launched(num_pes);
             }
             self.inner.scheduler.submit_am(am);
-            // println!("am spawned");
+            trace!("am spawned");
         }
     }
     /// This method will spawn the associated Active Message on the work queue,
@@ -173,17 +179,20 @@ impl<T: AmDist> LamellarRequest for AmHandle<T> {
         self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
 
         if self.inner.ready.load(Ordering::SeqCst) {
+            trace!("request read");
             true
         } else {
+            trace!("request not ready");
             match &mut *cur_waker {
                 Some(cur_waker) => {
                     if !cur_waker.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", cur_waker);
+                        warn!("WARNING: overwriting waker {:?}", cur_waker);
                         cur_waker.wake_by_ref();
                     }
                     cur_waker.clone_from(waker);
@@ -316,6 +325,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
         self.process_result(data)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
@@ -325,7 +335,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
             match &mut *cur_waker {
                 Some(cur_waker) => {
                     if !cur_waker.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", cur_waker);
+                        warn!("WARNING: overwriting waker {:?}", cur_waker);
                         cur_waker.wake_by_ref();
                     }
                     cur_waker.clone_from(waker);
@@ -508,6 +518,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
         res
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
@@ -517,7 +528,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
             match &mut *cur_waker {
                 Some(cur_waker) => {
                     if !cur_waker.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", cur_waker);
+                        warn!("WARNING: overwriting waker {:?}", cur_waker);
                         cur_waker.wake_by_ref();
                     }
                     cur_waker.clone_from(waker);

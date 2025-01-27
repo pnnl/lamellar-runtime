@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use tracing::trace;
+
 use crate::{
     array::{
         private::{ArrayExecAm, LamellarArrayPrivate},
@@ -420,18 +422,29 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) {
+    ) -> ArrayRdmaHandle<T>{
         match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => match self.inner.distribution {
-                Distribution::Block => {
-                    self.block_op(ArrayRdmaCmd::Put, index, buf);
-                }
-                Distribution::Cyclic => {
-                    self.cyclic_op(ArrayRdmaCmd::Put, index, buf);
+            Ok(buf) => {
+                let inner_handle = match self.inner.distribution {
+                    Distribution::Block => {
+                        self.block_op(ArrayRdmaCmd::Put, index, buf)
+                    }
+                    Distribution::Cyclic => {
+                        self.cyclic_op(ArrayRdmaCmd::Put, index, buf)
+                    }
+                };
+                ArrayRdmaHandle {
+                    array: self.as_lamellar_byte_array(),
+                    reqs: inner_handle,
+                    spawned: false,
                 }
             },
-            Err(_) => {}
-        };
+            Err(_) => {ArrayRdmaHandle {
+                array: self.as_lamellar_byte_array(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
+                spawned: false,
+            }}
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -497,85 +510,95 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) {
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => match self.inner.distribution {
-                Distribution::Block => {
-                    self.block_op(ArrayRdmaCmd::Get(false), index, buf);
-                }
-                Distribution::Cyclic => {
-                    self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf);
+                Ok(buf) => {let inner_handle = match self.inner.distribution {
+                    Distribution::Block => {
+                        self.block_op(ArrayRdmaCmd::Get(false), index, buf)
+                    }
+                    Distribution::Cyclic => {
+                        self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf)
+                    }
+                };
+                ArrayRdmaHandle {
+                    array: self.as_lamellar_byte_array(),
+                    reqs: inner_handle,
+                    spawned: false,
                 }
             },
-            Err(_) => {}
+            Err(_) => {ArrayRdmaHandle {
+                array: self.as_lamellar_byte_array(),
+                reqs: InnerRdmaHandle::Am(VecDeque::new()),
+                spawned: false,
+            }}
         }
     }
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Performs a blocking "Get" of the data in this array starting at the provided index into the specified buffer
-    ///
-    /// The length of the Get is dictated by the length of the buffer.
-    ///
-    /// When this function returns, `buf` will have been populated with the results of the `get`
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe {
-    ///     let _ =array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
-    ///     for elem in buf.as_mut_slice()
-    ///                          .expect("we just created it so we know its local") { //initialize mem_region
-    ///         *elem = buf.len();
-    ///     }
-    ///     array.wait_all();
-    ///     array.barrier();
-    ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
-    ///     if my_pe == 0 { //only perfrom the transfer from one PE
-    ///          println!();
-    ///         array.blocking_get(0,&buf);
-    ///         
-    ///     }
-    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
-    /// }
-    ///```
-    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```text
-    /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    ///
-    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
-    ///```
-    pub unsafe fn blocking_get<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
-        &self,
-        index: usize,
-        buf: U,
-    ) {
-        // println!("unsafe iget {:?}",index);
-        if let Ok(buf) = buf.team_try_into(&self.inner.data.team.team()) {
-            match self.inner.distribution {
-                Distribution::Block => self.block_op(ArrayRdmaCmd::Get(true), index, buf),
-                Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(true), index, buf),
-            };
-        }
-    }
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Performs a blocking "Get" of the data in this array starting at the provided index into the specified buffer
+    // ///
+    // /// The length of the Get is dictated by the length of the buffer.
+    // ///
+    // /// When this function returns, `buf` will have been populated with the results of the `get`
+    // ///
+    // /// # Safety
+    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    // /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    // ///
+    // /// # One-sided Operation
+    // /// the calling PE initaites the remote transfer
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// use lamellar::memregion::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let my_pe = world.my_pe();
+    // /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
+    // /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    // /// unsafe {
+    // ///     let _ =array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
+    // ///     for elem in buf.as_mut_slice()
+    // ///                          .expect("we just created it so we know its local") { //initialize mem_region
+    // ///         *elem = buf.len();
+    // ///     }
+    // ///     array.wait_all();
+    // ///     array.barrier();
+    // ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
+    // ///     if my_pe == 0 { //only perfrom the transfer from one PE
+    // ///          println!();
+    // ///         array.blocking_get(0,&buf);
+    // ///         
+    // ///     }
+    // ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
+    // /// }
+    // ///```
+    // /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+    // ///```text
+    // /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // ///
+    // /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
+    // ///```
+    // pub unsafe fn blocking_get<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
+    //     &self,
+    //     index: usize,
+    //     buf: U,
+    // ) {
+    //     // println!("unsafe iget {:?}",index);
+    //     if let Ok(buf) = buf.team_try_into(&self.inner.data.team.team()) {
+    //         match self.inner.distribution {
+    //             Distribution::Block => self.block_op(ArrayRdmaCmd::Get(true), index, buf),
+    //             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(true), index, buf),
+    //         };
+    //     }
+    // }
 
     #[doc(alias("One-sided", "onesided"))]
     /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
@@ -629,11 +652,12 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
+    #[tracing::instrument(skip_all, level = "debug")]
     pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle<T>
     where
         U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
     {
-        println!("array get {:?}", index);
+        trace!("array get {:?}", index);
         match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => self.internal_get(index, buf),
             Err(_) => ArrayRdmaHandle {
@@ -1109,6 +1133,7 @@ struct InitSmallGetAm<T: Dist> {
 
 #[lamellar_impl::rt_am_local]
 impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     async fn exec(self) {
         let mut reqs = vec![];
         for pe in self
@@ -1116,7 +1141,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
             .pes_for_range(self.index, self.buf.len())
             .into_iter()
         {
-            println!(
+            trace!(
                 "InitSmallGetAm pe {:?} index {:?} len {:?}",
                 pe,
                 self.index,
@@ -1134,12 +1159,11 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                 Distribution::Block => {
                     let u8_buf = self.buf.clone().to_base::<u8>();
                     let mut cur_index = 0;
-                    let team_rt = self.array.team_rt();
 
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}", data.len());
-                        println!("InitSmallGetAm put_comm_slice: {:?}", data.as_ptr());
+                        trace!("InitSmallGetAm put_comm_slice: {:?}", data.as_ptr());
 
                         let _ = u8_buf
                             .put_comm_slice(
@@ -1149,7 +1173,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                             )
                             .spawn(); //we can do this conversion because we will spawn the put immediately, upon which the data buffer is free to be dropped
                         cur_index += data.len();
-                        println!("InitSmallGetAm put_comm_slice after: {:?}", data.as_ptr());
+                        trace!("InitSmallGetAm put_comm_slice after: {:?}", data.as_ptr());
                     }
                 }
                 Distribution::Cyclic => {

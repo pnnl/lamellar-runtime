@@ -41,7 +41,7 @@ pub(crate) struct WorkStealingThread {
 }
 
 impl WorkStealingThread {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn run(
         worker: WorkStealingThread,
         work_q: Worker<Runnable<usize>>,
@@ -96,7 +96,7 @@ impl WorkStealingThread {
 
                     if let Some(runnable) = omsg {
                         if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                            && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+                            && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
                         {
                             println!("runnable {:?}", runnable);
                             println!(
@@ -110,7 +110,7 @@ impl WorkStealingThread {
                         runnable.run();
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
-                        && timer.elapsed().as_secs_f64() > config().deadlock_timeout
+                        && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout
                         && (work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
@@ -261,7 +261,7 @@ impl LamellarExecutor for WorkStealing3 {
         // })
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn shutdown(&self) {
         while self.panic.load(Ordering::SeqCst) == 0 && self.active_cnt.load(Ordering::Relaxed) > 0
         {
@@ -270,7 +270,7 @@ impl LamellarExecutor for WorkStealing3 {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn force_shutdown(&self) {
         // println!("work stealing shuting down {:?}", self.status());
 
@@ -292,7 +292,7 @@ impl LamellarExecutor for WorkStealing3 {
         // );
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn exec_task(&self) {
         let mut _rng = rand::thread_rng();
         let _t = rand::distributions::Uniform::from(0..self.work_stealers.len());
@@ -399,7 +399,7 @@ impl WorkStealing3 {
 
 impl Drop for WorkStealing3 {
     //when is this called with respect to world?
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
