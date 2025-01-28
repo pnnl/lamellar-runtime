@@ -40,8 +40,10 @@ impl MyShmem {
 }
 
 #[tracing::instrument(skip_all, level = "debug")]
-fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: bool) -> MyShmem {
-    let size = size + std::mem::size_of::<usize>();
+fn attach_to_shmem(job_id: usize, size: usize, align:usize, id: &str, header: usize, create: bool) -> MyShmem {
+    let padding = std::mem::size_of::<usize>() % align;
+    let size = std::mem::size_of::<usize>() + padding + size;
+    
 
     let shmem_id =
         "lamellar_".to_owned() + &(job_id.to_string()) + "_" + &(size.to_string()) + "_" + id;
@@ -121,7 +123,7 @@ fn attach_to_shmem(job_id: usize, size: usize, id: &str, header: usize, create: 
             // data: m.as_ptr().add(std::mem::size_of::<usize>()),
             // len: size,
             alloc: CommAlloc {
-                addr: m.as_ptr().add(std::mem::size_of::<usize>()) as usize,
+                addr: m.as_ptr().add(std::mem::size_of::<usize>() + padding) as usize,
                 size,
                 alloc_type: CommAllocType::Fabric,
             },
@@ -152,7 +154,7 @@ impl ShmemAlloc {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
-        let mut shmem = attach_to_shmem(job_id, size, "alloc", job_id, pe == 0);
+        let mut shmem = attach_to_shmem(job_id, size,std::mem::align_of::<usize>(), "alloc", job_id, pe == 0);
         let data = unsafe { std::slice::from_raw_parts_mut(shmem.as_mut_ptr(), size) };
         if pe == 0 {
             for i in data {
@@ -185,7 +187,7 @@ impl ShmemAlloc {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
+    pub(crate) unsafe fn alloc<I>(&self, size: usize, align: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
     where
         I: Iterator<Item = usize> + Clone,
     {
@@ -235,11 +237,13 @@ impl ShmemAlloc {
                 }
             }
         }
+        
 
         // println!("going to attach to shmem {:?} {:?} {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe, barrier1,barrier2);
         let shmem = attach_to_shmem(
             self.job_id,
             size * pes_len,
+            align,
             &((*self.id).to_string()),
             *self.id,
             self.my_pe == first_pe,

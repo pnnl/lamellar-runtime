@@ -22,11 +22,11 @@ pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
     pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
     _size: usize,                                //size of my segment
-    pub(crate) alloc: RwLock<Vec<BTreeAlloc>>,
+    pub(crate) alloc: RwLock<Vec<BTreeAlloc>>,//runtime allocations
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
-    pub(crate) alloc_lock: Arc<
+    pub(crate) alloc_lock: Arc< //fabric allocations
         RwLock<(
             HashMap<
                 usize, //local addr
@@ -77,7 +77,7 @@ impl ShmemComm {
         // let shmem = attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0);
 
         // let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
-        let (shmem, _index, addrs) = unsafe { alloc.alloc(mem_per_pe, 0..num_pes) };
+        let (shmem, _index, addrs) = unsafe { alloc.alloc(mem_per_pe,std::mem::align_of::<u8>(), 0..num_pes) };
         let addr = shmem.as_ptr() as usize + mem_per_pe * my_pe;
 
         let mut allocs_map = HashMap::new();
@@ -124,7 +124,7 @@ impl CommProgress for ShmemComm {
     fn barrier(&self) {
         let alloc = self.alloc_lock.write();
         unsafe {
-            alloc.1.alloc(1, 0..self.num_pes);
+            alloc.1.alloc(1,1, 0..self.num_pes);
         }
     }
 }

@@ -116,27 +116,28 @@ impl CommMem for LocalComm {
     fn remote_addr(&self, _pe: usize, local_addr: usize) -> CommAllocAddr {
         CommAllocAddr(local_addr)
     }
-    fn local_alloc(&self, remote_addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+
+    fn get_alloc(&self,addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         let allocs: parking_lot::lock_api::MutexGuard<
             '_,
             parking_lot::RawMutex,
             std::collections::HashMap<usize, MyPtr>,
         > = self.allocs.lock();
-        if let Some(alloc) = allocs.get(&remote_addr.0) {
+        if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {
-                addr: remote_addr.into(),
+                addr: addr.into(),
                 size: alloc.layout.size(),
                 alloc_type: CommAllocType::Fabric,
             });
         }
         let allocs = self.heap_allocs.lock();
-        if let Some(alloc) = allocs.get(&remote_addr.0) {
+        if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {
-                addr: remote_addr.into(),
+                addr: addr.into(),
                 size: alloc.layout.size(),
                 alloc_type: CommAllocType::RtHeap,
             });
         }
-        Err(AllocError::LocalNotFound(remote_addr))
+        Err(AllocError::LocalNotFound(addr))
     }
 }

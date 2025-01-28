@@ -358,9 +358,12 @@ pub(crate) trait CommMem {
     fn num_pool_allocs(&self) -> usize;
     fn print_pools(&self);
     fn base_addr(&self) -> CommAllocAddr;
+    // this translates a remote address to a local address
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr;
+    // this translates a local address to a remote address
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> CommAllocAddr;
-    fn local_alloc(&self, remote_addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
+    // this checks for an allocation at the given address
+    fn get_alloc(&self,  addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
 }
 
 #[enum_dispatch]

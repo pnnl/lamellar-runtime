@@ -40,7 +40,7 @@ pub(crate) mod handle;
 use handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle};
 
 use enum_dispatch::enum_dispatch;
-use tracing::trace;
+use tracing::{debug, trace};
 
 /// This error occurs when you are trying to directly access data locally on a PE through a memregion handle,
 /// but that PE does not contain any data for that memregion
@@ -821,11 +821,10 @@ impl<T: Dist> MemoryRegion<T> {
             mode: mode,
             phantom: PhantomData,
         };
-        // println!(
-        //     "new memregion {:x} {:x}",
-        //     temp.addr,
-        //     size * std::mem::size_of::<T>()
-        // );
+        trace!(
+            "new memregion alloc {:?}",
+            temp.alloc,
+        );
         Ok(temp)
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1391,6 +1390,7 @@ impl<T: Dist> MemoryRegion<T> {
         if self.mode == Mode::Remote {
             return &mut [];
         }
+        trace!("alloc {:?} len {:?} alighnment {:?} is address alligned {:?}" , self.alloc,self.alloc.size / std::mem::size_of::<T>(), std::mem::align_of::<T>(), self.alloc.addr % std::mem::align_of::<T>());
         std::slice::from_raw_parts_mut(
             self.alloc.addr as *mut T,
             self.alloc.size / std::mem::size_of::<T>(),

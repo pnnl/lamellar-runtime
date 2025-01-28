@@ -47,6 +47,7 @@
 use core::marker::PhantomData;
 use futures_util::future::join_all;
 use serde::{Deserialize, Deserializer};
+use tracing::trace;
 use std::cmp::PartialEq;
 use std::fmt;
 use std::ops::Deref;
@@ -353,7 +354,7 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
         // self.print();
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
-        // println!("darc des");
+        trace!("darc des");
         match cur_pe {
             Ok(_) => {
                 self.deserialize_update_cnts();
@@ -384,11 +385,11 @@ impl<T: 'static> DarcInner<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
         // if self.ref_cnt_addr + pe * std::mem::size_of::<AtomicUsize>() < 10 {
-        if self.ref_cnt_slice[pe] < 10 {
-            println!("error!!!! addrress makes no sense: {:?} ", pe);
-            println!("{:?}", self);
-            panic!();
-        }
+        // if self.ref_cnt_slice.index_addr(pe) < 10 {
+        //     println!("error!!!! addrress makes no sense: {:?} ", pe);
+        //     println!("{:?}", self);
+        //     panic!();
+        // }
         let team_pe = pe;
         let tot_ref_cnt = unsafe {
             // ((self.total_ref_cnt_addr + team_pe * std::mem::size_of::<AtomicUsize>())
@@ -1671,7 +1672,7 @@ impl std::fmt::Debug for __NetworkDarc {
 
 impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
-        // println!("net darc from darc");
+        trace!("net darc from darc");
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner.addr(),
@@ -1686,7 +1687,7 @@ impl<T> From<Darc<T>> for __NetworkDarc {
 
 impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
-        // println!("net darc from darc");
+        trace!("net darc from darc");
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner.addr(),
@@ -1702,11 +1703,13 @@ impl<T> From<&Darc<T>> for __NetworkDarc {
 impl<T> From<__NetworkDarc> for Darc<T> {
     fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
+            let local_addr = lamellae.comm().local_addr(ndarc.orig_team_pe, ndarc.inner_addr.0);
             let alloc = lamellae
                 .comm()
-                .local_alloc(ndarc.inner_addr)
-                .expect("alloc to be valid on remote PE");
+                .get_alloc(local_addr)
+                .expect("alloc should be valid on remote PE");
 
+            trace!("found alloc: {:?}", alloc);
             let darc = Darc {
                 inner: DarcCommPtr {
                     alloc,

@@ -426,7 +426,7 @@ impl<T: Dist + ArrayOps + std::default::Default> GenericAtomicArray<T> {
                     team.clone(),
                     array_size,
                     distribution,
-                    DarcMode::LocalLockArray,
+                    DarcMode::GenericAtomicArray,
                 )
                 .await;
                 let mut vec = vec![];

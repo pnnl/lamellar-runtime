@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::atomic::Ordering};
 
-use tracing::trace;
+use tracing::{debug, trace};
 
 use crate::{
     lamellae::{
@@ -21,7 +21,7 @@ impl CommMem for ShmemComm {
         &self,
         size: usize,
         alloc_type: AllocationType,
-        _align: usize,
+        align: usize,
     ) -> AllocResult<CommAlloc> {
         //shared memory segments are aligned on page boundaries so no need to pass in alignment constraint
         let mut alloc = self.alloc_lock.write();
@@ -29,14 +29,14 @@ impl CommMem for ShmemComm {
             AllocationType::Sub(pes) => {
                 // println!("pes: {:?}",pes);
                 if pes.contains(&self.my_pe) {
-                    let ret = unsafe { alloc.1.alloc(size, pes.iter().cloned()) };
+                    let ret = unsafe { alloc.1.alloc(size,align, pes.iter().cloned()) };
                     // println!("{:?}",ret.2);
                     ret
                 } else {
                     return Err(AllocError::IdError(self.my_pe));
                 }
             }
-            AllocationType::Global => unsafe { alloc.1.alloc(size, 0..self.num_pes) },
+            AllocationType::Global => unsafe { alloc.1.alloc(size,align, 0..self.num_pes) },
             _ => panic!("unexpected allocation type {:?} in rofi_alloc", alloc_type),
         };
         let mut addr_map = HashMap::new();
@@ -194,7 +194,8 @@ impl CommMem for ShmemComm {
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    fn local_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+    fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+        trace!("get_alloc: {:?}", addr);
         let alloc = self.alloc_lock.read();
         if let Some((_, size, _)) = alloc.0.get(&addr.0) {
             return Ok(CommAlloc {
