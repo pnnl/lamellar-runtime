@@ -1,35 +1,49 @@
 pub(crate) mod comm;
 pub(crate) mod command_queues;
-#[cfg(feature = "enable-libfabric")]
-pub(crate) mod libfab_lamellae;
-#[cfg(feature = "enable-libfabric")]
-pub(crate) mod libfabasync_lamellae;
 pub(crate) mod local_lamellae;
-#[cfg(feature = "rofi")]
-mod rofi_lamellae;
-#[cfg(feature = "enable-rofi-rust")]
-pub(crate) mod rofi_rust_async_lamellae;
-#[cfg(feature = "enable-rofi-rust")]
-pub(crate) mod rofi_rust_lamellae;
 pub(crate) mod shmem_lamellae;
 
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 use local_lamellae::{Local, LocalBuilder};
-#[cfg(feature = "enable-rofi")]
-use rofi_lamellae::{Rofi, RofiBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
-use tracing::trace;
-#[cfg(feature = "enable-libfabric")]
-use {
-    libfab_lamellae::{LibFab, LibFabBuilder},
-    libfabasync_lamellae::{LibFabAsync, LibFabAsyncBuilder},
-};
-#[cfg(feature = "enable-rofi-rust")]
-use {
-    rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder},
-    rofi_rust_lamellae::{RofiRust, RofiRustBuilder},
-};
+
+match_cfg::match_cfg!{
+    #[cfg(feature = "rofi-c")] => {
+        pub(crate) mod rofi_c_lamellae;
+        use rofi_c_lamellae::{RofiC, RofiCBuilder};
+    }
+}
+
+// #[cfg(feature = "enable-libfabric")]
+// pub(crate) mod libfab_lamellae;
+// #[cfg(feature = "enable-libfabric")]
+// pub(crate) mod libfabasync_lamellae;
+// #[cfg(feature = "rofi-c")] 
+// {
+// pub(crate) mod rofi_c_lamellae;
+// use rofi_c_lamellae::{RofiC, RofiCBuilder};
+// }
+// #[cfg(feature = "enable-rofi-rust")]
+// pub(crate) mod rofi_rust_async_lamellae;
+// #[cfg(feature = "enable-rofi-rust")]
+// pub(crate) mod rofi_rust_lamellae;
+
+
+
+// #[cfg(feature = "enable-rofi-c")]
+// use rofi_c_lamellae::{RofiC, RofiCBuilder};
+// #[cfg(feature = "enable-rofi-rust")]
+// use {
+//     rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder},
+//     rofi_rust_lamellae::{RofiRust, RofiRustBuilder},
+// };
+// #[cfg(feature = "enable-libfabric")]
+// use {
+//     libfab_lamellae::{LibFab, LibFabBuilder},
+//     libfabasync_lamellae::{LibFabAsync, LibFabAsyncBuilder},
+// };
+
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
@@ -37,6 +51,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
+use tracing::trace;
 
 lazy_static! {
     static ref SERIALIZE_HEADER_LEN: usize =
@@ -48,9 +63,9 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
-    #[cfg(feature = "rofi")]
+    #[cfg(feature = "rofi-c")]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
-    Rofi,
+    RofiC,
     #[cfg(feature = "enable-rofi-rust")]
     RofiRust,
     #[cfg(feature = "enable-rofi-rust")]
@@ -74,12 +89,13 @@ pub(crate) enum AllocationType {
 
 impl Default for Backend {
     fn default() -> Self {
+        println!("default backend: {}", config().backend);
         match config().backend.as_str() {
-            "rofi" => {
-                #[cfg(feature = "rofi")]
-                return Backend::Rofi;
-                #[cfg(not(feature = "rofi"))]
-                panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+            "rofi_c" => {
+                #[cfg(feature = "rofi-c")]
+                return Backend::RofiC;
+                #[cfg(not(feature = "rofi-c"))]
+                panic!("unable to set rofi C backend, recompile with 'enable-rofi-c' feature")
             }
             "rofi_rust" => {
                 #[cfg(feature = "enable-rofi-rust")]
@@ -109,8 +125,11 @@ impl Default for Backend {
             "shmem" => {
                 return Backend::Shmem;
             }
-            _ => {
+            "local" => {
                 return Backend::Local;
+            }
+            _ => {
+                panic!("unknown backend: {}", config().backend);
             }
         }
     }
@@ -123,11 +142,6 @@ pub(crate) struct SerializeHeader {
 
 // #[derive(Debug)]
 pub(crate) struct SerializedData {
-    // pub(crate) addr: usize, // process space address)
-    // pub(crate) alloc_size: usize,
-    // pub(crate) data: NonNull<u8>,
-    // pub(crate) data_len: usize,
-    // pub(crate) ser_data_addr: usize, //address allocated from Comm
     pub(crate) alloc: CommAlloc,
     pub(crate) ref_cnt: *const AtomicUsize,
     pub(crate) ser_data_bytes: CommSlice<u8>,
@@ -180,8 +194,6 @@ impl SerializedData {
         let ser_data_bytes = alloc.slice_at_byte_offset(ser_data_offset, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
-        // let ser_data_addr = addr + ref_cnt_size;
-        // let raw_data_addr = ser_data_addr + *SERIALIZE_HEADER_LEN;
 
         unsafe { 
             ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
@@ -192,11 +204,6 @@ impl SerializedData {
         }
         
         Ok(SerializedData {
-            // addr,
-            // alloc_size,
-            // data: unsafe { NonNull::new_unchecked(raw_data_addr as *mut u8) },
-            // data_len: size,
-            // ser_data_addr,
             alloc,
             ref_cnt,
             ser_data_bytes,
@@ -238,18 +245,13 @@ impl SerializedData {
     }
 }
 
-// impl SerializedDataOps for SerializedData {
 impl SerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
-        // let header_size = *SERIALIZE_HEADER_LEN;
-        // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
-        // let header_size = *SERIALIZE_HEADER_LEN;
-        // unsafe { std::slice::from_raw_parts_mut((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -259,13 +261,11 @@ impl SerializedData {
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
-        // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes_mut(&mut self) -> CommSlice<u8> {
-        // unsafe { std::slice::from_raw_parts_mut(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
 
@@ -273,19 +273,8 @@ impl SerializedData {
     pub(crate) fn data_len(&self) -> usize {
         self.payload_bytes.len()
     }
-
-    // pub(crate) fn header_and_data_as_bytes(&self) -> CommSlice<u8> {
-    //     // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, self.len()) }
-    //     self.ser_data_bytes
-    // }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
-        // unsafe {
-        //     std::slice::from_raw_parts_mut(
-        //         (self.addr + std::mem::size_of::<AtomicUsize>()) as *mut u8,
-        //         self.len(),
-        //     )
-        // }
         self.ser_data_bytes
     }
 
@@ -345,7 +334,6 @@ impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
     #[tracing::instrument(level = "debug")]
     pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
-        // let mut sub = self.clone();
         self.increment_cnt();
         SubSerializedData {
             alloc: self.alloc.clone(),
@@ -380,13 +368,10 @@ impl Drop for SerializedData {
 impl SubSerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
-        // let header_size = *SERIALIZE_HEADER_LEN;
-        // unsafe { std::slice::from_raw_parts((self.ser_data_addr) as *mut u8, header_size) }
         self.header_bytes
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
-        // unsafe { std::slice::from_raw_parts(self.data.as_ptr(), self.data_len) }
         self.payload_bytes
     }
 
@@ -515,8 +500,8 @@ pub(crate) trait Des {
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder {
-    #[cfg(feature = "rofi")]
-    RofiBuilder,
+    #[cfg(feature = "rofi-c")]
+    RofiCBuilder,
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustBuilder,
     #[cfg(feature = "enable-rofi-rust")]
@@ -556,8 +541,8 @@ pub(crate) trait Ser {
 #[enum_dispatch(Ser, LamellaeAM, LamellaeShutdown)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
-    #[cfg(feature = "rofi")]
-    Rofi,
+    #[cfg(feature = "rofi-c")]
+    RofiC,
     #[cfg(feature = "enable-rofi-rust")]
     RofiRust,
     #[cfg(feature = "enable-rofi-rust")]
@@ -573,8 +558,8 @@ pub(crate) enum Lamellae {
 impl Lamellae {
     pub(crate) fn comm(&self) -> &Comm {
         match self {
-            #[cfg(feature = "rofi")]
-            Lamellae::Rofi => self.comm(),
+            #[cfg(feature = "rofi-c")]
+            Lamellae::RofiC(rofi_c) => rofi_c.comm(),
             #[cfg(feature = "enable-rofi-rust")]
             Lamellae::RofiRust => self.comm(),
             #[cfg(feature = "enable-rofi-rust")]
@@ -588,18 +573,6 @@ impl Lamellae {
         }
     }
 }
-
-// // #[async_trait]
-// #[enum_dispatch]
-// pub(crate) trait LamellaeComm: LamellaeAM + LamellaeRDMA {
-//     fn my_pe(&self) -> usize;
-//     fn num_pes(&self) -> usize;
-//     fn barrier(&self);
-//     fn backend(&self) -> Backend;
-//     #[allow(non_snake_case)]
-//     fn MB_sent(&self) -> f64;
-//     // fn print_stats(&self);
-// }
 
 #[async_trait]
 #[enum_dispatch]
@@ -616,11 +589,11 @@ pub(crate) trait LamellaeAM: Send {
 #[tracing::instrument(skip_all, level = "debug")]
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
-        #[cfg(feature = "rofi")]
-        Backend::Rofi => {
+        #[cfg(feature = "rofi-c")]
+        Backend::RofiC => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
-            LamellaeBuilder::RofiBuilder(RofiBuilder::new(&provider, &domain))
+            LamellaeBuilder::RofiCBuilder(RofiCBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-rofi-rust")]
         Backend::RofiRust => {

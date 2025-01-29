@@ -1,10 +1,14 @@
 use super::CommAllocAddr;
+use crate::lamellae::AllocationType;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum AllocError {
     OutOfMemoryError(usize),
     IdError(usize),
     LocalNotFound(CommAllocAddr),
+    RemoteNotFound(CommAllocAddr),
+    UnexpectedAllocationType(AllocationType),
+    FabricAllocationError(i32),
 }
 
 impl std::fmt::Display for AllocError {
@@ -23,6 +27,19 @@ impl std::fmt::Display for AllocError {
                     addr
                 )
             }
+            AllocError::RemoteNotFound(addr) => {
+                write!(
+                    f,
+                    "Allocation not found remotely for given address {:x}",
+                    addr
+                )
+            }
+            AllocError::UnexpectedAllocationType(alloc_type) => {
+                write!(f, "Unexpected allocation type {:?}", alloc_type)
+            }
+            AllocError::FabricAllocationError(err_no) => {
+                write!(f, "Fabric allocation error: {:?}", err_no)
+            }
         }
     }
 }
@@ -32,24 +49,34 @@ impl std::error::Error for AllocError {}
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct RdmaError {}
+pub(crate) enum RdmaError {
+    FabricPutError(i32),
+    FabricGetError(i32),
+}
 
 pub(crate) type RdmaResult = Result<(), RdmaError>;
 
 impl std::fmt::Display for RdmaError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "RDMA Error")
+        match self {
+            RdmaError::FabricPutError(err_no) => {
+                write!(f, "Fabric put error: {}", err_no)
+            }
+            RdmaError::FabricGetError(err_no) => {
+                write!(f, "Fabric get error: {}", err_no)
+            }
+        }
     }
 }
 
 impl std::error::Error for RdmaError {}
 
-#[cfg(feature = "rofi")]
+#[cfg(feature = "rofi-c")]
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum TxError {
     GetError,
 }
-#[cfg(feature = "rofi")]
+#[cfg(feature = "rofi-c")]
 impl std::fmt::Display for TxError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -59,7 +86,7 @@ impl std::fmt::Display for TxError {
         }
     }
 }
-#[cfg(feature = "rofi")]
+#[cfg(feature = "rofi-c")]
 impl std::error::Error for TxError {}
-#[cfg(feature = "rofi")]
+#[cfg(feature = "rofi-c")]
 pub(crate) type TxResult<T> = Result<T, TxError>;

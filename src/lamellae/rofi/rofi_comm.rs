@@ -302,11 +302,14 @@ impl CommOps for RofiComm {
         panic!("Error invalid free! {:?}", addr);
     }
     #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<usize> {
+    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<CommAlloc> {
         //memory segments are aligned on page boundaries so no need to pass in alignment constraint
-        // let size = size + size%8;
-        // let _lock = self.comm_mutex.write();
-        Ok(rofi_alloc(size, alloc) as usize)
+        let addr = rofi_alloc(size, alloc)?;
+        Ok(CommAlloc {
+            addr,
+            size,
+            alloc_type: CommAllocType::Fabric,
+        })
     }
 
     #[tracing::instrument(skip_all, level = "debug")]

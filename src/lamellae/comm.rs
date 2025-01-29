@@ -10,8 +10,8 @@ use tracing::trace;
 use super::Backend;
 
 // use crate::LamellarMemoryRegion;
-#[cfg(feature = "enable-rofi")]
-use crate::lamellae::rofi::rofi_comm::*;
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::{
     libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibFabAsyncData,
@@ -49,8 +49,8 @@ pub(crate) enum CmdQStatus {
 #[enum_dispatch(CommMem, CommRdma, CommShutdown, CommInfo, CommProgress)]
 #[derive(Debug)]
 pub(crate) enum Comm {
-    #[cfg(feature = "rofi")]
-    Rofi(RofiComm),
+    #[cfg(feature = "rofi-c")]
+    RofiC(RofiCComm),
     #[cfg(feature = "enable-rofi-rust")]
     RofiRust(RofiRustComm),
     #[cfg(feature = "enable-rofi-rust")]
@@ -87,6 +87,8 @@ impl CommAtomic for Comm {
         _remote_addr: usize,
     ) -> RdmaHandle<T> {
         match self {
+            #[cfg(feature = "rofi-c")]
+            Comm::RofiC(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
             Comm::Shmem(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
             Comm::Local(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
         }
@@ -101,6 +103,8 @@ impl CommAtomic for Comm {
         _result: &mut [T],
     ) -> RdmaHandle<T> {
         match self {
+            #[cfg(feature = "rofi-c")]
+            Comm::RofiC(comm) => comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result),
             Comm::Shmem(comm) => {
                 comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
             }
@@ -198,6 +202,12 @@ pub(crate) enum CommAllocType {
     Copy, Clone, Add, Sub, From, Into, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
 )]
 pub(crate) struct CommAllocAddr(pub(crate) usize);
+
+impl Into<usize> for &CommAllocAddr {
+    fn into(self) -> usize {
+        self.0
+    }
+}
 
 impl std::fmt::Debug for CommAllocAddr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

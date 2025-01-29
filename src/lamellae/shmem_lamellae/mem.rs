@@ -123,7 +123,7 @@ impl CommMem for ShmemComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
-        let mut allocs = self.alloc.write();
+        
         let size = std::cmp::max(
             min_size * 2 * self.num_pes,
             SHMEM_SIZE.load(Ordering::SeqCst),
@@ -132,7 +132,7 @@ impl CommMem for ShmemComm {
             // println!("addr: {:x} - {:x}",addr, addr+size);
             let mut new_alloc = BTreeAlloc::new("shmem".to_string());
             new_alloc.init(alloc.addr, size);
-            allocs.push(new_alloc)
+            self.alloc.write().push(new_alloc);
         } else {
             panic!("[Error] out of system memory");
         }

@@ -4,6 +4,8 @@ use crate::{
     lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler},
     LamellarTask,
 };
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
@@ -27,8 +29,8 @@ pub struct RdmaHandle<T> {
 
 #[pin_project(project = RdmaFutureProj)]
 pub(crate) enum RdmaFuture<T> {
-    #[cfg(feature = "rofi")]
-    Rofi(#[pin] RofiFuture),
+    #[cfg(feature = "rofi-c")]
+    RofiC(#[pin] RofiCFuture<T>),
     #[cfg(feature = "enable-rofi-rust")]
     RofiRust(#[pin] RofiRustFuture),
     #[cfg(feature = "enable-rofi-rust")]
@@ -45,8 +47,8 @@ impl<T: Remote> RdmaHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) {
         match self.future {
-            #[cfg(feature = "rofi")]
-            RdmaFuture::Rofi(f) => f.block(),
+            #[cfg(feature = "rofi-c")]
+            RdmaFuture::RofiC(f) => f.block(),
             #[cfg(feature = "enable-rofi-rust")]
             RdmaFuture::RofiRust(f) => f.block(),
             #[cfg(feature = "enable-rofi-rust")]
@@ -67,8 +69,8 @@ impl<T: Remote> RdmaHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
-            #[cfg(feature = "rofi")]
-            RdmaFuture::Rofi(f) => f.spawn(),
+            #[cfg(feature = "rofi-c")]
+            RdmaFuture::RofiC(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-rust")]
             RdmaFuture::RofiRust(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-rust")]
@@ -89,8 +91,8 @@ impl<T: Remote> Future for RdmaHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
-            #[cfg(feature = "rofi")]
-            RdmaFutureProj::Rofi(f) => f.poll(cx),
+            #[cfg(feature = "rofi-c")]
+            RdmaFutureProj::RofiC(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
             RdmaFutureProj::RofiRust(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
