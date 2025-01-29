@@ -800,7 +800,8 @@ impl<T: Dist> MemoryRegion<T> {
                     num_elems * std::mem::size_of::<T>(),
                     alloc,
                     std::mem::align_of::<T>(),
-                )? //did we call team barrer before this?
+                )
+                .block()? //did we call team barrer before this?
             }
         } else {
             println!(

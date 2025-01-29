@@ -14,6 +14,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use crate::lamellae::CommOpHandle;
 
 use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
@@ -141,7 +142,7 @@ impl LamellaeComm for LibFabAsync {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
-    fn barrier(&self) {
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a>{
         self.libfab_comm.barrier()
     }
     fn backend(&self) -> Backend {
@@ -249,13 +250,20 @@ impl LamellaeRDMA for LibFabAsync {
     //     self.libfab_comm.iput(pe, src, dst);
     // }
     fn put_all<T: Remote>(&self, src: &[T], dst: usize) -> RdmaHandle {
+
+    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        let fut = self.libfab_comm.iput(pe, src, dst);
+        CommOpHandle::new(fut)
+    }
+
+    fn put_all(&self, src: &[u8], dst: usize) {
         self.libfab_comm.put_all(src, dst);
     }
     fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaHandle {
         self.libfab_comm.get(pe, src, dst);
     }
-    // fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
-    //     self.libfab_comm.iget(pe, src, dst);
+    // fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a> {
+    //     self.libfab_comm.iget(pe, src, dst)
     // }
     fn atomic_avail<T>(&self) -> bool {
         false
@@ -287,7 +295,7 @@ impl LamellaeRDMA for LibFabAsync {
     fn rt_free(&self, addr: usize) {
         self.libfab_comm.rt_free(addr)
     }
-    fn alloc(&self, size: usize, alloc: AllocationType, align: usize) -> AllocResult<usize> {
+    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType, align: usize) -> CommOpHandle<'a, AllocResult<usize>> {
         self.libfab_comm.alloc(size, alloc)
     }
     fn free(&self, addr: usize) {

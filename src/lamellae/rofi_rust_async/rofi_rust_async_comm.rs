@@ -16,6 +16,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+#[cfg(feature="tokio-executor")]
+use tokio::runtime::Handle;
+#[cfg(not(feature="tokio-executor"))]
+use async_std::task::block_on;
+
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum TxError {
@@ -86,7 +91,10 @@ impl RofiRustAsyncComm {
         // println!("rofi comm total_mem {:?}",total_mem);
         let all_pes: Vec<_> = (0..ofi.num_pes).collect();
         let addr =
-            async_std::task::block_on(async { ofi.sub_alloc(&all_pes, total_mem).await.unwrap() });
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async { ofi.sub_alloc(&all_pes, total_mem).await.unwrap() });
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async { ofi.sub_alloc(&all_pes, total_mem).await.unwrap() });
 
         let libfab = Self {
             base_address: Arc::new(RwLock::new(addr as usize)),
@@ -102,7 +110,7 @@ impl RofiRustAsyncComm {
         };
 
         libfab.alloc.write()[0].init(addr as usize, total_mem);
-        println!("Libfab is ready");
+        println!("rofirustasync is ready");
         Ok(libfab)
     }
 
@@ -192,7 +200,10 @@ impl RofiRustAsyncComm {
         // println!("iget_data {:?} {:x} {:?}", pe, src_addr, dst_addr.as_ptr());
         // let _lock = self.comm_mutex.write();
         match unsafe {
-            async_std::task::block_on(async { self.ofi.lock().get(pe, src_addr, dst_addr).await })
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async { self.ofi.lock().get(pe, src_addr, dst_addr).await });
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async { self.ofi.lock().get(pe, src_addr, dst_addr).await })
         } {
             //.expect("error in rofi get")
             Err(ret) => {
@@ -226,7 +237,10 @@ impl CommOps for RofiRustAsyncComm {
 
     fn barrier(&self) {
         let all_pes: Vec<_> = (0..self.num_pes).collect();
-        async_std::task::block_on(async move {self.ofi.lock().sub_barrier(&all_pes).await});
+        #[cfg(feature = "tokio-executor")]
+        Handle::current().block_on(async move {self.ofi.lock().sub_barrier(&all_pes).await});
+        #[cfg(not(feature = "tokio-executor"))]
+        block_on(async move {self.ofi.lock().sub_barrier(&all_pes).await});
     }
 
     fn occupied(&self) -> usize {
@@ -314,9 +328,17 @@ impl CommOps for RofiRustAsyncComm {
             AllocationType::Local => todo!(),
             AllocationType::Global => {
                 let pes: Vec<_> = (0..self.num_pes).collect();
-                async_std::task::block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())})
+                #[cfg(feature = "tokio-executor")]
+                Handle::current().block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())});
+                #[cfg(not(feature = "tokio-executor"))]
+                block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())})
             }
-            AllocationType::Sub(pes) => async_std::task::block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())}),
+            AllocationType::Sub(pes) => {
+                #[cfg(feature = "tokio-executor")]
+                Handle::current().block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())});
+                #[cfg(not(feature = "tokio-executor"))]
+                async_std::task::block_on(async move {Ok(self.ofi.lock().sub_alloc(&pes, size).await.unwrap())});
+            },
         }
     }
 
@@ -342,7 +364,10 @@ impl CommOps for RofiRustAsyncComm {
 
     fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize)  -> RdmaHandle{
         if pe != self.my_pe {
-            async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }.await.unwrap()});
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }.await.unwrap()});
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }.await.unwrap()});
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -363,7 +388,14 @@ impl CommOps for RofiRustAsyncComm {
 
     fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         if pe != self.my_pe {
-            async_std::task::block_on(async {
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async {
+                unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
+                .await
+                .unwrap()
+            });
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async {
                 unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
                     .await
                     .unwrap()
@@ -380,17 +412,29 @@ impl CommOps for RofiRustAsyncComm {
 
     fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize)  -> RdmaHandle{
         for pe in 0..self.my_pe {
-            async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
                 .await
                 .unwrap()
-            })
+            });
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
+                .await
+                .unwrap()
+            });
         }
 
         for pe in self.my_pe..self.num_pes {
-            async_std::task::block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
                 .await
                 .unwrap()
-            })
+            });
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async move {unsafe { self.ofi.lock().put(pe, src_addr, dst_addr) }
+                .await
+                .unwrap()
+            });
         }
 
         unsafe {
@@ -406,7 +450,13 @@ impl CommOps for RofiRustAsyncComm {
 
     fn get<T: Remote>(&self, pe: usize, src: usize, dst: &mut [T]) -> RdmaHandle{
         if pe != self.my_pe {
-            async_std::task::block_on(async {unsafe { self.ofi.lock().get(pe, src_addr, dst_addr) }
+            #[cfg(feature = "tokio-executor")]
+            Handle::current().block_on(async {unsafe { self.ofi.lock().get(pe, src_addr, dst_addr) }
+                .await
+                .unwrap()
+            });
+            #[cfg(not(feature = "tokio-executor"))]
+            block_on(async {unsafe { self.ofi.lock().get(pe, src_addr, dst_addr) }
                 .await
                 .unwrap()
             });

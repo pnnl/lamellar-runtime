@@ -1072,6 +1072,7 @@ impl<T: Send + Sync> Darc<T> {
             .lamellae
             .comm()
             .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
+            .await
             .expect("out of memory");
         // let temp_team = team_rt.clone();
         // team_rt.print_cnt();

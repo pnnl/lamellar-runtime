@@ -915,6 +915,7 @@ impl LamellarTeamRT {
                 alloc,
                 std::mem::align_of::<*const LamellarTeamRT>(),
             )
+            .block()
             .unwrap();
 
         let team = LamellarTeamRT {
@@ -1180,6 +1181,7 @@ impl LamellarTeamRT {
                     parent_alloc,
                     std::mem::align_of::<*const LamellarTeamRT>(),
                 )
+                .block()
                 .unwrap();
             // ------------------------------------------------------------------------------------------------- //
             // println!("passed remote_ptr_alloc");

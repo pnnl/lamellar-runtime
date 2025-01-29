@@ -25,6 +25,12 @@ use std::process::Output;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use parking_lot::Mutex;
+use std::thread;
+#[cfg(feature="tokio-executor")]
+use tokio::runtime::Handle;
+#[cfg(not(feature="tokio-executor"))]
+use async_std::task::block_on;
 
 // #[derive(Debug)]
 enum BarrierImpl {
@@ -70,16 +76,14 @@ pub(crate) struct OfiAsync {
     av: libfabric::av::AddressVector,
     eq: libfabric::async_::eq::EventQueue<WaitableEq>,
     domain: libfabric::domain::Domain,
-    fabric: libfabric::fabric::Fabric,
+    _fabric: libfabric::fabric::Fabric,
     info_entry: libfabric::info::InfoEntry<RmaAtomicCollEp>,
     alloc_manager: AllocInfoManager,
-    my_pmi: Arc<dyn Pmi + Sync + Send>,
+    _my_pmi: Arc<dyn Pmi + Sync + Send>,
+    context_bank: Mutex<HashMap<thread::ThreadId, Vec<libfabric::Context>>>,
     put_cnt: AtomicUsize,
     get_cnt: AtomicUsize,
 }
-
-unsafe impl Sync for OfiAsync {}
-unsafe impl Send for OfiAsync {}
 
 impl OfiAsync {
     pub(crate) fn new(
@@ -119,7 +123,7 @@ impl OfiAsync {
         .mode(libfabric::enums::Mode::new().context())
         .enter_domain_attr()
         .resource_mgmt(libfabric::enums::ResourceMgmt::Enabled)
-        .threading(libfabric::enums::Threading::Domain)
+        .threading(libfabric::enums::Threading::Safe)
         .mr_mode(
             libfabric::enums::MrMode::new()
                 .allocated()
@@ -222,9 +226,9 @@ impl OfiAsync {
         let mut ofi = Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
-            my_pmi: Arc::new(my_pmi),
+            _my_pmi: Arc::new(my_pmi),
             info_entry,
-            fabric,
+            _fabric: fabric,
             domain,
             av,
             eq,
@@ -237,11 +241,37 @@ impl OfiAsync {
             barrier_impl: BarrierImpl::Uninit,
             put_cnt: AtomicUsize::new(0),
             get_cnt: AtomicUsize::new(0),
+            context_bank: Mutex::new(HashMap::with_capacity(10)),
         };
 
         ofi.init_barrier()?;
 
         Ok(ofi)
+    }
+
+    fn acquire_context(&self) -> libfabric::Context {
+        {
+            self.context_bank.lock()
+                .entry(thread::current().id())
+                .or_insert_with(|| {
+                    let mut vec = Vec::with_capacity(10);
+                    vec.resize_with(10, || self.info_entry.allocate_context());
+                    vec
+                }) // Shall we release, allocate and lock again?
+                .pop()
+        } // Make sure the lock drops. We don't need it to allocate
+        .unwrap_or_else(|| self.info_entry.allocate_context())
+    }
+
+    fn release_context(&self, ctx: libfabric::Context) {
+        self.context_bank.lock()
+            .entry(thread::current().id())
+            .or_insert_with(|| {
+                let mut vec = Vec::with_capacity(10); 
+                vec.resize_with(10, || self.info_entry.allocate_context());
+                vec
+            })
+            .push(ctx);
     }
 
     fn create_mc_group(
@@ -431,18 +461,21 @@ impl OfiAsync {
                 std::mem::size_of_val(&all_rma_iovs),
             )
         };
-
+        let mut ctx = self.acquire_context();
+        println!("Calling allgather!");
         self.ep
-            .allgather_async(
-                my_iov_bytes,
-                &mut libfabric::mr::default_desc(),
-                all_iov_bytes,
-                &mut libfabric::mr::default_desc(),
-                &mc,
-                libfabric::enums::TferOptions::new(),
-            )
-            .await?;
-
+        .allgather_async(
+            my_iov_bytes,
+            &mut libfabric::mr::default_desc(),
+            all_iov_bytes,
+            &mut libfabric::mr::default_desc(),
+            &mc,
+            libfabric::enums::TferOptions::new(),
+            &mut ctx
+        )
+        .await?;
+        println!("Done calling allgather!");
+        self.release_context(ctx);
         // println!("Recevied the following:");
         // for rma_iov in all_rma_iovs.iter() {
         //     println!("{}", rma_iov.get_address());
@@ -502,10 +535,15 @@ impl OfiAsync {
         {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
             let barrier_size = all_pes.len() * std::mem::size_of::<usize>();
-            let barrier_addr =
-                async_std::task::block_on(async { self.sub_alloc(&all_pes, barrier_size).await })?;
-
+            println!("Initing barrier");
+            #[cfg(feature = "tokio-executor")]
+            let barrier_addr = Handle::current().block_on(async { self.sub_alloc(&all_pes, barrier_size).await })?;
+            
+            #[cfg(not(feature = "tokio-executor"))]
+            let barrier_addr = block_on(async { self.sub_alloc(&all_pes, barrier_size).await })?;
+            
             self.barrier_impl = BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
+            println!("Done Initing barrier");
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
@@ -548,9 +586,13 @@ impl OfiAsync {
             MaybeDisabledMemoryRegion::Enabled(mr) => mr,
         };
 
+        println!("Calling exchange_mr_info!");
+
         let rma_iovs = self
             .exchange_mr_info(mem.as_ptr() as usize, mem.len(), &mr.key()?, &pes)
             .await?;
+        println!("Done calling exchange_mr_info!");
+
 
         let remote_alloc_infos = pes
             .iter()
@@ -577,15 +619,24 @@ impl OfiAsync {
                 panic!("Barrier is not initialized");
             }
             BarrierImpl::Collective(mc) => {
-                self.ep.barrier_async(mc).await?;
+                let mut ctx = self.acquire_context();
+
+                println!("Calling barrier!");
+                
+                self.ep.barrier_async(mc, &mut ctx).await?;
+                self.release_context(ctx);
+                println!("Done calling barrier!");
+
                 // println!("Done with barrier");
                 Ok(())
             }
             BarrierImpl::Manual(barrier_addr, barrier_id) => {
+
                 let n = 2;
                 let num_pes = pes.len();
                 let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
                 let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
+                println!("Part of  calling barrier!");
 
                 for round in 0..num_rounds as usize {
                     for i in 1..=n {
@@ -595,10 +646,13 @@ impl OfiAsync {
                         );
 
                         let dst = barrier_addr + 8 * self.my_pe;
+                        println!("Calling put!");
+                        
                         unsafe {
                             self.put(dst, std::slice::from_ref(&my_barrier), send_pe, false)
-                                .await?
+                            .await?
                         };
+                        println!("Done calling put!");
                     }
 
                     for i in 1..=n {
@@ -616,6 +670,8 @@ impl OfiAsync {
                         }
                     }
                 }
+                println!("Done part of  calling barrier!");
+
 
                 Ok(())
             }
@@ -627,7 +683,7 @@ impl OfiAsync {
         pe: usize,
         src_addr: &[T],
         dst_addr: usize,
-        sync: bool,
+        _sync: bool,
     ) -> Result<(), libfabric::error::Error> {
         let (offset, mut desc, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
@@ -651,6 +707,7 @@ impl OfiAsync {
         //     "Putting to PE {}, addr: {}, remote_addr: {}",
         //     pe, dst_addr, remote_dst_addr
         // );
+        println!("Calling put!");
 
         let remote_key = remote_alloc_info.key();
         let cntr_order =
@@ -669,6 +726,7 @@ impl OfiAsync {
 
                 let mut cntr_order = 0;
                 while curr_idx < src_addr.len() {
+                    let mut ctx = self.acquire_context();
                     let msg_len = std::cmp::min(
                         src_addr.len() - curr_idx,
                         self.info_entry.ep_attr().max_msg_size(),
@@ -683,8 +741,10 @@ impl OfiAsync {
                         &mut desc,
                         &self.mapped_addresses[pe],
                         remote_dst_addr as u64,
-                        remote_key
+                        remote_key,
+                        &mut ctx
                     );
+                    self.release_context(ctx);
                     // let order = self.post_put(|| {unsafe{self.ep.write_to_async(&src_addr[curr_idx..curr_idx+msg_len], &mut desc, &self.mapped_addresses[pe], remote_dst_addr as u64, remote_key)}}).await?;
 
                     remote_dst_addr += msg_len;
@@ -692,8 +752,10 @@ impl OfiAsync {
                     cntr_order = order;
                 }
 
+
                 cntr_order
             };
+        println!("Done calling put!");
 
         // if sync {
         //     self.wait_for_tx_cntr(cntr_order)?;
@@ -707,7 +769,7 @@ impl OfiAsync {
         pe: usize,
         src_addr: usize,
         dst_addr: &mut [T],
-        sync: bool,
+        _sync: bool,
     ) -> Result<(), libfabric::error::Error> {
         let (offset, mut desc, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
@@ -737,6 +799,7 @@ impl OfiAsync {
 
         let mut cntr_order = 0;
         while curr_idx < dst_addr.len() {
+            let mut ctx = self.acquire_context();
             let msg_len = std::cmp::min(
                 dst_addr.len() - curr_idx,
                 self.info_entry.ep_attr().max_msg_size(),
@@ -750,13 +813,15 @@ impl OfiAsync {
                 &mut desc,
                 &self.mapped_addresses[pe],
                 remote_src_addr as u64,
-                remote_key
+                remote_key,
+                &mut ctx
             );
-            // let order = self.post_get(|| {unsafe{self.ep.read_from_async(&mut dst_addr[curr_idx..curr_idx+msg_len], &mut desc, &self.mapped_addresses[pe], remote_src_addr as u64, remote_key)}}).await?;
             remote_src_addr += msg_len;
             curr_idx += msg_len;
             cntr_order = order;
+            self.release_context(ctx);
         }
+
 
         // if sync {
         //     self.wait_for_rx_cntr(cntr_order)?;
@@ -791,6 +856,9 @@ impl Drop for OfiAsync {
         self.wait_all_put().unwrap();
     }
 }
+
+unsafe impl Send for AllocInfoManager{} 
+unsafe impl Sync for AllocInfoManager{} 
 
 pub(crate) struct AllocInfoManager {
     pub(crate) mr_info_table: RwLock<Vec<AllocInfo>>,
@@ -854,7 +922,6 @@ impl AllocInfoManager {
         self.mr_next_key.fetch_add(1, Ordering::SeqCst)
     }
 }
-
 #[derive(Clone)]
 pub(crate) struct RemoteAllocInfo {
     key: libfabric::mr::MappedMemoryRegionKey,
@@ -917,7 +984,7 @@ impl AllocInfo {
     ) -> Result<Self, libfabric::error::Error> {
         let start = mem.as_ptr() as usize;
         let end = start + mem.len();
-        let desc = mr.description();
+        let desc = mr.descriptor();
         let key = mr.key()?;
 
         Ok(Self {

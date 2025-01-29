@@ -391,3 +391,31 @@ pub(crate) trait CommInfo {
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
 }
+
+pub(crate) struct CommOpHandle<'a, T = ()> {
+    fut: Pin<Box<dyn Future<Output =T> + Send + 'a> >
+}
+
+impl<'a, T> CommOpHandle<'a, T> {
+    pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a) -> Self {
+        Self {
+            fut: Box::pin(fut)
+        }
+    }
+
+    pub(crate) fn block(self) -> T{
+        #[cfg(feature="tokio-executor")]
+        return Handle::current().block_on(async {self.fut.await});
+        #[cfg(not(feature="tokio-executor"))]
+        return block_on(async {self.fut.await});
+    }
+}
+
+impl<'a, T> Future for CommOpHandle<'a, T> {
+        type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.get_mut();
+        let guard = ready!(this.fut.as_mut().poll(cx));
+        Poll::Ready(guard)
+    }
+}

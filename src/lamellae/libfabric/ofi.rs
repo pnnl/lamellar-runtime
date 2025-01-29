@@ -44,16 +44,13 @@ pub(crate) struct Ofi {
     av: libfabric::av::AddressVector,
     eq: libfabric::eq::EventQueue<WaitableEq>,
     domain: libfabric::domain::Domain,
-    fabric: libfabric::fabric::Fabric,
+    _fabric: libfabric::fabric::Fabric,
     info_entry: libfabric::info::InfoEntry<RmaAtomicCollEp>,
     alloc_manager: AllocInfoManager,
-    my_pmi: Arc<dyn Pmi + Sync + Send>,
+    _my_pmi: Arc<dyn Pmi + Sync + Send>,
     put_cnt: AtomicUsize,
     get_cnt: AtomicUsize,
 }
-
-unsafe impl Sync for Ofi {}
-unsafe impl Send for Ofi {}
 
 impl Ofi {
     pub(crate) fn new(
@@ -195,9 +192,9 @@ impl Ofi {
         let mut ofi = Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
-            my_pmi: Arc::new(my_pmi),
+            _my_pmi: Arc::new(my_pmi),
             info_entry,
-            fabric,
+            _fabric: fabric,
             domain,
             av,
             eq,
@@ -898,7 +895,7 @@ impl AllocInfo {
     ) -> Result<Self, libfabric::error::Error> {
         let start = mem.as_ptr() as usize;
         let end = start + mem.len();
-        let desc = mr.description();
+        let desc = mr.descriptor();
         let key = mr.key()?;
 
         Ok(Self {

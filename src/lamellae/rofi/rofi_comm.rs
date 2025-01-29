@@ -217,10 +217,11 @@ impl CommOps for RofiComm {
             / 1_000_000.0
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn barrier(&self) {
+    //#[tracing::instrument(skip_all)]
+    fn barrier<'a>(&'a self) -> CommOpHandle<'a> {
         // let _lock = self.comm_mutex.write();
-        rofi_barrier();
+        let fut = async move{rofi_barrier()};
+        CommOpHandle::new(fut)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -250,18 +251,23 @@ impl CommOps for RofiComm {
             );
         }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc_pool(&self, min_size: usize) {
-        let mut allocs = self.alloc.write();
-        let size = std::cmp::max(min_size * 2 * self.num_pes, ROFI_MEM.load(Ordering::SeqCst));
-        if let Ok(addr) = self.alloc(size, AllocationType::Global) {
-            // println!("addr: {:x} - {:x}",addr, addr+size);
-            let mut new_alloc = BTreeAlloc::new("rofi_mem".to_string());
-            new_alloc.init(addr, size);
-            allocs.push(new_alloc)
-        } else {
-            panic!("[Error] out of system memory");
-        }
+    //#[tracing::instrument(skip_all)]
+    fn alloc_pool<'a>(&'a self, min_size: usize) -> CommOpHandle<'a> {
+        let fut = async move {
+
+            let mut allocs = self.alloc.write();
+            let size = std::cmp::max(min_size * 2 * self.num_pes, ROFI_MEM.load(Ordering::SeqCst));
+            if let Ok(addr) = self.alloc(size, AllocationType::Global).await {
+                // println!("addr: {:x} - {:x}",addr, addr+size);
+                let mut new_alloc = BTreeAlloc::new("rofi_mem".to_string());
+                new_alloc.init(addr, size);
+                allocs.push(new_alloc)
+            } else {
+                panic!("[Error] out of system memory");
+            }
+        };
+
+        CommOpHandle::new(fut)
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
@@ -301,15 +307,16 @@ impl CommOps for RofiComm {
         }
         panic!("Error invalid free! {:?}", addr);
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc(&self, size: usize, alloc: AllocationType, _align: usize) -> AllocResult<CommAlloc> {
+    //#[tracing::instrument(skip_all)]
+    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType) -> CommOpHandle<'a, AllocResult<usize>> {
         //memory segments are aligned on page boundaries so no need to pass in alignment constraint
-        let addr = rofi_alloc(size, alloc)?;
-        Ok(CommAlloc {
-            addr,
-            size,
-            alloc_type: CommAllocType::Fabric,
-        })
+        // let size = size + size%8;
+        // let _lock = self.comm_mutex.write();
+        let fut = async move {
+            Ok(rofi_alloc(size, alloc) as usize)
+        };
+
+        CommOpHandle::new(fut)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -388,8 +395,8 @@ impl CommOps for RofiComm {
         // println!("[{:?}]-({:?}) put [{:?}] exit",self.my_pe,thread::current().id(),pe);
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    //#[tracing::instrument(skip_all)]
+    fn iput<'a, T: Remote + Sync >(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
         //-> RofiReq{
         // println!("[{:?}]-({:?}) iput entry",self.my_pe,thread::current().id());
         // let mut req = RofiReq{
@@ -397,7 +404,7 @@ impl CommOps for RofiComm {
         //     _drop_set: self.drop_set.clone(),
         //     _any_dropped: self.any_dropped.clone(),
         // };
-        if pe != self.my_pe {
+        let fut = async move {if pe != self.my_pe {
             // let _lock = self.comm_mutex.write();
             let _txid = rofi_iput(src_addr, dst_addr, pe).expect("error in rofi put");
             self.put_amt
@@ -411,7 +418,9 @@ impl CommOps for RofiComm {
                 // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
                 std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
             }
-        }
+        }};
+
+        CommOpHandle::new(fut)
         // req
         // println!("[{:?}]-({:?}) iput exit",self.my_pe,thread::current().id());
 
@@ -505,195 +514,82 @@ impl CommOps for RofiComm {
         // println!("[{:?}]- gc: {:?} pc: {:?} get exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        if pe != self.my_pe {
-            self.iget_data(pe, src_addr, dst_addr);
-            // let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
-            // self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
-            // // println!(
-            // //     "rofi_comm iget {:?} {:?} {:?}",
-            // //     dst_addr.len() * std::mem::size_of::<T>(),
-            // //     bytes_len,
-            // //     self.get_amt.load(Ordering::SeqCst)
-            // // );
-            // self.get_cnt.fetch_add(1, Ordering::SeqCst);
-            // let rem_bytes = bytes_len % std::mem::size_of::<u64>();
-            // // println!(
-            // //     "{:x} {:?} {:?} {:?}",
-            // //     src_addr,
-            // //     dst_addr.as_ptr(),
-            // //     bytes_len,
-            // //     rem_bytes
-            // // );
-            // if bytes_len >= std::mem::size_of::<u64>() {
-            //     let temp_dst_addr = &mut dst_addr[rem_bytes..];
-            //     self.init_buffer(temp_dst_addr);
-            //     self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
-            //     while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
-            //         self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
-            //     }
-            // }
-            // if rem_bytes > 0 {
-            //     loop {
-            //         if let Ok(addr) = self.rt_alloc(rem_bytes, std::mem::size_of::<u8>()) {
-            //             unsafe {
-            //                 let temp_dst_addr = &mut dst_addr[0..rem_bytes];
-            //                 let buf1 = std::slice::from_raw_parts_mut(
-            //                     addr as *mut T as *mut u8,
-            //                     rem_bytes,
-            //                 );
-            //                 let buf0 = std::slice::from_raw_parts(
-            //                     temp_dst_addr.as_ptr() as *mut T as *mut u8,
-            //                     rem_bytes,
-            //                 );
-            //                 self.fill_buffer(temp_dst_addr, 0u8);
-            //                 self.fill_buffer(buf1, 1u8);
+    //#[tracing::instrument(skip_all)]
+    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>{
+        let fut = async move {
+            if pe != self.my_pe {
+                let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
+                self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
+                // println!(
+                //     "rofi_comm iget {:?} {:?} {:?}",
+                //     dst_addr.len() * std::mem::size_of::<T>(),
+                //     bytes_len,
+                //     self.get_amt.load(Ordering::SeqCst)
+                // );
+                self.get_cnt.fetch_add(1, Ordering::SeqCst);
+                let rem_bytes = bytes_len % std::mem::size_of::<u64>();
+                // println!(
+                //     "{:x} {:?} {:?} {:?}",
+                //     src_addr,
+                //     dst_addr.as_ptr(),
+                //     bytes_len,
+                //     rem_bytes
+                // );
+                if bytes_len >= std::mem::size_of::<u64>() {
+                    let temp_dst_addr = &mut dst_addr[rem_bytes..];
+                    self.init_buffer(temp_dst_addr);
+                    self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
+                    while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
+                        self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
+                    }
+                }
+                if rem_bytes > 0 {
+                    loop {
+                        if let Ok(addr) = self.rt_alloc(rem_bytes, std::mem::size_of::<u8>()) {
+                            unsafe {
+                                let temp_dst_addr = &mut dst_addr[0..rem_bytes];
+                                let buf1 = std::slice::from_raw_parts_mut(
+                                    addr as *mut T as *mut u8,
+                                    rem_bytes,
+                                );
+                                let buf0 = std::slice::from_raw_parts(
+                                    temp_dst_addr.as_ptr() as *mut T as *mut u8,
+                                    rem_bytes,
+                                );
+                                self.fill_buffer(temp_dst_addr, 0u8);
+                                self.fill_buffer(buf1, 1u8);
 
-            //                 self.iget_data(pe, src_addr, temp_dst_addr);
-            //                 self.iget_data(pe, src_addr, buf1);
+                                self.iget_data(pe, src_addr, temp_dst_addr);
+                                self.iget_data(pe, src_addr, buf1);
 
-            //                 let mut timer = std::time::Instant::now();
-            //                 for i in 0..temp_dst_addr.len() {
-            //                     while buf0[i] != buf1[i] {
-            //                         std::thread::yield_now();
-            //                         if timer.elapsed().as_secs_f64() > 1.0 {
-            //                             // println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
-            //                             self.iget_data(pe, src_addr, temp_dst_addr);
-            //                             self.iget_data(pe, src_addr, buf1);
-            //                             timer = std::time::Instant::now();
-            //                         }
-            //                     }
-            //                 }
-            //                 // println!("{:?} {:?}",buf0,buf1);
-            //             }
-            //             self.rt_free(addr);
-            //             break;
-            //         }
-            //         std::thread::yield_now();
-            //     }
-            // }
-        } else {
-            unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                                let mut timer = std::time::Instant::now();
+                                for i in 0..temp_dst_addr.len() {
+                                    while buf0[i] != buf1[i] {
+                                        std::thread::yield_now();
+                                        if timer.elapsed().as_secs_f64() > 1.0 {
+                                            // println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
+                                            self.iget_data(pe, src_addr, temp_dst_addr);
+                                            self.iget_data(pe, src_addr, buf1);
+                                            timer = std::time::Instant::now();
+                                        }
+                                    }
+                                }
+                                // println!("{:?} {:?}",buf0,buf1);
+                            }
+                            self.rt_free(addr);
+                            break;
+                        }
+                        std::thread::yield_now();
+                    }
+                }
+            } else {
+                unsafe {
+                    std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                }
             }
-        }
-    }
+        };
 
-    fn atomic_avail<T: Remote>(&self) -> bool {
-        rofi_atomic_avail::<T>()
-    }
-
-    fn atomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
-        // if pe != self.my_pe {
-        let _txid = rofi_atomic_store(src_addr, dst_addr, pe).expect("error in rofi put");
-        self.put_amt
-            .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.put_cnt.fetch_add(1, Ordering::SeqCst);
-
-        // } else {
-        //     unsafe {
-        //         // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
-        //         std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
-        //     }
-        // }
-    }
-
-    fn iatomic_store<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
-        // if pe != self.my_pe {
-        let _txid = rofi_iatomic_store(src_addr, dst_addr, pe).expect("error in rofi put");
-        self.put_amt
-            .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.put_cnt.fetch_add(1, Ordering::SeqCst);
-
-        // } else {
-        //     unsafe {
-        //         // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
-        //         std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
-        //     }
-        // }
-    }
-
-    fn atomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]) {
-        // if pe != self.my_pe {
-        let _txid = rofi_atomic_load(result, remote, pe);
-        self.get_amt
-            .fetch_add(result.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-        // else{
-        //     //atomic memcopy
-        // }
-    }
-
-    fn iatomic_load<T: Remote>(&self, pe: usize, remote: usize, result: &mut [T]) {
-        // if pe != self.my_pe {
-        let _txid = rofi_iatomic_load(result, remote, pe);
-        self.get_amt
-            .fetch_add(result.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-        // else{
-        //     //atomic memcopy
-        // }
-    }
-
-    fn atomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {
-        // if pe != self.my_pe {
-        let _txid = rofi_atomic_swap(operand, result, remote, pe);
-        self.get_amt
-            .fetch_add(result.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-        // else{
-        //     //atomic memcopy
-        // }
-    }
-
-    fn iatomic_swap<T: Remote>(&self, pe: usize, operand: &[T], remote: usize, result: &mut [T]) {
-        // if pe != self.my_pe {
-        let _txid = rofi_iatomic_swap(operand, result, remote, pe);
-        self.get_amt
-            .fetch_add(result.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-        // else{
-        //     //atomic memcopy
-        // }
-    }
-
-    fn atomic_compare_exhange<T: Remote>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-        // if pe != self.my_pe {
-        let _txid = rofi_atomic_compare_exchange(new, remote, old, result, pe);
-        self.get_amt
-            .fetch_add(old.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-        // }
-        // else{
-        //atomic cas
-        // }
-    }
-
-    fn iatomic_compare_exhange<T: Remote>(
-        &self,
-        pe: usize,
-        old: &[T],
-        new: &[T],
-        remote: usize,
-        result: &mut [T],
-    ) {
-        // if pe != self.my_pe {
-        let _txid = rofi_iatomic_compare_exchange(new, remote, old, result, pe);
-        self.get_amt
-            .fetch_add(old.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        self.get_cnt.fetch_add(1, Ordering::SeqCst);
-        // }
-        // else{
-        //atomic cas
-        // }
+        CommOpHandle::new(fut)
     }
 
     //src address is relative to rofi base addr
