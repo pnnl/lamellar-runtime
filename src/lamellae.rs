@@ -31,7 +31,7 @@ match_cfg::match_cfg!{
 
 
 
-// #[cfg(feature = "enable-rofi-c")]
+// #[cfg(feature = "rofi-c")]
 // use rofi_c_lamellae::{RofiC, RofiCBuilder};
 // #[cfg(feature = "enable-rofi-rust")]
 // use {

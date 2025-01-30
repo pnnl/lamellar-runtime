@@ -4,7 +4,7 @@ use crate::{
     lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler},
     LamellarTask,
 };
-#[cfg(feature = "enable-rofi-c")]
+#[cfg(feature = "rofi-c")]
 use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
 
 use enum_dispatch::enum_dispatch;

@@ -840,7 +840,7 @@ impl InnerCQ {
             }
             // panic!("exiting");
 
-            self.comm.alloc_pool(min_size).block();
+            self.comm.alloc_pool(min_size);
             let cmd = &mut alloc_buf[self.my_pe];
             cmd.daddr = 0;
             cmd.dsize = 0;

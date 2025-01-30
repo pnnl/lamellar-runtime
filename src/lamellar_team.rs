@@ -915,8 +915,7 @@ impl LamellarTeamRT {
                 alloc,
                 std::mem::align_of::<*const LamellarTeamRT>(),
             )
-            .block()
-            .unwrap();
+            .expect("unable to allocate remote_ptr_alloc");
 
         let team = LamellarTeamRT {
             world: None,
@@ -1181,8 +1180,7 @@ impl LamellarTeamRT {
                     parent_alloc,
                     std::mem::align_of::<*const LamellarTeamRT>(),
                 )
-                .block()
-                .unwrap();
+                .expect("alloc failed creating LamellarTeam");
             // ------------------------------------------------------------------------------------------------- //
             // println!("passed remote_ptr_alloc");
             for e in temp_array_slice.iter_mut() {
