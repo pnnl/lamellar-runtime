@@ -695,7 +695,7 @@ impl<T> From<GlobalRwDarc<T>> for OrigDarc<T> {
 }
 
 impl<T: 'static> OrigDarc<T> {
-    fn inc_local_cnt(&self) {
+    fn inc_local_cnt(&self) -> usize {
         match self {
             OrigDarc::Darc(darc) => darc.inc_local_cnt(1),
             OrigDarc::LocalRw(darc) => darc.darc.inc_local_cnt(1),
@@ -827,11 +827,12 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
         self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
-        this.darc.inc_local_cnt();
+        let id = this.darc.inc_local_cnt();
         let item = unsafe { this.darc.get_item() };
         let darc: Darc<T> = Darc {
             inner: this.darc.inner(),
             src_pe: this.darc.src_pe(),
+            id,
         };
         darc.inner_mut().update_item(Box::into_raw(Box::new(item)));
         darc.inner_mut().drop = None;
@@ -929,11 +930,12 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
         self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
-        this.darc.inc_local_cnt();
+        let id = this.darc.inc_local_cnt();
         let item = unsafe { this.darc.get_item() };
         let darc: Darc<Arc<RwLock<T>>> = Darc {
             inner: this.darc.inner(),
             src_pe: this.darc.src_pe(),
+            id,
         };
         darc.inner_mut()
             .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
@@ -1031,11 +1033,12 @@ impl<T: Sync + Send> Future for IntoGlobalRwDarcHandle<T> {
         self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
-        this.darc.inc_local_cnt();
+        let id = this.darc.inc_local_cnt();
         let item = unsafe { this.darc.get_item() };
         let darc: Darc<DistRwLock<T>> = Darc {
             inner: this.darc.inner(),
             src_pe: this.darc.src_pe(),
+            id,
         };
         darc.inner_mut()
             .update_item(Box::into_raw(Box::new(DistRwLock::new(

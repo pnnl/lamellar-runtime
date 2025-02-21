@@ -624,12 +624,37 @@ impl<T: Dist> From<GenericAtomicByteArray> for GenericAtomicArray<T> {
         }
     }
 }
+
+impl<T: Dist> From<&GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: &GenericAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
+impl<T: Dist> From<&mut GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: &mut GenericAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
 impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
     fn from(array: GenericAtomicByteArray) -> Self {
         GenericAtomicArray {
             locks: array.locks.clone(),
             array: array.array.into(),
         }
+        .into()
+    }
+}
+impl<T: Dist> From<&GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &GenericAtomicByteArray) -> Self {
+        array.clone()
+        .into()
+    }
+}
+
+impl<T: Dist> From<&mut GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut GenericAtomicByteArray) -> Self {
+        array.clone()
         .into()
     }
 }

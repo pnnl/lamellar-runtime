@@ -416,8 +416,53 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 }
 
 #[doc(hidden)]
-pub trait LocalAtomicOps<T: Dist + ElementOps> {
-    fn local_load(&self, index: usize, val: T) -> T;
-    fn local_store(&self, index: usize, val: T);
-    fn local_swap(&self, index: usize, val: T) -> T;
+pub trait LocalAccessOps<T: Dist + ElementOps> {
+    fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>);
+    fn local_swap(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T>;
+}
+
+impl<T: Dist + ElementOps> LocalAccessOps<T> for LamellarMutLocalData<'_,T>  {
+    fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
+        match self {
+            LamellarMutLocalData::Slice(data) => data.local_store(idx_vals),
+            LamellarMutLocalData::LocalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_store(idx_vals)
+            }   
+            LamellarMutLocalData::GlobalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_store(idx_vals)
+            },
+            LamellarMutLocalData::NativeAtomic( ref mut  data) => data.local_store(idx_vals),
+            LamellarMutLocalData::GenericAtomic(ref mut  data) => data.local_store(idx_vals),
+        }
+    }
+
+    fn local_swap(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        match self {
+            LamellarMutLocalData::Slice(data) => data.local_swap(idx_vals),
+            LamellarMutLocalData::LocalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_swap(idx_vals)
+            }   
+            LamellarMutLocalData::GlobalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_swap(idx_vals)
+            },
+            LamellarMutLocalData::NativeAtomic( ref mut  data) => data.local_swap(idx_vals),
+            LamellarMutLocalData::GenericAtomic(ref mut  data) => data.local_swap(idx_vals),
+        }
+    }
+}
+
+impl <T: Dist + ElementOps> LocalAccessOps<T> for  &mut [T] {
+    fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
+        for (idx, val) in idx_vals {
+            self[idx] = val;
+        }
+    }
+
+    fn local_swap(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        idx_vals.map(|(idx, val)| std::mem::replace(&mut self[idx], val)).collect()
+    }
 }

@@ -781,6 +781,18 @@ impl<T: Dist> From<GlobalLockByteArray> for GlobalLockArray<T> {
     }
 }
 
+impl<T: Dist> From<&GlobalLockByteArray> for GlobalLockArray<T> {
+    fn from(array: &GlobalLockByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
+impl<T: Dist> From<&mut GlobalLockByteArray> for GlobalLockArray<T> {
+    fn from(array: &mut GlobalLockByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
 impl<T: Dist> private::ArrayExecAm<T> for GlobalLockArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.array.team_rt()

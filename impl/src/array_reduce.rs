@@ -186,7 +186,7 @@ pub(crate) fn __register_reduction(item: TokenStream) -> TokenStream {
             let pat: syn::PatType = syn::PatType {
                 attrs: vec![],
                 pat: Box::new(syn::Pat::Ident(b.clone())),
-                colon_token: syn::Token![:](Span::call_site()),
+                colon_token: syn::Token![:](Span::call_site()), 
                 // ty: Box::new(syn::Type::Reference(tyr)),
                 ty: Box::new(syn::Type::Path(tyc.clone())),
             };

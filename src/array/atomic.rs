@@ -1223,6 +1223,25 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
     }
 }
 
+impl<T: Dist> From<&AtomicByteArray> for AtomicArray<T> {
+    fn from(array: &AtomicByteArray) -> Self {
+        match array {
+            AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+        }
+    }
+}
+
+impl<T: Dist> From<&mut AtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut AtomicByteArray) -> Self {
+        match array {
+            AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+        }
+    }
+}
+
+
 impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.

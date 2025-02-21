@@ -11,14 +11,46 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+
+type MultiValMultiIdxFnNew = fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>,Vec<u8>, u8, BatchReturnType) -> LamellarArcAm;
+type SingleValMultiIdxFnNew =
+    fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, Vec<u8>, u8,BatchReturnType) -> LamellarArcAm;
+type MultiValSingleIdxFnNew =
+    fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>,(*const u8,usize,usize), usize,BatchReturnType) -> LamellarArcAm;
+
 type MultiValMultiIdxFn = fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8) -> LamellarArcAm;
 type SingleValMultiIdxFn =
     fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, Vec<u8>, u8) -> LamellarArcAm;
 type MultiValSingleIdxFn =
     fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, usize) -> LamellarArcAm;
 
+
+
+
 lazy_static! {
 
+    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS_NEW: HashMap<TypeId, MultiValMultiIdxFnNew> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<multi_val_multi_idx_ops_new> {
+            map.insert((op.id)(), op.op);
+        }
+        map
+    };
+
+    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS_NEW: HashMap<TypeId, SingleValMultiIdxFnNew> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<single_val_multi_idx_ops_new> {
+            map.insert((op.id)(), op.op);
+        }
+        map
+    };
+    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS_NEW: HashMap<TypeId, MultiValSingleIdxFnNew> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<multi_val_single_idx_ops_new> {
+            map.insert((op.id)(), op.op);
+        }
+        map
+    };
 
     pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValMultiIdxFn> = {
         let mut map = HashMap::new();
@@ -241,6 +273,26 @@ impl IndexBuf {
     }
 }
 
+type IdGenNew = fn() -> TypeId;
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+pub struct multi_val_multi_idx_ops_new {
+    pub id: IdGenNew,
+    pub op: MultiValMultiIdxFnNew,
+}
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+pub struct single_val_multi_idx_ops_new {
+    pub id: IdGenNew,
+    pub op: SingleValMultiIdxFnNew,
+}
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+pub struct multi_val_single_idx_ops_new {
+    pub id: IdGenNew,
+    pub op: MultiValSingleIdxFnNew,
+}
+
 type IdGen = fn(BatchReturnType) -> (TypeId, TypeId, BatchReturnType);
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
@@ -266,6 +318,9 @@ pub struct multi_val_single_idx_ops {
     pub op: MultiValSingleIdxFn,
 }
 
+crate::inventory::collect!(multi_val_multi_idx_ops_new);
+crate::inventory::collect!(single_val_multi_idx_ops_new);
+crate::inventory::collect!(multi_val_single_idx_ops_new);
 crate::inventory::collect!(multi_val_multi_idx_ops);
 crate::inventory::collect!(single_val_multi_idx_ops);
 crate::inventory::collect!(multi_val_single_idx_ops);
@@ -877,22 +932,32 @@ impl SingleValMultiIndex {
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
         // println!("{:?} {:?} {:?}",self.array.type_id(),TypeId::of::<T>(),ret);
-        SINGLE_VAL_MULTI_IDX_OPS
-            .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-            .unwrap()(
-            self.array,
-            self.op,
-            self.val,
-            self.idx,
-            self.index_size.len() as u8,
-        )
+        
+        match std::env::var("TEST_OPS"){
+            Ok(_) => {
+                SINGLE_VAL_MULTI_IDX_OPS_NEW
+                .get(&TypeId::of::<T>())
+                .unwrap()(self.array, self.op, self.val,self.idx, self.index_size.len() as u8, ret)
+            }
+            Err(_) => {
+                SINGLE_VAL_MULTI_IDX_OPS
+                    .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                    .unwrap()(
+                    self.array,
+                    self.op,
+                    self.val,
+                    self.idx,
+                    self.index_size.len() as u8,
+                )
+            },
+        }
     }
 }
 
 struct MultiValSingleIndex {
     array: LamellarByteArray,
     idx: usize,
-    val: Vec<u8>,
+    val: (*const u8,usize,usize),
     op: ArrayOpCmd<Vec<u8>>,
 }
 
@@ -903,23 +968,45 @@ impl MultiValSingleIndex {
         index: usize,
         val: Vec<T>,
     ) -> Self {
-        let val_u8 = val.as_ptr() as *const u8;
+        // let val_u8 = val.as_ptr() as *const u8;
+
+        // Prevent running `val`'s destructor so we are in complete control
+        // of the allocation.
+        let mut val = std::mem::ManuallyDrop::new(val);
+
+        // Pull out the various important pieces of information about `v`
+        let p = val.as_mut_ptr() as *const u8;
+        let len = val.len();
+        let cap = val.capacity();
 
         Self {
             array: array.into(),
             idx: index,
-            val: unsafe {
-                std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
-            }
-            .to_vec(),
+            val: (p,len,cap),
             op: op.into(),
         }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        MULTI_VAL_SINGLE_IDX_OPS
-            .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-            .unwrap()(self.array, self.op, self.val, self.idx)
+        match std::env::var("TEST_OPS"){
+            Ok(_) => {
+                MULTI_VAL_SINGLE_IDX_OPS_NEW
+                .get(&TypeId::of::<T>())
+                .unwrap()(self.array, self.op, self.val, self.idx, ret)
+            }
+            Err(_) => {
+                let val = unsafe {Vec::from_raw_parts(self.val.0 as *mut T, self.val.1, self.val.2)};
+                let val_u8 = val.as_ptr() as *const u8;
+                
+                MULTI_VAL_SINGLE_IDX_OPS
+                .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                .unwrap()(self.array, self.op, unsafe {
+                    std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
+                }
+                .to_vec(), self.idx)
+            }
+        }
+        
     }
 }
 
@@ -946,14 +1033,24 @@ impl MultiValMultiIndex {
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        MULTI_VAL_MULTI_IDX_OPS
-            .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-            .unwrap()(
-            self.array,
-            self.op,
-            self.idxs_vals,
-            self.index_size.len() as u8,
-        )
+        match std::env::var("TEST_OPS"){
+            Ok(_) => {
+                MULTI_VAL_MULTI_IDX_OPS_NEW
+                .get(&TypeId::of::<T>())
+                .unwrap()(self.array, self.op, self.idxs_vals, self.index_size.len() as u8, ret)
+            }
+            Err(_) => {
+                MULTI_VAL_MULTI_IDX_OPS
+                .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                .unwrap()(
+                self.array,
+                self.op,
+                self.idxs_vals,
+                self.index_size.len() as u8,
+            )
+            },
+        }
+        
     }
 }
 

@@ -846,6 +846,7 @@ fn create_buf_ops(
         multi_val_single_idx_id,
     ) = gen_array_names(&array_type, &typeident, "multi", "single");
 
+    let serde_bytes = format! {"{}::serde_bytes",lamellar};
     if array_type != "ReadOnlyArray" {
         // Updating ops that dont return anything
         expanded.extend(quote! {
@@ -854,7 +855,7 @@ fn create_buf_ops(
             struct #multi_val_multi_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
-                #[serde(with = "serde_bytes")]
+                #[serde(with = #serde_bytes)]
                 idx_vals: Vec<u8>,
                 index_size: u8,
             }
@@ -920,7 +921,7 @@ fn create_buf_ops(
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
                 val: #typeident,
-                #[serde(with = "serde_bytes")]
+                #[serde(with = #serde_bytes)]
                 indices: Vec<u8>,
                 index_size: u8,
             }
@@ -928,7 +929,10 @@ fn create_buf_ops(
             impl LamellarAM for #single_val_multi_idx_am_buf_name{ //eventually we can return fetchs here too...
                 async fn exec(&self) {
                     // println!("in single val multi idx exec");
+                    // let mut timer = std::time::Instant::now();
                     #slice
+                    // println!("get slice time: {}",timer.elapsed().as_secs_f64());
+                    // timer = std::time::Instant::now();
                     let val = self.val;
                     match self.index_size{
                         1 => {
@@ -963,6 +967,7 @@ fn create_buf_ops(
                             }
                         }
                     }
+                    // println!("op time: {}",timer.elapsed().as_secs_f64());
                 }
             }
             #[allow(non_snake_case)]
@@ -990,7 +995,7 @@ fn create_buf_ops(
             struct #multi_val_single_idx_am_buf_name{
                 data: #lamellar::array::#array_type<#typeident>,
                 op: #lamellar::array::ArrayOpCmd<#typeident>,
-                #[serde(with = "serde_bytes")]
+                #[serde(with = #serde_bytes)]
                 vals: Vec<u8>,
                 index: usize,
             }
@@ -1032,7 +1037,7 @@ fn create_buf_ops(
                 struct #multi_val_multi_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
-                    #[serde(with = "serde_bytes")]
+                    #[serde(with = #serde_bytes)]
                     idx_vals: Vec<u8>,
                     index_size: u8,
                 }
@@ -1100,7 +1105,7 @@ fn create_buf_ops(
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
                     val: #typeident,
-                    #[serde(with = "serde_bytes")]
+                    #[serde(with = #serde_bytes)]
                     indices: Vec<u8>,
                     index_size: u8,
                 }
@@ -1172,7 +1177,7 @@ fn create_buf_ops(
                 struct #multi_val_single_idx_am_buf_result_name{
                     data: #lamellar::array::#array_type<#typeident>,
                     op: #lamellar::array::ArrayOpCmd<#typeident>,
-                    #[serde(with = "serde_bytes")]
+                    #[serde(with = #serde_bytes)]
                     vals: Vec<u8>,
                     index: usize,
                 }
@@ -1217,7 +1222,7 @@ fn create_buf_ops(
         struct #multi_val_multi_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
-            #[serde(with = "serde_bytes")]
+            #[serde(with = #serde_bytes)]
             idx_vals: Vec<u8>,
             index_size: u8,
         }
@@ -1288,7 +1293,7 @@ fn create_buf_ops(
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
             val: #typeident,
-            #[serde(with = "serde_bytes")]
+            #[serde(with = #serde_bytes)]
             indices: Vec<u8>,
             index_size: u8,
         }
@@ -1369,7 +1374,7 @@ fn create_buf_ops(
         struct #multi_val_single_idx_am_buf_fetch_name{
             data: #lamellar::array::#array_type<#typeident>,
             op: #lamellar::array::ArrayOpCmd<#typeident>,
-            #[serde(with = "serde_bytes")]
+            #[serde(with = #serde_bytes)]
             vals: Vec<u8>,
             index: usize,
         }
@@ -1492,6 +1497,461 @@ fn create_buffered_ops(
     expanded
 }
 
+fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenStream {
+    let lamellar = quote::format_ident!("crate");
+    let (am_data, am): (syn::Path, syn::Path) = 
+        (
+            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
+        );
+    let multi_val_multi_idx_name = quote::format_ident!(
+        "MultiValMultiIdxAm{}",type_to_string(&typeident)
+    );
+    let multi_val_multi_idx_fetch_name = quote::format_ident!(
+        "MultiValMultiIdxFetchAm{}",type_to_string(&typeident)
+    );
+    let multi_val_multi_idx_result_name = quote::format_ident!(
+        "MultiValMultiIdxResultAm{}",type_to_string(&typeident)
+    );
+    let create_multi_val_multi_idx_name = quote::format_ident!(
+        "CreateMultiValMultiIdxAm{}",type_to_string(&typeident)
+    );
+    let multi_val_multi_idx_id_new_name = quote::format_ident!(
+        "MultiValMultiIdxId{}",type_to_string(&typeident)
+    );
+    let single_val_multi_idx_name = quote::format_ident!(
+        "SingleValMultiIdxAm{}",type_to_string(&typeident)
+    );
+    let single_val_multi_idx_fetch_name = quote::format_ident!(
+        "SingleValMultiIdxFetchAm{}",type_to_string(&typeident)
+    );
+    let single_val_multi_idx_result_name = quote::format_ident!(
+        "SingleValMultiIdxResultAm{}",type_to_string(&typeident)
+    );
+    let create_single_val_multi_idx_name = quote::format_ident!(
+        "CreateSingleValMultiIdxAm{}",type_to_string(&typeident)
+    );
+    let single_val_multi_idx_id_new_name = quote::format_ident!(
+        "SingleValMultiIdxId{}",type_to_string(&typeident)
+    );
+    let multi_val_single_idx_name = quote::format_ident!(
+        "MultiValSingleIdxAm{}",type_to_string(&typeident)
+    );
+    let multi_val_single_idx_fetch_name = quote::format_ident!(
+        "MultiValSingleIdxFetchAm{}",type_to_string(&typeident)
+    );
+    let multi_val_single_idx_result_name = quote::format_ident!(
+        "MultiValSingleIdxResultAm{}",type_to_string(&typeident)
+    );
+    let create_multi_val_single_idx_name = quote::format_ident!(
+        "CreateMultiValSingleIdxAm{}",type_to_string(&typeident)
+    );
+    let multi_val_single_idx_id_new_name = quote::format_ident!(
+        "MultiValSingleIdxId{}",type_to_string(&typeident)
+    );
+    let mut ops = quote!{};
+    let mut fetch_ops = quote!{};
+    let mut result_ops = quote!{};
+    for op in op_types{
+        match op{
+            OpType::ReadOnly =>{
+                fetch_ops.extend(quote!{
+                    ArrayOpCmd::Load =>  local_data.local_load(idx_vals),
+                });
+            }
+            OpType::Access => {
+                ops.extend(quote!{
+                    ArrayOpCmd::Store => local_data.local_store(idx_vals),
+                });
+                fetch_ops.extend(quote!{
+                    ArrayOpCmd::Swap =>  local_data.local_swap(idx_vals),
+                    
+                });
+            }
+            OpType::Arithmetic => {
+                ops.extend(quote!{
+                    ArrayOpCmd::Add => local_data.local_add(idx_vals),
+                    ArrayOpCmd::Sub => local_data.local_sub(idx_vals),
+                    ArrayOpCmd::Mul => local_data.local_mul(idx_vals),
+                    ArrayOpCmd::Div => local_data.local_div(idx_vals),
+                    ArrayOpCmd::Rem => local_data.local_rem(idx_vals),
+                });
+                fetch_ops.extend(quote!{
+                    ArrayOpCmd::FetchAdd => local_data.local_fetch_add(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchSub => local_data.local_fetch_sub(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchMul => local_data.local_fetch_mul(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchDiv => local_data.local_fetch_div(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchRem => local_data.local_fetch_rem(idx_vals, true).unwrap(),
+                });
+            }
+            OpType::CompExEps=> {
+                result_ops.extend(quote!{
+                    ArrayOpCmd::CompareExchangeEps(cur,eps) => local_data.local_compare_exchange_epsilon(idx_vals, cur, eps),
+                });
+            }
+            OpType::Bitwise => {
+                ops.extend(quote!{
+                    ArrayOpCmd::And => local_data.local_bit_and(idx_vals),
+                    ArrayOpCmd::Or => local_data.local_bit_or(idx_vals),
+                    ArrayOpCmd::Xor => local_data.local_bit_xor(idx_vals),
+                });
+                fetch_ops.extend(quote!{
+                    ArrayOpCmd::FetchAnd => local_data.local_fetch_bit_and(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchOr => local_data.local_fetch_bit_or(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchXor => local_data.local_fetch_bit_xor(idx_vals, true).unwrap(),
+                });
+            }
+            OpType::Shift => {
+                ops.extend(quote!{
+                    ArrayOpCmd::Shl => local_data.local_shl(idx_vals),
+                    ArrayOpCmd::Shr => local_data.local_shr(idx_vals),
+                });
+                fetch_ops.extend(quote!{
+                    ArrayOpCmd::FetchShl => local_data.local_fetch_shl(idx_vals, true).unwrap(),
+                    ArrayOpCmd::FetchShr => local_data.local_fetch_shr(idx_vals, true).unwrap(),
+                });
+            }
+            OpType::CompEx => {
+                result_ops.extend(quote!{
+                    ArrayOpCmd::CompareExchange(cur) => local_data.local_compare_exchange(idx_vals, cur),
+                });
+            }
+        }
+    }
+    let single_val_multi_idx_idx_vals = quote::quote! {
+        let idx_vals = unsafe{ match self.index_size {
+            1 => {
+                Box::new(self.idxs.iter()
+                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
+            }
+            2 => {
+                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const u16, self.idxs.len()/2).iter()
+                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
+            }
+            4 => {
+                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const u32, self.idxs.len()/4).iter()
+                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
+            }
+            8 => {
+                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const u64, self.idxs.len()/8).iter()
+                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
+            }
+            _ => {
+                Box::new(std::slice::from_raw_parts(self.idxs.as_ptr() as *const usize, self.idxs.len()/std::mem::size_of::<usize>()).iter()
+                    .map(|&idx| (idx as usize, self.val))) as Box<dyn Iterator<Item = (usize, #typeident)>>
+            }
+        }};
+    };
+    quote! {
+        #[allow(non_camel_case_types)]
+        #[#am_data(AmGroup(false))]
+        struct #multi_val_multi_idx_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            idxs_vals: Vec<u8>,
+            index_size: u8,
+        }
+
+        #[#am(AmGroup(false))]
+        impl LamellarAm for #multi_val_multi_idx_name{
+            async fn exec(&self) {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
+                match self.op {
+                    #ops
+                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                }
+            }
+        }
+        #[allow(non_camel_case_types)]
+        #[#am_data(AmGroup(false))]
+        struct #multi_val_multi_idx_fetch_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            idxs_vals: Vec<u8>,
+            index_size: u8,
+        }
+
+        #[#am(AmGroup(false))]
+        impl LamellarAm for #multi_val_multi_idx_fetch_name{
+            async fn exec(&self) -> Vec<#typeident> {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
+                match self.op {
+                    #fetch_ops
+                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                }
+            }
+        }
+        #[allow(non_camel_case_types)]
+        #[#am_data(AmGroup(false))]
+        struct #multi_val_multi_idx_result_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            idxs_vals: Vec<u8>,
+            index_size: u8,
+        }
+
+        #[#am(AmGroup(false))]
+        impl LamellarAm for #multi_val_multi_idx_result_name{
+            async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
+                match self.op {
+                    #result_ops
+                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                }
+            }
+        }
+        fn #create_multi_val_multi_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>, index_size: u8, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+            match return_type {
+                #lamellar::array::BatchReturnType::None => {
+                    Arc::new(#multi_val_multi_idx_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        idxs_vals: idx_vals,
+                        index_size,
+                    })
+                }
+                #lamellar::array::BatchReturnType::Vals => {
+                    Arc::new(#multi_val_multi_idx_fetch_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        idxs_vals: idx_vals,
+                        index_size,
+                    })
+                }
+                #lamellar::array::BatchReturnType::Result => {
+                    Arc::new(#multi_val_multi_idx_result_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        idxs_vals: idx_vals,
+                        index_size,
+                    })
+                }
+            }
+        }
+        fn #multi_val_multi_idx_id_new_name() -> std::any::TypeId {
+            std::any::TypeId::of::<#typeident>()
+        }
+        inventory::submit! {
+            #lamellar::array::multi_val_multi_idx_ops_new{
+                id: #multi_val_multi_idx_id_new_name,
+                op: #create_multi_val_multi_idx_name,
+            } 
+        }
+
+        #[lamellar_impl::AmDataRT(AmGroup(false))]
+        struct #single_val_multi_idx_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            val: #typeident,
+            idxs: Vec<u8>,
+            index_size: u8,
+        }
+        #[lamellar_impl::rt_am]
+        impl LamellarAm for #single_val_multi_idx_name{
+            async fn exec(&self) {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                #single_val_multi_idx_idx_vals
+                match self.op {
+                    #ops
+                    _ => panic!("Invalid op: {:#?}", self.op)
+                }
+            }
+        }
+        #[lamellar_impl::AmDataRT(AmGroup(false))]
+        struct #single_val_multi_idx_fetch_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            val: #typeident,
+            idxs: Vec<u8>,
+            index_size: u8,
+        }
+        #[lamellar_impl::rt_am]
+        impl LamellarAm for #single_val_multi_idx_fetch_name{
+            async fn exec(&self) -> Vec<#typeident> {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                #single_val_multi_idx_idx_vals
+                match self.op {
+                    #fetch_ops
+                    _ => panic!("Invalid op: {:#?}", self.op)
+                }
+            }
+        }
+        #[lamellar_impl::AmDataRT(AmGroup(false))]
+        struct #single_val_multi_idx_result_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            val: #typeident,
+            idxs: Vec<u8>,
+            index_size: u8,
+        }
+        #[lamellar_impl::rt_am]
+        impl LamellarAm for #single_val_multi_idx_result_name{
+            async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                #single_val_multi_idx_idx_vals
+                match self.op {
+                    #result_ops
+                    _ => panic!("Invalid op: {:#?}", self.op)
+                }
+            }
+        }
+        fn #create_single_val_multi_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, val_bytes: Vec<u8>, idxs: Vec<u8>, index_size: u8, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+            match return_type {
+                #lamellar::array::BatchReturnType::None => {
+                    Arc::new(#single_val_multi_idx_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)}, 
+                        idxs: idxs,
+                        index_size,
+                    })
+                }
+                #lamellar::array::BatchReturnType::Vals => {
+                    Arc::new(#single_val_multi_idx_fetch_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)}, 
+                        idxs: idxs,
+                        index_size,
+                    })
+                }
+                #lamellar::array::BatchReturnType::Result => {
+                    Arc::new(#single_val_multi_idx_result_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)}, 
+                        idxs: idxs,
+                        index_size,
+                    })
+                }
+            }
+        }
+        fn #single_val_multi_idx_id_new_name() -> std::any::TypeId {
+            std::any::TypeId::of::<#typeident>()
+        }
+        inventory::submit! {
+            #lamellar::array::single_val_multi_idx_ops_new{
+                id: #single_val_multi_idx_id_new_name,
+                op: #create_single_val_multi_idx_name,
+            }
+        }
+
+        #[allow(non_camel_case_types)]
+        #[#am_data(AmGroup(false))]
+        struct #multi_val_single_idx_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            idx: usize,
+            vals: Vec<#typeident>,
+        }
+
+        #[#am(AmGroup(false))]
+        impl LamellarAm for #multi_val_single_idx_name{
+            async fn exec(&self) {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
+                match self.op {
+                    #ops
+                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                }
+            }
+        }
+        #[allow(non_camel_case_types)]
+        #[#am_data(AmGroup(false))]
+        struct #multi_val_single_idx_fetch_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            idx: usize,
+            vals: Vec<#typeident>,
+        }
+
+        #[#am(AmGroup(false))]
+        impl LamellarAm for #multi_val_single_idx_fetch_name{
+            async fn exec(&self) -> Vec<#typeident> {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
+                match self.op {
+                    #fetch_ops
+                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                }
+            }
+        }
+        #[allow(non_camel_case_types)]
+        #[#am_data(AmGroup(false))]
+        struct #multi_val_single_idx_result_name{
+            data: LamellarByteArray,
+            op: ArrayOpCmd<#typeident>,
+            idx: usize,
+            vals: Vec<#typeident>,
+        }
+
+        #[#am(AmGroup(false))]
+        impl LamellarAm for #multi_val_single_idx_result_name{
+            async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
+                let mut data = self.data.clone();
+                let mut local_data = data.mut_local_data::<#typeident>().await;
+                let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
+                match self.op {
+                    #result_ops
+                    _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
+                }
+            }
+        }
+        fn #create_multi_val_single_idx_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, vals: (*const u8,usize,usize), idx: usize, return_type: #lamellar::array::BatchReturnType) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
+            let vals = unsafe {Vec::from_raw_parts(vals.0 as *mut #typeident,vals.1,vals.2)};
+            match return_type {
+                #lamellar::array::BatchReturnType::None => {
+                    Arc::new(#multi_val_single_idx_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        idx,
+                        vals,
+                    })
+                }
+                #lamellar::array::BatchReturnType::Vals => {
+                    Arc::new(#multi_val_single_idx_fetch_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        idx,
+                        vals,
+                    })
+                }
+                #lamellar::array::BatchReturnType::Result => {
+                    Arc::new(#multi_val_single_idx_result_name{
+                        data: Into::into(array),
+                        op: op.into(),
+                        idx,
+                        vals,
+                    })
+                }
+            }
+        }
+        fn #multi_val_single_idx_id_new_name() -> std::any::TypeId {
+            std::any::TypeId::of::<#typeident>()
+        }
+
+        inventory::submit! {
+            #lamellar::array::multi_val_single_idx_ops_new{
+                id: #multi_val_single_idx_id_new_name,
+                op: #create_multi_val_single_idx_name,
+            }
+        }
+    }
+}
+
+
+
 pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let items = item
@@ -1541,7 +2001,7 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
             // impl crate::array::operations::ArrayOps for Option< #typeident > {}
             impl ElementArithmeticOps for #typeident {}
             impl ElementComparePartialEqOps for #typeident {}
-            impl ElementComparePartialEqOps for Option< #typeident > {}
+            // impl ElementComparePartialEqOps for Option< #typeident > {}
         });
         if bitwise {
             output.extend(quote! {
@@ -1555,19 +2015,22 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
                 impl ElementCompareEqOps for Option< #typeident > {}
             })
         }
-        output.extend(create_buffered_ops(
-            the_type.clone(),
-            op_types.clone(),
-            native,
-            true,
-        ));
+        // output.extend(create_buffered_ops(
+        //     the_type.clone(),
+        //     op_types.clone(),
+        //     native,
+        //     true,
+        // ));
         let opt_type: syn::Type = syn::parse_str::<syn::Type>(&format!("Option<{}>", t)).unwrap();
-        output.extend(create_buffered_ops(
-            opt_type,
-            opt_op_types.clone(),
-            false,
-            true,
-        ));
+        // output.extend(create_buffered_ops(
+        //     opt_type.clone(),
+        //     opt_op_types.clone(),
+        //     false,
+        //     true,
+        // ));
+
+        output.extend(test_ops(the_type.clone(),op_types.clone()));
+        output.extend(test_ops(opt_type,opt_op_types.clone()));
 
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }

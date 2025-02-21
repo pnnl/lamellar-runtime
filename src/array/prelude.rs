@@ -13,9 +13,9 @@ pub use crate::array::native_atomic::NativeAtomicArray;
 pub use crate::array::operations::{
     AccessOps, ArithmeticOps, ArrayOps as _ArrayOps, BitWiseOps, CompareExchangeEpsilonOps,
     CompareExchangeOps, ElementArithmeticOps, ElementBitWiseOps, ElementCompareEqOps,
-    ElementComparePartialEqOps, ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAtomicOps,
+    ElementComparePartialEqOps, ElementOps, ElementShiftOps, LocalArithmeticOps, LocalAccessOps, LocalReadOnlyOps,
     LocalBitWiseOps, LocalShiftOps, OpInput, ReadOnlyOps, ShiftOps, UnsafeAccessOps,
-    UnsafeArithmeticOps, UnsafeBitWiseOps, UnsafeCompareExchangeEpsilonOps,
+    UnsafeArithmeticOps, UnsafeBitWiseOps, UnsafeCompareExchangeEpsilonOps,LocalCompareExchangeOps, LocalCompareExchangeOpsEpsilon,
     UnsafeCompareExchangeOps, UnsafeReadOnlyOps, UnsafeShiftOps,
 };
 pub use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayHandle};

@@ -1046,12 +1046,89 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
 
 #[doc(hidden)]
 pub trait LocalBitWiseOps<T: Dist + ElementBitWiseOps> {
-    fn local_bit_and(&self, index: usize, val: T) {
-        self.local_fetch_bit_and(index, val);
+    fn local_bit_and(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
+        self.local_fetch_bit_and(idx_vals, false);
     }
-    fn local_fetch_bit_and(&self, index: usize, val: T) -> T;
-    fn local_bit_or(&self, index: usize, val: T) {
-        self.local_fetch_bit_or(index, val);
+    fn local_fetch_bit_and(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_bit_or(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
+        self.local_fetch_bit_or(idx_vals, false);
     }
-    fn local_fetch_bit_or(&self, index: usize, val: T) -> T;
+    fn local_fetch_bit_or(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_bit_xor(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
+        self.local_fetch_bit_xor(idx_vals, false);
+    }
+    fn local_fetch_bit_xor(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+}
+
+macro_rules! impl_local_bitwise_op {
+    ($op:ident) => {
+        fn $op(&mut self, idx_vals: impl Iterator<Item = (usize, T)>, fetch: bool) -> Option<Vec<T>> {
+            match self {
+                LamellarMutLocalData::Slice(data) => data.$op(idx_vals,fetch),
+                LamellarMutLocalData::LocalLock(ref mut data) => {
+                    let mut slice: &mut [T] = &mut *data;
+                    slice.$op(idx_vals,fetch)
+                }   
+                LamellarMutLocalData::GlobalLock(ref mut data) => {
+                    let mut slice: &mut [T] = &mut *data;
+                    slice.$op(idx_vals,fetch)
+                },
+                LamellarMutLocalData::NativeAtomic( ref mut  data) => data.$op(idx_vals,fetch),
+                LamellarMutLocalData::GenericAtomic(ref mut  data) => data.$op(idx_vals,fetch),
+            }
+        }
+    }
+}
+
+impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for LamellarMutLocalData<'_,T> {
+    impl_local_bitwise_op!(local_fetch_bit_and);
+    impl_local_bitwise_op!(local_fetch_bit_or);
+    impl_local_bitwise_op!(local_fetch_bit_xor);
+}
+
+impl <T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
+    fn local_fetch_bit_and(&mut self, idx_vals: impl Iterator<Item = (usize, T)>, fetch: bool) -> Option<Vec<T>> {
+        if fetch {
+            Some(idx_vals.map(|(i,val)| {
+                let old = self[i];
+                self[i] &= val;
+                old
+            }).collect())
+        } else {
+            idx_vals.map(|(i,val)| {
+                self[i] &= val;
+            });
+            None
+        }
+    }
+
+    fn local_fetch_bit_or(&mut self, idx_vals: impl Iterator<Item = (usize, T)>, fetch: bool) -> Option<Vec<T>> {
+        if fetch {
+            Some(idx_vals.map(|(i,val)| {
+                let old = self[i];
+                self[i] |=  val;
+                old
+            }).collect())
+        } else {
+            idx_vals.map(|(i,val)| {
+                self[i]  |= val;
+            });
+            None
+        }
+    }
+
+    fn local_fetch_bit_xor(&mut self, idx_vals: impl Iterator<Item = (usize, T)>, fetch: bool) -> Option<Vec<T>> {
+        if fetch {
+            Some(idx_vals.map(|(i,val)| {
+                let old = self[i];
+                self[i] ^= val;
+                old
+            }).collect())
+        } else {
+            idx_vals.map(|(i,val)| {
+                self[i] ^= val;
+            });
+            None
+        }   
+    }
 }

@@ -244,3 +244,32 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         )
     }
 }
+
+#[doc(hidden)]
+pub trait LocalReadOnlyOps<T: ElementOps>{
+    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T>;
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for  LamellarMutLocalData<'_,T> {
+    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        match self{
+            LamellarMutLocalData::Slice(data) => data.local_load(idx_vals),
+            LamellarMutLocalData::LocalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_load(idx_vals)
+            }
+            LamellarMutLocalData::GlobalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_load(idx_vals)
+            },
+            LamellarMutLocalData::NativeAtomic( ref mut  data) => data.local_load(idx_vals),
+            LamellarMutLocalData::GenericAtomic(ref mut  data) => data.local_load(idx_vals),
+        }
+    }
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for  &mut[T] {
+    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        idx_vals.map(|(i,_)| self[i] ).collect()
+    }
+}

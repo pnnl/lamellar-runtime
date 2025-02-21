@@ -81,6 +81,17 @@ impl UnsafeByteArray {
     pub(crate) fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
         self.inner.data.team.clone()
     }
+
+    pub fn mut_local_data<T: Dist>(&self) -> &mut [T] {
+        unsafe {
+            let u8_slice = self.inner.local_as_mut_slice();
+            // println!("u8 slice {:?} u8_len {:?} len {:?}",u8_slice,u8_slice.len(),u8_slice.len()/std::mem::size_of::<T>());
+            std::slice::from_raw_parts_mut(
+                u8_slice.as_mut_ptr() as *mut T,
+                u8_slice.len() / std::mem::size_of::<T>(),
+            )
+        }
+    }
 }
 
 #[doc(hidden)]

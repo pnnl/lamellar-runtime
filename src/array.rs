@@ -114,6 +114,7 @@ pub(crate) mod r#unsafe;
 pub use r#unsafe::{
     local_chunks::{UnsafeLocalChunks, UnsafeLocalChunksMut},
     operations::{
+        multi_val_multi_idx_ops_new, multi_val_single_idx_ops_new, single_val_multi_idx_ops_new,
         multi_val_multi_idx_ops, multi_val_single_idx_ops, single_val_multi_idx_ops,
         BatchReturnType,
     },
@@ -186,8 +187,8 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, isize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
@@ -201,21 +202,22 @@ lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
 // lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
 // lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
 // lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 
 impl<T: Dist + ArrayOps> Dist for Option<T> {}
 impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}
+
 /// Specifies the distributed data layout of a LamellarArray
 ///
 /// Block: The indicies of the elements on each PE are sequential
@@ -655,7 +657,75 @@ impl LamellarByteArray {
             LamellarByteArray::GlobalLockArray(array) => array.array.inner.data.team(),
         }
     }
+
+    pub async fn mut_local_data<'a,T: Dist >(&'a mut self) -> LamellarMutLocalData<'a,T> {
+        match self {
+            LamellarByteArray::UnsafeArray(ref mut array) => {
+                LamellarMutLocalData::Slice(array.mut_local_data())
+            },
+            LamellarByteArray::ReadOnlyArray(ref mut array) => panic!("ReadOnlyArray does not support mut_local_data"),
+            LamellarByteArray::AtomicArray(ref mut array) => {
+                match AtomicArray::from(array) {
+                    AtomicArray::NativeAtomicArray(ref mut array) => {
+                        LamellarMutLocalData::NativeAtomic(array.mut_local_data())
+                    },
+                    AtomicArray::GenericAtomicArray(ref mut array) => {
+                        LamellarMutLocalData::GenericAtomic(array.mut_local_data())
+                    },
+                }
+            },
+            LamellarByteArray::NativeAtomicArray(ref mut array) => {
+                LamellarMutLocalData::NativeAtomic(NativeAtomicArray::from(array).mut_local_data())
+            },
+            LamellarByteArray::GenericAtomicArray(ref mut array) => {
+                LamellarMutLocalData::GenericAtomic(GenericAtomicArray::from(array).mut_local_data())
+            },
+            LamellarByteArray::LocalLockArray(ref mut array) => {
+                LamellarMutLocalData::LocalLock(LocalLockArray::from(array).write_local_data().await)
+            },
+            LamellarByteArray::GlobalLockArray(ref mut array) => {
+                LamellarMutLocalData::GlobalLock(GlobalLockArray::from(array).write_local_data().await)   
+            }
+        }
+        
+    }
 }
+
+impl crate::active_messaging::DarcSerde for LamellarByteArray {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => array.ser(num_pes, darcs),
+            LamellarByteArray::ReadOnlyArray(array) => array.ser(num_pes, darcs),
+            LamellarByteArray::AtomicArray(array) => array.ser(num_pes, darcs),
+            LamellarByteArray::NativeAtomicArray(array) => array.ser(num_pes, darcs),
+            LamellarByteArray::GenericAtomicArray(array) => array.ser(num_pes, darcs),
+            LamellarByteArray::LocalLockArray(array) => array.ser(num_pes, darcs),
+            LamellarByteArray::GlobalLockArray(array) => array.ser(num_pes, darcs),
+        }
+    }
+    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => array.des(cur_pe),
+            LamellarByteArray::ReadOnlyArray(array) => array.des(cur_pe),
+            LamellarByteArray::AtomicArray(array) => array.des(cur_pe),
+            LamellarByteArray::NativeAtomicArray(array) => array.des(cur_pe),
+            LamellarByteArray::GenericAtomicArray(array) => array.des(cur_pe),
+            LamellarByteArray::LocalLockArray(array) => array.des(cur_pe),
+            LamellarByteArray::GlobalLockArray(array) => array.des(cur_pe),
+        }
+    }
+}
+#[doc(hidden)]
+// #[enum_dispatch]
+enum LamellarMutLocalData<'a, T: Dist> {
+    Slice(&'a mut [T]),
+    LocalLock(LocalLockMutLocalData<T>),
+    GlobalLock(GlobalLockMutLocalData<T>),
+    NativeAtomic(NativeAtomicLocalData<T>),
+    GenericAtomic(GenericAtomicLocalData<T>),
+}
+
+
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
