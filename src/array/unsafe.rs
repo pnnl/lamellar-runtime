@@ -92,6 +92,9 @@ impl UnsafeByteArray {
             )
         }
     }
+    pub fn local_data<T: Dist>(&self) -> &[T] {
+        self.mut_local_data()
+    }
 }
 
 #[doc(hidden)]

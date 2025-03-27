@@ -136,14 +136,14 @@ impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
         darcs.push(RemotePtr::NetworkDarc(self.darc.clone().into()));
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(_) => {
-                self.darc.deserialize_update_cnts();
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        // match cur_pe {
+        //     Ok(_) => {
+        //         self.darc.deserialize_update_cnts();
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
 }
 
@@ -168,6 +168,7 @@ impl<T> LocalRwDarc<T> {
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         // if self.darc.src_pe != cur_pe{
+        tracing::trace!("localrwdarc[{:?}] deserialize_update_cnts {:?}", self.darc.id, self.inner());
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...
                                                             // }
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -405,6 +406,7 @@ impl<T: Send + Sync> LocalRwDarc<T> {
 impl<T> Clone for LocalRwDarc<T> {
     fn clone(&self) -> Self {
         // self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
+        tracing::trace!("LocalRwDarc[{:?}] Clone {:?}",self.darc.id,self.darc.inner());
         LocalRwDarc {
             darc: self.darc.clone(),
         }
@@ -463,7 +465,7 @@ pub(crate) fn localrw_from_ndarc2<'de, D, T>(
 where
     D: Deserializer<'de>,
 {
-    // println!("lrwdarc2 from net darc");
+    tracing::trace!("lrwdarc2 from net darc");
     let ndarc: __NetworkDarc = Deserialize::deserialize(deserializer)?;
     // let rwdarc = LocalRwDarc {
     //     darc: ,

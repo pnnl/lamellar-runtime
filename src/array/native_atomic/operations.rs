@@ -386,7 +386,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for NativeAtomicLocalData<T
 }  
 
 impl<T: ElementOps> LocalReadOnlyOps<T> for NativeAtomicLocalData<T> {
-    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         local_op!(self, idx_vals, true, load).unwrap() 
     }
 }

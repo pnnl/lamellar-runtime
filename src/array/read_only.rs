@@ -32,6 +32,9 @@ impl ReadOnlyByteArray {
             array: UnsafeByteArray::downgrade(&array.array),
         }
     }
+    pub fn local_data<T: Dist>(&self) -> &[T] {
+        self.array.local_data()
+    }
 }
 
 #[doc(hidden)]

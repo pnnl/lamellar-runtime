@@ -72,14 +72,14 @@ impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
     }
     fn des(&self, cur_pe: Result<usize, crate::IdError>) {
         // println!("in shared des");
-        match cur_pe {
-            Ok(_) => {
-                self.mr.deserialize_update_cnts();
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        // match cur_pe {
+        //     Ok(_) => {
+        //         self.mr.deserialize_update_cnts();
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
         // self.mr.print();
     }
 }

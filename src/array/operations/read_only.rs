@@ -247,29 +247,53 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 
 #[doc(hidden)]
 pub trait LocalReadOnlyOps<T: ElementOps>{
-    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T>;
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T>;
 }
 
 impl<T: ElementOps> LocalReadOnlyOps<T> for  LamellarMutLocalData<'_,T> {
-    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         match self{
             LamellarMutLocalData::Slice(data) => data.local_load(idx_vals),
-            LamellarMutLocalData::LocalLock(ref mut data) => {
-                let mut slice: &mut [T] = &mut *data;
+            LamellarMutLocalData::LocalLock(data) => {
+                let  slice: & [T] = &*data;
                 slice.local_load(idx_vals)
             }
-            LamellarMutLocalData::GlobalLock(ref mut data) => {
-                let mut slice: &mut [T] = &mut *data;
+            LamellarMutLocalData::GlobalLock(  data) => {
+                let  slice: & [T] = & *data;
                 slice.local_load(idx_vals)
             },
-            LamellarMutLocalData::NativeAtomic( ref mut  data) => data.local_load(idx_vals),
-            LamellarMutLocalData::GenericAtomic(ref mut  data) => data.local_load(idx_vals),
+            LamellarMutLocalData::NativeAtomic(    data) => data.local_load(idx_vals),
+            LamellarMutLocalData::GenericAtomic(   data) => data.local_load(idx_vals),
+        }
+    }
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for  LamellarLocalData<'_,T> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        match self{
+            LamellarLocalData::Slice(data) => data.local_load(idx_vals),
+            LamellarLocalData::LocalLock(data) => {
+                let slice: &[T] = &*data;
+                slice.local_load(idx_vals)
+            }
+            LamellarLocalData::GlobalLock(data) => {
+                let slice: &[T] = & *data;
+                slice.local_load(idx_vals)
+            },
+            LamellarLocalData::NativeAtomic( data) => data.local_load(idx_vals),
+            LamellarLocalData::GenericAtomic(data) => data.local_load(idx_vals),
         }
     }
 }
 
 impl<T: ElementOps> LocalReadOnlyOps<T> for  &mut[T] {
-    fn local_load<'a>(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        idx_vals.map(|(i,_)| self[i] ).collect()
+    }
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for  &[T] {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         idx_vals.map(|(i,_)| self[i] ).collect()
     }
 }

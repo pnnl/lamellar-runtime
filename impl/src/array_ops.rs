@@ -1549,75 +1549,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
     let multi_val_single_idx_id_new_name = quote::format_ident!(
         "MultiValSingleIdxId{}",type_to_string(&typeident)
     );
-    let mut ops = quote!{};
-    let mut fetch_ops = quote!{};
-    let mut result_ops = quote!{};
-    for op in op_types{
-        match op{
-            OpType::ReadOnly =>{
-                fetch_ops.extend(quote!{
-                    ArrayOpCmd::Load =>  local_data.local_load(idx_vals),
-                });
-            }
-            OpType::Access => {
-                ops.extend(quote!{
-                    ArrayOpCmd::Store => local_data.local_store(idx_vals),
-                });
-                fetch_ops.extend(quote!{
-                    ArrayOpCmd::Swap =>  local_data.local_swap(idx_vals),
-                    
-                });
-            }
-            OpType::Arithmetic => {
-                ops.extend(quote!{
-                    ArrayOpCmd::Add => local_data.local_add(idx_vals),
-                    ArrayOpCmd::Sub => local_data.local_sub(idx_vals),
-                    ArrayOpCmd::Mul => local_data.local_mul(idx_vals),
-                    ArrayOpCmd::Div => local_data.local_div(idx_vals),
-                    ArrayOpCmd::Rem => local_data.local_rem(idx_vals),
-                });
-                fetch_ops.extend(quote!{
-                    ArrayOpCmd::FetchAdd => local_data.local_fetch_add(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchSub => local_data.local_fetch_sub(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchMul => local_data.local_fetch_mul(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchDiv => local_data.local_fetch_div(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchRem => local_data.local_fetch_rem(idx_vals, true).unwrap(),
-                });
-            }
-            OpType::CompExEps=> {
-                result_ops.extend(quote!{
-                    ArrayOpCmd::CompareExchangeEps(cur,eps) => local_data.local_compare_exchange_epsilon(idx_vals, cur, eps),
-                });
-            }
-            OpType::Bitwise => {
-                ops.extend(quote!{
-                    ArrayOpCmd::And => local_data.local_bit_and(idx_vals),
-                    ArrayOpCmd::Or => local_data.local_bit_or(idx_vals),
-                    ArrayOpCmd::Xor => local_data.local_bit_xor(idx_vals),
-                });
-                fetch_ops.extend(quote!{
-                    ArrayOpCmd::FetchAnd => local_data.local_fetch_bit_and(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchOr => local_data.local_fetch_bit_or(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchXor => local_data.local_fetch_bit_xor(idx_vals, true).unwrap(),
-                });
-            }
-            OpType::Shift => {
-                ops.extend(quote!{
-                    ArrayOpCmd::Shl => local_data.local_shl(idx_vals),
-                    ArrayOpCmd::Shr => local_data.local_shr(idx_vals),
-                });
-                fetch_ops.extend(quote!{
-                    ArrayOpCmd::FetchShl => local_data.local_fetch_shl(idx_vals, true).unwrap(),
-                    ArrayOpCmd::FetchShr => local_data.local_fetch_shr(idx_vals, true).unwrap(),
-                });
-            }
-            OpType::CompEx => {
-                result_ops.extend(quote!{
-                    ArrayOpCmd::CompareExchange(cur) => local_data.local_compare_exchange(idx_vals, cur),
-                });
-            }
-        }
-    }
+
     let single_val_multi_idx_idx_vals = quote::quote! {
         let idx_vals = unsafe{ match self.index_size {
             1 => {
@@ -1642,6 +1574,185 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
             }
         }};
     };
+
+    let mut ops_mv_mi = quote!{};
+    let mut fetch_ops_mv_mi = quote!{};
+    let mut result_ops_mv_mi = quote!{};
+    let mut ops_sv_mi = quote!{};
+    let mut fetch_ops_sv_mi = quote!{};
+    let mut result_ops_sv_mi = quote!{};
+    let mut ops_mv_si = quote!{};
+    let mut fetch_ops_mv_si = quote!{};
+    let mut result_ops_mv_si = quote!{};
+    let mv_mi_idx_vals = quote!{let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals)};
+    let sv_mi_idx_vals = quote!{#single_val_multi_idx_idx_vals};
+    let mv_si_idx_vals = quote!{let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied())};
+    let local_data = quote!{let local_data = data.local_data::<#typeident>().await};
+    let mut_local_data = quote!{let mut local_data = data.mut_local_data::<#typeident>().await};
+    for op in op_types{
+        match op{
+            OpType::ReadOnly =>{
+                
+                fetch_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::Load =>  {#local_data; #mv_mi_idx_vals; local_data.local_load(idx_vals)},
+                });
+                fetch_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::Load =>  {#local_data; #sv_mi_idx_vals;local_data.local_load(idx_vals)},
+                });
+                fetch_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::Load =>  {#local_data; #mv_si_idx_vals;local_data.local_load(idx_vals)},
+                });
+            }
+            OpType::Access => {
+                ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::Store => {#mut_local_data; #mv_mi_idx_vals; local_data.local_store(idx_vals)},
+                });
+                ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::Store => {#mut_local_data; #sv_mi_idx_vals; local_data.local_store(idx_vals)},
+                });
+                ops_mv_si.extend(quote!{
+                    ArrayOpCmd::Store => {#mut_local_data; #mv_si_idx_vals; local_data.local_store(idx_vals)},
+                });
+                fetch_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::Swap =>  {#mut_local_data; #mv_mi_idx_vals; local_data.local_swap(idx_vals)},
+                    
+                });
+                fetch_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::Swap =>  {#mut_local_data; #sv_mi_idx_vals; local_data.local_swap(idx_vals)},
+                    
+                });
+                fetch_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::Swap =>  {#mut_local_data; #mv_si_idx_vals; local_data.local_swap(idx_vals)},
+                    
+                });
+            }
+            OpType::Arithmetic => {
+                ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::Add => {#mut_local_data; #mv_mi_idx_vals; local_data.local_add(idx_vals)},
+                    ArrayOpCmd::Sub => {#mut_local_data; #mv_mi_idx_vals; local_data.local_sub(idx_vals)},
+                    ArrayOpCmd::Mul => {#mut_local_data; #mv_mi_idx_vals; local_data.local_mul(idx_vals)},
+                    ArrayOpCmd::Div => {#mut_local_data; #mv_mi_idx_vals; local_data.local_div(idx_vals)},
+                    ArrayOpCmd::Rem => {#mut_local_data; #mv_mi_idx_vals; local_data.local_rem(idx_vals)},
+                });
+                ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::Add => {#mut_local_data; #sv_mi_idx_vals; local_data.local_add(idx_vals)},
+                    ArrayOpCmd::Sub => {#mut_local_data; #sv_mi_idx_vals; local_data.local_sub(idx_vals)},
+                    ArrayOpCmd::Mul => {#mut_local_data; #sv_mi_idx_vals; local_data.local_mul(idx_vals)},
+                    ArrayOpCmd::Div => {#mut_local_data; #sv_mi_idx_vals; local_data.local_div(idx_vals)},
+                    ArrayOpCmd::Rem => {#mut_local_data; #sv_mi_idx_vals; local_data.local_rem(idx_vals)},
+                });
+                ops_mv_si.extend(quote!{
+                    ArrayOpCmd::Add => {#mut_local_data; #mv_si_idx_vals; local_data.local_add(idx_vals)},
+                    ArrayOpCmd::Sub => {#mut_local_data; #mv_si_idx_vals; local_data.local_sub(idx_vals)},
+                    ArrayOpCmd::Mul => {#mut_local_data; #mv_si_idx_vals; local_data.local_mul(idx_vals)},
+                    ArrayOpCmd::Div => {#mut_local_data; #mv_si_idx_vals; local_data.local_div(idx_vals)},
+                    ArrayOpCmd::Rem => {#mut_local_data; #mv_si_idx_vals; local_data.local_rem(idx_vals)},
+                });
+                fetch_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::FetchAdd => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_add(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchSub => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_sub(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchMul => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_mul(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchDiv => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_div(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchRem => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
+                });
+                fetch_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::FetchAdd => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_add(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchSub => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_sub(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchMul => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_mul(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchDiv => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_div(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchRem => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
+                });
+                fetch_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::FetchAdd => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_add(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchSub => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_sub(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchMul => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_mul(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchDiv => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_div(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchRem => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
+                });
+            }
+            OpType::CompExEps=> {
+                result_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #mv_mi_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
+                });
+                result_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #sv_mi_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
+                });
+                result_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #mv_si_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
+                });
+            }
+            OpType::Bitwise => {
+                ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::And => {#mut_local_data; #mv_mi_idx_vals; local_data.local_bit_and(idx_vals)},
+                    ArrayOpCmd::Or => {#mut_local_data; #mv_mi_idx_vals; local_data.local_bit_or(idx_vals)},
+                    ArrayOpCmd::Xor => {#mut_local_data; #mv_mi_idx_vals; local_data.local_bit_xor(idx_vals)},
+                });
+                ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::And => {#mut_local_data; #sv_mi_idx_vals; local_data.local_bit_and(idx_vals)},
+                    ArrayOpCmd::Or => {#mut_local_data; #sv_mi_idx_vals; local_data.local_bit_or(idx_vals)},
+                    ArrayOpCmd::Xor => {#mut_local_data; #sv_mi_idx_vals; local_data.local_bit_xor(idx_vals)},
+                });
+                ops_mv_si.extend(quote!{
+                    ArrayOpCmd::And => {#mut_local_data; #mv_si_idx_vals; local_data.local_bit_and(idx_vals)},
+                    ArrayOpCmd::Or => {#mut_local_data; #mv_si_idx_vals; local_data.local_bit_or(idx_vals)},
+                    ArrayOpCmd::Xor => {#mut_local_data; #mv_si_idx_vals; local_data.local_bit_xor(idx_vals)},
+                });
+                fetch_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::FetchAnd => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_bit_and(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchOr => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_bit_or(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchXor => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_bit_xor(idx_vals, true).unwrap()},
+                });
+                fetch_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::FetchAnd => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_bit_and(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchOr => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_bit_or(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchXor => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_bit_xor(idx_vals, true).unwrap()},
+                });
+                fetch_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::FetchAnd => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_bit_and(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchOr => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_bit_or(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchXor => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_bit_xor(idx_vals, true).unwrap()},
+                });
+            }
+            OpType::Shift => {
+                ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::Shl => {#mut_local_data; #mv_mi_idx_vals; local_data.local_shl(idx_vals)},
+                    ArrayOpCmd::Shr => {#mut_local_data; #mv_mi_idx_vals; local_data.local_shr(idx_vals)},
+                });
+                ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::Shl => {#mut_local_data; #sv_mi_idx_vals; local_data.local_shl(idx_vals)},
+                    ArrayOpCmd::Shr => {#mut_local_data; #sv_mi_idx_vals; local_data.local_shr(idx_vals)},
+                });
+                ops_mv_si.extend(quote!{
+                    ArrayOpCmd::Shl => {#mut_local_data; #mv_si_idx_vals; local_data.local_shl(idx_vals)},
+                    ArrayOpCmd::Shr => {#mut_local_data; #mv_si_idx_vals; local_data.local_shr(idx_vals)},
+                });
+                fetch_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::FetchShl => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_shl(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchShr => {#mut_local_data; #mv_mi_idx_vals; local_data.local_fetch_shr(idx_vals, true).unwrap()},
+                });
+                fetch_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::FetchShl => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_shl(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchShr => {#mut_local_data; #sv_mi_idx_vals; local_data.local_fetch_shr(idx_vals, true).unwrap()},
+                });
+                fetch_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::FetchShl => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_shl(idx_vals, true).unwrap()},
+                    ArrayOpCmd::FetchShr => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_shr(idx_vals, true).unwrap()},
+                });
+            }
+            OpType::CompEx => {
+                result_ops_mv_mi.extend(quote!{
+                    ArrayOpCmd::CompareExchange(cur) => {#mut_local_data; #mv_mi_idx_vals; local_data.local_compare_exchange(idx_vals, cur)},
+                });
+                result_ops_sv_mi.extend(quote!{
+                    ArrayOpCmd::CompareExchange(cur) => {#mut_local_data; #sv_mi_idx_vals; local_data.local_compare_exchange(idx_vals, cur)},
+                });
+                result_ops_mv_si.extend(quote!{
+                    ArrayOpCmd::CompareExchange(cur) => {#mut_local_data; #mv_si_idx_vals; local_data.local_compare_exchange(idx_vals, cur)},
+                });
+            }
+        }
+    }
+    
     quote! {
         #[allow(non_camel_case_types)]
         #[#am_data(AmGroup(false))]
@@ -1656,10 +1767,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #multi_val_multi_idx_name{
             async fn exec(&self) {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
                 match self.op {
-                    #ops
+                    #ops_mv_mi
                     _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
                 }
             }
@@ -1677,10 +1788,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #multi_val_multi_idx_fetch_name{
             async fn exec(&self) -> Vec<#typeident> {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
                 match self.op {
-                    #fetch_ops
+                    #fetch_ops_mv_mi
                     _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
                 }
             }
@@ -1698,10 +1809,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #multi_val_multi_idx_result_name{
             async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals);
                 match self.op {
-                    #result_ops
+                    #result_ops_mv_mi
                     _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
                 }
             }
@@ -1756,10 +1867,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #single_val_multi_idx_name{
             async fn exec(&self) {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                #single_val_multi_idx_idx_vals
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // #single_val_multi_idx_idx_vals
                 match self.op {
-                    #ops
+                    #ops_sv_mi
                     _ => panic!("Invalid op: {:#?}", self.op)
                 }
             }
@@ -1776,10 +1887,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #single_val_multi_idx_fetch_name{
             async fn exec(&self) -> Vec<#typeident> {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                #single_val_multi_idx_idx_vals
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // #single_val_multi_idx_idx_vals
                 match self.op {
-                    #fetch_ops
+                    #fetch_ops_sv_mi
                     _ => panic!("Invalid op: {:#?}", self.op)
                 }
             }
@@ -1796,10 +1907,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #single_val_multi_idx_result_name{
             async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                #single_val_multi_idx_idx_vals
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // #single_val_multi_idx_idx_vals
                 match self.op {
-                    #result_ops
+                    #result_ops_sv_mi
                     _ => panic!("Invalid op: {:#?}", self.op)
                 }
             }
@@ -1858,10 +1969,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #multi_val_single_idx_name{
             async fn exec(&self) {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
                 match self.op {
-                    #ops
+                    #ops_mv_si
                     _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
                 }
             }
@@ -1879,10 +1990,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #multi_val_single_idx_fetch_name{
             async fn exec(&self) -> Vec<#typeident> {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
                 match self.op {
-                    #fetch_ops
+                    #fetch_ops_mv_si
                     _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
                 }
             }
@@ -1900,10 +2011,10 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         impl LamellarAm for #multi_val_single_idx_result_name{
             async fn exec(&self) -> Vec<Result<#typeident, #typeident>> {
                 let mut data = self.data.clone();
-                let mut local_data = data.mut_local_data::<#typeident>().await;
-                let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
+                // let mut local_data = data.mut_local_data::<#typeident>().await;
+                // let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied());
                 match self.op {
-                    #result_ops
+                    #result_ops_mv_si
                     _ => panic!("Invalid ArrayOpCmd for MultiValMultiIdxAm")
                 }
             }

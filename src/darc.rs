@@ -352,6 +352,7 @@ impl<T> Clone for WeakDarc<T> {
 }
 
 impl<T> crate::active_messaging::DarcSerde for Darc<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         trace!("darc ser {:?} ", self.inner());
         // println!("darc ser");
@@ -360,6 +361,7 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
         darcs.push(RemotePtr::NetworkDarc(self.clone().into()));
         // self.print();
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn des(&self, cur_pe: Result<usize, IdError>) {
         trace!("darc des");
         // match cur_pe {
@@ -397,6 +399,7 @@ impl<T: 'static> DarcInner<T> {
         //     println!("{:?}", self);
         //     panic!();
         // }
+        trace!("inc_pe_ref_count pe: {} amt: {} {:?}", pe, amt,self);
         let team_pe = pe;
         let tot_ref_cnt = unsafe {
             // ((self.total_ref_cnt_addr + team_pe * std::mem::size_of::<AtomicUsize>())
@@ -569,7 +572,7 @@ impl<T: 'static> DarcInner<T> {
         // let mode_refs =
         //     unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
         let orig_state = inner.mode_slice[inner.my_pe];
-        trace!("[{:?}] entering block_on_outstanding {:?}", std::thread::current().id(),inner.as_ref());
+        debug!("[{:?}] entering block_on_outstanding {:?}", std::thread::current().id(),inner.as_ref());
         inner.await_all().await;
         if team.num_pes() == 1 {
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
@@ -606,7 +609,7 @@ impl<T: 'static> DarcInner<T> {
             }
             join_all(inner.send_finished()).await;
 
-            trace!(
+            debug!(
                 "[{:?}] entering initial block_on barrier() {:?}",
                 std::thread::current().id(),
                 inner.as_ref()
@@ -616,7 +619,7 @@ impl<T: 'static> DarcInner<T> {
             }
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
             barrier_fut.await;
-            trace!(
+            debug!(
                 "[{:?}] leaving initial block_on barrier() {:?}",
                 std::thread::current().id(),
                 inner.as_ref()
@@ -750,7 +753,7 @@ impl<T: 'static> DarcInner<T> {
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
             }
-            trace!(
+            debug!(
                 "[{:?}]  all outstanding refs are resolved {:?}",
                 std::thread::current().id(),
                 inner.as_ref(),
@@ -912,7 +915,7 @@ impl<T> Darc<T> {
     #[doc(hidden)]
     #[tracing::instrument(skip_all, level = "debug")]
     pub fn serialize_update_cnts(&self, cnt: usize) {
-        // println!("serialize darc cnts");
+        trace!("darc[{:?}] serialize darc cnts {:?}", self.id, self.inner());
         self.inner()
             .dist_cnt
             .fetch_add(cnt, std::sync::atomic::Ordering::SeqCst);
@@ -927,6 +930,7 @@ impl<T> Darc<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
+        trace!("darc[{:?}] deserialize darc cnts {:?}", self.id, self.inner());
         self.inner().inc_pe_ref_count(self.src_pe, 1);
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
         self.inner().total_local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -938,6 +942,7 @@ impl<T> Darc<T> {
     #[doc(hidden)]
     #[tracing::instrument(skip_all, level = "debug")]
     pub fn inc_local_cnt(&self, cnt: usize) -> usize{
+        trace!("darc[{:?}] inc_local_cnt {:?}", self.id, self.inner());
         self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
         self.inner()
             .total_local_cnt
@@ -1154,11 +1159,13 @@ impl<T: Send + Sync> Darc<T> {
         for elem in d.inner().mode_barrier_slice.clone().iter_mut() {
             *elem = 0;
         }
-        // println!(
-        //     " [{:?}] created new darc , next_id: {:?}",
-        //     std::thread::current().id(),
-        //     DARC_ID.load(Ordering::Relaxed)
-        // );
+        trace!(
+            " [{:?}] created new darc[{:?}] , next_inner_id: {:?} {:?}",
+            std::thread::current().id(),
+            d.id,
+            DARC_ID.load(Ordering::Relaxed),
+            d.inner()
+        );
         // d.print();
         team_rt.async_barrier().await;
         // team_rt.print_cnt();
@@ -1255,7 +1262,7 @@ impl<T> Clone for Darc<T> {
     fn clone(&self) -> Self {
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
         let id = self.inner().total_local_cnt.fetch_add(1, Ordering::SeqCst);
-        debug! {"[{:?}] darc[{:?}][{id}] cloned {:?} {:?} {:?}", std::thread::current().id(),self.inner().id,self.inner,self.inner().local_cnt.load(Ordering::SeqCst),self.inner().total_local_cnt.load(Ordering::SeqCst)};
+        trace! {"[{:?}] darc[{:?}][{id}] cloned from [{:?}] {:?} {:?} {:?}", std::thread::current().id(),self.inner().id,self.id,self.inner,self.inner().local_cnt.load(Ordering::SeqCst),self.inner().total_local_cnt.load(Ordering::SeqCst)};
         // self.print();
         Darc {
             inner: self.inner.clone(),
@@ -1686,7 +1693,8 @@ impl std::fmt::Debug for __NetworkDarc {
 
 impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
-        trace!("net darc from darc");
+        trace!("net darc from darc id: {:?}",darc.id);
+        trace!("darc  {:?}", darc.inner());
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner.addr(),
@@ -1701,7 +1709,9 @@ impl<T> From<Darc<T>> for __NetworkDarc {
 
 impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
-        trace!("net darc from darc");
+        trace!("net darc from &darc {:?}",darc.id);
+        trace!("{:?}",std::backtrace::Backtrace::capture());
+        trace!("darc  {:?}", darc.inner());
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
             inner_addr: darc.inner.addr(),
@@ -1728,6 +1738,7 @@ impl<T> From<__NetworkDarc> for Darc<T> {
                 alloc,
                 _phantom: PhantomData,
             };
+            debug!("inner: {:?}", inner.as_ref());
             inner.inc_pe_ref_count(ndarc.orig_team_pe, 1);
             inner.local_cnt.fetch_add(1, Ordering::SeqCst);
             let id = inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);

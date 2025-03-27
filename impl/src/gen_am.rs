@@ -448,6 +448,7 @@ pub(crate) fn generate_am(
         const _: () = {
             extern crate lamellar as __lamellar;
             // use __lamellar::tracing::*;
+            // use __lamellar::Instrument;
             #expanded
         };
     };

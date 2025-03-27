@@ -311,6 +311,7 @@ impl<T> Deref for GlobalRwDarcReadGuard<T> {
 
 impl<T> Clone for GlobalRwDarcReadGuard<T> {
     fn clone(&self) -> Self {
+        tracing::trace!("glboal_rw_darc_read_guard[{:?}] deserialize_update_cnts {:?}", self.darc.darc.id, self.darc.inner());
         self.local_cnt.fetch_add(1, Ordering::SeqCst);
         GlobalRwDarcReadGuard {
             darc: self.darc.clone(),
@@ -508,14 +509,14 @@ impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
         darcs.push(RemotePtr::NetworkDarc(self.darc.clone().into()));
     }
     fn des(&self, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(_) => {
-                self.darc.deserialize_update_cnts();
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
+        // match cur_pe {
+        //     Ok(_) => {
+        //         self.darc.deserialize_update_cnts();
+        //     }
+        //     Err(err) => {
+        //         panic!("can only access darcs within team members ({:?})", err);
+        //     }
+        // }
     }
 }
 
