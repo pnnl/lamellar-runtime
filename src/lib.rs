@@ -225,6 +225,10 @@ pub extern crate serde;
 //#[doc(hidden)]
 pub use serde::*;
 
+pub extern crate serde_bytes;
+//#[doc(hidden)]
+// pub use serde_bytes::*;
+
 // //#[doc(hidden)]
 pub extern crate serde_with;
 // pub use serde_with::*;

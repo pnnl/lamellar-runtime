@@ -364,7 +364,7 @@ pub(crate) fn impl_return_struct(
         quote! {
             #am_data_header
             struct #ret_struct_name #impl_generics #where_clause{
-                val: serde_bytes::ByteBuf,
+                val: #lamellar::serde_bytes::ByteBuf,
                 #generic_phantoms
             }
         }
