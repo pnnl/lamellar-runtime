@@ -1,5 +1,8 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
+
+/// `Zip` is a combinator that combines two local iterators into a single iterator
+/// that yields tuples of items from each of the two iterators.
 #[derive(Clone, Debug)]
 pub struct Zip<A, B> {
     a: A,

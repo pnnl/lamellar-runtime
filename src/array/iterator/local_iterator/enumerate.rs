@@ -1,5 +1,6 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
+/// `Enumerate` is an iterator that yields pairs of the current index and the value from the input iterator.
 #[derive(Clone, Debug)]
 pub struct Enumerate<I> {
     iter: I,

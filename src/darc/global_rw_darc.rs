@@ -1,3 +1,6 @@
+//! This module defines the `GlobalRwDarc` type, which provides a distributed read-write lock mechanism across multiple processing elements (PEs).
+
+
 use core::marker::PhantomData;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -293,6 +296,10 @@ impl LamellarAM for UnlockAm {
     }
 }
 
+
+/// A global read-write `Darc` read handle.
+/// Any number of read guards can be held at the same time across the distributed environment.
+/// The read lock will be held until all read guards are dropped across the distributed environment.
 pub struct GlobalRwDarcReadGuard<T: 'static> {
     pub(crate) darc: GlobalRwDarc<T>,
     pub(crate) marker: PhantomData<&'static mut T>,
@@ -349,6 +356,9 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcReadGuard<T> {
     }
 }
 
+/// A global read-write `Darc` write guard.
+/// A single PE will hold this guard when it has a write lock on the global read-write lock associated with this `GlobalRwDarc`.
+/// the lock will not be released until this guard is dropped.
 pub struct GlobalRwDarcWriteGuard<T: 'static> {
     pub(crate) darc: GlobalRwDarc<T>,
     pub(crate) marker: PhantomData<&'static mut T>,
@@ -397,7 +407,8 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<T> {
         unsafe { fmt::Debug::fmt(&self.darc.darc.data.get().as_ref(), f) }
     }
 }
-
+/// A global read-write `Darc` collective write guard, each PE will hold a guard while the collective write lock is held
+/// The lock is not released until all PEs have released their individual guards 
 pub struct GlobalRwDarcCollectiveWriteGuard<T: 'static> {
     pub(crate) darc: GlobalRwDarc<T>,
     pub(crate) collective_cnt: usize,
@@ -841,7 +852,7 @@ impl<T: Send> GlobalRwDarc<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Converts this GlobalRwDarc into a [LocalRwDarc]
+    /// Converts this GlobalRwDarc into a [LocalRwDarc][crate::darc::local_rw_darc::LocalRwDarc].
     ///
     /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.

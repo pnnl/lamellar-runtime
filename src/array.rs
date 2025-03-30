@@ -114,42 +114,42 @@ pub use lamellar_impl::ArrayOps;
 /// The prelude contains all the traits and macros that are required to use the array types
 pub mod prelude;
 
-pub(crate) mod r#unsafe;
-pub use r#unsafe::{
-    local_chunks::{UnsafeLocalChunks, UnsafeLocalChunksMut},
+
+pub mod r#unsafe;
+pub  use r#unsafe::{
     operations::{
         multi_val_multi_idx_ops, multi_val_single_idx_ops, single_val_multi_idx_ops,
         BatchReturnType,
     },
     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
-pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, ReadOnlyByteArray, ReadOnlyByteArrayWeak, ReadOnlyLocalChunks};
 
-pub(crate) mod atomic;
-pub use atomic::{AtomicArray, AtomicByteArray, AtomicByteArrayWeak, AtomicLocalData};
 
-pub(crate) mod generic_atomic;
-pub use generic_atomic::{
-    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicByteArrayWeak, GenericAtomicLocalData,
+pub mod read_only;
+pub  use read_only::{ReadOnlyArray, ReadOnlyByteArray};
+
+pub mod atomic;
+pub  use atomic::{AtomicArray, AtomicByteArray};
+
+pub mod generic_atomic;
+pub  use generic_atomic::{
+    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicByteArrayWeak,
 };
 
-pub(crate) mod native_atomic;
-pub use native_atomic::{
-    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicByteArrayWeak, NativeAtomicLocalData,
+pub mod native_atomic;
+pub  use native_atomic::{
+    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicByteArrayWeak,
 };
 
-pub(crate) mod local_lock_atomic;
-pub use local_lock_atomic::{
-    LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak, LocalLockLocalChunks,
-    LocalLockLocalChunksMut, LocalLockLocalData, LocalLockMutLocalData, LocalLockReadGuard,
-    LocalLockWriteGuard,
+pub mod local_lock_atomic;
+pub use local_lock_atomic::
+{
+    LocalLockArray, LocalLockByteArray
 };
 
-pub(crate) mod global_lock_atomic;
-pub use global_lock_atomic::{
-    GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak, GlobalLockLocalData,
-    GlobalLockMutLocalData, GlobalLockReadGuard, GlobalLockWriteGuard,
+pub mod global_lock_atomic;
+pub  use global_lock_atomic::{
+    GlobalLockArray, GlobalLockByteArray
 };
 
 pub mod iterator;

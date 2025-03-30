@@ -1254,7 +1254,7 @@ pub trait ActiveMessaging {
     ///     let mut buf = vec![0u8;1000];
     ///     for pe in 0..num_pes{
     ///         let data = file.read(&mut buf).await.unwrap();
-    ///         world_clone.exec_am_pe(pe,MyAm{val: data}).spawn();
+    ///         let _ = world_clone.exec_am_pe(pe,MyAm{val: data}).spawn();
     ///     }
     ///     let _ = world_clone.exec_am_all(MyAm{val: buf[0] as usize}).spawn();
     ///     world_clone.await_all().await;

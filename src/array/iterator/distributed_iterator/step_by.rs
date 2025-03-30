@@ -1,6 +1,6 @@
 use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
-//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
+/// `StepBy` is an iterator that produces elements from the input iterator at a specified step size.
 #[derive(Clone, Debug)]
 pub struct StepBy<I> {
     iter: I,

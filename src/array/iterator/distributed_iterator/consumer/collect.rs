@@ -22,6 +22,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+
 #[derive(Clone, Debug)]
 pub(crate) struct Collect<I, A> {
     pub(crate) iter: Monotonic<I>,
@@ -250,6 +251,7 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
     }
 }
 
+/// This handle allows you to wait for the completion of a local iterator collect operation
 #[pin_project(PinnedDrop)]
 pub struct DistIterCollectHandle<T, A> {
     array: UnsafeArrayInner,

@@ -12,7 +12,7 @@ use crate::memregion::Dist;
 
 impl<T: Dist> UnsafeArray<T> {
     #[doc(alias = "Collective")]
-    /// Create an immutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
+    /// Create an immutable [DistributedIterator] for this UnsafeArray
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
@@ -38,7 +38,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Create a mutable [DistributedIterator][crate::array::DistributedIterator] for this UnsafeArray
+    /// Create a mutable [DistributedIterator] for this UnsafeArray
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the array to enter the call otherwise deadlock will occur (i.e. barriers are being called internally)
@@ -65,7 +65,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create an immutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
+    /// Create an immutable [LocalIterator] for this UnsafeArray
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -93,7 +93,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create a mutable [LocalIterator][crate::array::LocalIterator] for this UnsafeArray
+    /// Create a mutable [LocalIterator] for this UnsafeArray
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -120,7 +120,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
+    /// Create an immutable [OneSidedIterator] for this UnsafeArray
     ///
     /// # Safety
     /// Data in UnsafeArrays are always unsafe as there are no protections on how remote PE's may access any other PE's local data.
@@ -150,7 +150,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Create an immutable [OneSidedIterator][crate::array::OneSidedIterator] for this UnsafeArray
+    /// Create an immutable [OneSidedIterator] for this UnsafeArray
     /// which will transfer and buffer `buf_size` elements at a time (to more efficient utilize the underlying lamellae network)
     ///
     /// The buffering is transparent to the user.

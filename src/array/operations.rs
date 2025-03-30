@@ -12,9 +12,10 @@ use crate::config;
 // use crate::LamellarTeamRT;
 
 pub(crate) mod handle;
-pub use handle::{
-    ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
-};
+pub use handle::*;
+// {
+//     ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
+// };
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAtomicOps, UnsafeAccessOps};
 pub(crate) mod arithmetic;
@@ -404,15 +405,15 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
 /// # Batch-compatible input types and type conversion methods
 ///
 /// Methods that return a batch-compatible input type (and the array type that provides it):
-/// - `local_data`- ([AtomicArray][crate::array::AtomicArray], [ReadOnlyArray][crate::array::ReadOnlyArray])
-/// - `mut_local_data` - ([AtomicArray][crate::array::AtomicArray], [ReadOnlyArray][crate::array::ReadOnlyArray])
-/// - `read_local_data` - ([LocalLockArray][crate::array::LocalLockArray],[GlobalLockArray][crate::array::GlobalLockArray])
-/// - `write_local_data` -([LocalLockArray][crate::array::LocalLockArray],[GlobalLockArray][crate::array::GlobalLockArray])
+/// - `local_data`- ([AtomicArray], [ReadOnlyArray][crate::array::read_only::ReadOnlyArray])
+/// - `mut_local_data` - ([AtomicArray], [ReadOnlyArray][crate::array::read_only::ReadOnlyArray])
+/// - `read_local_data` - ([LocalLockArray],[GlobalLockArray])
+/// - `write_local_data` -([LocalLockArray],[GlobalLockArray])
 ///
 /// Batch-compatible input types:
 /// - T and &T
 /// - &\[T\]
-///     - the local data of a [ReadOnlyArray](crate::array::ReadOnlyArray) is directly the underlying slice
+///     - the local data of a [ReadOnlyArray](crate::array::read_only::ReadOnlyArray) is directly the underlying slice
 ///     - ```read_only_array.local_data();```
 /// - Vec\[T\] and &Vec\[T\]
 /// - [AtomicLocalData][crate::array::atomic::AtomicLocalData]

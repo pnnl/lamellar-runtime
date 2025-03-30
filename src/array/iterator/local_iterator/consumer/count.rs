@@ -106,6 +106,7 @@ impl Future for InnerLocalIterCountHandle {
     }
 }
 
+/// This handle allows you to wait for the completion of a local iterator count operation.
 #[pin_project(PinnedDrop)]
 pub struct LocalIterCountHandle {
     array: UnsafeArrayInner,

@@ -1,5 +1,7 @@
+//! This module contains the implementation of the `NativeAtomicArray` type, which provides a distributed array of atomic types which are natively supported by the language and hardware
+
 mod handle;
-pub(crate) use handle::NativeAtomicArrayHandle;
+pub (crate) use handle::*;
 
 pub(crate) mod iteration;
 pub(crate) mod operations;
@@ -646,8 +648,7 @@ macro_rules! impl_compare_exchange_eps {
         }
     };
 }
-
-//#[doc(hidden)]
+/// `NativeAtomicElement` represents a native (like AtomicUsize, AtomicU8, etc.) atomic element in a `NativeAtomicArray`.
 pub struct NativeAtomicElement<T> {
     array: NativeAtomicArray<T>,
     local_index: usize,
@@ -660,40 +661,67 @@ impl<T: Dist> From<NativeAtomicElement<T>> for AtomicElement<T> {
 }
 
 impl<T: Dist> NativeAtomicElement<T> {
+    /// returns the value of the atomic element
     pub fn load(&self) -> T {
         impl_load!(self)
     }
+
+    /// stores a value into the atomic element
     pub fn store(&self, val: T) {
         impl_store!(self, val);
     }
+
+    /// Atomically replaces the current value with `val` and returns the old value.
     pub fn swap(&self, val: T) -> T {
         impl_swap!(self, val)
     }
+
+    /// Performs an atomic compare and exchange operation on the atomic element.
+    /// The operation succeeds if the current value is equal to `old`. If successful, it replaces the current value with `new` and returns the old value.
+    /// If the current value is not equal to `old`, it returns the current value without making any changes.
     pub fn compare_exchange(&self, old: T, new: T) -> Result<T, T> {
         impl_compare_exchange!(self, old, new)
     }
+
+    /// Performs an atomic compare and exchange operation with an epsilon value.
+    /// This operation succeeds if the absolute difference between the current value and `old` is less than `eps`. If successful, it replaces the current value with `new` and returns the old value.
+    /// If the absolute difference is greater than or equal to `eps`, it returns the current value without making any changes.
     pub fn compare_exchange_epsilon(&self, old: T, new: T, eps: T) -> Result<T, T> {
         impl_compare_exchange_eps!(self, old, new, eps)
     }
+
+    /// Atomically adds `val` to the current value and returns the old value.
     pub fn fetch_add(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_add, val)
     }
+
+    /// Atomically subtracts `val` from the current value and returns the old value.
     pub fn fetch_sub(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_sub, val)
     }
+
+    /// Atomically multiplies the current value by `val` and returns the old value.
     pub fn fetch_mul(&self, val: T) -> T {
         impl_mul_div!(self, * , val)
     }
+
+    /// Atomically divides the current value by `val` and returns the old value.
     pub fn fetch_div(&self, val: T) -> T {
         impl_mul_div!(self, /, val)
     }
+
+    /// Atomically computes the remainder of the current value divided by `val` and returns the old value.
     pub fn fetch_rem(&self, val: T) -> T {
         impl_mul_div!(self, %, val)
     }
+
+    /// Atomically shifts the current value left by `val` and returns the old value.
     pub fn fetch_shl(&self, val: T) -> T {
         //result.0 is old value, result.1 is new value
         impl_shift!(self, <<, val)
     }
+
+    /// Atomically shifts the current value right by `val` and returns the old value.
     pub fn fetch_shr(&self, val: T) -> T {
         //result.0 is old value, result.1 is new value
         impl_shift!(self, >>, val)
@@ -701,12 +729,17 @@ impl<T: Dist> NativeAtomicElement<T> {
 }
 
 impl<T: ElementBitWiseOps + 'static> NativeAtomicElement<T> {
+    /// Atomically performs a bitwise AND operation with `val` and returns the old value.
     pub fn fetch_and(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_and, val)
     }
+
+    /// Atomically performs a bitwise OR operation with `val` and returns the old value.
     pub fn fetch_or(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_or, val)
     }
+
+    /// Atomically performs a bitwise XOR operation with `val` and returns the old value.
     pub fn fetch_xor(&self, val: T) -> T {
         impl_add_sub_and_or_xor!(self, fetch_xor, val)
     }
@@ -781,7 +814,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
 ///
-/// You should not be directly interacting with this type, rather you should be operating on an [AtomicArray][crate::array::AtomicArray].
+/// You should not be directly interacting with this type, rather you should be operating on an [AtomicArray].
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicArray<T> {
     pub(crate) array: UnsafeArray<T>,
@@ -1295,18 +1328,28 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> NativeAtomicArray<
 }
 
 //for use within RDMA active messages to atomically read/write values
-//#[doc(hidden)]
+/// `NativeAtomicType` represents the various native atomic types supported in Rust (like AtomicI8, AtomicUsize, etc.)
 #[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub enum NativeAtomicType {
+    /// Represents an `AtomicI8`
     I8,
+    /// Represents an `AtomicI16`
     I16,
+    /// Represents an `AtomicI32`
     I32,
+    /// Represents an `AtomicI64`
     I64,
+    /// Represents an `AtomicIsize`
     Isize,
+    /// Represents an `AtomicU8`
     U8,
+    /// Represents an `AtomicU16`
     U16,
+    /// Represents an `AtomicU32`
     U32,
+    /// Represents an `AtomicU64`
     U64,
+    /// Represents an `AtomicUsize`
     Usize,
 }
 

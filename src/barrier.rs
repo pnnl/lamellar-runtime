@@ -360,6 +360,8 @@ impl Barrier {
 //     }
 // }
 
+
+/// A handle to a Lamellar barrier that can be used to wait on the barrier
 #[pin_project(PinnedDrop)]
 pub struct BarrierHandle {
     barrier_buf: Arc<Vec<MemoryRegion<usize>>>,

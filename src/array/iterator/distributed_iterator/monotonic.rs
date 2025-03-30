@@ -1,5 +1,6 @@
 use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
+/// `Monotonic` is an iterator that produces elements in a monotonically increasing order based on the index of the elements in the input iterator.
 #[derive(Clone, Debug)]
 pub struct Monotonic<I> {
     iter: I,

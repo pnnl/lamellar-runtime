@@ -246,6 +246,8 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
     }
 }
 
+
+/// This handle allows you to wait for the completion of a local iterator collect operation.
 #[pin_project(PinnedDrop)]
 pub struct LocalIterCollectHandle<T, A> {
     array: UnsafeArrayInner,

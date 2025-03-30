@@ -96,6 +96,8 @@ pub enum ExecutorType {
 
 #[derive(Debug)]
 #[pin_project]
+/// A LamellarTask is a wrapper around a future that is being executed by the Lamellar scheduler.
+/// LamellarTasks can be either awaited or blocked on.
 pub struct LamellarTask<T> {
     #[pin]
     task: LamellarTaskInner<T>,
@@ -106,6 +108,7 @@ unsafe impl<T: Send> Send for LamellarTask<T> {}
 unsafe impl<T: Sync> Sync for LamellarTask<T> {}
 
 impl<T> LamellarTask<T> {
+    /// Calls the underlying scheduler block_on method to block the current thread until the task is completed.
     pub fn block(self) -> T {
         RuntimeWarning::BlockingCall("LamellarTask::block", "<task>.await").print();
         self.executor.clone().block_on(self)

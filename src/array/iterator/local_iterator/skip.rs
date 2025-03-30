@@ -1,6 +1,6 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
-//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
+/// `Skip` is an iterator that skips a specified number of elements from the start of an iterator.
 #[derive(Clone, Debug)]
 pub struct Skip<I> {
     iter: I,

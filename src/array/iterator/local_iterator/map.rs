@@ -1,5 +1,7 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
+/// `Map` is an iterator that applies a function to each element of the input iterator,
+/// transforming it into a new type. 
 #[derive(Clone, Debug)]
 pub struct Map<I, F> {
     iter: I,

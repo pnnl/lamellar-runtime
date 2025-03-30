@@ -1,5 +1,7 @@
+//! This module defines the `ReadOnlyArray` type, which provides a safe abstraction for a distributed array that only allows read access.
+
 pub(crate) mod handle;
-pub use handle::ReadOnlyArrayHandle;
+pub use handle::*;
 
 mod iteration;
 pub(crate) mod local_chunks;
@@ -59,7 +61,7 @@ impl ReadOnlyByteArrayWeak {
 impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new ReadOnlyArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -155,7 +157,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this ReadOnlyArray into an [UnsafeArray][crate::array::UnsafeArray]
+    /// Convert this ReadOnlyArray into an [UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -197,6 +199,24 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// unsafe_array.print();
     /// println!("{slice:?}");
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_unsafe and it will not deadlock
+    /// let unsafe_array = array.into_unsafe().block();
+    /// unsafe_array.print();
+    ///```
     pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("readonly into_unsafe");
         IntoUnsafeArrayHandle {
@@ -212,7 +232,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     // }
 
     #[doc(alias = "Collective")]
-    /// Convert this ReadOnlyArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
+    /// Convert this ReadOnlyArray into a (safe) [LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -250,13 +270,31 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// local_lock_array.print();
     /// println!("{slice:?}");
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_local_lock and it will not deadlock
+    /// let local_lock_array = array.into_local_lock().block();
+    /// local_lock_array.print();
+    ///```
     pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("readonly into_local_lock");
         self.array.into_local_lock()
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this ReadOnlyArray into a (safe) [GlobalLockArray][crate::array::GlobalLockArray]
+    /// Convert this ReadOnlyArray into a (safe) [GlobalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -294,6 +332,24 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
     /// global_lock_array.print();
     /// println!("{slice:?}");
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_global_lock and it will not deadlock
+    /// let global_lock_array = array.into_global_lock().block();
+    /// global_lock_array.print();
+    ///```
     pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("readonly into_global_lock");
         self.array.into_global_lock()
@@ -302,7 +358,7 @@ impl<T: Dist + ArrayOps> ReadOnlyArray<T> {
 
 impl<T: Dist + 'static> ReadOnlyArray<T> {
     #[doc(alias = "Collective")]
-    /// Convert this ReadOnlyArray into a (safe) [AtomicArray][crate::array::AtomicArray]
+    /// Convert this ReadOnlyArray into a (safe) [AtomicArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -319,7 +375,7 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let atomic_array = array.into_local_lock().block();
+    /// let atomic_array = array.into_atomic().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -336,9 +392,27 @@ impl<T: Dist + 'static> ReadOnlyArray<T> {
     /// // but array1 will not be dropped until after slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop slice/array1).
-    /// let atomic_array = array.into_local_lock().block();
+    /// let atomic_array = array.into_atomic().block();
     /// atomic_array.print();
     /// println!("{slice:?}");
+    ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_atomic and it will not deadlock
+    /// let atomic_array = array.into_atomic().block();
+    /// atomic_array.print();
     ///```
     pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         self.array.into_atomic()

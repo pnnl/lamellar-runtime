@@ -6,7 +6,7 @@
 //! - `Darc`'s have global lifetime tracking and management, meaning that the pointed to objects remain valid and accessible
 //!   as long as one reference exists on any PE.
 //! - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-//! types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].
+//! types. Alternatively you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
 //!
 //! `Darc`'s are intended to be passed via active messages.
 //! - They allow distributed
@@ -73,15 +73,16 @@ use crate::{IdError, LamellarEnv, LamellarTeam};
 /// prelude for the darc module
 pub mod prelude;
 
-pub(crate) mod local_rw_darc;
-pub use local_rw_darc::LocalRwDarc;
+pub mod local_rw_darc;
+// pub (crate) use local_rw_darc::LocalRwDarc;
 
-pub(crate) mod global_rw_darc;
-pub use global_rw_darc::GlobalRwDarc;
+pub mod global_rw_darc;
+// pub (crate) use global_rw_darc::GlobalRwDarc;
 
-use self::handle::{DarcHandle, IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
+// use self::handle::{DarcHandle, IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
 
 pub(crate) mod handle;
+pub use handle::*;
 
 static DARC_ID: AtomicUsize = AtomicUsize::new(0);
 
@@ -157,7 +158,7 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 /// - `Darc`'s have global lifetime, meaning that the pointed to objects remain valid and accessible
 ///   as long as one reference exists on any PE.
 /// - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-/// types. Alternatively you can also use a [`LocalRwDarc`] or [`GlobalRwDarc`].
+/// types. Alternatively you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
 ///
 /// `Darc`'s are intended to be passed via active messages.
 /// - They allow distributed
@@ -1418,7 +1419,7 @@ impl<T: Send + Sync> Darc<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Converts this Darc into a [LocalRwDarc]
+    /// Converts this Darc into a [LocalRwDarc][crate::darc::local_rw_darc::LocalRwDarc]
     ///
     /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.
@@ -1457,7 +1458,7 @@ impl<T: Send + Sync> Darc<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Converts this Darc into a [GlobalRwDarc]
+    /// Converts this Darc into a [GlobalRwDarc][crate::darc::global_rw_darc::GlobalRwDarc]
     ///
     /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.

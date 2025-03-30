@@ -1,3 +1,5 @@
+//! Local Read-Write `Darc` Implementation
+
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -16,6 +18,9 @@ pub(crate) use super::handle::{
     IntoDarcHandle, IntoGlobalRwDarcHandle, LocalRwDarcReadHandle, LocalRwDarcWriteHandle,
 };
 
+/// A local read guard for a `LocalRwDarc`
+/// any number of read guards can be held at the same time on a `LocalRwDarc`
+/// the lock will remain locked until all read guards are dropped
 #[derive(Debug)]
 pub struct LocalRwDarcReadGuard<T: 'static> {
     pub(crate) _darc: LocalRwDarc<T>,
@@ -45,6 +50,9 @@ impl<T> std::ops::Deref for LocalRwDarcReadGuard<T> {
 //     }
 // }
 
+/// A local write guard for a `LocalRwDarc`
+/// A single guard can exist at a time for a given `LocalRwDarc` on a PE.
+/// The lock is held until the guard is dropped, which means that no other thread on the same PE can acquire a write lock until this guard is dropped.
 #[derive(Debug)]
 pub struct LocalRwDarcWriteGuard<T: 'static> {
     pub(crate) _darc: LocalRwDarc<T>,
@@ -321,7 +329,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     // }
 
     #[doc(alias = "Collective")]
-    /// Converts this LocalRwDarc into a [GlobalRwDarc]
+    /// Converts this LocalRwDarc into a [GlobalRwDarc][crate::darc::global_rw_darc::GlobalRwDarc].
     ///
     /// This returns a handle (which is Future) thats needs to be `awaited` or `blocked` on to perform the operation.
     /// Awaiting/blocking on the handle is a blocking collective call amongst all PEs in the Darc's team, only returning once every PE in the team has completed the call.

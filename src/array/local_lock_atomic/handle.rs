@@ -518,7 +518,7 @@ impl<T: Dist> Future for LocalLockMutLocalDataHandle<T> {
 /// This handle must be either await'd in an async context or block'd in an non-async context.
 /// Awaiting or blocking will not return until the read lock has been acquired.
 ///
-/// the returned iterator is a lamellar [LocalIterator] and also captures a read lock on the local data.
+/// the returned iterator is a lamellar [LocalIterator][crate::array::iterator::local_iterator::LocalIterator] and also captures a read lock on the local data.
 ///
 /// # Examples
 ///```
@@ -630,7 +630,7 @@ impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
 /// This handle must be either await'd in an async context or block'd in an non-async context.
 /// Awaiting or blocking will not return until the write lock has been acquired.
 ///
-/// the returned iterator is a lamellar [LocalIterator] and also captures a write lock on the local data.
+/// the returned iterator is a lamellar [LocalIterator][crate::array::iterator::local_iterator::LocalIterator] and also captures a write lock on the local data.
 ///
 /// # Examples
 ///```

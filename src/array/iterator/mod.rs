@@ -59,7 +59,7 @@ pub enum Schedule {
 
 /// The interface for creating the various lamellar array iterator types
 ///
-/// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
+/// This is only implemented for Safe Array types, [UnsafeArray][crate::array::unsafe::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayIterators<T: Dist> {
     /// The [DistributedIterator] type
     type DistIter: DistributedIterator;
@@ -160,7 +160,7 @@ pub trait LamellarArrayIterators<T: Dist> {
 
 /// The interface for creating the various lamellar array mutable iterator types
 ///
-/// This is only implemented for Safe Array types, [UnsafeArray][crate::array::UnsafeArray] directly provides unsafe versions of the same functions
+/// This is only implemented for Safe Array types, [UnsafeArray][crate::array::unsafe::UnsafeArray] directly provides unsafe versions of the same functions
 pub trait LamellarArrayMutIterators<T: Dist> {
     /// The [DistributedIterator] type
     type DistIter: DistributedIterator;

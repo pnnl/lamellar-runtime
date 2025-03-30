@@ -24,17 +24,17 @@ mod take;
 pub(crate) mod consumer;
 
 // use chunks::*;
-use enumerate::*;
-use filter::*;
-use filter_map::*;
-use map::*;
-use monotonic::*;
-use skip::*;
-use step_by::*;
-use take::*;
+pub use enumerate::*;
+pub use filter::*;
+pub use filter_map::*;
+pub use map::*;
+pub use monotonic::*;
+pub use skip::*;
+pub use step_by::*;
+pub use take::*;
 // use zip::*;
 
-pub(crate) use consumer::*;
+pub use consumer::*;
 
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::{private::*, Schedule};

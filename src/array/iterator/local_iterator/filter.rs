@@ -1,5 +1,7 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
+
+/// `Filter` is an iterator that filters elements based on a predicate function.
 #[derive(Clone, Debug)]
 pub struct Filter<I, F> {
     iter: I,

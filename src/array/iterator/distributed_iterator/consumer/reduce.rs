@@ -20,6 +20,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+
+
 #[derive(Clone, Debug)]
 pub(crate) struct Reduce<I, F> {
     pub(crate) iter: I,
@@ -202,6 +204,7 @@ where
     }
 }
 
+/// This handle allows you to wait for the completion of a local iterator reduce operation
 #[pin_project(PinnedDrop)]
 pub struct DistIterReduceHandle<T, F> {
     array: UnsafeArrayInner,

@@ -1,5 +1,7 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
+
+/// `Monotonic` is an iterator that returns elements with a monotonically increasing index.
 #[derive(Clone, Debug)]
 pub struct Monotonic<I> {
     iter: I,

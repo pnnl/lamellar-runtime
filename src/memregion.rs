@@ -270,7 +270,7 @@ impl<T: Dist> TeamTryFrom<LamellarMemoryRegion<T>> for LamellarArrayRdmaOutput<T
 ///
 /// Memory Regions are low-level unsafe abstraction not really intended for use in higher-level applications
 ///
-/// # Warning
+///  
 /// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
 /// [LamellarArray][crate::array::LamellarArray] interface to construct and interact with distributed memory.
 #[enum_dispatch]

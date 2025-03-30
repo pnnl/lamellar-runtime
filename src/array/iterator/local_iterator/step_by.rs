@@ -1,6 +1,6 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
-//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
+/// `StepBy` is an interator that allows you to iterate over elements of an iterator
 #[derive(Clone, Debug)]
 pub struct StepBy<I> {
     iter: I,

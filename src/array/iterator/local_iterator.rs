@@ -21,18 +21,18 @@ mod zip;
 
 pub(crate) mod consumer;
 
-use chunks::*;
-use enumerate::*;
-use filter::*;
-use filter_map::*;
-use map::*;
-use monotonic::*;
-use skip::*;
-use step_by::*;
-use take::*;
-use zip::*;
+pub use chunks::*;
+pub use enumerate::*;
+pub use filter::*;
+pub use filter_map::*;
+pub use map::*;
+pub use monotonic::*;
+pub use skip::*;
+pub use step_by::*;
+pub use take::*;
+pub use zip::*;
 
-pub(crate) use consumer::*;
+pub use consumer::*;
 
 use crate::array::iterator::{private::*, Schedule};
 use crate::array::{operations::ArrayOps, AsyncTeamFrom, Distribution, InnerArray, LamellarArray};
@@ -771,7 +771,7 @@ pub trait IndexedLocalIterator: LocalIterator + SyncSend + InnerIter + 'static {
     /// If calling this on a LocalLockArray it may be possible to call  [read_local_chunks](crate::array::LocalLockArray::read_local_chunks)
     /// or [write_local_chunks](crate::array::LocalLockArray::write_local_chunks) for better performance
     ///
-    /// If calling this on an UnsafeArray it may be possible to call [local_chunks](crate::array::UnsafeArray::local_chunks) or [local_chunks_mut](crate::array::UnsafeArray::local_chunks_mut)
+    /// If calling this on an UnsafeArray it may be possible to call [local_chunks](crate::array::unsafe::UnsafeArray::local_chunks) or [local_chunks_mut](crate::array::unsafe::UnsafeArray::local_chunks_mut)
     ///
     /// # Examples
     ///```

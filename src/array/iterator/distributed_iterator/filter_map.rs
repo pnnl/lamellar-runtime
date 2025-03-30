@@ -1,5 +1,9 @@
 use crate::array::iterator::{distributed_iterator::*, IterLockFuture};
 
+
+
+/// `FilterMap` is an iterator that applies a function to each element of the input iterator, transforming it into a new type,
+/// and filters out `None` values. It returns `Some` for transformed values and `None` for filtered-out values.
 #[derive(Clone, Debug)]
 pub struct FilterMap<I, F> {
     iter: I,

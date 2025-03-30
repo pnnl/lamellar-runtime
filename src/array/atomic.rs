@@ -1,9 +1,11 @@
+//! This module provides the implementation of the `AtomicArray` type, which is a distributed array that uses atomic operations for thread-safe access. The array can be backed either by native atomics or mutex based atomics
+
 mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
 
 pub(crate) mod handle;
-pub use handle::AtomicArrayHandle;
+pub use handle::*;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};
@@ -48,8 +50,11 @@ use std::ops::{
 ///
 /// This type is returned when iterating over an AtomicArray as well as when accessing local elements through an [AtomicLocalData] handle.
 pub enum AtomicElement<T: Dist> {
+    /// This variant represents a native atomic type (like AtomicUsize, AtomicU8, etc.) that uses the standard library's atomic types for thread-safe operations.
     NativeAtomicElement(NativeAtomicElement<T>),
+    /// This variant represents a generic atomic element that uses a mutex to provide thread-safe access for types that do not have native atomic support.
     GenericAtomicElement(GenericAtomicElement<T>),
+    /// This variant represents a local generic atomic element that uses a mutex to provide thread-safe access for types that do not have native atomic support but are used in a local context.
     LocalGenericAtomicElement(LocalGenericAtomicElement<T>),
 }
 
@@ -848,7 +853,7 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -967,7 +972,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this AtomicArray into an [UnsafeArray][crate::array::UnsafeArray]
+    /// Convert this AtomicArray into an [UnsafeArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -1009,6 +1014,24 @@ impl<T: Dist> AtomicArray<T> {
     /// unsafe_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice.at(0).load());
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_unsafe and it will not deadlock
+    /// let unsafe_array = array.into_unsafe().block();
+    /// unsafe_array.print();
+    ///```
     pub fn into_unsafe(self) -> IntoUnsafeArrayHandle<T> {
         // println!("atomic into_unsafe");
         match self {
@@ -1025,7 +1048,7 @@ impl<T: Dist> AtomicArray<T> {
     // }
 
     #[doc(alias = "Collective")]
-    /// Convert this AtomicArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
+    /// Convert this AtomicArray into a (safe) [ReadOnlyArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -1063,6 +1086,24 @@ impl<T: Dist> AtomicArray<T> {
     /// read_only_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice.at(0).load());
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_read_only and it will not deadlock
+    /// let read_only_array = array.into_read_only().block();
+    /// read_only_array.print();
+    ///```
     pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("atomic into_read_only");
         match self {
@@ -1072,7 +1113,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this AtomicArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
+    /// Convert this AtomicArray into a (safe) [LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -1110,6 +1151,24 @@ impl<T: Dist> AtomicArray<T> {
     /// local_lock_array.print();
     /// println!("{:?}",slice.at(0).load());
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice.at(0).load());
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_local_lock and it will not deadlock
+    /// let local_lock_array = array.into_local_lock().block();
+    /// local_lock_array.print();
+    ///```
     pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("atomic into_local_lock");
         match self {
@@ -1119,7 +1178,7 @@ impl<T: Dist> AtomicArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this AtomicArray into a (safe) [GlobalLockArray][crate::array::GlobalLockArray]
+    /// Convert this AtomicArray into a (safe) [GlobalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -1156,6 +1215,24 @@ impl<T: Dist> AtomicArray<T> {
     /// let global_lock_array = array.into_global_lock().block();
     /// global_lock_array.print();
     /// println!("{:?}",slice.at(0).load());
+    ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let array: AtomicArray<usize> = AtomicArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = array1.local_data();
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice.at(0).load());
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_global_lock and it will not deadlock
+    /// let global_lock_array = array.into_global_lock().block();
+    /// global_lock_array.print();
     ///```
     pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("atomic into_global_lock");

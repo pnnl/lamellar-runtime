@@ -1,10 +1,14 @@
+//! This module provides an unsafe abstraction of a distributed array in Lamellar.
+
 pub(crate) mod handle;
+pub use handle::*;
 mod iteration;
 pub(crate) mod local_chunks;
+pub use local_chunks::*;
 pub(crate) mod operations;
+pub use operations::*;
 mod rdma;
 
-pub use handle::UnsafeArrayHandle;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::active_messaging::*;
@@ -141,7 +145,7 @@ pub(crate) struct UnsafeArrayInnerWeak {
 impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
     /// Construct a new UnsafeArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
-    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam][crate::LamellarTeam] (instance or reference).
+    /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam] (instance or reference).
     ///
     /// # Collective Operation
     /// Requires all PEs associated with the `team` to enter the constructor call otherwise deadlock will occur (i.e. team barriers are being called internally)
@@ -494,7 +498,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this UnsafeArray into a (safe) [ReadOnlyArray][crate::array::ReadOnlyArray]
+    /// Convert this UnsafeArray into a (safe) [ReadOnlyArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -533,6 +537,23 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// ro_array.print();
     /// println!("{mut_slice:?}");
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_read_only and it will not deadlock
+    /// let ro_array = array.into_read_only().block();
+    /// ro_array.print();
+    ///```
     pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
         // println!("unsafe into read only");
         IntoReadOnlyArrayHandle {
@@ -548,7 +569,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     // }
 
     #[doc(alias = "Collective")]
-    /// Convert this UnsafeArray into a (safe) [LocalLockArray][crate::array::LocalLockArray]
+    /// Convert this UnsafeArray into a (safe) [LocalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -586,6 +607,23 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// local_lock_array.print();
     /// println!("{mut_slice:?}");
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_local_lock and it will not deadlock
+    /// let local_lock_array = array.into_local_lock().block();
+    /// local_lock_array.print();
+    ///```
     pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
         // println!("unsafe into local lock atomic");
         // self.into()
@@ -598,7 +636,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     }
 
     #[doc(alias = "Collective")]
-    /// Convert this UnsafeArray into a (safe) [GlobalLockArray][crate::array::GlobalLockArray]
+    /// Convert this UnsafeArray into a (safe) [GlobalLockArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -636,6 +674,23 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// global_lock_array.print();
     /// println!("{slice:?}");
     ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_global_lock and it will not deadlock
+    /// let global_lock_array = array.into_global_lock().block();
+    /// global_lock_array.print();
+    ///```
     pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
         // println!("readonly into_global_lock");
         IntoGlobalLockArrayHandle {
@@ -652,7 +707,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
 impl<T: Dist + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
-    /// Convert this UnsafeArray into a (safe) [AtomicArray][crate::array::AtomicArray]
+    /// Convert this UnsafeArray into a (safe) [AtomicArray]
     ///
     /// This is a collective and blocking function which will only return when there is at most a single reference on each PE
     /// to this Array, and that reference is currently calling this function.
@@ -669,7 +724,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// let my_pe = world.my_pe();
     /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
     ///
-    /// let atomic_array = array.into_local_lock().block();
+    /// let atomic_array = array.into_atomic().block();
     ///```
     /// # Warning
     /// Because this call blocks there is the possibility for deadlock to occur, as highlighted below:
@@ -686,9 +741,26 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// // but array1 will not be dropped until after mut_slice is dropped.
     /// // Given the ordering of these calls we will get stuck in "into_atomic" as it
     /// // waits for the reference count to go down to "1" (but we will never be able to drop mut_slice/array1).
-    /// let atomic_array = array.into_local_lock().block();
+    /// let atomic_array = array.into_atomic().block();
     /// atomic_array.print();
     /// println!("{mut_slice:?}");
+    ///```
+    /// Instead we would want to do something like:
+    ///```
+    /// use lamellar::array::prelude::*;
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let array: UnsafeArray<usize> = UnsafeArray::new(&world,100,Distribution::Cyclic).block();
+    ///
+    /// let array1 = array.clone();
+    /// let slice = unsafe {array1.local_data()};
+    ///
+    /// // do something interesting with the slice and then manually drop the slice and array1 to ensure the reference count for array is 1.
+    /// println!("{:?}",slice[0]);
+    /// drop(slice);
+    /// drop(array1);
+    /// // now we can call into_atomic and it will not deadlock
+    /// let atomic_array = array.into_atomic().block();
+    /// atomic_array.print();
     ///```
     pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
         // println!("unsafe into atomic");
@@ -1307,7 +1379,7 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.
     ///
-    /// Please see the documentation for the [register_reduction][lamellar_impl::register_reduction] procedural macro for
+    /// Please see the documentation for the [register_reduction] procedural macro for
     /// more details and examples on how to create your own reductions.
     ///
     /// # Safety

@@ -192,7 +192,8 @@ impl Future for InnerDistIterForEachHandle {
     }
 }
 
-//#[doc(hidden)]
+/// This handle allows you to wait for the completion of a local iterator `for_each` operation
+
 #[pin_project(PinnedDrop)]
 pub struct DistIterForEachHandle {
     array: UnsafeArrayInner,

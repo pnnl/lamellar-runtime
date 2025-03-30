@@ -1,6 +1,6 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
-//skips the first n elements of iterator I per pe (this implys that n * num_pes elements are skipd in total)
+/// `Take` is an iterator that limits the number of elements returned by an iterator to a specified count.
 #[derive(Clone, Debug)]
 pub struct Take<I> {
     iter: I,

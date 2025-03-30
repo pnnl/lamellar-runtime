@@ -1,5 +1,7 @@
+//! This module defines the `GenericAtomicArray` type, which provides atomic access to elements of an array for any type that implements the `Dist` trait through the use of element-wise mutexes.
+
 mod handle;
-pub(crate) use handle::GenericAtomicArrayHandle;
+pub(crate) use handle::*;
 
 pub(crate) mod iteration;
 pub(crate) mod operations;

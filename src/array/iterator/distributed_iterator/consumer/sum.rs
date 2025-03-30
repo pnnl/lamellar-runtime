@@ -179,6 +179,9 @@ where
     }
 }
 
+
+
+/// This handle allows you to wait for the completion of a local iterator sum operation.
 #[pin_project(PinnedDrop)]
 pub struct DistIterSumHandle<T> {
     array: UnsafeArrayInner,

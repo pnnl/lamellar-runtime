@@ -1,5 +1,7 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
+
+/// `Chunks` is an iterator that produces chunks of a specified size from the input iterator.
 #[derive(Clone, Debug)]
 pub struct Chunks<I> {
     iter: I,
@@ -96,6 +98,8 @@ where
     }
 }
 
+
+/// The `Chunk` struct represents a chunk of data produced by the `Chunks` iterator.
 #[derive(Clone)]
 pub struct Chunk<I> {
     iter: I,
