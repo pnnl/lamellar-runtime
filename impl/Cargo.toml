@@ -1,6 +1,6 @@
 [package] 
 name = "lamellar-impl"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>",  "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>", "Joseph Cottam <joseph.cottam@pnnl.gov>","Greg Roek <gregory.roek@pnnl.gov>","Erdal Mutlu <erdal.mutlu@pnnl.gov>"]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
