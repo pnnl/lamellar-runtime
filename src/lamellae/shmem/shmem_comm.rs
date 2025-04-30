@@ -527,16 +527,27 @@ impl CommOps for ShmemComm {
             if shmem.contains(dst_addr) {
                 let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
                 let real_dst_addr = real_dst_base + (dst_addr - addr);
-                // if self.alloc.read().len() > 1 {
-                //     println!("put base: {:x} {:x} addr: {:x} src {:?} len {:?} pe {:?}",shmem.base_addr(),real_dst_base,real_dst_addr,src_addr.as_ptr(),alloc.0.len(),pe );
-                // }
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        src_addr.as_ptr(),
-                        real_dst_addr as *mut T,
-                        src_addr.len(),
-                    );
-                }
+                let src_usize_addr = src_addr.as_ptr() as usize;
+                if !((src_usize_addr <= real_dst_addr && real_dst_addr < src_usize_addr + src_addr.len())//dst start overlaps src
+                    || (real_dst_addr <= src_usize_addr && src_usize_addr < real_dst_addr + src_addr.len()))//src start overlaps dst
+                {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            src_addr.as_ptr(),
+                            real_dst_addr as *mut T,
+                            src_addr.len(),
+                        );
+                    }
+                } else {
+                    unsafe {
+                        std::ptr::copy(
+                            src_addr.as_ptr(),
+                            real_dst_addr as *mut T,
+                            src_addr.len(),
+                        );
+                    }
+                }   
+                
                 break;
             }
         }
@@ -558,12 +569,25 @@ impl CommOps for ShmemComm {
                 // if self.alloc.read().len() > 1 {
                 //     println!("get base: {:x} {:x} addr: {:x} dst: {:?} pe {:?}",shmem.base_addr(),real_src_base,real_src_addr, dst_addr.as_mut_ptr(),pe);
                 // }
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        real_src_addr as *const T,
-                        dst_addr.as_mut_ptr(),
-                        dst_addr.len(),
-                    );
+                let dst_usize_addr = dst_addr.as_ptr() as usize;
+                if !((real_src_addr <= dst_usize_addr && dst_usize_addr < real_src_addr + dst_addr.len())//dst start overlaps src
+                    || (dst_usize_addr <= real_src_addr && real_src_addr < dst_usize_addr + dst_addr.len())){ //src start overlaps dst
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            real_src_addr as *const T,
+                            dst_addr.as_mut_ptr(),
+                            dst_addr.len(),
+                        );
+                    }
+                }
+                else{
+                    unsafe {
+                        std::ptr::copy(
+                            real_src_addr as *const T,
+                            dst_addr.as_mut_ptr(),
+                            dst_addr.len(),
+                        );
+                    }
                 }
                 break;
             }
