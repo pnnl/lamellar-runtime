@@ -20,13 +20,14 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 [dependencies]
 lamellar-impl = { version = "0.6.0", path = "impl" }
 libfabric = { git = "https://github.com/pnnl/rofi.git", branch = "libfabric-async", features = [
+    "async-cqs-spin",
     "use-async-std",
-    "thread-safe",
+    "threading-thread-safe",
 ], optional = true }
 rofi-rust = { path = "/people/thom895/rofi/rofi-rust", features = [
     "async-rofi",
 ], optional = true }
-pmi = { path = "/people/thom895/rofi/pmi/" , optional = true}
+pmi = { path = "/people/thom895/rofi/pmi/" , optional = true, features=["with-pmi1"]}
 memmap = "0.7.0"
 page_size = "0.6.0"
 #rofisys = { version ="0.3", optional = true }

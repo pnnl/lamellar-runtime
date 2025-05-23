@@ -108,7 +108,6 @@ impl LibFabAsyncComm {
         };
 
         libfab.alloc.write()[0].init(addr as usize, total_mem);
-        println!("Libfabasync is ready");
         Ok(libfab)
     }
 
@@ -389,7 +388,7 @@ impl CommOps for LibFabAsyncComm {
     fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
         let fut = async move {
             if pe != self.my_pe {
-                let ret = unsafe { self.ofi.put(pe, src_addr, dst_addr, true) }.await.unwrap();
+                unsafe { self.ofi.put(pe, src_addr, dst_addr, true) }.await.unwrap();
                 
                 self.put_amt
                     .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
@@ -543,7 +542,7 @@ impl CommOps for LibFabAsyncComm {
 
 impl Drop for LibFabAsyncComm {
     fn drop(&mut self) {
-        println!("[{:?}] in rofi comm drop", self.my_pe);
+        // println!("[{:?}] in rofi comm drop", self.my_pe);
         // print!(""); //not sure why this prevents hanging....
         // rofi_barrier();
         // std::thread::sleep(std::time::Duration::from_millis(1000));

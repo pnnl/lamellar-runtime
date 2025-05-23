@@ -492,7 +492,7 @@ impl CommOps for RofiRustComm {
 
 impl Drop for RofiRustComm {
     fn drop(&mut self) {
-        println!("[{:?}] in rofi comm drop", self.my_pe);
+        // println!("[{:?}] in rofi comm drop", self.my_pe);
         // print!(""); //not sure why this prevents hanging....
         // rofi_barrier();
         // std::thread::sleep(std::time::Duration::from_millis(1000));

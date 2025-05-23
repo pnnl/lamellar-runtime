@@ -100,7 +100,6 @@ impl LibFabComm {
         };
 
         libfab.alloc.write()[0].init(addr as usize, total_mem);
-        println!("Libfab is ready");
         Ok(libfab)
     }
 
@@ -512,7 +511,7 @@ impl CommOps for LibFabComm {
 
 impl Drop for LibFabComm {
     fn drop(&mut self) {
-        println!("[{:?}] in rofi comm drop", self.my_pe);
+        // println!("[{:?}] in rofi comm drop", self.my_pe);
         // print!(""); //not sure why this prevents hanging....
         // rofi_barrier();
         // std::thread::sleep(std::time::Duration::from_millis(1000));

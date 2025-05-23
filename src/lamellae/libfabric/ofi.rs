@@ -148,23 +148,21 @@ impl Ofi {
         let put_cntr = libfabric::cntr::CounterBuilder::new().build(&domain)?;
         let get_cntr = libfabric::cntr::CounterBuilder::new().build(&domain)?; //
 
-        let ep = libfabric::ep::EndpointBuilder::new(&info_entry).build(&domain)?;
+        let ep = libfabric::ep::EndpointBuilder::new(&info_entry).build_with_shared_cq(&domain, &cq, true)?;
         let ep = match ep {
             libfabric::ep::Endpoint::ConnectionOriented(_) => {
                 panic!("Verbs should be connectionless, I think")
             }
             libfabric::ep::Endpoint::Connectionless(ep) => ep,
         };
-        ep.bind_av(&av)?;
         ep.bind_cntr().write().remote_write().cntr(&put_cntr)?;
 
         ep.bind_cntr().read().remote_read().cntr(&get_cntr)?;
 
-        ep.bind_shared_cq(&cq, true)?;
 
         ep.bind_eq(&eq)?;
 
-        let ep = ep.enable()?;
+        let ep = ep.enable(&av)?;
 
         let address = ep.getname()?;
         let address_bytes = address.as_bytes();
@@ -374,14 +372,17 @@ impl Ofi {
     ) -> Result<Vec<libfabric::iovec::RmaIoVec>, libfabric::error::Error> {
         // println!("Exchaning mr info");
         let mc = self.create_mc_group(pes)?;
-        let mut key = match key {
-            libfabric::mr::MemoryRegionKey::Key(key) => *key,
-            libfabric::mr::MemoryRegionKey::RawKey(_) => {
-                panic!("Raw keys are not handled currently")
-            }
+        let key_bytes = key.to_bytes();
+        let key_len = key_bytes.len();
+        if key_len > std::mem::size_of::<u64>() {
+            panic!("Key size does not fit");
+        }
+        let mut key = 0u64;
+        unsafe {
+            std::slice::from_raw_parts_mut(&mut key as *mut u64 as *mut u8, 8)
+                .copy_from_slice(&key_bytes)
         };
-
-        // println!("PE {} sending : {}", self.my_pe, addr);
+        // println!("PE {} sending : {} {}", self.my_pe, addr, key);
         let mut my_rma_iov = libfabric::iovec::RmaIoVec::new()
             .address(addr as u64)
             .len(len)
@@ -406,18 +407,18 @@ impl Ofi {
 
         self.ep.allgather_with_context(
             my_iov_bytes,
-            &mut libfabric::mr::default_desc(),
+            None,
             all_iov_bytes,
-            &mut libfabric::mr::default_desc(),
+            None,
             &mc,
             libfabric::enums::TferOptions::new(),
             &mut ctx,
         )?;
 
         self.wait_for_completion(&ctx)?;
-        // println!("Recevied the following:");
+        // println!("P{} Recevied the following:", self.my_pe);
         // for rma_iov in all_rma_iovs.iter() {
-        //     println!("{}", rma_iov.get_address());
+        //     println!("{} {:x}", rma_iov.get_address(), rma_iov.get_key());
         // }
         // println!("Done Exchaning mr info");
 
@@ -512,29 +513,32 @@ impl Ofi {
             .build(&self.domain)?;
 
         let mr = match mr {
-            MaybeDisabledMemoryRegion::Disabled(mr) => {
-                mr.bind_ep(&self.ep)?;
-                mr.enable()?
+            MaybeDisabledMemoryRegion::Disabled(disabled_mr) => {
+                match disabled_mr {
+                    mr::DisabledMemoryRegion::EpBind(ep_binding_mr) => ep_binding_mr.enable(&self.ep),
+                    mr::DisabledMemoryRegion::RmaEvent(_rma_event_memory_region) => todo!(),
+                }.unwrap()
             }
             MaybeDisabledMemoryRegion::Enabled(mr) => mr,
         };
 
         let rma_iovs = self.exchange_mr_info(mem.as_ptr() as usize, mem.len(), &mr.key()?, &pes)?;
-
+        
         let remote_alloc_infos = pes
             .iter()
             .zip(rma_iovs)
             .map(|(pe, rma_iov)| {
+                let key64 = rma_iov.get_key();
+                let key_bytes = unsafe {std::slice::from_raw_parts(&key64 as *const u64 as *const u8, 8) };
                 let mapped_key =
-                    unsafe { libfabric::mr::MemoryRegionKey::from_u64(rma_iov.get_key()) }
-                        .into_mapped(&self.domain)
+                    unsafe { libfabric::mr::MappedMemoryRegionKey::from_raw(key_bytes, &self.domain) }
                         .unwrap();
                 (*pe, RemoteAllocInfo::from_rma_iov(rma_iov, mapped_key))
             })
             .collect();
 
         self.alloc_manager
-            .insert(AllocInfo::new(mem, mr, remote_alloc_infos)?);
+            .insert(AllocInfo::new(mem, Arc::new(mr), remote_alloc_infos)?);
 
         Ok(mem_addr)
     }
@@ -609,7 +613,7 @@ impl Ofi {
         dst_addr: usize,
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let (offset, mut desc, remote_alloc_info) = {
+        let (offset, mr, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
             let alloc_info = table
                 .iter()
@@ -618,7 +622,7 @@ impl Ofi {
 
             (
                 alloc_info.start(),
-                alloc_info.mr_desc(),
+                alloc_info.mr(),
                 alloc_info.remote_info(&pe).expect(&format!(
                     "PE {} is not part of the sub allocation group",
                     pe
@@ -626,6 +630,7 @@ impl Ofi {
             )
         };
 
+        let desc = mr.descriptor();
         let mut remote_dst_addr = dst_addr - offset + remote_alloc_info.start();
         // println!(
         //     "Putting to PE {}, addr: {}, remote_addr: {}",
@@ -656,7 +661,7 @@ impl Ofi {
                     let order = self.post_put(|| unsafe {
                         self.ep.write_to(
                             &src_addr[curr_idx..curr_idx + msg_len],
-                            &mut desc,
+                            Some(&desc),
                             &self.mapped_addresses[pe],
                             remote_dst_addr as u64,
                             remote_key,
@@ -685,7 +690,7 @@ impl Ofi {
         dst_addr: &mut [T],
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let (offset, mut desc, remote_alloc_info) = {
+        let (offset, mr, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
             let alloc_info = table
                 .iter()
@@ -694,7 +699,7 @@ impl Ofi {
 
             (
                 alloc_info.start(),
-                alloc_info.mr_desc(),
+                alloc_info.mr(),
                 alloc_info.remote_info(&pe).expect(&format!(
                     "PE {} is not part of the sub allocation group",
                     pe
@@ -702,6 +707,7 @@ impl Ofi {
             )
         };
 
+        let desc = mr.descriptor();
         let mut remote_src_addr = src_addr - offset + remote_alloc_info.start();
         let remote_key = remote_alloc_info.key();
         // println!(
@@ -720,7 +726,7 @@ impl Ofi {
             let order = self.post_get(|| unsafe {
                 self.ep.read_from(
                     &mut dst_addr[curr_idx..curr_idx + msg_len],
-                    &mut desc,
+                    Some(&desc),
                     &self.mapped_addresses[pe],
                     remote_src_addr as u64,
                     remote_key,
@@ -875,9 +881,7 @@ impl RemoteAllocInfo {
 
 pub(crate) struct AllocInfo {
     _mem: memmap::MmapMut,
-    mr: libfabric::mr::MemoryRegion,
-    desc: libfabric::mr::MemoryRegionDesc,
-    key: libfabric::mr::MemoryRegionKey,
+    mr: Arc<libfabric::mr::MemoryRegion>,
     range: std::ops::Range<usize>,
     remote_allocs: HashMap<usize, RemoteAllocInfo>,
 }
@@ -885,19 +889,15 @@ pub(crate) struct AllocInfo {
 impl AllocInfo {
     pub(crate) fn new(
         mem: memmap::MmapMut,
-        mr: libfabric::mr::MemoryRegion,
+        mr: Arc<libfabric::mr::MemoryRegion>,
         remote_allocs: HashMap<usize, RemoteAllocInfo>,
     ) -> Result<Self, libfabric::error::Error> {
         let start = mem.as_ptr() as usize;
         let end = start + mem.len();
-        let desc = mr.descriptor();
-        let key = mr.key()?;
 
         Ok(Self {
             _mem: mem,
             mr,
-            desc,
-            key,
             range: std::ops::Range { start, end },
             remote_allocs,
         })
@@ -934,10 +934,6 @@ impl AllocInfo {
         self.range.end
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn key(&self) -> &libfabric::mr::MemoryRegionKey {
-        &self.key
-    }
 
     #[allow(dead_code)]
     pub(crate) fn remote_key(&self, remote_id: &usize) -> &libfabric::mr::MappedMemoryRegionKey {
@@ -969,13 +965,10 @@ impl AllocInfo {
         self.remote_allocs.get(remote_pe).cloned()
     }
 
-    pub(crate) fn mr_desc(&self) -> libfabric::mr::MemoryRegionDesc {
-        self.desc.clone()
-    }
 
     #[allow(dead_code)]
-    pub(crate) fn mr(&self) -> &libfabric::mr::MemoryRegion {
-        &self.mr
+    pub(crate) fn mr(&self) -> Arc<libfabric::mr::MemoryRegion> {
+        self.mr.clone()
     }
 }
 

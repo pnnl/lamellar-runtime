@@ -174,18 +174,24 @@ impl<'a, T> CommOpHandle<'a, T> {
         }
     }
 
-    pub(crate) fn block(self) -> T{
+    pub(crate) fn block(self) -> T {
         #[cfg(feature="tokio-executor")]
         return Handle::current().block_on(async {self.fut.await});
         #[cfg(not(feature="tokio-executor"))]
         return block_on(async {self.fut.await});
     }
+    
+    // pub(crate) fn spawn(self) -> async_std::task::JoinHandle<T> {
+    //     async_std::task::spawn(async {self.fut.await})
+    // }
+
+
 }
 
 impl<'a, T> Future for CommOpHandle<'a, T> {
         type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.get_mut();
+        let this = self.get_mut();
         let guard = ready!(this.fut.as_mut().poll(cx));
         Poll::Ready(guard)
     }

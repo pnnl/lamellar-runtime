@@ -59,23 +59,16 @@ impl LamellaeInit for RofiRustAsyncBuilder {
 
         let libfab = Arc::new(Lamellae::RofiRustAsync(libfab));
         let libfab_clone = libfab.clone();
-        println!("Submitting Rofi Tasks");
         scheduler.submit_io_task(async move {
-            println!("ROFI RECV DATA TASK");
             cq_clone
                 .recv_data(scheduler_clone.clone(), libfab_clone.clone())
                 .await;
-            println!("ROFI RECV DATA DONE");
         });
         scheduler.submit_io_task(async move {
-            println!("ROFI ALLOC TASK");
             cq_clone2.alloc_task(scheduler_clone2.clone()).await;
-            println!("ROFI ALLOC DONE");
         });
         scheduler.submit_io_task(async move {
-            println!("ROFI PANIC TASK");
             cq_clone3.panic_task(scheduler_clone3.clone()).await;
-            println!("ROFI PANIC DONE");
         });
         libfab
     }
