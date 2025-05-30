@@ -1,7 +1,7 @@
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric::libfabric_comm::*;
+use crate::lamellae::libfabric_rs::libfabric_sync::libfabric_comm::*;
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_async::libfabric_async_comm::*;
+use crate::lamellae::libfabric_rs::libfabric_async::libfabric_async_comm::*;
 #[cfg(feature = "enable-rofi")]
 use crate::lamellae::rofi::rofi_comm::*;
 #[cfg(feature = "enable-rofi-rust")]

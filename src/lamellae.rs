@@ -9,9 +9,9 @@ use crate::lamellae::libfabasync_lamellae::LibFabAsync;
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabasync_lamellae::LibFabAsyncBuilder;
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric::libfabric_comm::LibFabData;
+use crate::lamellae::libfabric_rs::libfabric_sync::libfabric_comm::LibFabData;
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_async::libfabric_async_comm::LibFabAsyncData;
+use crate::lamellae::libfabric_rs::libfabric_async::libfabric_async_comm::LibFabAsyncData;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 use async_trait::async_trait;
@@ -54,9 +54,7 @@ pub(crate) mod rofi_rust_async_lamellae;
 pub(crate) mod rofi_rust_lamellae;
 
 #[cfg(feature = "enable-libfabric")]
-mod libfabric;
-#[cfg(feature = "enable-libfabric")]
-pub(crate) mod libfabric_async;
+mod libfabric_rs;
 #[cfg(feature = "enable-rofi-rust")]
 mod rofi_rust;
 #[cfg(feature = "enable-rofi-rust")]

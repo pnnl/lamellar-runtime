@@ -1,29 +1,28 @@
-use libfabric::RemoteMemoryAddress;
+use crate::lamellae::libfabric_rs::*;
 use crate::lamellae::comm::Remote;
-use crate::parking_lot::RwLock;
-#[cfg(not(feature = "tokio-executor"))]
-use async_std::task::block_on;
-use libfabric::async_::comm::collective::AsyncCollectiveEp;
-use libfabric::async_::comm::rma::AsyncReadEp;
-use libfabric::async_::comm::rma::AsyncWriteEp;
-use libfabric::av::AvInAddress;
+use av::AvInAddress;
+use comm::{
+    collective::CollectiveEp,
+    rma::{ReadEp, WriteEp},
+};
+use cq::ReadCq;
+use ep::BaseEndpoint;
 use libfabric::cntr::WaitCntr;
-use libfabric::cq::ReadCq;
-use libfabric::ep::BaseEndpoint;
 use libfabric::info::Version;
 use libfabric::mr::MaybeDisabledMemoryRegion;
-use libfabric::CntrCaps;
-use libfabric::FabInfoCaps;
-use libfabric::MappedAddress;
-use parking_lot::Mutex;
+use libfabric::*;
 use pmi::pmi::Pmi;
-use std::collections::HashMap;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::thread;
-#[cfg(feature = "tokio-executor")]
-use tokio::runtime::Handle;
+use std::sync::atomic::{AtomicUsize, Ordering};
+type WaitableEq = libfabric::eq_caps_type!(EqCaps::WAIT);
+type WaitableCq = libfabric::cq_caps_type!(CqCaps::WAIT);
+type WaitableCntr = libfabric::cntr_caps_type!(CntrCaps::WAIT);
+type RmaAtomicCollEp =
+    libfabric::info_caps_type!(FabInfoCaps::ATOMIC, FabInfoCaps::RMA, FabInfoCaps::COLL);
+
+use crate::lamellae::libfabric_rs::euclid_rem;
+use crate::lamellae::libfabric_rs::RemoteAllocInfo;
+use crate::lamellae::libfabric_rs::AllocInfo;
 
 // #[derive(Debug)]
 enum BarrierImpl {
@@ -32,47 +31,49 @@ enum BarrierImpl {
     Manual(usize, AtomicUsize),
 }
 
-type WaitableCntr = libfabric::cntr_caps_type!(CntrCaps::WAIT);
-
-type WaitableEq = libfabric::async_eq_caps_type!();
-type CqAsync = libfabric::async_cq_caps_type!();
-type RmaAtomicCollEp =
-    libfabric::info_caps_type!(FabInfoCaps::ATOMIC, FabInfoCaps::RMA, FabInfoCaps::COLL);
-
-macro_rules!  post_async{
-    ($post_fn:ident, $ep:expr, $inc: expr, $( $x:expr),* ) => {
-        $ep.$post_fn($($x,)*).await.unwrap();
-        $inc
-    };
-}
-
-pub(crate) struct OfiAsync {
+pub(crate) struct Ofi {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     mapped_addresses: Vec<libfabric::MappedAddress>,
     barrier_impl: BarrierImpl,
-    ep: libfabric::async_::connless_ep::ConnectionlessEndpoint<RmaAtomicCollEp>,
-    cq: libfabric::async_::cq::CompletionQueue<CqAsync>,
+    ep: libfabric::connless_ep::ConnectionlessEndpoint<RmaAtomicCollEp>,
+    cq: libfabric::cq::CompletionQueue<WaitableCq>,
     put_cntr: libfabric::cntr::Counter<WaitableCntr>,
     get_cntr: libfabric::cntr::Counter<WaitableCntr>,
     av: libfabric::av::AddressVector,
-    eq: libfabric::async_::eq::EventQueue<WaitableEq>,
+    eq: libfabric::eq::EventQueue<WaitableEq>,
     domain: libfabric::domain::Domain,
     _fabric: libfabric::fabric::Fabric,
     info_entry: libfabric::info::InfoEntry<RmaAtomicCollEp>,
     alloc_manager: AllocInfoManager,
     _my_pmi: Arc<dyn Pmi + Sync + Send>,
-    context_bank: Mutex<HashMap<thread::ThreadId, Vec<libfabric::Context>>>,
     put_cnt: AtomicUsize,
     get_cnt: AtomicUsize,
 }
 
-impl OfiAsync {
+impl Ofi {
     pub(crate) fn new(
         provider: Option<&str>,
         domain: Option<&str>,
     ) -> Result<Self, libfabric::error::Error> {
         let my_pmi = pmi::pmi::PmiBuilder::with_pmi1().unwrap();
+
+        // let info_caps = libfabric::infocapsoptions::InfoCaps::new().rma().atomic().collective();
+        // let mut domain_conf = libfabric::domain::DomainAttr::new();
+        // domain_conf.resource_mgmt= libfabric::enums::ResourceMgmt::Enabled;
+        // domain_conf.threading = libfabric::enums::Threading::Domain;
+        // domain_conf.mr_mode = libfabric::enums::MrMode::new().allocated().prov_key().virt_addr();
+        // domain_conf.data_progress = libfabric::enums::Progress::Manual;
+
+        // let mut endpoint_conf = libfabric::ep::EndpointAttr::new();
+        //     endpoint_conf
+        //     .ep_type(libfabric::enums::EndpointType::Rdm);
+
+        // let info_hints = libfabric::info::InfoHints::new()
+        //     .caps(info_caps)
+        //     .domain_attr(domain_conf)
+        //     .mode(libfabric::enums::Mode::new().context())
+        //     .ep_attr(endpoint_conf);
 
         let info = libfabric::info::Info::new(&Version {
             major: 1,
@@ -88,7 +89,7 @@ impl OfiAsync {
         .mode(libfabric::enums::Mode::new().context())
         .enter_domain_attr()
         .resource_mgmt(libfabric::enums::ResourceMgmt::Enabled)
-        .threading(libfabric::enums::Threading::Safe)
+        .threading(libfabric::enums::Threading::Domain)
         .mr_mode(
             libfabric::enums::MrMode::new()
                 .allocated()
@@ -103,6 +104,8 @@ impl OfiAsync {
         .leave_hints()
         .get()?;
 
+        // println!("Found the following providers");
+        // info.iter().for_each(|e| println!("{:?}", e));
         let info_entry = info
             .into_iter()
             .find(|e| {
@@ -128,13 +131,13 @@ impl OfiAsync {
             ));
 
         let fabric = libfabric::fabric::FabricBuilder::new().build(&info_entry)?;
-        let eq = libfabric::async_::eq::EventQueueBuilder::new(&fabric).build()?;
+        let eq = libfabric::eq::EventQueueBuilder::new(&fabric).build()?;
 
         let domain = libfabric::domain::DomainBuilder::new(&fabric, &info_entry).build()?;
         let mut coll_attr = libfabric::comm::collective::CollectiveAttr::<()>::new();
         domain.query_collective::<()>(libfabric::enums::CollectiveOp::AllGather, &mut coll_attr)?;
 
-        let cq = libfabric::async_::cq::CompletionQueueBuilder::new()
+        let cq = libfabric::cq::CompletionQueueBuilder::new()
             .format(libfabric::enums::CqFormat::Context)
             .size(info_entry.rx_attr().size())
             .build(&domain)?;
@@ -144,14 +147,13 @@ impl OfiAsync {
         let put_cntr = libfabric::cntr::CounterBuilder::new().build(&domain)?;
         let get_cntr = libfabric::cntr::CounterBuilder::new().build(&domain)?; //
 
-        let ep = libfabric::async_::ep::EndpointBuilder::new(&info_entry).build_with_shared_cq(&domain, &cq)?;
+        let ep = libfabric::ep::EndpointBuilder::new(&info_entry).build_with_shared_cq(&domain, &cq, true)?;
         let ep = match ep {
-            libfabric::async_::ep::Endpoint::ConnectionOriented(_) => {
+            libfabric::ep::Endpoint::ConnectionOriented(_) => {
                 panic!("Verbs should be connectionless, I think")
             }
-            libfabric::async_::ep::Endpoint::Connectionless(ep) => ep,
+            libfabric::ep::Endpoint::Connectionless(ep) => ep,
         };
-
         ep.bind_cntr().write().remote_write().cntr(&put_cntr)?;
 
         ep.bind_cntr().read().remote_read().cntr(&get_cntr)?;
@@ -172,7 +174,7 @@ impl OfiAsync {
             .iter()
             .map(|r| {
                 let addr = my_pmi.get("epname", &address_bytes.len(), &r).unwrap();
-                unsafe { libfabric::ep::Address::from_bytes(&addr) }
+                unsafe { ep::Address::from_bytes(&addr) }
             })
             .collect();
 
@@ -202,7 +204,6 @@ impl OfiAsync {
             barrier_impl: BarrierImpl::Uninit,
             put_cnt: AtomicUsize::new(0),
             get_cnt: AtomicUsize::new(0),
-            context_bank: Mutex::new(HashMap::with_capacity(10)),
         };
 
         ofi.init_barrier()?;
@@ -210,39 +211,16 @@ impl OfiAsync {
         Ok(ofi)
     }
 
-    fn acquire_context(&self) -> libfabric::Context {
-        {
-            self.context_bank
-                .lock()
-                .entry(thread::current().id())
-                .or_insert_with(|| {
-                    let mut vec = Vec::with_capacity(10);
-                    vec.resize_with(10, || self.info_entry.allocate_context());
-                    vec
-                }) // Shall we release, allocate and lock again?
-                .pop()
-        } // Make sure the lock drops. We don't need it to allocate
-        .unwrap_or_else(|| self.info_entry.allocate_context())
-    }
-
-    fn release_context(&self, ctx: libfabric::Context) {
-        self.context_bank
-            .lock()
-            .entry(thread::current().id())
-            .or_insert_with(|| {
-                let mut vec = Vec::with_capacity(10);
-                vec.resize_with(10, || self.info_entry.allocate_context());
-                vec
-            })
-            .push(ctx);
-    }
-
     fn create_mc_group(
         &self,
         pes: &[usize],
     ) -> Result<libfabric::comm::collective::MulticastGroupCollective, libfabric::error::Error>
     {
-        // println!("Creating MC group");
+        // let table_address = match &self.mapped_addresses[pes[0]] {
+        //     _ => panic!("Address type is not table"),
+        //     MappedAddress::Table(table_address) => table_address,
+        // };
+        // println!("Creating MC group of len: {}", pes.len());
         let mut av_set = libfabric::av::AddressVectorSetBuilder::new_from_range(
             &self.av,
             &self.mapped_addresses[pes[0]],
@@ -253,17 +231,19 @@ impl OfiAsync {
         // .start_addr(&self.mapped_addresses[pes[0]])
         // .end_addr(&self.mapped_addresses[pes[0]])
         // .stride(1)
-        .build()?;
+        .build()
+        .unwrap();
 
         for pe in pes.iter().skip(1) {
-            av_set.insert(&self.mapped_addresses[*pe])?;
+            av_set.insert(&self.mapped_addresses[*pe]).unwrap();
         }
 
         let mut ctx = self.info_entry.allocate_context();
         let mc = libfabric::comm::collective::MulticastGroupCollective::new(&av_set);
         mc.join_collective_with_context(&self.ep, libfabric::enums::JoinOptions::new(), &mut ctx)
             .unwrap();
-        self.wait_for_join_event(&ctx)?;
+        self.wait_for_join_event(&ctx).unwrap();
+        // println!("Done Creating MC group");
 
         Ok(mc)
     }
@@ -306,6 +286,42 @@ impl OfiAsync {
         }
     }
 
+    fn wait_for_completion(&self, ctx: &libfabric::Context) -> Result<(), libfabric::error::Error> {
+        loop {
+            let cq_res = self.cq.read(1);
+            match cq_res {
+                Ok(completion) => match completion {
+                    libfabric::cq::Completion::Ctx(entries)
+                    | libfabric::cq::Completion::Unspec(entries) => {
+                        if entries[0].is_op_context_equal(ctx) {
+                            return Ok(());
+                        }
+                    }
+                    libfabric::cq::Completion::Msg(entries) => {
+                        if entries[0].is_op_context_equal(ctx) {
+                            return Ok(());
+                        }
+                    }
+                    libfabric::cq::Completion::Data(entries) => {
+                        if entries[0].is_op_context_equal(ctx) {
+                            return Ok(());
+                        }
+                    }
+                    libfabric::cq::Completion::Tagged(entries) => {
+                        if entries[0].is_op_context_equal(ctx) {
+                            return Ok(());
+                        }
+                    }
+                },
+                Err(err) => {
+                    if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
+                        return Err(err);
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn wait_all_put(&self) -> Result<(), libfabric::error::Error> {
         let mut cnt = self.put_cnt.load(Ordering::SeqCst);
 
@@ -338,51 +354,96 @@ impl OfiAsync {
         Ok(())
     }
 
-    async fn exchange_mr_info<T: Copy>(
+    fn wait_for_tx_cntr(&self, target: usize) -> Result<(), libfabric::error::Error> {
+        self.put_cntr.wait(target as u64, -1)
+    }
+
+    fn wait_for_rx_cntr(&self, target: usize) -> Result<(), libfabric::error::Error> {
+        self.get_cntr.wait(target as u64, -1)
+    }
+
+    fn exchange_mr_info<T: Copy>(
         &self,
         mem_slice: &[T],
-        key: &libfabric::mr::MemoryRegionKey<'_>,
+        key: &libfabric::mr::MemoryRegionKey,
         pes: &[usize],
     ) -> Result<Vec<libfabric::RemoteMemAddressInfo>, libfabric::error::Error> {
         let mem_info = libfabric::MemAddressInfo::from_slice(mem_slice, 0, key, &self.info_entry);
         let mut my_mem_bytes = mem_info.to_bytes().to_vec();
         // println!("Exchaning mr info");
         let mc = self.create_mc_group(pes)?;
+
         let mut all_mem_bytes = vec![0u8; my_mem_bytes.len() * pes.len()];
 
-        let mut ctx = self.acquire_context();
+        let mut ctx = self.info_entry.allocate_context();
+        self.ep.allgather_with_context(
+            &mut my_mem_bytes[..],
+            None,
+            &mut all_mem_bytes[..],
+            None,
+            &mc,
+            libfabric::enums::TferOptions::new(),
+            &mut ctx,
+        )?;
 
-        // println!("Calling allgather!");
-        self.ep
-            .allgather_async(
-                &mut my_mem_bytes[..],
-                None,
-                &mut all_mem_bytes[..],
-                None,
-                &mc,
-                libfabric::enums::TferOptions::new(),
-                &mut ctx,
-            )
-            .await?;
-        // println!("Done calling allgather!");
-        self.release_context(ctx);
-        // println!("Recevied the following:");
+        self.wait_for_completion(&ctx)?;
+        // println!("P{} Recevied the following:", self.my_pe);
         // for rma_iov in all_rma_iovs.iter() {
-        //     println!("{}", rma_iov.get_address());
+        //     println!("{} {:x}", rma_iov.get_address(), rma_iov.get_key());
         // }
         // println!("Done Exchaning mr info");
+
 
         Ok (
             pes
             .iter()
             .map(|&i| {
-                unsafe {libfabric::MemAddressInfo::from_bytes(&all_mem_bytes[i * my_mem_bytes.len()..(i + 1) * my_mem_bytes.len()])}
+                unsafe{ libfabric::MemAddressInfo::from_bytes(&all_mem_bytes[i * my_mem_bytes.len()..(i + 1) * my_mem_bytes.len()])}
                     .into_remote_info(&self.domain).unwrap()
             })
             .collect::<Vec<_>>()
         )
     }
 
+    fn post_put(
+        &self,
+        mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
+    ) -> Result<usize, libfabric::error::Error> {
+        loop {
+            match fun() {
+                Ok(_) => break,
+                Err(error) => {
+                    if matches!(error.kind, libfabric::error::ErrorKind::TryAgain) {
+                        self.progress()?;
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+
+        Ok(self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1)
+    }
+
+    fn post_get(
+        &self,
+        mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
+    ) -> Result<usize, libfabric::error::Error> {
+        loop {
+            match fun() {
+                Ok(_) => break,
+                Err(error) => {
+                    if matches!(error.kind, libfabric::error::ErrorKind::TryAgain) {
+                        self.progress()?;
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+
+        Ok(self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1)
+    }
 
     fn init_barrier(&mut self) -> Result<(), libfabric::error::Error> {
         let mut coll_attr = libfabric::comm::collective::CollectiveAttr::<()>::new();
@@ -394,16 +455,9 @@ impl OfiAsync {
         {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
             let barrier_size = all_pes.len() * std::mem::size_of::<usize>();
-            println!("Initing barrier");
-            #[cfg(feature = "tokio-executor")]
-            let barrier_addr = Handle::current()
-                .block_on(async { self.sub_alloc(&all_pes, barrier_size).await })?;
-
-            #[cfg(not(feature = "tokio-executor"))]
-            let barrier_addr = block_on(async { self.sub_alloc(&all_pes, barrier_size).await })?;
+            let barrier_addr = self.sub_alloc(&all_pes, barrier_size)?;
 
             self.barrier_impl = BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
-            println!("Done Initing barrier");
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
@@ -412,7 +466,7 @@ impl OfiAsync {
         }
     }
 
-    pub(crate) async fn sub_alloc(
+    pub(crate) fn sub_alloc(
         &self,
         pes: &[usize],
         size: usize,
@@ -441,19 +495,15 @@ impl OfiAsync {
         let mr = match mr {
             MaybeDisabledMemoryRegion::Disabled(disabled_mr) => {
                 match disabled_mr {
-                    libfabric::mr::DisabledMemoryRegion::EpBind(ep_binding_mr) => ep_binding_mr.enable(&self.ep),
-                    libfabric::mr::DisabledMemoryRegion::RmaEvent(_rma_event_memory_region) => todo!(),
+                    mr::DisabledMemoryRegion::EpBind(ep_binding_mr) => ep_binding_mr.enable(&self.ep),
+                    mr::DisabledMemoryRegion::RmaEvent(_rma_event_memory_region) => todo!(),
                 }.unwrap()
             }
             MaybeDisabledMemoryRegion::Enabled(mr) => mr,
         };
 
-        println!("Calling exchange_mr_info!");
-
         let remote_mem_infos = self
-            .exchange_mr_info(&mem, &mr.key()?, &pes)
-            .await?;
-        println!("Done calling exchange_mr_info!");
+            .exchange_mr_info(&mem, &mr.key()?, &pes)?;
 
             
         let remote_alloc_infos = pes
@@ -470,17 +520,27 @@ impl OfiAsync {
         Ok(mem_addr)
     }
 
-    pub(crate) async fn sub_barrier(&self, pes: &[usize]) -> Result<(), libfabric::error::Error> {
+    pub(crate) fn sub_barrier(&self, pes: &[usize]) -> Result<(), libfabric::error::Error> {
         // println!("Running barrier");
         match &self.barrier_impl {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
             }
             BarrierImpl::Collective(mc) => {
-                let mut ctx = self.acquire_context();
-
-                self.ep.barrier_async(mc, &mut ctx).await?;
-                self.release_context(ctx);
+                let mut ctx = self.info_entry.allocate_context();
+                loop {
+                    let ret = self.ep.barrier_with_context(mc, &mut ctx);
+                    match &ret {
+                        Ok(_) => break,
+                        Err(err) => {
+                            if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
+                                return ret;
+                            }
+                        }
+                    }
+                }
+                self.wait_for_completion(&ctx)?;
+                // println!("Done with barrier");
                 Ok(())
             }
             BarrierImpl::Manual(barrier_addr, barrier_id) => {
@@ -488,7 +548,6 @@ impl OfiAsync {
                 let num_pes = pes.len();
                 let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
                 let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
-                println!("Part of  calling barrier!");
 
                 for round in 0..num_rounds as usize {
                     for i in 1..=n {
@@ -498,13 +557,9 @@ impl OfiAsync {
                         );
 
                         let dst = barrier_addr + 8 * self.my_pe;
-                        println!("Calling put!");
-
                         unsafe {
-                            self.put(dst, std::slice::from_ref(&my_barrier), send_pe, false)
-                                .await?
+                            self.put(dst, std::slice::from_ref(&my_barrier), send_pe, false)?
                         };
-                        println!("Done calling put!");
                     }
 
                     for i in 1..=n {
@@ -522,19 +577,18 @@ impl OfiAsync {
                         }
                     }
                 }
-                println!("Done part of  calling barrier!");
 
                 Ok(())
             }
         }
     }
 
-    pub(crate) async unsafe fn put<T: Remote>(
+    pub(crate) unsafe fn put<T: Remote>(
         &self,
         pe: usize,
         src_addr: &[T],
         dst_addr: usize,
-        _sync: bool,
+        sync: bool,
     ) -> Result<(), libfabric::error::Error> {
         let (offset, mr, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
@@ -553,50 +607,43 @@ impl OfiAsync {
             )
         };
 
+        let desc = mr.descriptor();
         let mut remote_dst_addr =  remote_alloc_info.start().add(dst_addr - offset);
         // println!(
         //     "Putting to PE {}, addr: {}, remote_addr: {}",
         //     pe, dst_addr, remote_dst_addr
         // );
-        let desc = mr.descriptor();
+
         let remote_key = remote_alloc_info.key();
         let cntr_order =
             if std::mem::size_of_val(src_addr) < self.info_entry.tx_attr().inject_size() {
-                let order;
-                post_async!(
-                    inject_write_to_async,
-                    self.ep,
-                    order = self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1,
-                    &src_addr,
-                    &self.mapped_addresses[pe],
-                    remote_dst_addr,
-                    &remote_key
-                );
-                order
+                self.post_put(|| unsafe {
+                    self.ep.inject_write_to(
+                        src_addr,
+                        &self.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                    )
+                })?
             } else {
                 let mut curr_idx = 0;
 
                 let mut cntr_order = 0;
                 while curr_idx < src_addr.len() {
-                    let mut ctx = self.acquire_context();
                     let msg_len = std::cmp::min(
                         src_addr.len() - curr_idx,
                         self.info_entry.ep_attr().max_msg_size(),
                     );
 
-                    let order;
-                    post_async!(
-                        write_to_async,
-                        self.ep,
-                        order = self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1,
-                        &src_addr[curr_idx..curr_idx + msg_len],
-                        Some(&desc),
-                        &self.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        &mut ctx
-                    );
-                    self.release_context(ctx);
+                    let order = self.post_put(|| unsafe {
+                        self.ep.write_to(
+                            &src_addr[curr_idx..curr_idx + msg_len],
+                            Some(&desc),
+                            &self.mapped_addresses[pe],
+                            remote_dst_addr,
+                            &remote_key,
+                        )
+                    })?;
 
                     remote_dst_addr = remote_dst_addr.add(msg_len);
                     curr_idx += msg_len;
@@ -605,15 +652,20 @@ impl OfiAsync {
 
                 cntr_order
             };
+
+        if sync {
+            self.wait_for_tx_cntr(cntr_order)?;
+        }
+        // println!("Done putting");
         Ok(())
     }
 
-    pub(crate) async unsafe fn get<T: Remote>(
+    pub(crate) unsafe fn get<T: Remote>(
         &self,
         pe: usize,
         src_addr: usize,
         dst_addr: &mut [T],
-        _sync: bool,
+        sync: bool,
     ) -> Result<(), libfabric::error::Error> {
         let (offset, mr, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
@@ -633,7 +685,7 @@ impl OfiAsync {
         };
 
         let desc = mr.descriptor();
-        let mut remote_src_addr = remote_alloc_info.start().add(src_addr - offset);
+        let mut remote_src_addr =  remote_alloc_info.start().add(src_addr - offset);
         let remote_key = remote_alloc_info.key();
         // println!(
         //     "Getting from PE {}, addr: {}, remote_addr: {}",
@@ -644,27 +696,26 @@ impl OfiAsync {
 
         let mut cntr_order = 0;
         while curr_idx < dst_addr.len() {
-            let mut ctx = self.acquire_context();
             let msg_len = std::cmp::min(
                 dst_addr.len() - curr_idx,
                 self.info_entry.ep_attr().max_msg_size(),
             );
-            let order;
-            post_async!(
-                read_from_async,
-                self.ep,
-                order = self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1,
-                &mut dst_addr[curr_idx..curr_idx + msg_len],
-                Some(&desc),
-                &self.mapped_addresses[pe],
-                remote_src_addr,
-                &remote_key,
-                &mut ctx
-            );
+            let order = self.post_get(|| unsafe {
+                self.ep.read_from(
+                    &mut dst_addr[curr_idx..curr_idx + msg_len],
+                    Some(&desc),
+                    &self.mapped_addresses[pe],
+                    remote_src_addr,
+                    &remote_key,
+                )
+            })?;
             remote_src_addr = remote_src_addr.add(msg_len);
             curr_idx += msg_len;
             cntr_order = order;
-            self.release_context(ctx);
+        }
+
+        if sync {
+            self.wait_for_rx_cntr(cntr_order)?;
         }
 
         Ok(())
@@ -691,227 +742,227 @@ impl OfiAsync {
     }
 }
 
-impl Drop for OfiAsync {
+impl Drop for Ofi {
     fn drop(&mut self) {
         self.wait_all_get().unwrap();
         self.wait_all_put().unwrap();
     }
 }
 
-unsafe impl Send for AllocInfoManager {}
-unsafe impl Sync for AllocInfoManager {}
+// pub(crate) struct AllocInfoManager {
+//     pub(crate) mr_info_table: RwLock<Vec<AllocInfo>>,
+//     mr_next_key: AtomicUsize,
+//     page_size: usize,
+// }
 
-pub(crate) struct AllocInfoManager {
-    pub(crate) mr_info_table: RwLock<Vec<AllocInfo>>,
-    mr_next_key: AtomicUsize,
-    page_size: usize,
-}
+// impl AllocInfoManager {
+//     pub(crate) fn new() -> Self {
+//         Self {
+//             mr_info_table: RwLock::new(Vec::new()),
+//             mr_next_key: AtomicUsize::new(0),
+//             page_size: page_size::get(),
+//         }
+//     }
 
-impl AllocInfoManager {
-    pub(crate) fn new() -> Self {
-        Self {
-            mr_info_table: RwLock::new(Vec::new()),
-            mr_next_key: AtomicUsize::new(0),
-            page_size: page_size::get(),
-        }
-    }
+//     pub(crate) fn insert(&self, alloc: AllocInfo) {
+//         self.mr_info_table.write().push(alloc)
+//     }
 
-    pub(crate) fn insert(&self, alloc: AllocInfo) {
-        self.mr_info_table.write().push(alloc)
-    }
+//     pub(crate) fn remove(&self, mem_addr: &usize) {
+//         let mut table = self.mr_info_table.write();
+//         let idx = table
+//             .iter()
+//             .position(|e| e.start() == *mem_addr)
+//             .expect("Error! Invalid memory address");
 
-    pub(crate) fn remove(&self, mem_addr: &usize) {
-        let mut table = self.mr_info_table.write();
-        let idx = table
-            .iter()
-            .position(|e| e.start() == *mem_addr)
-            .expect("Error! Invalid memory address");
+//         table.remove(idx);
+//     }
 
-        table.remove(idx);
-    }
+//     pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &RemoteMemoryAddress) -> Option<usize> {
+//         let table = self.mr_info_table.read();
+//         if let Some(alloc_info) = table
+//             .iter()
+//             .find(|x| x.remote_contains_remote(remote_pe, remote_addr))
+//         {
+//             Some(unsafe{remote_addr.offset_from(alloc_info.remote_start(&remote_pe))} as usize + alloc_info.start())
+//         } else {
+//             None
+//         }
+//     }
 
-    pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &RemoteMemoryAddress) -> Option<usize> {
-        let table = self.mr_info_table.read();
-        if let Some(alloc_info) = table
-            .iter()
-            .find(|x| x.remote_contains_remote(remote_pe, remote_addr))
-        {
-            Some(unsafe{remote_addr.offset_from(alloc_info.remote_start(&remote_pe))} as usize + alloc_info.start())
-        } else {
-            None
-        }
-    }
+//     pub(crate) fn remote_addr(&self, remote_pe: &usize, local_addr: &usize) -> Option<RemoteMemoryAddress> {
+//         let table = self.mr_info_table.read();
+//         if let Some(alloc_info) = table.iter().find(|x| x.contains(local_addr)) {
+//             if let Some(remote_alloc_info) = alloc_info.remote_allocs.get(remote_pe) {
+//                 Some(unsafe{remote_alloc_info.start().add(local_addr - alloc_info.start())})
+//             } else {
+//                 None
+//             }
+//         } else {
+//             None
+//         }
+//     }
 
-    pub(crate) fn remote_addr(&self, remote_pe: &usize, local_addr: &usize) -> Option<RemoteMemoryAddress> {
-        let table = self.mr_info_table.read();
-        if let Some(alloc_info) = table.iter().find(|x| x.contains(local_addr)) {
-            if let Some(remote_alloc_info) = alloc_info.remote_allocs.get(remote_pe) {
-                Some(unsafe{remote_alloc_info.start().add(local_addr - alloc_info.start())})
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
+//     pub(crate) fn page_size(&self) -> usize {
+//         self.page_size
+//     }
 
-    pub(crate) fn page_size(&self) -> usize {
-        self.page_size
-    }
+//     pub(crate) fn next_key(&self) -> usize {
+//         self.mr_next_key.fetch_add(1, Ordering::SeqCst)
+//     }
+// }
 
-    pub(crate) fn next_key(&self) -> usize {
-        self.mr_next_key.fetch_add(1, Ordering::SeqCst)
-    }
-}
-#[derive(Clone)]
-pub(crate) struct RemoteAllocInfo {
-    remote_mem_info: libfabric::RemoteMemAddressInfo,
-    start_addr: RemoteMemoryAddress,
-    end_addr: RemoteMemoryAddress,
-}
+// #[derive(Clone)]
+// pub(crate) struct RemoteAllocInfo {
+//     remote_mem_info: libfabric::RemoteMemAddressInfo,
+//     start_addr: RemoteMemoryAddress,
+//     end_addr: RemoteMemoryAddress,
+// }
 
-impl RemoteAllocInfo {
-    pub(crate) fn new (
-        remote_mem_info: libfabric::RemoteMemAddressInfo,
-    ) -> Self {
-        Self {
-            start_addr: remote_mem_info.mem_address(),
-            end_addr: unsafe{remote_mem_info.mem_address().add(remote_mem_info.mem_len())},
-            remote_mem_info,
-        }
-    }
+// impl RemoteAllocInfo {
+//     pub(crate) fn new (
+//         remote_mem_info: libfabric::RemoteMemAddressInfo,
+//     ) -> Self {
+//         Self {
+//             start_addr: remote_mem_info.mem_address(),
+//             end_addr: unsafe{remote_mem_info.mem_address().add(remote_mem_info.mem_len())},
+//             remote_mem_info,
+//         }
+//     }
 
-    pub(crate) fn start(&self) -> &RemoteMemoryAddress {
-        &self.start_addr
-    }
+//     pub(crate) fn start(&self) -> &RemoteMemoryAddress {
+//         &self.start_addr
+//     }
 
-    pub(crate) fn end(&self) -> &RemoteMemoryAddress {
-        &self.end_addr
-    }
+//     pub(crate) fn end(&self) -> &RemoteMemoryAddress {
+//         &self.end_addr
+//     }
 
-    pub(crate) fn key(&self) -> libfabric::mr::MappedMemoryRegionKey {
-        self.remote_mem_info.key()
-    }
+//     pub(crate) fn key(&self) -> libfabric::mr::MappedMemoryRegionKey {
+//         self.remote_mem_info.key()
+//     }
 
-    pub(crate) fn contains_remote(&self, addr: &RemoteMemoryAddress) -> bool {
-        &self.start_addr <= addr
-            && addr < &self.end_addr
-    }
+//     pub(crate) fn contains_remote(&self, addr: &RemoteMemoryAddress) -> bool {
+//         &self.start_addr <= addr
+//             && addr < &self.end_addr
+//     }
 
-    pub(crate) fn contains_local(&self, addr: &usize) -> bool {
-        &(self.start_addr.as_ptr() as usize) <= addr
-            && addr < &(self.end_addr.as_ptr() as usize)
-    }
-}
+//     pub(crate) fn contains_local(&self, addr: &usize) -> bool {
+//         &(self.start_addr.as_ptr() as usize) <= addr
+//             && addr < &(self.end_addr.as_ptr() as usize)
+//     }
+// }
 
-pub(crate) struct AllocInfo {
-    _mem: memmap::MmapMut,
-    mr: Arc<libfabric::mr::MemoryRegion>,
-    range: std::ops::Range<usize>,
-    remote_allocs: HashMap<usize, RemoteAllocInfo>,
-}
+// pub(crate) struct AllocInfo {
+//     _mem: memmap::MmapMut,
+//     mr: Arc<libfabric::mr::MemoryRegion>,
+//     range: std::ops::Range<usize>,
+//     remote_allocs: HashMap<usize, RemoteAllocInfo>,
+// }
 
-impl AllocInfo {
-    pub(crate) fn new(
-        mem: memmap::MmapMut,
-        mr: Arc<libfabric::mr::MemoryRegion>,
-        remote_allocs: HashMap<usize, RemoteAllocInfo>,
-    ) -> Result<Self, libfabric::error::Error> {
-        let start = mem.as_ptr() as usize;
-        let end = start + mem.len();
+// impl AllocInfo {
+//     pub(crate) fn new(
+//         mem: memmap::MmapMut,
+//         mr: Arc<libfabric::mr::MemoryRegion>,
+//         remote_allocs: HashMap<usize, RemoteAllocInfo>,
+//     ) -> Result<Self, libfabric::error::Error> {
+//         let start = mem.as_ptr() as usize;
+//         let end = start + mem.len();
 
-        Ok(Self {
-            _mem: mem,
-            mr,
-            range: std::ops::Range { start, end },
-            remote_allocs,
-        })
-    }
+//         Ok(Self {
+//             _mem: mem,
+//             mr,
+//             range: std::ops::Range { start, end },
+//             remote_allocs,
+//         })
+//     }
 
-    pub(crate) fn start(&self) -> usize {
-        self.range.start
-    }
+//     pub(crate) fn start(&self) -> usize {
+//         self.range.start
+//     }
 
-    #[allow(dead_code)]
-    pub(crate) fn remote_start(&self, remote_id: &usize) -> &RemoteMemoryAddress {
-        self.remote_allocs
-            .get(remote_id)
-            .expect(&format!(
-                "PE {} is not part of the sub allocation group",
-                remote_id
-            ))
-            .start()
-    }
+//     #[allow(dead_code)]
+//     pub(crate) fn remote_start(&self, remote_id: &usize) -> &RemoteMemoryAddress {
+//         self.remote_allocs
+//             .get(remote_id)
+//             .expect(&format!(
+//                 "PE {} is not part of the sub allocation group",
+//                 remote_id
+//             ))
+//             .start()
+//     }
 
-    #[allow(dead_code)]
-    pub(crate) fn remote_end(&self, remote_id: &usize) -> &RemoteMemoryAddress {
-        self.remote_allocs
-            .get(remote_id)
-            .expect(&format!(
-                "PE {} is not part of the sub allocation group",
-                remote_id
-            ))
-            .end()
-    }
+//     #[allow(dead_code)]
+//     pub(crate) fn remote_end(&self, remote_id: &usize) -> &RemoteMemoryAddress {
+//         self.remote_allocs
+//             .get(remote_id)
+//             .expect(&format!(
+//                 "PE {} is not part of the sub allocation group",
+//                 remote_id
+//             ))
+//             .end()
+//     }
 
-    #[allow(dead_code)]
-    pub(crate) fn end(&self) -> usize {
-        self.range.end
-    }
+//     #[allow(dead_code)]
+//     pub(crate) fn end(&self) -> usize {
+//         self.range.end
+//     }
 
-    #[allow(dead_code)]
-    pub(crate) fn remote_key(&self, remote_id: &usize) -> libfabric::mr::MappedMemoryRegionKey {
-        self.remote_allocs
-            .get(remote_id)
-            .expect(&format!(
-                "PE {} is not part of the sub allocation group",
-                remote_id
-            ))
-            .key()
-    }
 
-    pub(crate) fn contains(&self, addr: &usize) -> bool {
-        self.range.contains(addr)
-    }
+//     #[allow(dead_code)]
+//     pub(crate) fn remote_key(&self, remote_id: &usize) -> libfabric::mr::MappedMemoryRegionKey {
+//         self.remote_allocs
+//             .get(remote_id)
+//             .expect(&format!(
+//                 "PE {} is not part of the sub allocation group",
+//                 remote_id
+//             ))
+//             .key()
+//     }
 
-    #[allow(dead_code)]
-    pub(crate) fn remote_contains_local(&self, remote_id: &usize, addr: &usize) -> bool {
-        self.remote_allocs
-            .get(remote_id)
-            .expect(&format!(
-                "PE {} is not part of the sub allocation group",
-                remote_id
-            ))
-            .contains_local(addr)
-    }
+//     pub(crate) fn contains(&self, addr: &usize) -> bool {
+//         self.range.contains(addr)
+//     }
 
-    #[allow(dead_code)]
-    pub(crate) fn remote_contains_remote(&self, remote_id: &usize, addr: &RemoteMemoryAddress) -> bool {
-        self.remote_allocs
-            .get(remote_id)
-            .expect(&format!(
-                "PE {} is not part of the sub allocation group",
-                remote_id
-            ))
-            .contains_remote(addr)
-    }
+//     #[allow(dead_code)]
+//     pub(crate) fn remote_contains_local(&self, remote_id: &usize, addr: &usize) -> bool {
+//         self.remote_allocs
+//             .get(remote_id)
+//             .expect(&format!(
+//                 "PE {} is not part of the sub allocation group",
+//                 remote_id
+//             ))
+//             .contains_local(addr)
+//     }
 
-    pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteAllocInfo> {
-        self.remote_allocs.get(remote_pe).cloned()
-    }
+//     #[allow(dead_code)]
+//     pub(crate) fn remote_contains_remote(&self, remote_id: &usize, addr: &RemoteMemoryAddress) -> bool {
+//         self.remote_allocs
+//             .get(remote_id)
+//             .expect(&format!(
+//                 "PE {} is not part of the sub allocation group",
+//                 remote_id
+//             ))
+//             .contains_remote(addr)
+//     }
 
-    pub(crate) fn mr(&self) -> Arc<libfabric::mr::MemoryRegion> {
-        self.mr.clone()
-    }
+//     pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteAllocInfo> {
+//         self.remote_allocs.get(remote_pe).cloned()
+//     }
 
-}
 
-fn euclid_rem(a: i64, b: i64) -> usize {
-    let r = a % b;
+//     #[allow(dead_code)]
+//     pub(crate) fn mr(&self) -> Arc<libfabric::mr::MemoryRegion> {
+//         self.mr.clone()
+//     }
+// }
 
-    if r >= 0 {
-        r as usize
-    } else {
-        (r + b.abs()) as usize
-    }
-}
+// fn euclid_rem(a: i64, b: i64) -> usize {
+//     let r = a % b;
+
+//     if r >= 0 {
+//         r as usize
+//     } else {
+//         (r + b.abs()) as usize
+//     }
+// }

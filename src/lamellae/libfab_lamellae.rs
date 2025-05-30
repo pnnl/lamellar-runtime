@@ -1,7 +1,7 @@
 use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::libfabric::libfabric_comm::{LibFabComm, LibFabData};
+use crate::lamellae::libfabric_rs::libfabric_sync::libfabric_comm::{LibFabComm, LibFabData};
 use crate::lamellae::{
     AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
     Ser, SerializeHeader, SerializedData, SerializedDataOps, SERIALIZE_HEADER_LEN,

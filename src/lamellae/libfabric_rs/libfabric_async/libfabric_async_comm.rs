@@ -429,8 +429,6 @@ impl CommOps for LibFabAsyncComm {
     }
 
     fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        println!("Calling get");
-        
         if pe != self.my_pe {
             #[cfg(feature = "tokio-executor")]
             Handle::current().block_on(async {unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await.unwrap()});
@@ -444,13 +442,11 @@ impl CommOps for LibFabAsyncComm {
                 std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
             }
         }
-        println!("Done Calling get");
     }
 
     //#[tracing::instrument(skip_all)]
     fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>{
         let fut = async move {
-
             if pe != self.my_pe {
                 let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
                 self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
@@ -524,7 +520,6 @@ impl CommOps for LibFabAsyncComm {
         };
 
         CommOpHandle::new(fut)
-
     }
 
     #[allow(non_snake_case)]
