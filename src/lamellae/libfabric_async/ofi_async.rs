@@ -1,3 +1,4 @@
+use libfabric::RemoteMemoryAddress;
 use crate::lamellae::comm::Remote;
 use crate::parking_lot::RwLock;
 #[cfg(not(feature = "tokio-executor"))]
@@ -5,17 +6,11 @@ use async_std::task::block_on;
 use libfabric::async_::comm::collective::AsyncCollectiveEp;
 use libfabric::async_::comm::rma::AsyncReadEp;
 use libfabric::async_::comm::rma::AsyncWriteEp;
-use libfabric::async_::ep;
 use libfabric::av::AvInAddress;
 use libfabric::cntr::WaitCntr;
-use libfabric::comm::rma::WriteEp;
 use libfabric::cq::ReadCq;
-use libfabric::cq::SingleCompletion;
-use libfabric::ep::ActiveEndpoint;
-use libfabric::ep::Address;
 use libfabric::ep::BaseEndpoint;
 use libfabric::info::Version;
-use libfabric::iovec::RmaIoVec;
 use libfabric::mr::MaybeDisabledMemoryRegion;
 use libfabric::CntrCaps;
 use libfabric::FabInfoCaps;
@@ -23,7 +18,6 @@ use libfabric::MappedAddress;
 use parking_lot::Mutex;
 use pmi::pmi::Pmi;
 use std::collections::HashMap;
-use std::process::Output;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -344,53 +338,26 @@ impl OfiAsync {
         Ok(())
     }
 
-    async fn exchange_mr_info(
+    async fn exchange_mr_info<T: Copy>(
         &self,
-        addr: usize,
-        len: usize,
+        mem_slice: &[T],
         key: &libfabric::mr::MemoryRegionKey<'_>,
         pes: &[usize],
-    ) -> Result<Vec<libfabric::iovec::RmaIoVec>, libfabric::error::Error> {
+    ) -> Result<Vec<libfabric::RemoteMemAddressInfo>, libfabric::error::Error> {
+        let mem_info = libfabric::MemAddressInfo::from_slice(mem_slice, 0, key, &self.info_entry);
+        let mut my_mem_bytes = mem_info.to_bytes().to_vec();
         // println!("Exchaning mr info");
         let mc = self.create_mc_group(pes)?;
+        let mut all_mem_bytes = vec![0u8; my_mem_bytes.len() * pes.len()];
 
-        let key_bytes = key.to_bytes();
-        let key_len = key_bytes.len();
-        if key_len > std::mem::size_of::<u64>() {
-            panic!("Key size does not fit");
-        }
-        let mut key = 0u64;
-        unsafe {
-            std::slice::from_raw_parts_mut(&mut key as *mut u64 as *mut u8, 8)
-                .copy_from_slice(&key_bytes)
-        };
-        // println!("PE {} sending : {}", self.my_pe, addr);
-        let mut my_rma_iov = libfabric::iovec::RmaIoVec::new()
-            .address(addr as u64)
-            .len(len)
-            .key(key);
-
-        let mut all_rma_iovs = vec![libfabric::iovec::RmaIoVec::new(); pes.len()];
-
-        let my_iov_bytes = unsafe {
-            std::slice::from_raw_parts_mut(
-                (&mut my_rma_iov) as *mut RmaIoVec as *mut u8,
-                std::mem::size_of_val(&my_rma_iov),
-            )
-        };
-        let all_iov_bytes = unsafe {
-            std::slice::from_raw_parts_mut(
-                all_rma_iovs.as_mut_ptr() as *mut u8,
-                std::mem::size_of_val(&all_rma_iovs),
-            )
-        };
         let mut ctx = self.acquire_context();
+
         // println!("Calling allgather!");
         self.ep
             .allgather_async(
-                my_iov_bytes,
+                &mut my_mem_bytes[..],
                 None,
-                all_iov_bytes,
+                &mut all_mem_bytes[..],
                 None,
                 &mc,
                 libfabric::enums::TferOptions::new(),
@@ -405,7 +372,15 @@ impl OfiAsync {
         // }
         // println!("Done Exchaning mr info");
 
-        Ok(all_rma_iovs)
+        Ok (
+            pes
+            .iter()
+            .map(|&i| {
+                unsafe {libfabric::MemAddressInfo::from_bytes(&all_mem_bytes[i * my_mem_bytes.len()..(i + 1) * my_mem_bytes.len()])}
+                    .into_remote_info(&self.domain).unwrap()
+            })
+            .collect::<Vec<_>>()
+        )
     }
 
 
@@ -475,20 +450,17 @@ impl OfiAsync {
 
         println!("Calling exchange_mr_info!");
 
-        let rma_iovs = self
-            .exchange_mr_info(mem.as_ptr() as usize, mem.len(), &mr.key()?, &pes)
+        let remote_mem_infos = self
+            .exchange_mr_info(&mem, &mr.key()?, &pes)
             .await?;
         println!("Done calling exchange_mr_info!");
 
+            
         let remote_alloc_infos = pes
             .iter()
-            .zip(rma_iovs)
-            .map(|(pe, rma_iov)| {
-                let key_bytes = unsafe {std::slice::from_raw_parts(&rma_iov.get_key() as *const u64 as *const u8, std::mem::size_of::<u64>()) };
-                let mapped_key =
-                    unsafe { libfabric::mr::MappedMemoryRegionKey::from_raw(key_bytes, &self.domain) }
-                        .unwrap();
-                (*pe, RemoteAllocInfo::from_rma_iov(rma_iov, mapped_key))
+            .zip(remote_mem_infos)
+            .map(|(pe, remote_mem_info)| {
+                (*pe, RemoteAllocInfo::new(remote_mem_info))
             })
             .collect();
 
@@ -581,7 +553,7 @@ impl OfiAsync {
             )
         };
 
-        let mut remote_dst_addr = dst_addr - offset + remote_alloc_info.start();
+        let mut remote_dst_addr =  remote_alloc_info.start().add(dst_addr - offset);
         // println!(
         //     "Putting to PE {}, addr: {}, remote_addr: {}",
         //     pe, dst_addr, remote_dst_addr
@@ -597,8 +569,8 @@ impl OfiAsync {
                     order = self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1,
                     &src_addr,
                     &self.mapped_addresses[pe],
-                    remote_dst_addr as u64,
-                    remote_key
+                    remote_dst_addr,
+                    &remote_key
                 );
                 order
             } else {
@@ -620,13 +592,13 @@ impl OfiAsync {
                         &src_addr[curr_idx..curr_idx + msg_len],
                         Some(&desc),
                         &self.mapped_addresses[pe],
-                        remote_dst_addr as u64,
-                        remote_key,
+                        remote_dst_addr,
+                        &remote_key,
                         &mut ctx
                     );
                     self.release_context(ctx);
 
-                    remote_dst_addr += msg_len;
+                    remote_dst_addr = remote_dst_addr.add(msg_len);
                     curr_idx += msg_len;
                     cntr_order = order;
                 }
@@ -661,7 +633,7 @@ impl OfiAsync {
         };
 
         let desc = mr.descriptor();
-        let mut remote_src_addr = src_addr - offset + remote_alloc_info.start();
+        let mut remote_src_addr = remote_alloc_info.start().add(src_addr - offset);
         let remote_key = remote_alloc_info.key();
         // println!(
         //     "Getting from PE {}, addr: {}, remote_addr: {}",
@@ -685,11 +657,11 @@ impl OfiAsync {
                 &mut dst_addr[curr_idx..curr_idx + msg_len],
                 Some(&desc),
                 &self.mapped_addresses[pe],
-                remote_src_addr as u64,
-                remote_key,
+                remote_src_addr,
+                &remote_key,
                 &mut ctx
             );
-            remote_src_addr += msg_len;
+            remote_src_addr = remote_src_addr.add(msg_len);
             curr_idx += msg_len;
             cntr_order = order;
             self.release_context(ctx);
@@ -698,16 +670,17 @@ impl OfiAsync {
         Ok(())
     }
 
-    pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &usize) -> usize {
+    pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &RemoteMemoryAddress) -> usize {
         self.alloc_manager
             .local_addr(remote_pe, remote_addr)
-            .expect(&format!(
-                "Local address not found from remote PE {}, remote addr: {}",
-                remote_pe, remote_addr
-            ))
+            .unwrap()
+            // .expect(&format!(
+            //     "Local address not found from remote PE {}, remote addr: {}",
+            //     remote_pe, remote_addr
+            // ))
     }
 
-    pub(crate) fn remote_addr(&self, pe: &usize, local_addr: &usize) -> usize {
+    pub(crate) fn remote_addr(&self, pe: &usize, local_addr: &usize) -> RemoteMemoryAddress {
         self.alloc_manager
             .remote_addr(pe, local_addr)
             .expect(&format!("Remote address not found for PE {}", pe))
@@ -757,23 +730,23 @@ impl AllocInfoManager {
         table.remove(idx);
     }
 
-    pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &usize) -> Option<usize> {
+    pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &RemoteMemoryAddress) -> Option<usize> {
         let table = self.mr_info_table.read();
         if let Some(alloc_info) = table
             .iter()
-            .find(|x| x.remote_contains(remote_pe, remote_addr))
+            .find(|x| x.remote_contains_remote(remote_pe, remote_addr))
         {
-            Some(remote_addr - alloc_info.remote_start(&remote_pe) + alloc_info.start())
+            Some(unsafe{remote_addr.offset_from(alloc_info.remote_start(&remote_pe))} as usize + alloc_info.start())
         } else {
             None
         }
     }
 
-    pub(crate) fn remote_addr(&self, remote_pe: &usize, local_addr: &usize) -> Option<usize> {
+    pub(crate) fn remote_addr(&self, remote_pe: &usize, local_addr: &usize) -> Option<RemoteMemoryAddress> {
         let table = self.mr_info_table.read();
         if let Some(alloc_info) = table.iter().find(|x| x.contains(local_addr)) {
             if let Some(remote_alloc_info) = alloc_info.remote_allocs.get(remote_pe) {
-                Some(local_addr - alloc_info.start() + remote_alloc_info.start())
+                Some(unsafe{remote_alloc_info.start().add(local_addr - alloc_info.start())})
             } else {
                 None
             }
@@ -792,46 +765,42 @@ impl AllocInfoManager {
 }
 #[derive(Clone)]
 pub(crate) struct RemoteAllocInfo {
-    key: libfabric::mr::MappedMemoryRegionKey,
-    range: std::ops::Range<usize>,
+    remote_mem_info: libfabric::RemoteMemAddressInfo,
+    start_addr: RemoteMemoryAddress,
+    end_addr: RemoteMemoryAddress,
 }
 
 impl RemoteAllocInfo {
-    pub(crate) fn from_rma_iov(
-        rma_iov: libfabric::iovec::RmaIoVec,
-        key: libfabric::mr::MappedMemoryRegionKey,
+    pub(crate) fn new (
+        remote_mem_info: libfabric::RemoteMemAddressInfo,
     ) -> Self {
-        let start = rma_iov.get_address() as usize;
-        let end = start + rma_iov.get_len();
-
         Self {
-            key,
-            range: std::ops::Range { start, end },
+            start_addr: remote_mem_info.mem_address(),
+            end_addr: unsafe{remote_mem_info.mem_address().add(remote_mem_info.mem_len())},
+            remote_mem_info,
         }
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn new(
-        range: std::ops::Range<usize>,
-        key: libfabric::mr::MappedMemoryRegionKey,
-    ) -> Self {
-        Self { key, range }
+    pub(crate) fn start(&self) -> &RemoteMemoryAddress {
+        &self.start_addr
     }
 
-    pub(crate) fn start(&self) -> usize {
-        self.range.start
+    pub(crate) fn end(&self) -> &RemoteMemoryAddress {
+        &self.end_addr
     }
 
-    pub(crate) fn end(&self) -> usize {
-        self.range.end
+    pub(crate) fn key(&self) -> libfabric::mr::MappedMemoryRegionKey {
+        self.remote_mem_info.key()
     }
 
-    pub(crate) fn key(&self) -> &libfabric::mr::MappedMemoryRegionKey {
-        &self.key
+    pub(crate) fn contains_remote(&self, addr: &RemoteMemoryAddress) -> bool {
+        &self.start_addr <= addr
+            && addr < &self.end_addr
     }
 
-    pub(crate) fn contains(&self, addr: &usize) -> bool {
-        self.range.contains(addr)
+    pub(crate) fn contains_local(&self, addr: &usize) -> bool {
+        &(self.start_addr.as_ptr() as usize) <= addr
+            && addr < &(self.end_addr.as_ptr() as usize)
     }
 }
 
@@ -864,7 +833,7 @@ impl AllocInfo {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn remote_start(&self, remote_id: &usize) -> usize {
+    pub(crate) fn remote_start(&self, remote_id: &usize) -> &RemoteMemoryAddress {
         self.remote_allocs
             .get(remote_id)
             .expect(&format!(
@@ -875,7 +844,7 @@ impl AllocInfo {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn remote_end(&self, remote_id: &usize) -> usize {
+    pub(crate) fn remote_end(&self, remote_id: &usize) -> &RemoteMemoryAddress {
         self.remote_allocs
             .get(remote_id)
             .expect(&format!(
@@ -891,7 +860,7 @@ impl AllocInfo {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn remote_key(&self, remote_id: &usize) -> &libfabric::mr::MappedMemoryRegionKey {
+    pub(crate) fn remote_key(&self, remote_id: &usize) -> libfabric::mr::MappedMemoryRegionKey {
         self.remote_allocs
             .get(remote_id)
             .expect(&format!(
@@ -906,14 +875,25 @@ impl AllocInfo {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn remote_contains(&self, remote_id: &usize, addr: &usize) -> bool {
+    pub(crate) fn remote_contains_local(&self, remote_id: &usize, addr: &usize) -> bool {
         self.remote_allocs
             .get(remote_id)
             .expect(&format!(
                 "PE {} is not part of the sub allocation group",
                 remote_id
             ))
-            .contains(&addr)
+            .contains_local(addr)
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn remote_contains_remote(&self, remote_id: &usize, addr: &RemoteMemoryAddress) -> bool {
+        self.remote_allocs
+            .get(remote_id)
+            .expect(&format!(
+                "PE {} is not part of the sub allocation group",
+                remote_id
+            ))
+            .contains_remote(addr)
     }
 
     pub(crate) fn remote_info(&self, remote_pe: &usize) -> Option<RemoteAllocInfo> {

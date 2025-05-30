@@ -17,7 +17,6 @@ use crate::scheduler::Scheduler;
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
-use std::pin::Pin;
 pub(crate) mod comm;
 pub(crate) mod command_queues;
 use comm::AllocResult;

@@ -9,10 +9,7 @@ use crate::lamellae::{
 use crate::lamellar_alloc::BTreeAlloc;
 use crate::lamellar_alloc::LamellarAlloc;
 use libfabric::*;
-use parking_lot::{Mutex, RwLock};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use crate::lamellae::comm::CommOpHandle;
@@ -350,11 +347,12 @@ impl CommOps for LibFabAsyncComm {
     }
 
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
+        let remote_addr = RemoteMemoryAddress::from_raw(remote_addr as *const u8);
         self.ofi.local_addr(&remote_pe, &remote_addr)
     }
 
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
-        self.ofi.remote_addr(&pe, &local_addr)
+        self.ofi.remote_addr(&pe, &local_addr).as_ptr() as usize
     }
 
     fn flush(&self) {
