@@ -256,6 +256,7 @@ path="examples/bandwidths/readonly_array_get_bw.rs"
 name="readonly_array_get_unchecked_bw"
 path="examples/bandwidths/readonly_array_get_unchecked_bw.rs"
 
+
 ##------------ Active Message Examples -----------------##
 [[example]]
 name="am_no_return"
@@ -367,6 +368,11 @@ path="examples/array_examples/histo.rs"
 #[[example]]
 #name="single_pe_array"
 #path="examples/array_examples/single_pe_array.rs"
+
+[[example]]
+name="prefix_sum"
+path="examples/array_examples/prefix_sum.rs"
+
 
 ##------------ RDMA Examples -----------------##
 [[example]]
