@@ -15,6 +15,11 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+static LAMELLAR_THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    pub static LAMELLAR_THREAD_ID: usize = LAMELLAR_THREAD_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+}
+
 pub(crate) mod work_stealing;
 use work_stealing::WorkStealing;
 
@@ -181,6 +186,11 @@ pub(crate) trait LamellarExecutor {
         F: Future + Send + 'static,
         F::Output: Send;
 
+     fn submit_task_thread<F>(&self, future: F, tid: usize)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send;
+
     fn submit_io_task<F>(&self, future: F)
     where
         F: Future + Send + 'static,
@@ -291,6 +301,20 @@ impl Scheduler {
             // );
         };
         self.executor.submit_task(am_future);
+    }
+
+    pub(crate) fn submit_am_thread(&self, am: Am,tid: usize) {
+        let num_ams = self.num_ams.clone();
+        let max_ams = self.max_ams.clone();
+        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let ame = self.active_message_engine.clone();
+        num_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_future = async move {   
+            ame.process_msg(am, am_stall_mark, false).await;
+            num_ams.fetch_sub(1, Ordering::Relaxed);
+        };
+        self.executor.submit_task_thread(am_future, tid);
     }
 
     #[allow(dead_code)]
