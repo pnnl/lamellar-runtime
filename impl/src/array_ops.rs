@@ -282,6 +282,7 @@ fn create_buf_ops(
     optypes: &Vec<OpType>,
     rt: bool,
 ) -> proc_macro2::TokenStream {
+    // println!("[lamellar_impl] creating buf ops for type: {:?} {:?} {:?}", typeident,array_type,optypes);
     let lamellar = if rt {
         quote::format_ident!("crate")
     } else {
@@ -907,6 +908,7 @@ fn create_buf_ops(
                         index_size: index_size,
                     })
             }
+
             inventory::submit! {
                 #lamellar::array::#multi_val_multi_idx_reg_name{
                     id: #multi_val_multi_idx_id,
@@ -1216,6 +1218,7 @@ fn create_buf_ops(
     }
     //ops that return a value
 
+    // println!("creating the access stuff");
     expanded.extend(quote! {
         #[allow(non_camel_case_types)]
         #[#am_data(Debug,AmGroup(false))]
@@ -1267,9 +1270,7 @@ fn create_buf_ops(
                 res
             }
         }
-        fn #multi_val_multi_idx_id (batch_type:  #lamellar::array::BatchReturnType) -> (std::any::TypeId,std::any::TypeId,#lamellar::array::BatchReturnType) {
-            (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),batch_type)
-        }
+        
         #[allow(non_snake_case)]
         fn #dist_multi_val_multi_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>,index_usize: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_multi_idx_am_buf_fetch_name{
@@ -1278,6 +1279,10 @@ fn create_buf_ops(
                     idx_vals: idx_vals,
                     index_size: index_usize,
                 })
+        }
+        fn #multi_val_multi_idx_id (batch_type:  #lamellar::array::BatchReturnType) -> (std::any::TypeId,std::any::TypeId,#lamellar::array::BatchReturnType) {
+            // println!("in multi_val_multi_idx_id {} {}",stringify!(#typeident), stringify!(#byte_array_type));
+            (std::any::TypeId::of::<#byte_array_type>(),std::any::TypeId::of::<#typeident>(),batch_type)
         }
         inventory::submit! {
             #lamellar::array::#multi_val_multi_idx_reg_name{
@@ -2176,6 +2181,7 @@ pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
 }
 
 pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
+    // println!("__derive_arrayops called");
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident.clone();
     let the_type: syn::Type = syn::parse_quote!(#name);
@@ -2191,6 +2197,7 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
 
     for attr in &input.attrs {
         if attr.path().is_ident("array_ops") {
+            // println!("array_ops attr found");
             attr.parse_nested_meta(|temp| {
                 if temp.path.is_ident("Arithmetic") {
                     op_types.push(OpType::Arithmetic);
