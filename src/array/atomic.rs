@@ -677,6 +677,13 @@ impl AtomicByteArray {
             AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.data.team(),
         }
     }
+
+    pub(crate) fn num_elems_local(&self) -> usize {
+        match self {
+            AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.num_elems_local(),
+            AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.num_elems_local(),
+        }
+    }
 }
 
 impl crate::active_messaging::DarcSerde for AtomicByteArray {
