@@ -1025,7 +1025,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
         self.inner
             .data
             .team
-            .exec_am_local_tg(am, Some(self.team_counters()))
+            .exec_am_local_tg(am, Some(self.team_counters()),None)
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {

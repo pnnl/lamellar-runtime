@@ -273,6 +273,7 @@ pub mod memregion;
 // //#[doc(hidden)]
 pub use memregion::prelude::*;
 mod scheduler;
+pub use scheduler::LAMELLAR_THREAD_ID;
 mod utils;
 //#[doc(hidden)]
 pub use utils::*;

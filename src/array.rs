@@ -187,11 +187,11 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
+lamellar_impl::generate_reductions_for_type_rt!(true, i64);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, i64);
 
 // lamellar_impl::generate_reductions_for_type_rt!(false, f64);
 // lamellar_impl::generate_ops_for_type_rt!(false, false, false, f64);
@@ -200,18 +200,18 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 // // //------------------------------------
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 
@@ -643,6 +643,18 @@ impl LamellarByteArray {
             }
             LamellarByteArray::LocalLockArray(_) => std::any::TypeId::of::<LocalLockByteArray>(),
             LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<GlobalLockByteArray>(),
+        }
+    }
+
+    pub fn num_elems_local(&self) -> usize {
+        match self {
+            LamellarByteArray::UnsafeArray(array) => array.inner.num_elems_local(),
+            LamellarByteArray::ReadOnlyArray(array) => array.array.inner.num_elems_local(),
+            LamellarByteArray::AtomicArray(array) => array.num_elems_local(),
+            LamellarByteArray::NativeAtomicArray(array) => array.array.inner.num_elems_local(),
+            LamellarByteArray::GenericAtomicArray(array) => array.array.inner.num_elems_local(),
+            LamellarByteArray::LocalLockArray(array) => array.array.inner.num_elems_local(),
+            LamellarByteArray::GlobalLockArray(array) => array.array.inner.num_elems_local(),
         }
     }
 
@@ -1180,7 +1192,7 @@ pub(crate) mod private {
             F: LamellarActiveMessage + LocalAM + 'static,
         {
             self.team_rt()
-                .exec_am_local_tg(am, Some(self.team_counters()))
+                .exec_am_local_tg(am, Some(self.team_counters()),None)
         }
         fn exec_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where

@@ -434,6 +434,12 @@ impl LamellarTeam {
     {
         self.team.am_group_exec_am_all_tg(am, None)
     }
+
+    pub fn exec_am_local_thread<F>(&self, am: F,thread: usize) -> LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static{
+            self.team.exec_am_local_tg(am, None, Some(thread))
+        }
 }
 
 impl LamellarEnv for Arc<LamellarTeam> {
@@ -505,7 +511,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        self.team.exec_am_local_tg(am, None)
+        self.team.exec_am_local_tg(am, None,None)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -2244,7 +2250,7 @@ impl LamellarTeamRT {
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
-        self.exec_am_local_tg(am, None)
+        self.exec_am_local_tg(am, None,None)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -2252,6 +2258,7 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         am: F,
         task_group_cnts: Option<Arc<AMCounters>>,
+        thread: Option<usize>,
     ) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -2308,6 +2315,7 @@ impl LamellarTeamRT {
             inner: req,
             am: Some((Am::Local(req_data, func), 1)),
             _phantom: PhantomData,
+            thread: thread,
         }
     }
     /// allocate a shared memory region from the asymmetric heap
