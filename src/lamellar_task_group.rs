@@ -21,7 +21,6 @@ use futures_util::future::join_all;
 use futures_util::{Future, StreamExt};
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
-use tracing::{trace, warn};
 use std::collections::{BTreeMap, HashMap};
 use std::marker::PhantomData;
 use std::pin::Pin;
@@ -29,6 +28,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
+use tracing::{trace, warn};
 
 #[derive(Debug)]
 
@@ -418,7 +418,6 @@ impl<T: AmDist> LamellarRequest for TaskGroupMultiAmHandle<T> {
         }
         res
     }
-
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {

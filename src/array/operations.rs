@@ -227,6 +227,10 @@ impl<I, T: Dist> IdxVal<I, T> {
         }
     }
 
+    pub fn bytes_len() -> usize {
+        std::mem::size_of::<Self>()
+    }
+
     pub fn iter_from_bytes<'a>(index_size: usize, bytes: &'a [u8]) -> impl Iterator<Item = (usize, T)> + 'a {
         unsafe {
             match index_size {
