@@ -11,7 +11,7 @@ use crate::lamellar_alloc::LamellarAlloc;
 use libfabric::*;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use crate::lamellae::comm::CommOpHandle;
 #[cfg(feature="tokio-executor")]
 use tokio::runtime::Handle;
@@ -108,6 +108,10 @@ impl LibFabAsyncComm {
         Ok(libfab)
     }
 
+    pub(crate) fn set_scheduler(&self, scheduler: Arc<crate::lamellae::Scheduler>) {
+        self.ofi.set_scheduler(scheduler);
+    }
+
     //#[tracing::instrument(skip_all)]
     unsafe fn fill_buffer<R: Copy, T>(&self, dst_addr: &mut [T], val: R) {
         let num_r = (dst_addr.len() * std::mem::size_of::<T>()) / std::mem::size_of::<R>();
@@ -190,32 +194,31 @@ impl LibFabAsyncComm {
         Ok(())
     }
     //#[tracing::instrument(skip_all)]
-    fn iget_data<'a, T: Remote + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>{
+    fn iget_data<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]){
         // println!("iget_data {:?} {:x} {:?}", pe, src_addr, dst_addr.as_ptr());
         // let _lock = self.comm_mutex.write();
-        let fut = async move {
-            
-            println!("Calling get");
-            match unsafe{self.ofi.get(pe, src_addr, dst_addr, true)}.await {
-                Err(ret) => {
-                    println!(
-                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
-                        pe,
-                        src_addr,
-                        *self.base_address.read(),
-                        dst_addr,
-                        dst_addr.len(),
-                        ret,
-                    );
-                    panic!();
-                },
-                Ok(_) => {}
-            }
-            println!("Done Calling get");
-        };
-
-
-        CommOpHandle::new(fut)
+        // println!("Calling get");
+        // #[cfg(feature = "tokio-executor")]
+        // let res = Handle::current().block_on(async {unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await});
+        // #[cfg(not(feature = "tokio-executor"))]
+        // let res = block_on(async {unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await});
+        let res = self.ofi.scheduler.get().unwrap().clone().block_on(async {unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await});
+        match res {
+            Err(ret) => {
+                println!(
+                    "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                    pe,
+                    src_addr,
+                    *self.base_address.read(),
+                    dst_addr,
+                    dst_addr.len(),
+                    ret,
+                );
+                panic!();
+            },
+            Ok(_) => {}
+        }
+        println!("Done Calling get");
     }
     pub(crate) fn heap_size() -> usize {
         LIBFABASYNC_MEM.load(Ordering::SeqCst)
@@ -237,7 +240,7 @@ impl CommOps for LibFabAsyncComm {
             self.ofi.sub_barrier(&all_pes).await.unwrap();
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.ofi.scheduler.get().unwrap().clone())
     }
 
     fn occupied(&self) -> usize {
@@ -269,7 +272,6 @@ impl CommOps for LibFabAsyncComm {
 
     fn alloc_pool<'a>(&'a self, min_size: usize) -> CommOpHandle<'a>{
         let fut = async move {
-            let mut allocs = self.alloc.write();
             let size = std::cmp::max(
                 min_size * 2 * self.num_pes,
                 LIBFABASYNC_MEM.load(Ordering::SeqCst),
@@ -278,13 +280,14 @@ impl CommOps for LibFabAsyncComm {
                 // println!("addr: {:x} - {:x}",addr, addr+size);
                 let mut new_alloc = BTreeAlloc::new("libfab_mem".to_string());
                 new_alloc.init(addr, size);
+                let mut allocs = self.alloc.write();
                 allocs.push(new_alloc)
             } else {
                 panic!("[Error] out of system memory");
             }
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.ofi.scheduler.get().unwrap().clone())
     }
 
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
@@ -335,7 +338,7 @@ impl CommOps for LibFabAsyncComm {
             AllocationType::Sub(pes) => Ok(comm.sub_alloc(&pes, size).await.unwrap()),
         }};
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.ofi.scheduler.get().unwrap().clone())
     }
 
     fn free(&self, addr: usize) {
@@ -359,12 +362,11 @@ impl CommOps for LibFabAsyncComm {
         self.ofi.progress().unwrap()
     }
 
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         if pe != self.my_pe {
-            #[cfg(feature = "tokio-executor")]
-            Handle::current().block_on(async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()});
-            #[cfg(not(feature = "tokio-executor"))]
-            block_on(async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()});
+            self.ofi.scheduler.get().unwrap().block_on(
+                async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()}
+            );
             self.put_amt
                 .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         } else {
@@ -383,7 +385,7 @@ impl CommOps for LibFabAsyncComm {
         }
     }
 
-    fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
+    fn put<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
         let fut = async move {
             if pe != self.my_pe {
                 unsafe { self.ofi.put(pe, src_addr, dst_addr, true) }.await.unwrap();
@@ -398,55 +400,53 @@ impl CommOps for LibFabAsyncComm {
             }
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.ofi.scheduler.get().unwrap().clone())
     }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
-        for pe in 0..self.my_pe {
+    fn put_all<'a, T: Remote + Sync>(&'a self, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a>{
+        let fut = async move {
 
-            #[cfg(feature = "tokio-executor")]
-            Handle::current().block_on(async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()});
-            #[cfg(not(feature = "tokio-executor"))]
-            block_on(async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()});
-        }
-
-        for pe in self.my_pe..self.num_pes {
-            #[cfg(feature = "tokio-executor")]
-            Handle::current().block_on(async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()});
-            #[cfg(not(feature = "tokio-executor"))]
-            block_on(async move {unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap()});
-        }
-
-        unsafe {
-            std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
-        }
-
-        self.put_amt.fetch_add(
-            src_addr.len() * (self.num_pes - 1) * std::mem::size_of::<T>(),
-            Ordering::SeqCst,
-        );
-        self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
-    }
-
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-        if pe != self.my_pe {
-            #[cfg(feature = "tokio-executor")]
-            Handle::current().block_on(async {unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await.unwrap()});
-            #[cfg(not(feature = "tokio-executor"))]
-            block_on(async {unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await.unwrap()});
-            self.get_amt
-            .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        } else {
-            // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
-            unsafe {
-                std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+            for pe in 0..self.my_pe {
+                unsafe {self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap();
             }
-        }
+            
+            for pe in self.my_pe..self.num_pes {
+                unsafe { self.ofi.put(pe, src_addr, dst_addr, false) }.await.unwrap();
+            }
+            
+            unsafe {
+                std::ptr::copy(src_addr.as_ptr(), dst_addr as *mut T, src_addr.len());
+            }
+            
+            self.put_amt.fetch_add(
+                src_addr.len() * (self.num_pes - 1) * std::mem::size_of::<T>(),
+                Ordering::SeqCst,
+            );
+            self.put_cnt.fetch_add(self.num_pes - 1, Ordering::SeqCst);
+        };
+
+        CommOpHandle::new(fut, self.ofi.scheduler.get().unwrap().clone())
+    }
+
+    fn get<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>{
+        let fut = async move {
+            if pe != self.my_pe {
+                    unsafe { self.ofi.get(pe, src_addr, dst_addr, true) }.await.unwrap();
+                    self.get_amt
+                        .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+            } else {
+                // println!("[{:?}]-{:?} {:?} {:?}",self.my_pe,src_addr as *const T,dst_addr.as_mut_ptr(),dst_addr.len());
+                unsafe {
+                    std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
+                }
+            }
+        }; 
+
+        CommOpHandle::new(fut, self.ofi.scheduler.get().unwrap().clone())
     }
 
     //#[tracing::instrument(skip_all)]
-    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>{
-        let fut = async move {
+    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
             if pe != self.my_pe {
                 let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
                 self.get_amt.fetch_add(bytes_len, Ordering::SeqCst);
@@ -468,9 +468,9 @@ impl CommOps for LibFabAsyncComm {
                 if bytes_len >= std::mem::size_of::<u64>() {
                     let temp_dst_addr = &mut dst_addr[rem_bytes..];
                     self.init_buffer(temp_dst_addr);
-                    self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr).await;
+                    self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
                     while let Err(TxError::GetError) = self.check_buffer(temp_dst_addr) {
-                        self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr).await;
+                        self.iget_data(pe, src_addr + rem_bytes, temp_dst_addr);
                     }
                 }
                 if rem_bytes > 0 {
@@ -489,8 +489,8 @@ impl CommOps for LibFabAsyncComm {
                                 self.fill_buffer(temp_dst_addr, 0u8);
                                 self.fill_buffer(buf1, 1u8);
 
-                                self.iget_data(pe, src_addr, temp_dst_addr).await;
-                                self.iget_data(pe, src_addr, buf1).await;
+                                self.iget_data(pe, src_addr, temp_dst_addr);
+                                self.iget_data(pe, src_addr, buf1);
 
                                 let mut timer = std::time::Instant::now();
                                 for i in 0..temp_dst_addr.len() {
@@ -498,8 +498,8 @@ impl CommOps for LibFabAsyncComm {
                                         std::thread::yield_now();
                                         if timer.elapsed().as_secs_f64() > 1.0 {
                                             // println!("iget {:?} {:?} {:?}", i, buf0[i], buf1[i]);
-                                            self.iget_data(pe, src_addr, temp_dst_addr).await;
-                                            self.iget_data(pe, src_addr, buf1).await;
+                                            self.iget_data(pe, src_addr, temp_dst_addr);
+                                            self.iget_data(pe, src_addr, buf1);
                                             timer = std::time::Instant::now();
                                         }
                                     }
@@ -517,9 +517,6 @@ impl CommOps for LibFabAsyncComm {
                     std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
                 }
             }
-        };
-
-        CommOpHandle::new(fut)
     }
 
     #[allow(non_snake_case)]

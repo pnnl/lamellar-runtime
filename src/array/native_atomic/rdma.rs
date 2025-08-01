@@ -126,7 +126,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}",data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data).await;
                         cur_index += data.len();
                     }
                 }

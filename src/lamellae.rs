@@ -230,6 +230,7 @@ pub(crate) enum LamellaeBuilder {
 #[enum_dispatch]
 pub(crate) trait LamellaeInit {
     fn init_fabric(&mut self) -> (usize, usize); //(my_pe,num_pes)
+    fn set_scheduler(&self, scheduler: Arc<Scheduler>);
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae>;
 }
 
@@ -296,13 +297,14 @@ pub(crate) trait LamellaeAM: Send {
 #[enum_dispatch]
 pub(crate) trait LamellaeRDMA: Send + Sync {
     fn flush(&self);
-    fn put(&self, pe: usize, src: &[u8], dst: usize);
+    fn iput(&self, pe: usize, src: &[u8], dst: usize);
     #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
-    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>;
-    fn put_all(&self, src: &[u8], dst: usize);
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]);
+    fn put<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>;
     #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
-    fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>;
+    fn put_all<'a>(&'a self, src: &'a [u8], dst: usize) -> CommOpHandle<'a>;
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn get<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>;
+    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]);
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize>;
     // fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
     fn rt_free(&self, addr: usize);

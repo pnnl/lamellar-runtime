@@ -137,7 +137,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}",data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data).await;
                         cur_index += data.len();
                     }
                 }
@@ -323,17 +323,21 @@ impl LamellarAm for GlobalLockRemotePutAm {
     async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         let _lock = self.array.lock.write().await;
-        unsafe {
+        let elems = unsafe {
             match self
                 .array
                 .array
                 .local_elements_for_range(self.start_index, self.len)
             {
                 Some((elems, _)) => {
-                    self.data.blocking_get_slice(self.pe, 0, elems);
+                    Some(elems)
                 }
-                None => {}
+                None => {None}
             }
+        };
+
+        if let Some(elems) = elems {
+            unsafe {self.data.get_slice(self.pe, 0, elems).await};
         }
         // println!("done remote put");
     }

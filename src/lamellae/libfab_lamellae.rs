@@ -47,6 +47,11 @@ impl LamellaeInit for LibFabBuilder {
     fn init_fabric(&mut self) -> (usize, usize) {
         (self.my_pe, self.num_pes)
     }
+
+    fn set_scheduler(&self, scheduler: Arc<Scheduler>) {
+        self.libfab_comm.set_scheduler(scheduler);
+    }
+    
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         let libfab = LibFab::new(self.my_pe, self.num_pes, self.libfab_comm.clone());
         let cq_clone = libfab.cq();
@@ -227,23 +232,23 @@ impl LamellaeRDMA for LibFab {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.libfab_comm.put(pe, src, dst);
+    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
+        self.libfab_comm.iput(pe, src, dst);
     }
     
-    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
-        let fut = self.libfab_comm.iput(pe, src, dst);
-        CommOpHandle::new(fut)
+    fn put<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        self.libfab_comm.put(pe, src, dst)
+        // CommOpHandle::new(fut)
     }
 
-    fn put_all(&self, src: &[u8], dst: usize) {
-        self.libfab_comm.put_all(src, dst);
+    fn put_all<'a>(&'a self, src: &'a [u8], dst: usize) -> CommOpHandle<'a> {
+        self.libfab_comm.put_all(src, dst)
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.libfab_comm.get(pe, src, dst);
+    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.libfab_comm.iget(pe, src, dst);
     }
-    fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
-        self.libfab_comm.iget(pe, src, dst)
+    fn get<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
+        self.libfab_comm.get(pe, src, dst)
     }
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.libfab_comm.rt_alloc(size, align)

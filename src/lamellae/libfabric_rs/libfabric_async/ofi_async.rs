@@ -25,6 +25,7 @@ use crate::lamellae::libfabric_rs::AllocInfoManager;
 use crate::lamellae::libfabric_rs::euclid_rem;
 use crate::lamellae::libfabric_rs::RemoteAllocInfo;
 use crate::lamellae::libfabric_rs::AllocInfo;
+use std::sync::OnceLock;
 
 #[cfg(feature = "tokio-executor")]
 use tokio::runtime::Handle;
@@ -69,6 +70,7 @@ pub(crate) struct OfiAsync {
     context_bank: Mutex<HashMap<thread::ThreadId, Vec<libfabric::Context>>>,
     put_cnt: AtomicUsize,
     get_cnt: AtomicUsize,
+    pub(crate) scheduler: OnceLock<Arc<crate::lamellae::Scheduler>>,
 }
 
 impl OfiAsync {
@@ -207,11 +209,18 @@ impl OfiAsync {
             put_cnt: AtomicUsize::new(0),
             get_cnt: AtomicUsize::new(0),
             context_bank: Mutex::new(HashMap::with_capacity(10)),
+            scheduler: OnceLock::new(),
         };
 
         ofi.init_barrier()?;
 
         Ok(ofi)
+    }
+
+    pub(crate) fn set_scheduler(&self, scheduler: Arc<crate::lamellae::Scheduler>) {
+        if let Err(_) = self.scheduler.set(scheduler.clone()) {
+            panic!("Error setting scheduler for libfabric async comm");
+        }
     }
 
     fn acquire_context(&self) -> libfabric::Context {
@@ -241,7 +250,7 @@ impl OfiAsync {
             .push(ctx);
     }
 
-    fn create_mc_group(
+    async fn create_mc_group(
         &self,
         pes: &[usize],
     ) -> Result<libfabric::comm::collective::MulticastGroupCollective, libfabric::error::Error>
@@ -267,12 +276,12 @@ impl OfiAsync {
         let mc = libfabric::comm::collective::MulticastGroupCollective::new(&av_set);
         mc.join_collective_with_context(&self.ep, libfabric::enums::JoinOptions::new(), &mut ctx)
             .unwrap();
-        self.wait_for_join_event(&ctx)?;
+        self.wait_for_join_event(&ctx).await?;
 
         Ok(mc)
     }
 
-    fn wait_for_join_event(&self, ctx: &libfabric::Context) -> Result<(), libfabric::error::Error> {
+    async fn wait_for_join_event(&self, ctx: &libfabric::Context) -> Result<(), libfabric::error::Error> {
         loop {
             let eq_res = self.eq.read();
 
@@ -292,6 +301,7 @@ impl OfiAsync {
             }
 
             self.progress()?;
+            async_std::task::yield_now().await;
         }
     }
 
@@ -351,7 +361,7 @@ impl OfiAsync {
         let mem_info = libfabric::MemAddressInfo::from_slice(mem_slice, 0, key, &self.info_entry);
         let mut my_mem_bytes = mem_info.to_bytes().to_vec();
         // println!("Exchaning mr info");
-        let mc = self.create_mc_group(pes)?;
+        let mc = self.create_mc_group(pes).await?;
         let mut all_mem_bytes = vec![0u8; my_mem_bytes.len() * pes.len()];
 
         let mut ctx = self.acquire_context();
@@ -411,7 +421,17 @@ impl OfiAsync {
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
-            self.barrier_impl = BarrierImpl::Collective(self.create_mc_group(&all_pes)?);
+            #[cfg(feature = "tokio-executor")]
+            {
+
+                self.barrier_impl = Handle::current()
+                .block_on(async {BarrierImpl::Collective(self.create_mc_group(&all_pes).await.unwrap())});  
+            }
+            #[cfg(not(feature = "tokio-executor"))]
+            {
+                self.barrier_impl = block_on(async {BarrierImpl::Collective(self.create_mc_group(&all_pes).await.unwrap())});
+            }
+            
             Ok(())
         }
     }
@@ -452,12 +472,10 @@ impl OfiAsync {
             MaybeDisabledMemoryRegion::Enabled(mr) => mr,
         };
 
-        println!("Calling exchange_mr_info!");
 
         let remote_mem_infos = self
             .exchange_mr_info(&mem, &mr.key()?, &pes)
             .await?;
-        println!("Done calling exchange_mr_info!");
 
             
         let remote_alloc_infos = pes
@@ -482,7 +500,7 @@ impl OfiAsync {
             }
             BarrierImpl::Collective(mc) => {
                 let mut ctx = self.acquire_context();
-
+                // println!("Calling barrier!");
                 self.ep.barrier_async(mc, &mut ctx).await?;
                 self.release_context(ctx);
                 Ok(())
@@ -505,7 +523,7 @@ impl OfiAsync {
                         println!("Calling put!");
 
                         unsafe {
-                            self.put(dst, std::slice::from_ref(&my_barrier), send_pe, false)
+                            self.put(send_pe, std::slice::from_ref(&my_barrier), dst, false)
                                 .await?
                         };
                         println!("Done calling put!");
@@ -521,8 +539,8 @@ impl OfiAsync {
                         };
 
                         while my_barrier > barrier_vec[recv_pe] {
-                            self.progress()?;
-                            std::thread::yield_now();
+                            // self.progress()?;
+                            async_std::task::yield_now().await;
                         }
                     }
                 }
@@ -670,7 +688,7 @@ impl OfiAsync {
             cntr_order = order;
             self.release_context(ctx);
         }
-
+        
         Ok(())
     }
 

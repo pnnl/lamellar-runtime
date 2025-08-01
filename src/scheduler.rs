@@ -247,7 +247,7 @@ impl Scheduler {
             // let start_tid = thread::current().id();
 
             // println!("[{:?}] submit work exec req {:?} {:?} TaskId: {:?}", std::thread::current().id(),num_tasks.load(Ordering::Relaxed),max_tasks.load(Ordering::Relaxed),cur_task);
-            // println!("[{:?}] submit_am {:?}", std::thread::current().id(), am_id);
+            // println!("[{:?}] submit_am {:?}", std::thread::current().id(), _am_id);
             ame.process_msg(am, am_stall_mark, false).await;
             num_ams.fetch_sub(1, Ordering::Relaxed);
             // if thread::current().id() != start_tid {

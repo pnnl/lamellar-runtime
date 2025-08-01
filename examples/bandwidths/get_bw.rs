@@ -64,7 +64,7 @@ fn main() {
                         0,
                         data.sub_region(j..(j + num_bytes as usize)),
                     )
-                };
+                }.block();
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

@@ -517,7 +517,7 @@ impl<T: 'static> DarcInner<T> {
         true
     }
 
-    fn broadcast_state(
+    async fn broadcast_state(
         inner: WrappedInner<T>,
         team: Pin<Arc<LamellarTeamRT>>,
         mode_refs: &mut [u8],
@@ -528,17 +528,23 @@ impl<T: 'static> DarcInner<T> {
                 .store(state as u8, Ordering::SeqCst)
         };
         let rdma = &team.lamellae;
-        for pe in team.arch.team_iter() {
+        for pe in team.arch.team_iter().collect::<Vec<_>>() {
             // println!("darc block_on_outstanding put 3");
-            rdma.iput(
+            rdma.put(
                 pe,
                 &mode_refs[inner.my_pe..=inner.my_pe],
                 inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
-            ).block();
+            ).await;
         }
     }
 
     async fn block_on_outstanding(inner: WrappedInner<T>, state: DarcMode, extra_cnt: usize) {
+        // println!(
+        //     "[{:?}] block_on_outstanding {:?} extra_cnt = {:?}",
+        //     std::thread::current().id(),
+        //     state,
+        //     extra_cnt
+        // );
         let team = inner.team();
         let mode_refs =
             unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
@@ -572,19 +578,39 @@ impl<T: 'static> DarcInner<T> {
             };
 
             // let rel_addr = inner.inner.as_ptr() as *const _ as usize - team.lamellae.base_addr();
-
+            // println!(
+            //     "Waiting on local cnt = {:?} dist cnt = {:?} extra_cnt = {:?} barrier_id = {:?} barrier_slice = {:?}",
+            //     inner.local_cnt.load(Ordering::SeqCst),
+            //     inner.dist_cnt.load(Ordering::SeqCst),
+            //     extra_cnt,
+            //     barrier_id,
+            //     barrier_slice
+            // );
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                 async_std::task::yield_now().await;
             }
+            // println!("Done waiting on local cnt = {:?} dist cnt = {:?} extra_cnt = {:?} barrier_id = {:?} barrier_slice = {:?}",
+            //     inner.local_cnt.load(Ordering::SeqCst),
+            //     inner.dist_cnt.load(Ordering::SeqCst),
+            //     extra_cnt,
+            //     barrier_id,
+            //     barrier_slice
+            // );
+            // println!("Waiting on join_all(inner.send_finished()).await");
             join_all(inner.send_finished()).await;
+            // println!("Done waiting on join_all(inner.send_finished()).await");
 
             // println!(
             //     "[{:?}] entering initial block_on barrier()",
             //     std::thread::current().id()
             // );
+            // println!("Waiting on wait_on_state orig_state = {:?} extra_cnt = {:?}",
+                // orig_state, extra_cnt);
             if !Self::wait_on_state(inner.clone(), mode_refs, orig_state, extra_cnt, false).await {
                 panic!("deadlock waiting for original state");
             }
+            // println!("Done waiting on wait_on_state orig_state = {:?} extra_cnt = {:?}",
+                // orig_state, extra_cnt);
             let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
             barrier_fut.await;
             // println!(
@@ -599,7 +625,7 @@ impl<T: 'static> DarcInner<T> {
                         team.clone(),
                         mode_refs,
                         DarcMode::RestartDrop as u8,
-                    );
+                    ).await;
                     if !(Self::wait_on_state(
                         inner.clone(),
                         mode_refs,
@@ -611,7 +637,7 @@ impl<T: 'static> DarcInner<T> {
                     {
                         panic!("deadlock");
                     }
-                    Self::broadcast_state(inner.clone(), team.clone(), mode_refs, orig_state);
+                    Self::broadcast_state(inner.clone(), team.clone(), mode_refs, orig_state).await;
                     // team.scheduler.submit_task(async move {
                     Box::pin(DarcInner::block_on_outstanding(
                         inner.clone(),
@@ -669,7 +695,7 @@ impl<T: 'static> DarcInner<T> {
                         //     inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>()
                         // );
                         // println!("darc block_on_outstanding put 1");
-                        rdma.iput(
+                        rdma.put(
                             send_pe,
                             ref_cnt_u8,
                             inner.mode_ref_cnt_addr + inner.my_pe * std::mem::size_of::<usize>(), //this is barrier_ref_cnt_slice
@@ -765,7 +791,7 @@ impl<T: 'static> DarcInner<T> {
                     // );
 
                     // println!("darc block_on_outstanding put 2");
-                    rdma.iput(
+                    rdma.put(
                         send_pe,
                         barrier_id_slice,
                         inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
@@ -842,14 +868,14 @@ impl<T: 'static> DarcInner<T> {
             // );
             // inner.debug_print();
             // println!("[{:?}] {:?}", std::thread::current().id(), inner);
-            Self::broadcast_state(inner.clone(), team.clone(), mode_refs, state as u8);
+            Self::broadcast_state(inner.clone(), team.clone(), mode_refs, state as u8).await;
             if !Self::wait_on_state(inner.clone(), mode_refs, state as u8, extra_cnt, true).await {
                 Self::broadcast_state(
                     inner.clone(),
                     team.clone(),
                     mode_refs,
                     DarcMode::RestartDrop as u8,
-                );
+                ).await;
                 if !(Self::wait_on_state(
                     inner.clone(),
                     mode_refs,
@@ -861,7 +887,7 @@ impl<T: 'static> DarcInner<T> {
                 {
                     panic!("deadlock");
                 }
-                Self::broadcast_state(inner.clone(), team.clone(), mode_refs, orig_state);
+                Self::broadcast_state(inner.clone(), team.clone(), mode_refs, orig_state).await;
                 // team.scheduler.submit_task(async move {
                 Box::pin(DarcInner::block_on_outstanding(
                     inner.clone(),
@@ -1663,7 +1689,7 @@ macro_rules! launch_drop {
                 pe,
                 &mode_refs[$inner.my_pe..=$inner.my_pe],
                 $inner.mode_addr + $inner.my_pe * std::mem::size_of::<DarcMode>(),
-            );
+            ).block();
         }
         // team.print_cnt();
         let _ = team

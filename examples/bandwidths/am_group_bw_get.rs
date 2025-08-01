@@ -28,12 +28,11 @@ impl LamellarAM for DataAM {
             let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice().unwrap();
             local_slice[self.length - 1] = 255u8;
-            self.array.get_unchecked(self.index, local.clone());
-
-            while local_slice[self.length - 1] == 255u8 {
-                // async_std::task::yield_now().await;
-                std::thread::yield_now();
-            }
+            self.array.get_unchecked(self.index, local.clone()).await;
+            // while local_slice[self.length - 1] == 255u8 {
+            //     // async_std::task::yield_now().await;
+            //     std::thread::yield_now();
+            // }
         }
     }
 }
@@ -49,7 +48,7 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    unsafe { array.put(0, data.clone()) };
+    unsafe { array.put(0, data.clone()).block() };
     world.barrier();
     let s = Instant::now();
     world.barrier();

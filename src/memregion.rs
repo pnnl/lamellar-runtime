@@ -10,6 +10,7 @@ use crate::array::{
     LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
     TeamTryFrom,
 };
+use crate::lamellae::comm::CommOpHandle;
 use crate::lamellae::{AllocationType, Backend, Lamellae, LamellaeComm, LamellaeRDMA};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
 use crate::LamellarEnv;
@@ -492,7 +493,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///     }      
     /// }
     ///```
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) -> CommOpHandle;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
@@ -574,7 +576,8 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///     }      
     /// }
     ///```
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> CommOpHandle;
 
     #[doc(alias("One-sided", "onesided"))]
     /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
@@ -619,12 +622,13 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///     }      
     /// }
     ///```
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
     unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
-    );
+    ) -> CommOpHandle;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
@@ -674,8 +678,10 @@ pub trait MemoryRegionRDMA<T: Dist> {
 
 #[enum_dispatch]
 pub(crate) trait RTMemoryRegionRDMA<T: Dist> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]);
-    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn put_slice<'a>(&'a self, pe: usize, index: usize, data: &'a [T]) -> CommOpHandle<'a>;
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn get_slice(&self, pe: usize, index: usize, data: &mut [T]) -> CommOpHandle<'_>;
 }
 
 impl<T: Dist> Hash for LamellarMemoryRegion<T> {
@@ -840,20 +846,22 @@ impl<T: Dist> MemoryRegion<T> {
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn put<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub(crate) unsafe fn put<'a, R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+        &'a self,
         pe: usize,
         index: usize,
         data: U,
-    ) {
+    ) -> CommOpHandle<'a>
+    {
         //todo make return a result?
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
-                self.rdma
-                    .put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
+                return self.rdma
+                    .put(pe, bytes, self.addr + index * std::mem::size_of::<R>());
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -897,7 +905,7 @@ impl<T: Dist> MemoryRegion<T> {
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
                 self.rdma
-                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>()).block()
+                    .iput(pe, bytes, self.addr + index * std::mem::size_of::<R>());
             } else {
                 panic!("ERROR: put data src is not local");
             }
@@ -908,17 +916,19 @@ impl<T: Dist> MemoryRegion<T> {
     }
 
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn put_all<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub(crate) unsafe fn put_all<'a, R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+        &'a self,
         index: usize,
         data: U,
-    ) {
+    ) -> CommOpHandle<'a> 
+    {
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_ptr() {
                 let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
-                self.rdma
+                return self.rdma
                     .put_all(bytes, self.addr + index * std::mem::size_of::<R>());
             } else {
                 panic!("ERROR: put data src is not local");
@@ -939,19 +949,21 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn get_unchecked<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub(crate) unsafe fn get_unchecked<'a, R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+        &'a self,
         pe: usize,
         index: usize,
         data: U,
-    ) {
+    ) -> CommOpHandle<'a> 
+    {
         let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
             if let Ok(ptr) = data.as_mut_ptr() {
                 let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
                 // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
-                self.rdma
+                return self.rdma
                     .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
@@ -986,7 +998,33 @@ impl<T: Dist> MemoryRegion<T> {
                 let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
                 // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
                 self.rdma
-                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes).block();
+                    .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
+            //(remote pe, src, dst)
+            // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
+            } else {
+                panic!("ERROR: get data dst is not local");
+            }
+        } else {
+            println!("{:?} {:?} {:?}", self.size, index, data.len(),);
+            panic!("index out of bounds");
+        }
+    }
+
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub(crate) unsafe fn get<'a, R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+        &'a self,
+        pe: usize,
+        index: usize,
+        data: U,
+    )-> CommOpHandle<'a> {
+        let data = data.into();
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+            let num_bytes = data.len() * std::mem::size_of::<R>();
+            if let Ok(ptr) = data.as_mut_ptr() {
+                let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
+                // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
+                self.rdma
+                    .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes)
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
             } else {
@@ -1000,7 +1038,8 @@ impl<T: Dist> MemoryRegion<T> {
 
     //we must ensure the the slice will live long enough and that it already exsists in registered memory
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn put_slice<R: Dist>(&self, pe: usize, index: usize, data: &[R]) {
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub(crate) unsafe fn put_slice<'a, R: Dist>(&'a self, pe: usize, index: usize, data: &'a [R]) -> CommOpHandle<'a>{
         //todo make return a result?
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
@@ -1016,7 +1055,7 @@ impl<T: Dist> MemoryRegion<T> {
             //     self.addr + index * std::mem::size_of::<T>(),
             //     pe,
             // );
-            self.rdma
+            return self.rdma
                 .put(pe, bytes, self.addr + index * std::mem::size_of::<R>())
         } else {
             println!(
@@ -1037,12 +1076,13 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     ///    data will be present within the buffer once this returns.
     //#[tracing::instrument(skip_all)]
-    pub(crate) unsafe fn blocking_get_slice<R: Dist>(
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub(crate) unsafe fn get_slice<R: Dist>(
         &self,
         pe: usize,
         index: usize,
         data: &mut [R],
-    ) {
+    ) -> CommOpHandle<'_>{
         // let data = data.into();
         if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
             let num_bytes = data.len() * std::mem::size_of::<R>();
@@ -1050,7 +1090,7 @@ impl<T: Dist> MemoryRegion<T> {
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
             self.rdma
-                .iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes).block();
+                .get(pe, self.addr + index * std::mem::size_of::<R>(), bytes)
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
         } else {
@@ -1073,7 +1113,7 @@ impl<T: Dist> MemoryRegion<T> {
             let my_offset = self.addr + my_index * std::mem::size_of::<R>();
             let bytes = std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes);
             let local_addr = self.rdma.local_addr(pe, addr);
-            self.rdma.iget(pe, local_addr, bytes).block();
+            self.rdma.iget(pe, local_addr, bytes);
         } else {
             println!(
                 "mem region len: {:?} index: {:?} data len{:?}",

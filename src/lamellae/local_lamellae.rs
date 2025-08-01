@@ -10,12 +10,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use crate::lamellae::comm::CommOpHandle;
 use async_trait::async_trait;
+use std::sync::OnceLock;
 
 #[derive(Clone)]
 pub(crate) struct Local {
     // am: Arc<LocalLamellaeAM>,
     // rdma: Arc<LocalLamellaeRDMA>,
     allocs: Arc<Mutex<HashMap<usize, MyPtr>>>,
+    scheduler: OnceLock<Arc<Scheduler>>,
 }
 
 impl std::fmt::Debug for Local {
@@ -62,6 +64,13 @@ impl Local {
     pub(crate) fn new() -> Local {
         Local {
             allocs: Arc::new(Mutex::new(HashMap::new())),
+            scheduler: OnceLock::new(),
+        }
+    }
+
+    pub(crate) fn set_scheduler(&self, scheduler: Arc<Scheduler>) {
+        if let Err(_)= self.scheduler.set(scheduler) {
+            panic!("Local Lamellae scheduler already set");
         }
     }
 }
@@ -88,6 +97,10 @@ impl LamellaeInit for Local {
     fn init_fabric(&mut self) -> (usize, usize) {
         (0, 1)
     }
+    fn set_scheduler(&self,scheduler:Arc<Scheduler>) {
+        self.set_scheduler(scheduler);
+    }
+
     fn init_lamellae(&mut self, _scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
         Arc::new(Lamellae::Local(self.clone()))
     }
@@ -102,7 +115,7 @@ impl LamellaeComm for Local {
     }
     fn barrier<'a>(&'a self) -> CommOpHandle<'a> { 
         let fut = async move {};
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
     fn backend(&self) -> Backend {
         Backend::Local
@@ -137,33 +150,36 @@ unsafe impl Send for MyPtr {}
 
 impl LamellaeRDMA for Local {
     fn flush(&self) {}
-    fn put(&self, _pe: usize, src: &[u8], dst: usize) {
+    fn iput(&self, _pe: usize, src: &[u8], dst: usize) {
         unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
         }
     }
-    fn iput<'a> (&self, _pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+    fn put<'a> (&self, _pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
         let fut = async move {unsafe {
             std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
         }};
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
-        }
+    fn put_all<'a>(&'a self, src: &'a [u8], dst: usize) -> CommOpHandle<'a> {
+        let fut = async move {
+            unsafe {
+                std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut u8, src.len());
+            }
+        };
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
-    fn get(&self, _pe: usize, src: usize, dst: &mut [u8]) {
+    fn iget(&self, _pe: usize, src: usize, dst: &mut [u8]) {
         unsafe {
             std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
         }
     }
 
-    fn iget<'a>(&'a self, _pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
+    fn get<'a>(&'a self, _pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
         let fut = async move {unsafe {
             std::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
         }};
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
 
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
@@ -213,7 +229,7 @@ impl LamellaeRDMA for Local {
             Ok(data_addr)
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
     fn free(&self, addr: usize) {
         let mut allocs = self.allocs.lock();

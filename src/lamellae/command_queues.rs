@@ -5,7 +5,8 @@ use crate::lamellae::{
 };
 use crate::scheduler::Scheduler;
 
-use parking_lot::Mutex;
+// use parking_lot::Mutex;
+use async_std::sync::Mutex;
 // use thread_local::ThreadLocal;
 
 use std::collections::HashMap;
@@ -596,7 +597,7 @@ impl InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn empty(&self) -> bool {
         for buf in &self.cmd_buffers {
-            let buf = buf.lock();
+            let buf = buf.lock_blocking();
             if !buf.empty() {
                 return false;
             }
@@ -605,8 +606,8 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn ready(&self, src: usize) -> Option<CmdMsg> {
-        let mut recv_buffer = self.recv_buffer.lock();
+    async fn ready(&self, src: usize) -> Option<CmdMsg> {
+        let mut recv_buffer = self.recv_buffer.lock().await;
         let cmd = recv_buffer[src].clone();
         if cmd.check_hash() {
             match cmd.cmd {
@@ -636,7 +637,7 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn check_alloc(&self) {
+    async fn check_alloc(&self) {
         if let Some(mut alloc_buf) = self.alloc_buffer.try_lock() {
             let mut do_alloc = false;
             let mut min_size = 0;
@@ -652,7 +653,7 @@ impl InnerCQ {
                 //     "need to alloc new pool {:?}",
                 //     std::backtrace::Backtrace::capture()
                 // );
-                self.send_alloc_inner(&mut alloc_buf, min_size);
+                self.send_alloc_inner(&mut alloc_buf, min_size).await;
             }
         }
     }
@@ -681,14 +682,14 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn try_sending_buffer(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) -> bool {
+    async fn try_sending_buffer(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) -> bool {
         if self.pending_cmds.load(Ordering::SeqCst) == 0 || cmd_buffer.full_bufs.len() > 0 {
-            let mut send_buf = self.send_buffer.lock();
+            let mut send_buf = self.send_buffer.lock().await;
             if send_buf[dst].hash() == self.clear_cmd.hash() {
                 cmd_buffer.flush_buffer(&mut send_buf[dst]);
                 // println!{"send_buf  after{:?}",send_buf[dst]};
                 if send_buf[dst].dsize > 0 {
-                    let recv_buffer = self.recv_buffer.lock();
+                    let recv_buffer = self.recv_buffer.lock().await;
                     // println! {"sending data to dst {:?} {:?} {:?} {:?}",recv_buffer[self.my_pe].as_addr()-self.comm.base_addr(),send_buf[dst],send_buf[dst].as_bytes(),send_buf};
                     // println!("sending cmd {:?}", send_buf);
                     // println!("Command Queue sending buffer");
@@ -696,7 +697,7 @@ impl InnerCQ {
                         dst,
                         send_buf[dst].as_bytes(),
                         recv_buffer[self.my_pe].as_addr(),
-                    );
+                    ).await;
                     self.put_amt
                         .fetch_add(send_buf[dst].as_bytes().len(), Ordering::Relaxed);
                 }
@@ -710,8 +711,8 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn progress_transfers(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) {
-        let mut send_buf = self.send_buffer.lock();
+    async fn progress_transfers(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) {
+        let mut send_buf = self.send_buffer.lock().await;
         if cmd_buffer.check_transfer(send_buf[dst].daddr) {
             send_buf[dst].daddr = 0;
             send_buf[dst].dsize = 0;
@@ -733,7 +734,7 @@ impl InnerCQ {
                 // let _guard = span.enter();
 
                 // let mut cmd_buffer = trace_span!("lock").in_scope(|| self.cmd_buffers[dst].lock());
-                let mut cmd_buffer = self.cmd_buffers[dst].lock();
+                let mut cmd_buffer = self.cmd_buffers[dst].lock().await;
                 if cmd_buffer.try_push(addr, len, hash) {
                     self.sent_cnt.fetch_add(1, Ordering::SeqCst);
                     self.put_amt.fetch_add(len, Ordering::Relaxed);
@@ -743,16 +744,16 @@ impl InnerCQ {
                 // let span1 = trace_span!("send loop 1.1");
                 // let _guard1 = span1.enter();
                 //while we are waiting to push our data might as well try to advance the buffers
-                self.progress_transfers(dst, &mut cmd_buffer);
-                self.try_sending_buffer(dst, &mut cmd_buffer);
+                self.progress_transfers(dst, &mut cmd_buffer).await;
+                self.try_sending_buffer(dst, &mut cmd_buffer).await;
                 if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    let send_buf = self.send_buffer.lock();
+                    let send_buf = self.send_buffer.lock().await;
                     // println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
                     // println!("send_buf: {:?}", send_buf);
                     // drop(send_buf);
-                    let recv_buf = self.recv_buffer.lock();
+                    let recv_buf = self.recv_buffer.lock().await;
                     // println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
+                    let free_buf = self.free_buffer.lock().await;
                     // println!("free_buf: {:?}", free_buf);
                     timer = std::time::Instant::now();
                 }
@@ -765,11 +766,11 @@ impl InnerCQ {
                 // let span = trace_span!("send loop 2");
                 // let _guard = span.enter();
                 //this is to tell the compiler we wont hold the mutex lock if we have to yield
-                let mut cmd_buffer = self.cmd_buffers[dst].lock();
+                let mut cmd_buffer = self.cmd_buffers[dst].lock().await;
                 if !cmd_buffer.empty() {
                     //data to send
-                    self.progress_transfers(dst, &mut cmd_buffer);
-                    if self.try_sending_buffer(dst, &mut cmd_buffer) {
+                    self.progress_transfers(dst, &mut cmd_buffer).await;
+                    if self.try_sending_buffer(dst, &mut cmd_buffer).await {
                         self.send_waiting[dst].store(false, Ordering::SeqCst);
                         break;
                     }
@@ -792,12 +793,12 @@ impl InnerCQ {
                 }
                 if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                     // println!("waiting to send cmd buffer {:?}", cmd_buffer);
-                    let send_buf = self.send_buffer.lock();
+                    let send_buf = self.send_buffer.lock().await;
                     // println!("send_buf addr {:?}", send_buf.as_ptr());
                     // println!("send_buf: {:?}", send_buf);
-                    let recv_buf = self.recv_buffer.lock();
+                    let recv_buf = self.recv_buffer.lock().await;
                     // println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
+                    let free_buf = self.free_buffer.lock().await;
                     // println!("free_buf: {:?}", free_buf);
                     timer = std::time::Instant::now();
                 }
@@ -808,9 +809,9 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn send_alloc(&self, min_size: usize) {
+    async fn send_alloc(&self, min_size: usize) {
         let prev_cnt = self.comm.num_pool_allocs();
-        let mut alloc_buf = self.alloc_buffer.lock();
+        let mut alloc_buf = self.alloc_buffer.lock().await;
         if !self
             .comm
             .rt_check_alloc(min_size, std::mem::align_of::<CmdMsg>())
@@ -818,20 +819,20 @@ impl InnerCQ {
             // println!(" {:?} {:?}",prev_cnt,self.comm.num_pool_allocs());
             if prev_cnt == self.comm.num_pool_allocs() {
                 // println!("im responsible for the new alloc");
-                self.send_alloc_inner(&mut alloc_buf, min_size);
+                self.send_alloc_inner(&mut alloc_buf, min_size).await;
             }
         }
     }
 
     //#[tracing::instrument(skip_all)]
     fn send_panic(&self) {
-        let mut panic_buf = self.panic_buffer.lock();
+        let mut panic_buf = self.panic_buffer.lock_blocking();
         self.send_panic_inner(&mut panic_buf);
     }
 
     // need to include  a "barrier" count...
     //#[tracing::instrument(skip_all)]
-    fn send_alloc_inner(&self, alloc_buf: &mut Box<[CmdMsg]>, min_size: usize) {
+    async fn send_alloc_inner(&self, alloc_buf: &mut Box<[CmdMsg]>, min_size: usize) {
         let mut new_alloc = true;
         while new_alloc {
             new_alloc = false;
@@ -846,8 +847,8 @@ impl InnerCQ {
                 cmd.calc_hash();
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
-                        // println!("putting alloc cmd to pe {:?}", pe);
-                        self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+                        println!("putting alloc cmd to pe {:?}", pe);
+                        self.comm.put(pe, cmd.as_bytes(), cmd.as_addr()).await;
                     }
                 }
             }
@@ -855,17 +856,18 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
                     self.comm.flush();
-                    std::thread::yield_now();
+                    // std::thread::yield_now();
+                    async_std::task::yield_now().await;
                     if start.elapsed().as_secs_f64() > config().deadlock_timeout {
                         // println!("waiting to alloc: {:?} {:?}", alloc_buf, alloc_id);
                         start = std::time::Instant::now();
                     }
                 }
-                // println!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
+                println!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
             }
             // panic!("exiting");
 
-            self.comm.alloc_pool(min_size).block();
+            self.comm.alloc_pool(min_size).await;
             let cmd = &mut alloc_buf[self.my_pe];
             cmd.daddr = 0;
             cmd.dsize = 0;
@@ -874,8 +876,8 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    // println!("putting clear cmd to pe {:?}", pe);
-                    self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+                    println!("putting clear cmd to pe {:?}", pe);
+                    self.comm.put(pe, cmd.as_bytes(), cmd.as_addr()).await;
                 }
             }
             for pe in 0..self.num_pes {
@@ -886,9 +888,9 @@ impl InnerCQ {
                             break;
                         }
                     }
-                    std::thread::yield_now();
+                    async_std::task::yield_now().await;
                 }
-                // println!(" pe {:?} has alloced", pe);
+                println!(" pe {:?} has alloced", pe);
             }
             // println!("created new alloc pool");
         }
@@ -906,14 +908,14 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()).block(); // not sure if we need to make this put incase the other PEs are already down
+                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
                 }
             }
         }
     }
 
     //#[tracing::instrument(skip_all)]
-    fn send_release(&self, dst: usize, cmd: CmdMsg) {
+    async fn send_release(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
         // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
         let local_daddr = self.comm.local_addr(dst, cmd.daddr);
@@ -922,11 +924,11 @@ impl InnerCQ {
             dst,
             self.release_cmd.cmd_as_bytes(),
             local_daddr + offset_of!(CmdMsg, cmd),
-        ); // + self.comm.base_addr(),);
+        ).await // + self.comm.base_addr(),);
     }
 
     //#[tracing::instrument(skip_all)]
-    fn send_free(&self, dst: usize, cmd: CmdMsg) {
+    async fn send_free(&self, dst: usize, cmd: CmdMsg) {
         // let cmd_buffer = self.cmd_buffers[dst].lock();
         // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
         let local_daddr = self.comm.local_addr(dst, cmd.daddr);
@@ -935,7 +937,7 @@ impl InnerCQ {
             dst,
             self.free_cmd.cmd_as_bytes(),
             local_daddr + offset_of!(CmdMsg, cmd),
-        ); // + self.comm.base_addr(),);
+        ).await // + self.comm.base_addr(),);
     }
 
     //#[tracing::instrument(skip_all)]
@@ -944,7 +946,7 @@ impl InnerCQ {
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
                 // let mut cmd_buffer = self.cmd_buffers[dst].lock();
-                let mut send_buf = self.send_buffer.lock();
+                let mut send_buf = self.send_buffer.lock().await;
                 if send_buf[dst].hash() == self.clear_cmd.hash() {
                     send_buf[dst].daddr = cmd.daddr;
                     send_buf[dst].dsize = cmd.dsize;
@@ -952,25 +954,25 @@ impl InnerCQ {
                     send_buf[dst].msg_hash = cmd.msg_hash;
                     send_buf[dst].calc_hash();
                     // println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
-                    let recv_buffer = self.recv_buffer.lock();
+                    let recv_buffer = self.recv_buffer.lock().await;
                     println!("sending cmd {:?}", send_buf);
                     println!("sending print to {dst}");
                     self.comm.put(
                         dst,
                         send_buf[dst].as_bytes(),
                         recv_buffer[self.my_pe].as_addr(),
-                    );
+                    ).await;
                     // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
                     break;
                 }
                 if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    let send_buf = self.send_buffer.lock();
+                    let send_buf = self.send_buffer.lock().await;
                     // println!("waiting to add cmd to cmd buffer {:?}",cmd_buffer);
                     println!("send_buf: {:?}", send_buf);
                     // drop(send_buf);
-                    let recv_buf = self.recv_buffer.lock();
+                    let recv_buf = self.recv_buffer.lock().await;
                     println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
+                    let free_buf = self.free_buffer.lock().await;
                     println!("free_buf: {:?}", free_buf);
                     timer = std::time::Instant::now();
                 }
@@ -980,14 +982,14 @@ impl InnerCQ {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn check_transfers(&self, src: usize) {
-        let mut cmd_buffer = self.cmd_buffers[src].lock();
-        self.progress_transfers(src, &mut cmd_buffer);
+    async fn check_transfers(&self, src: usize) {
+        let mut cmd_buffer = self.cmd_buffers[src].lock().await;
+        self.progress_transfers(src, &mut cmd_buffer).await;
     }
 
     //#[tracing::instrument(skip_all)]
-    fn print_data(&self, src: usize, cmd: CmdMsg) {
-        let cmd_buffer = self.cmd_buffers[src].lock();
+    async fn print_data(&self, src: usize, cmd: CmdMsg) {
+        let cmd_buffer = self.cmd_buffers[src].lock().await;
         println!("print data -- cmd {:?}", cmd);
         println!("print data -- cmd_buffer {:?}", cmd_buffer);
     }
@@ -997,7 +999,7 @@ impl InnerCQ {
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting data from {src}, {:?}", cmd.daddr);
-        self.comm.iget(src, local_daddr as usize, data_slice).await;
+        self.comm.get(src, local_daddr as usize, data_slice).await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
@@ -1026,7 +1028,7 @@ impl InnerCQ {
         let data_slice = ser_data.header_and_data_as_bytes();
         let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
-        self.comm.iget(src, local_daddr as usize, data_slice).await;
+        self.comm.get(src, local_daddr as usize, data_slice).await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
         while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash
@@ -1056,7 +1058,7 @@ impl InnerCQ {
         while ser_data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
             // println!("cq 848 need to alloc memory {:?}",cmd.dsize);
-            self.send_alloc(cmd.dsize);
+            self.send_alloc(cmd.dsize).await;
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
             // println!("cq 851 data {:?}",ser_data.is_ok());
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout && ser_data.is_err() {
@@ -1103,7 +1105,7 @@ impl InnerCQ {
         while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
             // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
-            self.send_alloc(cmd.dsize);
+            self.send_alloc(cmd.dsize).await;
             data = self
                 .comm
                 .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
@@ -1126,7 +1128,7 @@ impl InnerCQ {
         //     self.sent_cnt.load(Ordering::SeqCst),
         //     self.recv_cnt.load(Ordering::SeqCst)
         // );
-        self.send_release(src, cmd);
+        self.send_release(src, cmd).await;
         data
     }
 }
@@ -1135,19 +1137,19 @@ impl Drop for InnerCQ {
     //#[tracing::instrument(skip_all)]
     fn drop(&mut self) {
         // println!("dropping InnerCQ");
-        let mut send_buf = self.send_buffer.lock();
+        let mut send_buf = self.send_buffer.lock_blocking();
         let old = std::mem::take(&mut *send_buf);
         Box::into_raw(old);
-        let mut recv_buf = self.recv_buffer.lock();
+        let mut recv_buf = self.recv_buffer.lock_blocking();
         let old = std::mem::take(&mut *recv_buf);
         Box::into_raw(old);
-        let mut free_buf = self.free_buffer.lock();
+        let mut free_buf = self.free_buffer.lock_blocking();
         let old = std::mem::take(&mut *free_buf);
         Box::into_raw(old);
-        let mut alloc_buffer = self.alloc_buffer.lock();
+        let mut alloc_buffer = self.alloc_buffer.lock_blocking();
         let old = std::mem::take(&mut *alloc_buffer);
         Box::into_raw(old);
-        let mut panic_buffer = self.panic_buffer.lock();
+        let mut panic_buffer = self.panic_buffer.lock_blocking();
         let old = std::mem::take(&mut *panic_buffer);
         Box::into_raw(old);
         let old = std::mem::replace(
@@ -1321,7 +1323,9 @@ impl CommandQueue {
 
     //#[tracing::instrument(skip_all)]
     pub(crate) fn send_alloc(&self, min_size: usize) {
-        self.cq.send_alloc(min_size)
+        async_std::task::block_on(async {
+            self.cq.send_alloc(min_size).await
+        })
     }
 
     //#[tracing::instrument(skip_all)]
@@ -1444,7 +1448,7 @@ impl CommandQueue {
     //#[tracing::instrument(skip_all)]
     pub(crate) async fn alloc_task(&self, scheduler: Arc<Scheduler>) {
         while scheduler.active() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
-            self.cq.check_alloc();
+            self.cq.check_alloc().await;
             async_std::task::yield_now().await;
         }
         // println!("leaving alloc_task task {:?}", scheduler.active());
@@ -1481,7 +1485,7 @@ impl CommandQueue {
             //     .fetch_add(1, Ordering::Relaxed);
             for src in 0..num_pes {
                 if src != my_pe {
-                    if let Some(cmd_buf_cmd) = self.cq.ready(src) {
+                    if let Some(cmd_buf_cmd) = self.cq.ready(src).await {
                         // timer =  std::time::Instant::now();
                         let cmd_buf_cmd = cmd_buf_cmd;
                         // println!("recv_data {:?}", cmd_buf_cmd);
@@ -1493,7 +1497,7 @@ impl CommandQueue {
                             }
                             Cmd::Free => panic!("should not be possible to see free here"),
                             // self.cq.free_data(src,cmd_buf_cmd.daddr as usize),
-                            Cmd::Print => self.cq.print_data(src, cmd_buf_cmd),
+                            Cmd::Print => self.cq.print_data(src, cmd_buf_cmd).await,
                             Cmd::Tx => {
                                 let cq = self.cq.clone();
                                 let lamellae = lamellae.clone();
@@ -1541,7 +1545,7 @@ impl CommandQueue {
                                                     .submit_remote_am(work_data, lamellae.clone());
                                                 if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
                                                 {
-                                                    cq.send_free(src, cmd_buf_cmd);
+                                                    cq.send_free(src, cmd_buf_cmd).await;
                                                     // println!(
                                                     //     "sending clear cmd {:?} [{:?}/{:?}]",
                                                     //     cmd_buf_cmd.daddr, i, len
@@ -1572,7 +1576,7 @@ impl CommandQueue {
                             }
                         }
                     }
-                    self.cq.check_transfers(src);
+                    self.cq.check_transfers(src).await;
                     // self.cq.check_buffers(src);//process any finished buffers
                 }
             }

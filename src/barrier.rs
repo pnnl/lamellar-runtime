@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
+use crate::lamellae::LamellaeComm;
 
 pub(crate) struct Barrier {
     my_pe: usize, // global pe id
@@ -223,7 +224,7 @@ impl Barrier {
                                         send_pe,
                                         round,
                                         barrier_slice,
-                                    );
+                                    ).block();
                                     //safe as we are the only ones writing to our index
                                 }
                             }
@@ -363,7 +364,14 @@ impl Barrier {
     }
 
     pub(crate) async fn async_barrier(&self) {
-        self.barrier_handle().await;
+        // println!("calling libfabasync barrier");
+        if let crate::lamellae::Lamellae::LibFabAsync(libfabasync) = self.lamellae.as_ref() {
+            libfabasync.barrier().await;
+        }
+        else {
+            self.barrier_handle().await;
+        }
+        // println!("Done calling libfabasync barrier");
     }
 
     //     pub(crate) async fn async_barrier(&self) {
@@ -472,7 +480,7 @@ impl BarrierHandle {
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                 unsafe {
-                    self.barrier_buf[i - 1].put_slice(send_pe, round, barrier_slice);
+                    self.barrier_buf[i - 1].put_slice(send_pe, round, barrier_slice).block();
                     //safe as we are the only ones writing to our index
                 }
             }

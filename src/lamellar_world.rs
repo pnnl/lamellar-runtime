@@ -574,6 +574,7 @@ impl LamellarWorldBuilder {
         //     Arc::strong_count(&sched_new)
         // );
 
+        lamellae_builder.set_scheduler(sched_new.clone());
         // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
         // println!("{:?}: init_lamellae", timer.elapsed());

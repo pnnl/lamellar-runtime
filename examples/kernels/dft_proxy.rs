@@ -658,13 +658,13 @@ fn main() {
                 .block();
             full_signal_array.barrier();
 
-            partial_spectrum.put(my_pe, 0, full_spectrum.sub_region(0..array_len));
-            partial_sum.put(my_pe, 0, magic.clone());
+            partial_spectrum.put(my_pe, 0, full_spectrum.sub_region(0..array_len)).block();
+            partial_sum.put(my_pe, 0, magic.clone()).block();
             partial_signal.put(
                 my_pe,
                 0,
                 full_signal.sub_region(my_pe * array_len..my_pe * array_len + array_len),
-            );
+            ).block();
 
             for i in magic.as_mut_slice().unwrap() {
                 *i = MAGIC;

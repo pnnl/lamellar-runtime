@@ -15,6 +15,7 @@ use crate::lamellae::LibFabAsyncData;
 use crate::lamellae::RofiRustAsyncData;
 #[cfg(feature = "enable-rofi-rust")]
 use crate::lamellae::RofiRustData;
+use crate::lamellae::Scheduler;
 use crate::lamellae::{AllocationType, SerializedData};
 // use crate::lamellae::shmem::ShmemComm;
 use futures_util::{ready, Future};
@@ -127,6 +128,22 @@ impl Comm {
             Comm::Shmem(_) => Ok(ShmemData::new(self.clone(), size)?.into()),
         }
     }
+
+    pub(crate) fn set_scheduler(&self, scheduler: Arc<Scheduler>) {
+        match self {
+            #[cfg(feature = "enable-rofi")]
+            Comm::Rofi(comm) => comm.set_scheduler(scheduler),
+            #[cfg(feature = "enable-rofi-rust")]
+            Comm::RofiRust(comm) => comm.set_scheduler(scheduler),
+            #[cfg(feature = "enable-rofi-rust")]
+            Comm::RofiRustAsync(comm) => comm.set_scheduler(scheduler),
+            #[cfg(feature = "enable-libfabric")]
+            Comm::LibFab(comm) => comm.set_scheduler(scheduler),
+            #[cfg(feature = "enable-libfabric")]
+            Comm::LibFabAsync(comm) => comm.set_scheduler(scheduler),
+            Comm::Shmem(comm) => comm.set_scheduler(scheduler),
+        }
+    }
 }
 
 #[enum_dispatch]
@@ -150,35 +167,39 @@ pub(crate) trait CommOps {
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize;
     fn remote_addr(&self, pe: usize, local_addr: usize) -> usize;
     fn flush(&self);
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
-    fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> ;
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize);
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
+    fn put<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> ;
+    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize);
     #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
-    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>;
+    fn put_all<'a, T: Remote + Sync>(&'a self, src_addr: &'a [T], dst_addr: usize)-> CommOpHandle<'a>;
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn get<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a>;
+    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]);
     // fn iget_relative<T: Remote>(& self, pe: usize, src_addr: usize, dst_addr: &mut [T]);
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
     fn force_shutdown(&self);
 }
 
-pub(crate) struct CommOpHandle<'a, T = ()> {
-    fut: Pin<Box<dyn Future<Output =T> + Send + 'a> >
+pub struct CommOpHandle<'a, T = ()> {
+    fut: Pin<Box<dyn Future<Output =T> + Send + 'a> >,
+    scheduler: Arc<crate::lamellae::Scheduler>,
 }
 
 impl<'a, T> CommOpHandle<'a, T> {
-    pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a) -> Self {
+    pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a, scheduler: Arc<crate::lamellae::Scheduler>) -> Self {
         Self {
-            fut: Box::pin(fut)
+            fut: Box::pin(fut),
+            scheduler: scheduler.clone(),
         }
     }
 
-    pub(crate) fn block(self) -> T {
-        #[cfg(feature="tokio-executor")]
-        return Handle::current().block_on(async {self.fut.await});
-        #[cfg(not(feature="tokio-executor"))]
-        return block_on(async {self.fut.await});
+    pub fn block(self) -> T {
+        // #[cfg(feature="tokio-executor")]
+        // return Handle::current().block_on(async {self.fut.await});
+        // #[cfg(not(feature="tokio-executor"))]
+        // return block_on(async {self.fut.await});
+        self.scheduler.block_on(async {self.fut.await})
     }
     
     // pub(crate) fn spawn(self) -> async_std::task::JoinHandle<T> {

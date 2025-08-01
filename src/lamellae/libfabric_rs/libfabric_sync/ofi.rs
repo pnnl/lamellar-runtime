@@ -23,7 +23,7 @@ type RmaAtomicCollEp =
 use crate::lamellae::libfabric_rs::euclid_rem;
 use crate::lamellae::libfabric_rs::RemoteAllocInfo;
 use crate::lamellae::libfabric_rs::AllocInfo;
-
+use std::sync::OnceLock;
 // #[derive(Debug)]
 enum BarrierImpl {
     Uninit,
@@ -49,6 +49,7 @@ pub(crate) struct Ofi {
     _my_pmi: Arc<dyn Pmi + Sync + Send>,
     put_cnt: AtomicUsize,
     get_cnt: AtomicUsize,
+    pub(crate) scheduler: OnceLock<Arc<crate::lamellae::Scheduler>>,
 }
 
 impl Ofi {
@@ -89,7 +90,7 @@ impl Ofi {
         .mode(libfabric::enums::Mode::new().context())
         .enter_domain_attr()
         .resource_mgmt(libfabric::enums::ResourceMgmt::Enabled)
-        .threading(libfabric::enums::Threading::Domain)
+        .threading(libfabric::enums::Threading::Safe)
         .mr_mode(
             libfabric::enums::MrMode::new()
                 .allocated()
@@ -204,11 +205,18 @@ impl Ofi {
             barrier_impl: BarrierImpl::Uninit,
             put_cnt: AtomicUsize::new(0),
             get_cnt: AtomicUsize::new(0),
+            scheduler: OnceLock::new(),
         };
 
         ofi.init_barrier()?;
 
         Ok(ofi)
+    }
+
+    pub(crate) fn set_scheduler(&self, scheduler: Arc<crate::lamellae::Scheduler>) {
+        if let Err(_) = self.scheduler.set(scheduler.clone()) {
+            panic!("Error setting scheduler for libfabric comm");
+        }
     }
 
     fn create_mc_group(
@@ -610,7 +618,7 @@ impl Ofi {
         let desc = mr.descriptor();
         let mut remote_dst_addr =  remote_alloc_info.start().add(dst_addr - offset);
         // println!(
-        //     "Putting to PE {}, addr: {}, remote_addr: {}",
+        //     "Putting to PE {}, addr: {}, remote_addr: {:?}",
         //     pe, dst_addr, remote_dst_addr
         // );
 
@@ -688,7 +696,7 @@ impl Ofi {
         let mut remote_src_addr =  remote_alloc_info.start().add(src_addr - offset);
         let remote_key = remote_alloc_info.key();
         // println!(
-        //     "Getting from PE {}, addr: {}, remote_addr: {}",
+        //     "Getting from PE {}, addr: {}, remote_addr: {:?}",
         //     pe, src_addr, remote_src_addr
         // );
 
@@ -724,11 +732,11 @@ impl Ofi {
     pub(crate) fn local_addr(&self, remote_pe: &usize, remote_addr: &RemoteMemoryAddress) -> usize {
         self.alloc_manager
             .local_addr(remote_pe, remote_addr)
-            .unwrap()
-            // .expect(&format!(
-            //     "Local address not found from remote PE {}, remote addr: {}",
-            //     remote_pe, remote_addr
-            // ))
+            // .unwrap()
+            .expect(&format!(
+                "Local address not found from remote PE {}, remote addr: {:?}",
+                remote_pe, remote_addr
+            ))
     }
 
     pub(crate) fn remote_addr(&self, pe: &usize, local_addr: &usize) -> RemoteMemoryAddress {

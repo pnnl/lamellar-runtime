@@ -7,9 +7,11 @@ use crate::LamellarTeamRT;
 use crate::LAMELLAES;
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 // use crate::active_messaging::AmDist;
+use crate::lamellae::comm::CommOpHandle;
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
+// use async_std::Mutex;
 // use serde::ser::Serialize;
 use std::collections::HashMap;
 use std::ops::Bound;
@@ -455,8 +457,9 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///     }      
     /// }
     ///```
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::put(self, self.pe, index, data);
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> CommOpHandle{
+        MemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -572,8 +575,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()});
     ///```
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
+    /// 
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(& self, index: usize, data: U) -> CommOpHandle {
+        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -846,12 +851,12 @@ impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) -> CommOpHandle {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .put(pe, self.sub_region_offset + index, data);
+                .put(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
@@ -880,23 +885,24 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> CommOpHandle{
         self.mr
             .inner
             .mr
-            .put_all(self.sub_region_offset + index, data);
+            .put_all(self.sub_region_offset + index, data)
     }
     unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
-    ) {
+    ) -> CommOpHandle
+    {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .get_unchecked(pe, self.sub_region_offset + index, data);
+                .get_unchecked(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -927,7 +933,7 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Dist> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
+    unsafe fn put_slice<'a>(&'a self, pe: usize, index: usize, data: &'a [T]) -> CommOpHandle<'a>{
         if self.pe == pe {
             self.mr
                 .inner
@@ -941,12 +947,13 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]) {
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn get_slice(&self, pe: usize, index: usize, data: &mut [T]) -> CommOpHandle {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .blocking_get_slice(pe, self.sub_region_offset + index, data)
+                .get_slice(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",

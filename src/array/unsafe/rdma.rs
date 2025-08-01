@@ -69,17 +69,17 @@ impl<T: Dist> UnsafeArray<T> {
                     },
                     ArrayRdmaCmd::Get(immediate) => unsafe {
                         if immediate {
-                            self.inner.data.mem_region.blocking_get(
+                            self.inner.data.mem_region.get(
                                 pe,
                                 offset,
                                 buf.sub_region(buf_index..(buf_index + len)),
-                            )
+                            ).block();
                         } else {
                             self.inner.data.mem_region.get_unchecked(
                                 pe,
                                 offset,
                                 buf.sub_region(buf_index..(buf_index + len)),
-                            )
+                            ).block()
                         }
                     },
                     ArrayRdmaCmd::PutAm => {
@@ -180,7 +180,7 @@ impl<T: Dist> UnsafeArray<T> {
                         let pe = (start_pe + i) % num_pes;
                         let offset = global_index / num_pes + overflow;
                         for j in (i..buf.len()).step_by(num_pes) {
-                            temp_memreg.put(k, buf.sub_region(j..=j));
+                            temp_memreg.put(k, buf.sub_region(j..=j)).block();
                             k += 1;
                         }
                         self.inner.data.mem_region.blocking_put(
@@ -205,7 +205,7 @@ impl<T: Dist> UnsafeArray<T> {
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
                     for j in (i..buf.len()).step_by(num_pes) {
-                        unsafe { temp_memreg.put(k, buf.sub_region(j..=j)) };
+                        unsafe { temp_memreg.put(k, buf.sub_region(j..=j)) }.block();
                         k += 1;
                     }
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
@@ -256,16 +256,16 @@ impl<T: Dist> UnsafeArray<T> {
                             let offset = global_index / num_pes + overflow;
                             let num_elems = (num_elems_pe - 1) + if i < rem { 1 } else { 0 };
                             // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
-                            self.inner.data.mem_region.blocking_get(
+                            self.inner.data.mem_region.get(
                                 pe,
                                 offset,
                                 temp_memreg.sub_region(0..num_elems),
-                            );
+                            ).block();
                             // let mut k = 0;
                             // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
 
                             for (k, j) in (i..buf.len()).step_by(num_pes).enumerate() {
-                                buf.put(my_pe, j, temp_memreg.sub_region(k..=k));
+                                buf.put(my_pe, j, temp_memreg.sub_region(k..=k)).block();
                             }
                             if pe + 1 == num_pes {
                                 overflow += 1;
@@ -277,7 +277,7 @@ impl<T: Dist> UnsafeArray<T> {
                                 (index + i) % num_pes,
                                 (index + i) / num_pes,
                                 buf.sub_region(i..=i),
-                            )
+                            ).block()
                         }
                     }
                 }
@@ -1003,11 +1003,11 @@ struct UnsafeBlockGetAm {
 impl LamellarAm for UnsafeBlockGetAm {
     async fn exec(self) {
         unsafe {
-            self.array.inner.data.mem_region.blocking_get(
+            self.array.inner.data.mem_region.get(
                 self.pe,
                 self.offset * self.array.inner.elem_size,
                 self.data.clone(),
-            )
+            ).await
         };
     }
 }
@@ -1028,11 +1028,11 @@ struct UnsafeCyclicGetAm {
 impl LamellarAm for UnsafeCyclicGetAm {
     async fn exec(self) {
         unsafe {
-            self.array.inner.data.mem_region.blocking_get(
+            self.array.inner.data.mem_region.get(
                 self.pe,
                 self.offset * self.array.inner.elem_size,
                 self.temp_data.clone(),
-            );
+            ).await;
         }
         for (k, j) in (self.i..self.data.len() / self.array.inner.elem_size)
             .step_by(self.num_pes)
@@ -1051,7 +1051,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
                     self.temp_data
                         .sub_region(k..(k + self.array.inner.elem_size)),
                 )
-            };
+            }.await;
         }
     }
 }
@@ -1093,7 +1093,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
                     for req in reqs.drain(..) {
                         let data = req.await;
                         // println!("data recv {:?}", data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
+                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data).await;
                         cur_index += data.len();
                     }
                 }
@@ -1161,7 +1161,7 @@ struct UnsafePutAm {
 #[lamellar_impl::rt_am]
 impl LamellarAm for UnsafePutAm {
     async fn exec(self) {
-        unsafe {
+        let elems = unsafe {
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
             match self
                 .array
@@ -1169,11 +1169,16 @@ impl LamellarAm for UnsafePutAm {
                 .local_elements_for_range(self.start_index, self.len)
             {
                 Some((elems, _)) => {
-                    self.data.blocking_get_slice(self.pe, 0, elems);
+                    Some(elems)
+                    // self.data.get_slice(self.pe, 0, elems).await;
                 }
-                None => {}
+                None => {None}
             }
         };
+
+        if let Some(elems) = elems {
+            unsafe {self.data.get_slice(self.pe, 0, elems).await};
+        }
     }
 }
 

@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 struct MyShmem {
     data: *mut u8,
@@ -293,6 +294,7 @@ pub(crate) struct ShmemComm {
             ShmemAlloc,
         )>,
     >,
+    scheduler: OnceLock<Arc<crate::lamellae::Scheduler>>,
 }
 
 static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
@@ -349,11 +351,17 @@ impl ShmemComm {
             num_pes: num_pes,
             my_pe: my_pe,
             alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
+            scheduler: OnceLock::new(),
         };
         shmem.alloc.write()[0].init(addr, mem_per_pe);
         shmem
     }
 
+    pub(crate) fn set_scheduler(&self, scheduler: Arc<crate::lamellae::Scheduler>) {
+        if let Err(_) = self.scheduler.set(scheduler.clone()) {
+            panic!("Error setting scheduler for shmem comm");
+        }
+    }
     pub(crate) fn heap_size() -> usize {
         SHMEM_SIZE.load(Ordering::SeqCst)
     }
@@ -377,7 +385,7 @@ impl CommOps for ShmemComm {
             }
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
     fn occupied(&self) -> usize {
         let mut occupied = 0;
@@ -408,23 +416,23 @@ impl CommOps for ShmemComm {
     fn alloc_pool<'a>(&'a self, min_size: usize) -> CommOpHandle<'a> {
         let fut = async move {
 
-            let mut allocs = self.alloc.write();
             let size = std::cmp::max(
                 min_size * 2 * self.num_pes,
                 SHMEM_SIZE.load(Ordering::SeqCst),
             ) / self.num_pes;
             if let Ok(addr) = self.alloc(size, AllocationType::Global)
-                .await {
+            .await {
                 // println!("addr: {:x} - {:x}",addr, addr+size);
                 let mut new_alloc = BTreeAlloc::new("shmem".to_string());
                 new_alloc.init(addr, size);
+                let mut allocs = self.alloc.write();
                 allocs.push(new_alloc)
             } else {
                 panic!("[Error] out of system memory");
             }
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
 
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
@@ -495,7 +503,7 @@ impl CommOps for ShmemComm {
             Ok(addr)
         };
 
-        CommOpHandle::new(fut)
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
 
     fn free(&self, addr: usize) {
@@ -537,7 +545,7 @@ impl CommOps for ShmemComm {
     }
 
     fn flush(&self) {}
-    fn put<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
+    fn iput<T: Remote>(&self, pe: usize, src_addr: &[T], dst_addr: usize) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(dst_addr) {
@@ -557,18 +565,23 @@ impl CommOps for ShmemComm {
             }
         }
     }
-    fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
-        let fut = async move {self.put(pe, src_addr, dst_addr)};
-        CommOpHandle::new(fut)
+    fn put<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
+        let fut = async move {self.iput(pe, src_addr, dst_addr)};
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
 
-    fn put_all<T: Remote>(&self, src_addr: &[T], dst_addr: usize) {
-        for pe in 0..self.num_pes {
-            self.put(pe, src_addr, dst_addr);
-        }
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    fn put_all<'a, T: Remote+ Sync>(&'a self, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a> {
+        let fut = async move {
+            for pe in 0..self.num_pes {
+                self.put(pe, src_addr, dst_addr).await;
+            }
+        };
+
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
 
-    fn get<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
+    fn iget<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
             if shmem.contains(src_addr) {
@@ -589,10 +602,10 @@ impl CommOps for ShmemComm {
         }
     }
 
-    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a> {
+    fn get<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T]) -> CommOpHandle<'a> {
         // println!("iget s_addr {:?} d_addr {:?} b_addr {:?}",src_addr,dst_addr.as_ptr(),self.base_addr());
-        let fut = async move {self.get(pe, src_addr, dst_addr)};
-        CommOpHandle::new(fut)
+        let fut = async move {self.iget(pe, src_addr, dst_addr)};
+        CommOpHandle::new(fut, self.scheduler.get().unwrap().clone())
     }
     // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
     //     self.get(pe, src_addr + self.base_addr(), dst_addr);

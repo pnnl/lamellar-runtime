@@ -3,6 +3,7 @@ use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
+use crate::lamellae::comm::CommOpHandle;
 
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
@@ -219,8 +220,10 @@ impl<T: Dist> AsBase for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.put(pe, self.sub_region_offset + index, data);
+
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) -> CommOpHandle {
+        self.mr.put(pe, self.sub_region_offset + index, data)
     }
     unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
         &self,
@@ -231,17 +234,22 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         self.mr
             .blocking_put(pe, self.sub_region_offset + index, data);
     }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        self.mr.put_all(self.sub_region_offset + index, data);
+
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) -> CommOpHandle{
+        self.mr.put_all(self.sub_region_offset + index, data)
     }
+
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
     unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
-    ) {
+    ) -> CommOpHandle 
+    {
         self.mr
-            .get_unchecked(pe, self.sub_region_offset + index, data);
+            .get_unchecked(pe, self.sub_region_offset + index, data)
     }
     unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
@@ -255,13 +263,15 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn put_slice<'a>(&'a self, pe: usize, index: usize, data: &'a [T]) -> CommOpHandle<'a>{
         self.mr.put_slice(pe, self.sub_region_offset + index, data)
     }
-    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]) {
+    #[must_use="You must .block() or .await the returned handle in order for this function to execute"]
+    unsafe fn get_slice(&self, pe: usize, index: usize, data: &mut [T]) ->CommOpHandle<'_> {
         // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);
         self.mr
-            .blocking_get_slice(pe, self.sub_region_offset + index, data)
+            .get_slice(pe, self.sub_region_offset + index, data)
     }
 }
 

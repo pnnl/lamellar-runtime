@@ -1072,7 +1072,7 @@ impl LamellarTeamRT {
                 *e = 0;
             }
             unsafe {
-                temp_buf.put_slice(parent.world_pe, 0, &temp_array_slice[..parent.num_pes]);
+                temp_buf.put_slice(parent.world_pe, 0, &temp_array_slice[..parent.num_pes]).block();
             }
             let s = Instant::now();
             parent.barrier();
@@ -1084,7 +1084,7 @@ impl LamellarTeamRT {
                 for world_pe in parent.arch.team_iter() {
                     if world_pe != parent.world_pe {
                         unsafe {
-                            temp_buf.put_slice(world_pe, parent_world_pe, &temp_array_slice[0..1]);
+                            temp_buf.put_slice(world_pe, parent_world_pe, &temp_array_slice[0..1]).block();
                         }
                     }
                 }
@@ -1269,7 +1269,7 @@ impl LamellarTeamRT {
                                 world_pe,
                                 my_index,
                                 &temp_slice[my_index..=my_index],
-                            );
+                            ).block();
                         }
                     }
                 }
@@ -1287,7 +1287,7 @@ impl LamellarTeamRT {
                                 world_pe,
                                 self.world_pe,
                                 &temp_slice[self.world_pe..=self.world_pe],
-                            );
+                            ).block();
                         }
                     }
                 }
