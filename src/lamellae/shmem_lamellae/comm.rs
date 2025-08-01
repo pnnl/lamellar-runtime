@@ -20,13 +20,14 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct ShmemComm {
     // _shmem: MyShmem, //the global handle
-    pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
-    _size: usize,                                //size of my segment
-    pub(crate) alloc: RwLock<Vec<BTreeAlloc>>,//runtime allocations
+    // pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
+    // _size: usize,                                //size of my segment
+    pub(crate) allocs: RwLock<Vec<BTreeAlloc>>, //runtime allocations
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
-    pub(crate) alloc_lock: Arc< //fabric allocations
+    pub(crate) alloc_lock: Arc<
+        //fabric allocations
         RwLock<(
             HashMap<
                 usize, //local addr
@@ -77,7 +78,8 @@ impl ShmemComm {
         // let shmem = attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0);
 
         // let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
-        let (shmem, _index, addrs) = unsafe { alloc.alloc(mem_per_pe,std::mem::align_of::<u8>(), 0..num_pes) };
+        let (shmem, _index, addrs) =
+            unsafe { alloc.alloc(mem_per_pe, std::mem::align_of::<u8>(), 0..num_pes) };
         let addr = shmem.as_ptr() as usize + mem_per_pe * my_pe;
 
         let mut allocs_map = HashMap::new();
@@ -91,9 +93,9 @@ impl ShmemComm {
         // alloc.0.insert(addr,(ret,size))
         let shmem = ShmemComm {
             // _shmem: shmem,
-            base_address: Arc::new(RwLock::new(addr)),
-            _size: mem_per_pe,
-            alloc: RwLock::new(vec![BTreeAlloc::new("shmem".to_string())]),
+            // base_address: Arc::new(RwLock::new(addr)),
+            // _size: mem_per_pe,
+            allocs: RwLock::new(vec![BTreeAlloc::new("shmem".to_string())]),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: my_pe,
@@ -101,7 +103,7 @@ impl ShmemComm {
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
         };
-        shmem.alloc.write()[0].init(addr, mem_per_pe);
+        shmem.allocs.write()[0].init(addr, mem_per_pe);
         shmem
     }
 
@@ -124,7 +126,7 @@ impl CommProgress for ShmemComm {
     fn barrier(&self) {
         let alloc = self.alloc_lock.write();
         unsafe {
-            alloc.1.alloc(1,1, 0..self.num_pes);
+            alloc.1.alloc(1, 1, 0..self.num_pes);
         }
     }
 }
@@ -155,8 +157,8 @@ impl Drop for ShmemComm {
         // if self.occupied() > 0 {
         //     println!("dropping shmem -- memory in use {:?}", self.occupied());
         // }
-        if self.alloc.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.alloc.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
+        if self.allocs.read().len() > 1 {
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.allocs.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
         }
     }
 }

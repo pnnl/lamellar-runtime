@@ -39,12 +39,12 @@ impl<T: Remote> LocalFuture<T> {
     fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
-            src.addr,
+            src.usize_addr(),
             dst,
             src.len(),
             src.len() * std::mem::size_of::<T>()
         );
-        if !(src.contains(dst) || src.contains(dst + src.len())) {
+        if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len());
             }
@@ -59,10 +59,10 @@ impl<T: Remote> LocalFuture<T> {
         trace!(
             "getting src: {:?} dst: {:?} len: {}",
             src,
-            dst.addr,
+            dst.usize_addr(),
             dst.len()
         );
-        if !(dst.contains(src) || dst.contains(src + dst.len())) {
+        if !(dst.contains(src) || dst.contains(&(src + dst.len()))) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
             }

@@ -30,7 +30,6 @@ impl LamellarAM for DataAM {
             local_slice[self.length - 1] = 255u8;
             self.array.get_unchecked(self.index, local.clone()).await;
 
-            
             if local_slice[self.length - 1] == 255u8 {
                 println!("Failure");
             }

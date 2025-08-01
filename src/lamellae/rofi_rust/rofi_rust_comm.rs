@@ -43,7 +43,6 @@ pub(crate) static ROFIRUST_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 *
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
                                          // #[derive(Debug)]
 pub(crate) struct RofiRustComm {
-    pub(crate) base_address: Arc<RwLock<usize>>,
     alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -89,7 +88,6 @@ impl RofiRustComm {
         let addr = ofi.sub_alloc(&all_pes, total_mem).unwrap();
 
         let libfab = Self {
-            base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: RwLock::new(vec![BTreeAlloc::new("libfab_mem".to_string())]),
             _init: AtomicBool::new(true),
             my_pe: ofi.my_pe,
@@ -195,10 +193,9 @@ impl RofiRustComm {
             //.expect("error in rofi get")
             Err(ret) => {
                 println!(
-                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                        "Error in get from {:?} src {:x}  dst_addr {:p} size {:?} ret {:?}",
                         pe,
                         src_addr,
-                        *self.base_address.read(),
                         dst_addr,
                         dst_addr.len(),
                         ret,
@@ -320,10 +317,6 @@ impl CommOps for RofiRustComm {
 
     fn free(&self, addr: usize) {
         self.ofi.lock().release(&addr);
-    }
-
-    fn base_addr(&self) -> usize {
-        *self.base_address.read()
     }
 
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
@@ -541,7 +534,7 @@ impl RofiRustData {
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr =
             libfab_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let addr = relative_addr; // + libfab_comm.base_addr();
+        let addr = relative_addr; 
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)

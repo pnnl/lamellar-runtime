@@ -635,7 +635,7 @@
 
 use crate::barrier::BarrierHandle;
 use crate::darc::__NetworkDarc;
-use crate::lamellae::{CommMem, Lamellae, SerializedData};
+use crate::lamellae::{CommAllocAddr, CommMem, Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -645,11 +645,11 @@ use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, ReqId};
 use async_trait::async_trait;
 use futures_util::Future;
 use parking_lot::Mutex;
-use tracing::trace;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::trace;
 
 // //#[doc(hidden)]
 /// The prelude for the active messaging module
@@ -853,7 +853,7 @@ pub(crate) struct ReqMetaData {
     pub(crate) lamellae: Arc<Lamellae>,
     pub(crate) world: Pin<Arc<LamellarTeamRT>>,
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    pub(crate) team_addr: usize,
+    pub(crate) team_addr: CommAllocAddr,
 }
 
 pub(crate) enum Am {
@@ -1371,11 +1371,20 @@ pub(crate) trait ActiveMessageEngine {
         team_addr: usize,
         lamellae: &Arc<Lamellae>,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
-        trace!("get_team_and_world: pe: {:?} team_addr: {:x} ", pe, team_addr);
+        trace!(
+            "get_team_and_world: pe: {:?} team_addr: {:x} ",
+            pe,
+            team_addr
+        );
         let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
         let team_rt = unsafe {
-            let team_ptr=  *local_team_addr.as_ptr::<*const LamellarTeamRT>() ;
-            trace!("team_ptr from local_team_addr {:?} {:?} {:?}",local_team_addr, team_ptr,local_team_addr.as_ref::<*const LamellarTeamRT>());
+            let team_ptr = *local_team_addr.as_ptr::<*const LamellarTeamRT>();
+            trace!(
+                "team_ptr from local_team_addr {:?} {:?} {:?}",
+                local_team_addr,
+                team_ptr,
+                local_team_addr.as_ref::<*const LamellarTeamRT>()
+            );
             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
             Arc::increment_strong_count(team_ptr);
             Pin::new_unchecked(Arc::from_raw(team_ptr))

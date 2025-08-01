@@ -11,7 +11,7 @@ use crate::{
 };
 // use log::trace;
 
-//use tracing::*;
+use tracing::trace;
 
 use futures_util::future::join_all;
 use futures_util::Future;
@@ -248,7 +248,8 @@ impl LamellarWorld {
         }
     }
 
-    #[doc(alias("One-sided", "onesided"))] #[tracing::instrument(skip_all, level = "debug")]
+    #[doc(alias("One-sided", "onesided"))]
+    #[tracing::instrument(skip_all, level = "debug")]
     /// Returns the underlying [LamellarTeam] for this world
     /// # Examples
     ///```
@@ -587,10 +588,12 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         let mut lamellae_builder = create_lamellae(self.primary_lamellae);
+        trace!("lamellae created");
         // println!("{:?}: init_lamellae", timer.elapsed());
 
         // timer = std::time::Instant::now();
         let (my_pe, num_pes) = lamellae_builder.init_fabric();
+        trace!("lamellae fabric initited");
         // println!("{:?}: init_fabric", timer.elapsed());
 
         // timer = std::time::Instant::now();
@@ -604,6 +607,7 @@ impl LamellarWorldBuilder {
             self.num_threads,
             panic.clone(),
         ));
+        trace!("scheduler created");
         // println!(
         //     " create_scheduler  cnt {:?}",
         //     // timer.elapsed(),
@@ -612,6 +616,7 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         let lamellae = lamellae_builder.init_lamellae(sched_new.clone());
+        trace!("lamellae initialized");
         // println!("{:?}: init_lamellae", timer.elapsed());
 
         // timer = std::time::Instant::now();
@@ -632,6 +637,7 @@ impl LamellarWorldBuilder {
             panic.clone(),
             // teams.clone(),
         );
+        trace!("team_rt created");
         // println!("{:?}: init_team_rt", timer.elapsed());
 
         // timer = std::time::Instant::now();
@@ -644,6 +650,7 @@ impl LamellarWorldBuilder {
             num_pes: num_pes,
             ref_cnt: Arc::new(AtomicUsize::new(1)),
         };
+        trace!("world created");
         // println!("{:?}: init_world", timer.elapsed());
 
         // timer = std::time::Instant::now();

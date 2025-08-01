@@ -178,8 +178,7 @@ impl Fold for LamellarDSLReplace {
             let mac_string = mac_string.replace("lamellar::num_pes", "__lamellar_num_pes");
             let mac_string = mac_string.replace("lamellar::world", "__lamellar_world");
             let mac_string = mac_string.replace("lamellar::team", "__lamellar_team");
-            let mac_string =
-                mac_string.replace("lamellar::tid", "__lamellar_thread_id");
+            let mac_string = mac_string.replace("lamellar::tid", "__lamellar_thread_id");
             let mut new_mac: syn::Macro = syn::parse_str(&mac_string).unwrap();
             new_mac = parse_quote_spanned!(span=> #new_mac);
             // println!("{:#?}", new_mac.to_token_stream().to_string());

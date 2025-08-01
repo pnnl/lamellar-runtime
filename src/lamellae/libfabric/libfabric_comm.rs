@@ -1,4 +1,6 @@
+use super::ofi::Ofi;
 use crate::config;
+use crate::lamellae::comm::CommOpHandle;
 use crate::lamellae::{
     comm::{AllocError, AllocResult, Comm, CommOps},
     command_queues::CommandQueue,
@@ -15,8 +17,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-use crate::lamellae::comm::CommOpHandle;
-use super::ofi::Ofi;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum TxError {
@@ -41,8 +41,7 @@ static LIBFAB_MAGIC_1: u8 = 0b10011001;
 pub(crate) static LIBFAB_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
                                          // #[derive(Debug)]
-pub(crate) struct LibFabComm {
-    pub(crate) base_address: Arc<RwLock<usize>>,
+pub(crate) struct LibfabricComm {
     alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -54,7 +53,7 @@ pub(crate) struct LibFabComm {
     ofi: Arc<Ofi>,
 }
 
-impl std::fmt::Debug for LibFabComm {
+impl std::fmt::Debug for LibfabricComm {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "my_pes: {}", self.my_pe)?;
         write!(f, "num_pes: {}", self.num_pes)?;
@@ -65,7 +64,7 @@ impl std::fmt::Debug for LibFabComm {
     }
 }
 
-impl LibFabComm {
+impl LibfabricComm {
     pub(crate) fn new(
         provider: Option<&str>,
         domain: Option<&str>,
@@ -88,7 +87,6 @@ impl LibFabComm {
         let addr = ofi.sub_alloc(&all_pes, total_mem)?;
 
         let libfab = Self {
-            base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: RwLock::new(vec![BTreeAlloc::new("libfab_mem".to_string())]),
             _init: AtomicBool::new(true),
             my_pe: ofi.my_pe,
@@ -194,10 +192,9 @@ impl LibFabComm {
             //.expect("error in rofi get")
             Err(ret) => {
                 println!(
-                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                        "Error in get from {:?} src {:x}  dst_addr {:p} size {:?} ret {:?}",
                         pe,
                         src_addr,
-                        *self.base_address.read(),
                         dst_addr,
                         dst_addr.len(),
                         ret,
@@ -212,7 +209,7 @@ impl LibFabComm {
     }
 }
 
-impl CommOps for LibFabComm {
+impl CommOps for LibfabricComm {
     fn my_pe(&self) -> usize {
         self.my_pe
     }
@@ -310,9 +307,12 @@ impl CommOps for LibFabComm {
         panic!("Error invalid free! {:?}", addr);
     }
 
-    fn alloc<'a>(&'a self, size: usize, alloc: AllocationType) -> CommOpHandle<'a, AllocResult<usize>> {
+    fn alloc<'a>(
+        &'a self,
+        size: usize,
+        alloc: AllocationType,
+    ) -> CommOpHandle<'a, AllocResult<usize>> {
         let fut = async move {
-
             match alloc {
                 AllocationType::Local => todo!(),
                 AllocationType::Global => {
@@ -330,9 +330,6 @@ impl CommOps for LibFabComm {
         self.ofi.release(&addr);
     }
 
-    fn base_addr(&self) -> usize {
-        *self.base_address.read()
-    }
 
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.ofi.local_addr(&remote_pe, &remote_addr)
@@ -367,13 +364,17 @@ impl CommOps for LibFabComm {
         }
     }
 
-    fn iput<'a, T: Remote + Sync>(&'a self, pe: usize, src_addr: &'a [T], dst_addr: usize) -> CommOpHandle<'a>  {
-
+    fn iput<'a, T: Remote + Sync>(
+        &'a self,
+        pe: usize,
+        src_addr: &'a [T],
+        dst_addr: usize,
+    ) -> CommOpHandle<'a> {
         let fut = async move {
             if pe != self.my_pe {
                 unsafe { self.ofi.put(pe, src_addr, dst_addr, true) }.unwrap();
                 self.put_amt
-                .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+                    .fetch_add(src_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
             } else {
                 unsafe {
                     // println!("[{:?}]-({:?}) memcopy {:?}",pe,src_addr.as_ptr());
@@ -421,7 +422,12 @@ impl CommOps for LibFabComm {
     }
 
     //#[tracing::instrument(skip_all)]
-    fn iget<'a, T: Remote + Sync + Send>(&'a self, pe: usize, src_addr: usize, dst_addr: &'a mut [T])  -> CommOpHandle<'a>{
+    fn iget<'a, T: Remote + Sync + Send>(
+        &'a self,
+        pe: usize,
+        src_addr: usize,
+        dst_addr: &'a mut [T],
+    ) -> CommOpHandle<'a> {
         let fut = async move {
             if pe != self.my_pe {
                 let bytes_len = dst_addr.len() * std::mem::size_of::<T>();
@@ -509,7 +515,7 @@ impl CommOps for LibFabComm {
     }
 }
 
-impl Drop for LibFabComm {
+impl Drop for LibfabricComm {
     fn drop(&mut self) {
         println!("[{:?}] in rofi comm drop", self.my_pe);
         // print!(""); //not sure why this prevents hanging....
@@ -543,7 +549,7 @@ impl Drop for LibFabComm {
 }
 
 #[derive(Debug)]
-pub(crate) struct LibFabData {
+pub(crate) struct LibfabricData {
     pub(crate) addr: usize,          // process space address)
     pub(crate) relative_addr: usize, //address allocated from rofi
     pub(crate) len: usize,
@@ -553,19 +559,19 @@ pub(crate) struct LibFabData {
     pub(crate) alloc_size: usize,
 }
 
-impl LibFabData {
+impl LibfabricData {
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn new(libfab_comm: Arc<Comm>, size: usize) -> Result<LibFabData, anyhow::Error> {
+    pub(crate) fn new(libfab_comm: Arc<Comm>, size: usize) -> Result<LibfabricData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr =
             libfab_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let addr = relative_addr; // + libfab_comm.base_addr();
+        let addr = relative_addr; 
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)
         };
-        Ok(LibFabData {
+        Ok(LibfabricData {
             addr: addr,
             relative_addr: relative_addr + ref_cnt_size,
             data_start: addr + std::mem::size_of::<AtomicUsize>() + *SERIALIZE_HEADER_LEN,
@@ -577,7 +583,7 @@ impl LibFabData {
     }
 }
 
-impl SerializedDataOps for LibFabData {
+impl SerializedDataOps for LibfabricData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn header_as_bytes(&self) -> &mut [u8] {
         let header_size = *SERIALIZE_HEADER_LEN;
@@ -601,7 +607,7 @@ impl SerializedDataOps for LibFabData {
     }
 }
 
-impl Des for LibFabData {
+impl Des for LibfabricData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(self.header_as_bytes(), false).unwrap()
@@ -637,24 +643,24 @@ impl Des for LibFabData {
     }
 }
 
-impl SubData for LibFabData {
+impl SubData for LibfabricData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn sub_data(&self, start: usize, end: usize) -> SerializedData {
         let mut sub = self.clone();
         sub.data_start += start;
         sub.data_len = end - start;
-        SerializedData::LibFabData(sub)
+        SerializedData::LibfabricData(sub)
     }
 }
 
-impl Clone for LibFabData {
+impl Clone for LibfabricData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn clone(&self) -> Self {
         unsafe {
             let ref_cnt = self.addr as *const AtomicUsize;
             (*ref_cnt).fetch_add(1, Ordering::SeqCst)
         };
-        LibFabData {
+        LibfabricData {
             addr: self.addr,
             relative_addr: self.relative_addr,
             len: self.len,
@@ -666,7 +672,7 @@ impl Clone for LibFabData {
     }
 }
 
-impl Drop for LibFabData {
+impl Drop for LibfabricData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };

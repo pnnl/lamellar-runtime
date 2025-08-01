@@ -9,6 +9,9 @@
 use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
+use tracing;
+use tracing_subscriber::fmt;
+
 //--the returned active message that will execute automically upon arrival at the originating node --//
 #[lamellar::AmData(Clone, Debug)]
 struct ReturnUsizeAM {
@@ -57,6 +60,10 @@ impl LamellarAM for InitialAM {
 //-------------------------------------------------------------------//
 
 fn main() {
+    //sleep for 10 seconds to allow time to attach a debugger
+    // std::thread::sleep(std::time::Duration::from_secs(10));
+     let subscriber = fmt::init();
+     tracing::trace!("Starting Active Message Example: AM return AM usize");
     let world = lamellar::LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend

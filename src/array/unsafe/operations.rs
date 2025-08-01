@@ -1,12 +1,10 @@
-use crate::active_messaging::{ActiveMessaging,LamellarArcAm};
+use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::handle::*;
 use crate::array::operations::*;
- use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
-use crate::{AmHandle, LAMELLAR_THREAD_ID};
-use futures_util::future::join_all;
+use crate::AmHandle;
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
@@ -944,7 +942,7 @@ impl SingleValMultiIndex {
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
         // println!("{:?} {:?} {:?}",self.array.type_id(),TypeId::of::<T>(),ret);
-        match SINGLE_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()){
+        match SINGLE_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
             Some(op) => op(
                 self.array,
                 self.op,
@@ -961,7 +959,7 @@ impl SingleValMultiIndex {
                 self.val,
                 self.idx,
                 self.index_size.len() as u8,
-            )
+            ),
         }
         // match std::env::var("TEST_OPS") {
         //     Ok(_) => SINGLE_VAL_MULTI_IDX_OPS_NEW
@@ -1021,26 +1019,25 @@ impl MultiValSingleIndex {
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        match MULTI_VAL_SINGLE_IDX_OPS_NEW.get(&TypeId::of::<T>()){
-            Some(op) => op(
-                self.array, self.op, self.val, self.idx, ret
-            ),
+        match MULTI_VAL_SINGLE_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
+            Some(op) => op(self.array, self.op, self.val, self.idx, ret),
             None => {
-                 let val =
+                let val =
                     unsafe { Vec::from_raw_parts(self.val.0 as *mut T, self.val.1, self.val.2) };
                 let val_u8 = val.as_ptr() as *const u8;
 
                 MULTI_VAL_SINGLE_IDX_OPS
-                .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-                .unwrap()(
-                self.array,
+                    .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                    .unwrap()(
+                    self.array,
                     self.op,
                     unsafe {
                         std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
                     }
                     .to_vec(),
                     self.idx,
-            )}
+                )
+            }
         }
         // match std::env::var("TEST_OPS") {
         //     Ok(_) => MULTI_VAL_SINGLE_IDX_OPS_NEW
@@ -1097,7 +1094,7 @@ impl MultiValMultiIndex {
         //     ret,
         //     std::any::type_name::<T>(),
         // );
-        match MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()){
+        match MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
             Some(op) => op(
                 self.array,
                 self.op,
@@ -1112,7 +1109,7 @@ impl MultiValMultiIndex {
                 self.op,
                 self.idxs_vals,
                 self.index_size.len() as u8,
-            )
+            ),
         }
         // match std::env::var("TEST_OPS") {
         //     Ok(_) => MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()).unwrap()(

@@ -422,28 +422,24 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle<T>{
+    ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.inner.data.team.team()) {
             Ok(buf) => {
                 let inner_handle = match self.inner.distribution {
-                    Distribution::Block => {
-                        self.block_op(ArrayRdmaCmd::Put, index, buf)
-                    }
-                    Distribution::Cyclic => {
-                        self.cyclic_op(ArrayRdmaCmd::Put, index, buf)
-                    }
+                    Distribution::Block => self.block_op(ArrayRdmaCmd::Put, index, buf),
+                    Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Put, index, buf),
                 };
                 ArrayRdmaHandle {
                     array: self.as_lamellar_byte_array(),
                     reqs: inner_handle,
                     spawned: false,
                 }
-            },
-            Err(_) => {ArrayRdmaHandle {
+            }
+            Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
-            }}
+            },
         }
     }
 
@@ -512,25 +508,22 @@ impl<T: Dist> UnsafeArray<T> {
         buf: U,
     ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.inner.data.team.team()) {
-                Ok(buf) => {let inner_handle = match self.inner.distribution {
-                    Distribution::Block => {
-                        self.block_op(ArrayRdmaCmd::Get(false), index, buf)
-                    }
-                    Distribution::Cyclic => {
-                        self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf)
-                    }
+            Ok(buf) => {
+                let inner_handle = match self.inner.distribution {
+                    Distribution::Block => self.block_op(ArrayRdmaCmd::Get(false), index, buf),
+                    Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf),
                 };
                 ArrayRdmaHandle {
                     array: self.as_lamellar_byte_array(),
                     reqs: inner_handle,
                     spawned: false,
                 }
-            },
-            Err(_) => {ArrayRdmaHandle {
+            }
+            Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
-            }}
+            },
         }
     }
 
@@ -569,7 +562,7 @@ impl<T: Dist> UnsafeArray<T> {
     // ///     if my_pe == 0 { //only perfrom the transfer from one PE
     // ///          println!();
     // ///         array.blocking_get(0,&buf);
-    // ///         
+    // ///
     // ///     }
     // ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
     // /// }

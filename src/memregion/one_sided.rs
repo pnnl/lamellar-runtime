@@ -99,8 +99,8 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
         // println!("creating net handle {:?}",mem_reg);
         NetMemRegionHandle {
-            mr_addr: mem_reg.mr.alloc.addr,
-            mr_size: mem_reg.mr.alloc.size,
+            mr_addr: mem_reg.mr.alloc.comm_addr().into(),
+            mr_size: mem_reg.mr.alloc.num_bytes(),
             mr_pe: mem_reg.mr.pe,
             team: mem_reg.team.clone().into(),
             my_id: mem_reg.my_id,
@@ -836,7 +836,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self{
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         SubRegion::sub_region(self, range)
     }
 
@@ -872,7 +872,7 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
-    fn addr(&self) -> MemResult<usize> {
+    fn addr(&self) -> MemResult<CommAllocAddr> {
         if self.pe == self.mr.inner.my_id.1 {
             let addr = self.mr.inner.mr.addr()?;
             Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
@@ -912,16 +912,14 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     }
     unsafe fn as_ptr(&self) -> MemResult<*const T> {
         if self.pe == self.mr.inner.my_id.1 {
-            let addr = self.addr()?;
-            Ok(addr as *const T)
+            self.addr().map(|addr| addr.as_ptr())
         } else {
             Err(MemRegionError::MemNotLocalError)
         }
     }
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         if self.pe == self.mr.inner.my_id.1 {
-            let addr = self.addr()?;
-            Ok(addr as *mut T)
+            self.addr().map(|addr| addr.as_mut_ptr())
         } else {
             Err(MemRegionError::MemNotLocalError)
         }

@@ -53,7 +53,9 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    unsafe { array.put(0, data.clone()).block(); };
+    unsafe {
+        array.put(0, data.clone()).block();
+    };
     world.barrier();
     let s = Instant::now();
     world.barrier();

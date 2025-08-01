@@ -1657,53 +1657,75 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
 
 #[doc(hidden)]
 // #[enum_dispatch(LamellarMutLocalData<T>)]
-pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> { //the user facing trait enforces ElementArithmeticOps + ArrayOps so we don't apply those constraints here
+pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
+    //the user facing trait enforces ElementArithmeticOps + ArrayOps so we don't apply those constraints here
     fn local_add(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_add(idx_vals, false);
     }
-    fn local_fetch_add(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_fetch_add(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
     fn local_sub(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_sub(idx_vals, false);
     }
-    fn local_fetch_sub(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_fetch_sub(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
     fn local_mul(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_mul(idx_vals, false);
     }
-    fn local_fetch_mul(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
-    fn local_div(&mut self,idx_vals: impl Iterator<Item = (usize, T)>) {
+    fn local_fetch_mul(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
+    fn local_div(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_div(idx_vals, false);
     }
-    fn local_fetch_div(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_fetch_div(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
     fn local_rem(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_rem(idx_vals, false);
     }
-    fn local_fetch_rem(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_fetch_rem(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
 }
-
-
 
 macro_rules! impl_local_arithmetic_op {
     ($op:ident) => {
-        fn $op(&mut self, idx_vals: impl Iterator<Item = (usize, T)>, fetch: bool) -> Option<Vec<T>> {
+        fn $op(
+            &mut self,
+            idx_vals: impl Iterator<Item = (usize, T)>,
+            fetch: bool,
+        ) -> Option<Vec<T>> {
             match self {
-                LamellarMutLocalData::Slice(data) => data.$op(idx_vals,fetch),
+                LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
                 LamellarMutLocalData::LocalLock(ref mut data) => {
                     let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals,fetch)
-                }   
+                    slice.$op(idx_vals, fetch)
+                }
                 LamellarMutLocalData::GlobalLock(ref mut data) => {
                     let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals,fetch)
-                },
-                LamellarMutLocalData::NativeAtomic( ref mut  data) => data.$op(idx_vals,fetch),
-                LamellarMutLocalData::GenericAtomic(ref mut  data) => data.$op(idx_vals,fetch),
+                    slice.$op(idx_vals, fetch)
+                }
+                LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
             }
         }
-    }
-
+    };
 }
 
-impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for LamellarMutLocalData<'_,T> {
+impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for LamellarMutLocalData<'_, T> {
     impl_local_arithmetic_op!(local_fetch_add);
     impl_local_arithmetic_op!(local_fetch_sub);
     impl_local_arithmetic_op!(local_fetch_mul);
@@ -1711,83 +1733,115 @@ impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for LamellarMutLocalD
     impl_local_arithmetic_op!(local_fetch_rem);
 }
 
-
-impl <T: Dist + ElementArithmeticOps >  LocalArithmeticOps<T> for &mut [T] {
-    fn local_fetch_add(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>> {
+impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for &mut [T] {
+    fn local_fetch_add(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] += val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] += val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
-                self[i] += val;
             });
             None
         }
     }
-    fn local_fetch_sub(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>> {
+    fn local_fetch_sub(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] -= val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] -= val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
-                self[i] -= val;
             });
             None
         }
     }
-    fn local_fetch_mul(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>> {
+    fn local_fetch_mul(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] *= val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] *= val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
-                self[i] *= val;
             });
             None
         }
     }
-    fn local_fetch_div(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>> {
+    fn local_fetch_div(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
-                self[i] /= val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] /= val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] /= val;
             });
             None
         }
     }
-    fn local_fetch_rem(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>> {
+    fn local_fetch_rem(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
-                self[i] %= val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] %= val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] %= val;
             });
             None
         }
     }
 }
-
-

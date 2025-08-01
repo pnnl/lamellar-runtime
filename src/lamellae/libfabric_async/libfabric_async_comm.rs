@@ -46,8 +46,7 @@ static LIBFABASYNC_MAGIC_1: u8 = 0b10011001;
 pub(crate) static LIBFABASYNC_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
                                          // #[derive(Debug)]
-pub(crate) struct LibFabAsyncComm {
-    pub(crate) base_address: Arc<RwLock<usize>>,
+pub(crate) struct LibfabricAsyncComm {
     alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -59,7 +58,7 @@ pub(crate) struct LibFabAsyncComm {
     ofi: Arc<OfiAsync>,
 }
 
-impl std::fmt::Debug for LibFabAsyncComm {
+impl std::fmt::Debug for LibfabricAsyncComm {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "my_pes: {}", self.my_pe)?;
         write!(f, "num_pes: {}", self.num_pes)?;
@@ -70,7 +69,7 @@ impl std::fmt::Debug for LibFabAsyncComm {
     }
 }
 
-impl LibFabAsyncComm {
+impl LibfabricAsyncComm {
     pub(crate) fn new(
         provider: Option<&str>,
         domain: Option<&str>,
@@ -96,7 +95,6 @@ impl LibFabAsyncComm {
         let addr = block_on(async { ofi.sub_alloc(&all_pes, total_mem).await })?;
 
         let libfab = Self {
-            base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: RwLock::new(vec![BTreeAlloc::new("libfab_mem".to_string())]),
             _init: AtomicBool::new(true),
             my_pe: ofi.my_pe,
@@ -204,10 +202,9 @@ impl LibFabAsyncComm {
             match unsafe{self.ofi.get(pe, src_addr, dst_addr, true)}.await {
                 Err(ret) => {
                     println!(
-                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                        "Error in get from {:?} src {:x}  dst_addr {:p} size {:?} ret {:?}",
                         pe,
                         src_addr,
-                        *self.base_address.read(),
                         dst_addr,
                         dst_addr.len(),
                         ret,
@@ -227,7 +224,7 @@ impl LibFabAsyncComm {
     }
 }
 
-impl CommOps for LibFabAsyncComm {
+impl CommOps for LibfabricAsyncComm {
     fn my_pe(&self) -> usize {
         self.my_pe
     }
@@ -335,9 +332,6 @@ impl CommOps for LibFabAsyncComm {
         self.ofi.release(&addr);
     }
 
-    fn base_addr(&self) -> usize {
-        *self.base_address.read()
-    }
 
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.ofi.local_addr(&remote_pe, &remote_addr)
@@ -530,7 +524,7 @@ impl CommOps for LibFabAsyncComm {
     }
 }
 
-impl Drop for LibFabAsyncComm {
+impl Drop for LibfabricAsyncComm {
     fn drop(&mut self) {
         println!("[{:?}] in rofi comm drop", self.my_pe);
         // print!(""); //not sure why this prevents hanging....
@@ -564,7 +558,7 @@ impl Drop for LibFabAsyncComm {
 }
 
 #[derive(Debug)]
-pub(crate) struct LibFabAsyncData {
+pub(crate) struct LibfabricAsyncData {
     pub(crate) addr: usize,          // process space address)
     pub(crate) relative_addr: usize, //address allocated from rofi
     pub(crate) len: usize,
@@ -574,22 +568,22 @@ pub(crate) struct LibFabAsyncData {
     pub(crate) alloc_size: usize,
 }
 
-impl LibFabAsyncData {
+impl LibfabricAsyncData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         libfab_comm: Arc<Comm>,
         size: usize,
-    ) -> Result<LibFabAsyncData, anyhow::Error> {
+    ) -> Result<LibfabricAsyncData, anyhow::Error> {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr =
             libfab_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let addr = relative_addr; // + libfab_comm.base_addr();
+        let addr = relative_addr; 
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)
         };
-        Ok(LibFabAsyncData {
+        Ok(LibfabricAsyncData {
             addr: addr,
             relative_addr: relative_addr + ref_cnt_size,
             data_start: addr + std::mem::size_of::<AtomicUsize>() + *SERIALIZE_HEADER_LEN,
@@ -601,7 +595,7 @@ impl LibFabAsyncData {
     }
 }
 
-impl SerializedDataOps for LibFabAsyncData {
+impl SerializedDataOps for LibfabricAsyncData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn header_as_bytes(&self) -> &mut [u8] {
         let header_size = *SERIALIZE_HEADER_LEN;
@@ -625,7 +619,7 @@ impl SerializedDataOps for LibFabAsyncData {
     }
 }
 
-impl Des for LibFabAsyncData {
+impl Des for LibfabricAsyncData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
         crate::deserialize(self.header_as_bytes(), false).unwrap()
@@ -661,24 +655,24 @@ impl Des for LibFabAsyncData {
     }
 }
 
-impl SubData for LibFabAsyncData {
+impl SubData for LibfabricAsyncData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn sub_data(&self, start: usize, end: usize) -> SerializedData {
         let mut sub = self.clone();
         sub.data_start += start;
         sub.data_len = end - start;
-        SerializedData::LibFabAsyncData(sub)
+        SerializedData::LibfabricAsyncData(sub)
     }
 }
 
-impl Clone for LibFabAsyncData {
+impl Clone for LibfabricAsyncData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn clone(&self) -> Self {
         unsafe {
             let ref_cnt = self.addr as *const AtomicUsize;
             (*ref_cnt).fetch_add(1, Ordering::SeqCst)
         };
-        LibFabAsyncData {
+        LibfabricAsyncData {
             addr: self.addr,
             relative_addr: self.relative_addr,
             len: self.len,
@@ -690,7 +684,7 @@ impl Clone for LibFabAsyncData {
     }
 }
 
-impl Drop for LibFabAsyncData {
+impl Drop for LibfabricAsyncData {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         let cnt = unsafe { (*(self.addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst) };

@@ -297,7 +297,10 @@ impl Batcher for SimpleBatcher {
             // trace!("before i: {:?} dl {:?} cl {:?}", i, ser_data.data_len(), *CMD_LEN);
             //data.len() {
             // let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
-            let cmd: Cmd = ser_data.sub_data(i, i+*CMD_LEN).deserialize_data().unwrap();
+            let cmd: Cmd = ser_data
+                .sub_data(i, i + *CMD_LEN)
+                .deserialize_data()
+                .unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
@@ -425,7 +428,7 @@ impl SimpleBatcher {
         let am_header = AmHeader {
             am_id: am_id,
             req_id: req_data.id,
-            team_addr: req_data.team_addr,
+            team_addr: req_data.team_addr.into(),
         };
         crate::serialize_into(&mut data_buf[i..i + *AM_HEADER_LEN], &am_header, false).unwrap();
         i += *AM_HEADER_LEN;
@@ -548,7 +551,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: team.team.remote_ptr_alloc.comm_addr(),
         };
         // println!(
         //     "[{:?}] simple batcher exec_am submit task",
@@ -609,7 +612,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: team.team.remote_ptr_alloc.comm_addr(),
         };
         // println!(
         //     "[{:?}] exec_return_am submit task",

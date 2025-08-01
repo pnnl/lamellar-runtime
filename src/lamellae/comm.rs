@@ -12,15 +12,17 @@ use super::Backend;
 // use crate::LamellarMemoryRegion;
 #[cfg(feature = "rofi-c")]
 use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
+// #[cfg(feature = "enable-libfabric")]
+// use crate::lamellae::{
+//     libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibfabricAsyncData,
+// };
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::{
-    libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibFabAsyncData,
-};
-#[cfg(feature = "enable-rofi-rust")]
-use crate::lamellae::{
-    rofi_rust::rofi_rust_comm::*, rofi_rust_async::rofi_rust_async_comm::*, RofiRustAsyncData,
-    RofiRustData,
-};
+use crate::lamellae::libfabric_lamellae::{comm::LibfabricComm, fabric::AllocInfo};
+// #[cfg(feature = "enable-rofi-rust")]
+// use crate::lamellae::{
+//     rofi_rust::rofi_rust_comm::*, rofi_rust_async::rofi_rust_async_comm::*, RofiRustAsyncData,
+//     RofiRustData,
+// };
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -31,7 +33,7 @@ use crate::{
     Deserialize, Serialize,
 };
 
-use derive_more::{Add, From, Into, Sub};
+use derive_more::{Add, Into, Sub};
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
@@ -56,9 +58,9 @@ pub(crate) enum Comm {
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync(RofiRustAsyncComm),
     #[cfg(feature = "enable-libfabric")]
-    LibFab(LibFabComm),
-    #[cfg(feature = "enable-libfabric")]
-    LibFabAsync(LibFabAsyncComm),
+    Libfabric(LibfabricComm),
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricAsync(LibfabricAsyncComm),
     Shmem(ShmemComm),
     Local(LocalComm),
 }
@@ -91,6 +93,8 @@ impl CommAtomic for Comm {
             Comm::RofiC(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
             Comm::Shmem(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
             Comm::Local(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
+            #[cfg(feature = "enable-libfabric")]
+            Comm::Libfabric(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
         }
     }
     fn atomic_fetch_op<T: NetworkAtomic>(
@@ -104,11 +108,17 @@ impl CommAtomic for Comm {
     ) -> RdmaHandle<T> {
         match self {
             #[cfg(feature = "rofi-c")]
-            Comm::RofiC(comm) => comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result),
+            Comm::RofiC(comm) => {
+                comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
+            }
             Comm::Shmem(comm) => {
                 comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
             }
             Comm::Local(comm) => {
+                comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            Comm::Libfabric(comm) => {
                 comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
             }
         }
@@ -120,10 +130,81 @@ pub(crate) trait CommShutdown {
     fn force_shutdown(&self);
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum CommAllocInfo {
+    Raw(usize, usize), //address, size
+    #[cfg(feature = "enable-libfabric")]
+    AllocInfo(Arc<AllocInfo>),
+}
+
+impl CommAllocInfo {
+    pub(crate) fn addr(&self) -> CommAllocAddr {
+        match self {
+            CommAllocInfo::Raw(addr, _) => CommAllocAddr(*addr),
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInfo::AllocInfo(info) => CommAllocAddr(info.start()),
+        }
+    }
+    pub(crate) fn size(&self) -> usize {
+        match self {
+            CommAllocInfo::Raw(_, size) => *size,
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInfo::AllocInfo(info) => info.num_bytes(),
+        }
+    }
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAllocInfo {
+        debug_assert!(offset + size <= self.size());
+        match self {
+            CommAllocInfo::Raw(addr, _) => CommAllocInfo::Raw(*addr + offset, size),
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInfo::AllocInfo(info) => CommAllocInfo::AllocInfo(
+                info.sub_alloc(offset, size)
+                    .expect("Invalid sub allocation"),
+            ),
+        }
+    }
+    pub(crate) fn contains(&self, addr: &usize) -> bool {
+        let my_addr = self.addr().into();
+        my_addr <= *addr && *addr < my_addr
+    }
+}
+
+// impl Into<CommAllocAddr> for &CommAllocInfo {
+//     fn into(self) -> CommAllocAddr {
+//         match self {
+//             CommAllocInfo::Raw(addr) => CommAllocAddr(*addr),
+//             #[cfg(feature = "enable-libfabric")]
+//             CommAllocInfo::AllocInfo(info) => CommAllocAddr(info.addr),
+//         }
+//     }
+// }
+
+// impl Into<CommAllocAddr> for CommAllocInfo {
+//     fn into(self) -> CommAllocAddr {
+//         match self {
+//             CommAllocInfo::Raw(addr) => CommAllocAddr(addr),
+//             #[cfg(feature = "enable-libfabric")]
+//             CommAllocInfo::AllocInfo(info) => CommAllocAddr(info.addr),
+//         }
+//     }
+// }
+
+// impl std::ops::Deref for CommAllocInfo {
+//     type Target = usize;
+//     fn deref(&self) -> &Self::Target {
+//         match self {
+//             CommAllocInfo::Raw(addr) => addr,
+//             #[cfg(feature = "enable-libfabric")]
+//             CommAllocInfo::AllocInfo(info) => &info.addr,
+//         }
+//     }
+// }
+
 #[derive(Clone)]
 pub(crate) struct CommAlloc {
-    pub(crate) addr: usize,
-    pub(crate) size: usize,
+    // pub(crate) addr: usize,
+    // pub(crate) size: usize,
+    pub(crate) info: CommAllocInfo,
     pub(crate) alloc_type: CommAllocType,
 }
 impl std::fmt::Debug for CommAlloc {
@@ -131,7 +212,9 @@ impl std::fmt::Debug for CommAlloc {
         write!(
             f,
             "CommAlloc {{ addr: {:x}, size: {:?}, alloc_type: {:?} }}",
-            self.addr, self.size, self.alloc_type
+            self.info.addr(),
+            self.num_bytes(),
+            self.alloc_type
         )
     }
 }
@@ -141,19 +224,22 @@ impl std::fmt::Debug for CommAlloc {
 
 impl CommAlloc {
     pub(crate) fn byte_add(&self, offset: usize) -> CommAllocAddr {
-        debug_assert!(offset < self.size);
-        CommAllocAddr(self.addr + offset)
+        debug_assert!(offset < self.num_bytes());
+        self.info.addr() + offset
     }
     #[tracing::instrument(skip(self), level = "debug")]
-    pub(crate) fn as_slice<T>(&self) -> CommSlice<T> {
+    pub(crate) fn as_comm_slice<T>(&self) -> CommSlice<T> {
         CommSlice {
-            addr: CommAllocAddr(self.addr),
-            size: self.size / std::mem::size_of::<T>(),
+            info: self.info.clone(),
             _phantom: std::marker::PhantomData,
         }
     }
-    #[tracing::instrument( level = "debug")]
-    pub(crate) fn slice_at_byte_offset<T>(&self, offset: usize, num_elems: usize) -> CommSlice<T> {
+    #[tracing::instrument(level = "debug")]
+    pub(crate) fn comm_slice_at_byte_offset<T>(
+        &self,
+        offset: usize,
+        num_elems: usize,
+    ) -> CommSlice<T> {
         trace!(
             "{:?} offset: {}  num_elems: {} bytes: {}",
             self,
@@ -162,20 +248,22 @@ impl CommAlloc {
             num_elems * std::mem::size_of::<T>()
         );
         debug_assert!(
-            offset < self.size && offset + num_elems * std::mem::size_of::<T>() <= self.size
+            offset < self.num_bytes()
+                && offset + num_elems * std::mem::size_of::<T>() <= self.num_bytes()
         );
         CommSlice {
-            addr: CommAllocAddr(self.addr + offset),
-            size: num_elems,
+            info: self
+                .info
+                .sub_alloc(offset, num_elems * std::mem::size_of::<T>()),
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     pub(crate) unsafe fn as_ptr<T>(&self) -> *const T {
-        self.addr as *const T
+        self.info.addr().as_ptr::<T>()
     }
     pub(crate) unsafe fn as_mut_ptr<T>(&self) -> *mut T {
-        self.addr as *mut T
+        self.info.addr().as_mut_ptr::<T>()
     }
     pub(crate) unsafe fn as_ref<T>(&self) -> Option<&T> {
         self.as_ptr::<T>().as_ref()
@@ -185,7 +273,13 @@ impl CommAlloc {
         self.as_mut_ptr::<T>().as_mut()
     }
     pub(crate) fn comm_addr(&self) -> CommAllocAddr {
-        CommAllocAddr(self.addr)
+        self.info.addr()
+    }
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.info.size()
+    }
+    pub(crate) fn contains(&self, addr: &usize) -> bool {
+        self.info.contains(addr)
     }
 }
 
@@ -198,14 +292,31 @@ pub(crate) enum CommAllocType {
 // unsafe impl Send for CommAllocType {}
 // unsafe impl Sync for CommAllocType {}
 
-#[derive(
-    Copy, Clone, Add, Sub, From, Into, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize,
-)]
+#[derive(Copy, Clone, Add, Sub, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub(crate) struct CommAllocAddr(pub(crate) usize);
 
 impl Into<usize> for &CommAllocAddr {
     fn into(self) -> usize {
         self.0
+    }
+}
+
+impl Into<usize> for CommAllocAddr {
+    fn into(self) -> usize {
+        self.0
+    }
+}
+
+impl Into<CommAllocAddr> for usize {
+    fn into(self) -> CommAllocAddr {
+        CommAllocAddr(self)
+    }
+}
+
+impl std::ops::Deref for CommAllocAddr {
+    type Target = usize;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -253,16 +364,34 @@ impl std::ops::Add<usize> for &CommAllocAddr {
     }
 }
 
+impl std::ops::Sub<usize> for CommAllocAddr {
+    type Output = CommAllocAddr;
+    fn sub(self, rhs: usize) -> Self::Output {
+        CommAllocAddr(self.0 - rhs)
+    }
+}
+impl std::ops::Sub<usize> for &CommAllocAddr {
+    type Output = CommAllocAddr;
+    fn sub(self, rhs: usize) -> Self::Output {
+        CommAllocAddr(self.0 - rhs)
+    }
+}
+
 impl std::convert::AsRef<CommAllocAddr> for CommAllocAddr {
     fn as_ref(&self) -> &CommAllocAddr {
         self
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+impl std::convert::AsRef<usize> for CommAllocAddr {
+    fn as_ref(&self) -> &usize {
+        &self.0
+    }
+}
+
+#[derive(Debug, Clone)]
 pub(crate) struct CommSlice<T> {
-    pub(crate) addr: CommAllocAddr,
-    size: usize,
+    pub(crate) info: CommAllocInfo,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -271,10 +400,18 @@ pub(crate) struct CommSlice<T> {
 
 impl<T> CommSlice<T> {
     pub(crate) fn as_slice(&self) -> &[T] {
-        unsafe { std::slice::from_raw_parts(self.addr.as_ptr(), self.size) }
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
     pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.addr.as_mut_ptr(), self.size) }
+        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+    }
+    pub(crate) unsafe fn as_casted_slice<R>(&self) -> Option<&[R]> {
+        let len = self.len() * std::mem::size_of::<T>() / std::mem::size_of::<R>();
+        if len * std::mem::size_of::<R>() != self.len() * std::mem::size_of::<T>() {
+            return None; // size mismatch
+        }
+        let ptr = self.as_mut_ptr() as *mut R;
+        Some(std::slice::from_raw_parts_mut(ptr, len))
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -293,33 +430,34 @@ impl<T> CommSlice<T> {
         debug_assert!(end <= self.len());
         // trace!("subslice start: {} end: {} new addr: {:?} new size: {}", start, end, self.addr + start*std::mem::size_of::<T>(), end - start);
         CommSlice {
-            addr: self.addr + start*std::mem::size_of::<T>(),
-            size: end - start,
+            info: self.info.sub_alloc(
+                start * std::mem::size_of::<T>(),
+                (end - start) * std::mem::size_of::<T>(),
+            ),
             _phantom: std::marker::PhantomData,
         }
     }
     pub(crate) fn as_mut_ptr(&self) -> *mut T {
-        unsafe { self.addr.as_mut_ptr() }
+        unsafe { self.info.addr().as_mut_ptr() }
     }
     pub(crate) fn as_ptr(&self) -> *const T {
-        unsafe { self.addr.as_ptr() }
+        unsafe { self.info.addr().as_ptr() }
     }
     pub(crate) fn len(&self) -> usize {
-        self.size
+        self.info.size() / std::mem::size_of::<T>()
     }
-    pub(crate) fn addr(&self) -> usize {
-        self.addr.into()
+    pub(crate) fn usize_addr(&self) -> usize {
+        self.info.addr().into()
     }
 
     pub(crate) fn index_addr(&self, index: usize) -> CommAllocAddr {
-        debug_assert!(index < self.size);
-        self.addr + index*std::mem::size_of::<T>()
+        debug_assert!(index < self.info.size());
+        self.info.addr() + index * std::mem::size_of::<T>()
     }
 
     pub(crate) unsafe fn from_raw_parts(data: *const T, len: usize) -> Self {
         CommSlice {
-            addr: CommAllocAddr(data as usize),
-            size: len,
+            info: CommAllocInfo::Raw(data as usize, len * std::mem::size_of::<T>()),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -328,26 +466,25 @@ impl<T> CommSlice<T> {
         CommSlice::from_raw_parts(slice.as_ptr(), slice.len())
     }
 
-    pub(crate) fn contains<Addr: AsRef<CommAllocAddr>>(&self, addr: Addr) -> bool {
-        let addr = addr.as_ref();
-        &self.addr <= addr && addr < &(self.addr + self.size)
+    pub(crate) fn contains(&self, addr: &usize) -> bool {
+        self.info.contains(&addr)
     }
 
     pub(crate) fn num_bytes(&self) -> usize {
-        self.size * std::mem::size_of::<T>()
+        self.info.size() * std::mem::size_of::<T>()
     }
 }
 
 impl<T> std::ops::Deref for CommSlice<T> {
     type Target = [T];
     fn deref(&self) -> &Self::Target {
-        unsafe { std::slice::from_raw_parts(self.addr.as_ptr(), self.size) }
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 }
 
 impl<T> std::ops::DerefMut for CommSlice<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { std::slice::from_raw_parts_mut(self.addr.as_mut_ptr(), self.size) }
+        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
     }
 }
 
@@ -359,21 +496,23 @@ pub(crate) trait CommMem {
         alloc: AllocationType,
         align: usize,
     ) -> error::AllocResult<CommAlloc>;
+
+    // TODO: we probably want the CommAlloc to handle freeing on Drop... do we have the appropriate lifetime info for this?
     fn free(&self, alloc: CommAlloc);
     fn rt_alloc(&self, size: usize, align: usize) -> error::AllocResult<CommAlloc>;
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
+    // TODO: we probably want the CommAlloc to handle freeing on Drop... do we have the appropriate lifetime info for this?
     fn rt_free(&self, alloc: CommAlloc);
     fn mem_occupied(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);
     fn num_pool_allocs(&self) -> usize;
     fn print_pools(&self);
-    fn base_addr(&self) -> CommAllocAddr;
     // this translates a remote address to a local address
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr;
     // this translates a local address to a remote address
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> CommAllocAddr;
     // this checks for an allocation at the given address
-    fn get_alloc(&self,  addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
+    fn get_alloc(&self, addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
 }
 
 #[enum_dispatch]

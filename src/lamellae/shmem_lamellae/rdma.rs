@@ -40,12 +40,12 @@ impl<T: Remote> ShmemFuture<T> {
     fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
-            src.addr,
+            src.usize_addr(),
             dst,
             src.len(),
             src.len() * std::mem::size_of::<T>()
         );
-        if !(src.contains(dst) || src.contains(dst + src.len())) {
+        if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
             unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
         } else {
             unsafe {
@@ -57,7 +57,7 @@ impl<T: Remote> ShmemFuture<T> {
     fn inner_put_all(&self, src: &CommSlice<T>, dsts: &Vec<CommAllocAddr>) {
         trace!(
             "put all src: {:?} dsts: {:?} len: {}",
-            src.addr,
+            src.usize_addr(),
             dsts,
             src.len()
         );
@@ -70,10 +70,10 @@ impl<T: Remote> ShmemFuture<T> {
         trace!(
             "getting src: {:?} dst: {:?} len: {}",
             src,
-            dst.addr,
+            dst.usize_addr(),
             dst.len()
         );
-        if !(dst.contains(src) || dst.contains(src + dst.len())) {
+        if !(dst.contains(src) || dst.contains(&(src + dst.len()))) {
             unsafe {
                 std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
             }
@@ -210,9 +210,9 @@ impl CommRdma for ShmemComm {
             .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
         let alloc = self.alloc_lock.read();
         for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(src_addr.0) {
+            if shmem.contains(src_addr.into()) {
                 let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_src_addr = real_src_base + (src_addr.0 - addr);
+                let real_src_addr = real_src_base + (src_addr - *addr);
                 return ShmemFuture {
                     op: Op::Get(real_src_addr, dst),
                     spawned: false,

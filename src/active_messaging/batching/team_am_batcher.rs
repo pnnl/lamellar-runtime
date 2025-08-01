@@ -87,7 +87,7 @@ impl TeamAmBatcherInner {
     ) -> usize {
         let mut temp_size = 0;
         let team_batch = batch
-            .entry(req_data.team_addr)
+            .entry(req_data.team_addr.into())
             .or_insert_with(|| HashMap::new());
         if team_batch.len() == 0 {
             temp_size += *TEAM_HEADER_LEN;
@@ -431,7 +431,7 @@ impl Batcher for TeamAmBatcher {
             // let batch: BatchHeader =
             //     crate::deserialize(&data[i..i + *BATCH_HEADER_LEN], false).unwrap();
             let batch: BatchHeader = ser_data
-                .sub_data(i, i+*BATCH_HEADER_LEN)
+                .sub_data(i, i + *BATCH_HEADER_LEN)
                 .deserialize_data()
                 .unwrap();
             // println!("batch {:?} i: {} len: {}", batch, i, data.len());
@@ -736,7 +736,7 @@ impl TeamAmBatcher {
             // let team_header: TeamHeader =
             //     crate::deserialize(&data[*i..*i + *TEAM_HEADER_LEN], false).unwrap();
             let team_header: TeamHeader = ser_data
-                .sub_data(*i, *i+*TEAM_HEADER_LEN)
+                .sub_data(*i, *i + *TEAM_HEADER_LEN)
                 .deserialize_data()
                 .unwrap();
             // println!("team header: {:?}", team_header);
@@ -748,7 +748,7 @@ impl TeamAmBatcher {
                 // let batched_am_header: BatchedAmHeader =
                 // crate::deserialize(&data[*i..*i + *BATCHED_AM_HEADER_LEN], false).unwrap();
                 let batched_am_header: BatchedAmHeader = ser_data
-                    .sub_data(*i, *i+*BATCHED_AM_HEADER_LEN)
+                    .sub_data(*i, *i + *BATCHED_AM_HEADER_LEN)
                     .deserialize_data()
                     .unwrap();
                 // println!("batched am header: {:?}", batched_am_header);
@@ -824,7 +824,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: team.team.remote_ptr_alloc.comm_addr(),
         };
 
         let ame = ame.clone();
@@ -881,7 +881,7 @@ impl TeamAmBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: team.team.remote_ptr_alloc.comm_addr(),
         };
 
         ame.clone()

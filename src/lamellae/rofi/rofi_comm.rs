@@ -34,7 +34,6 @@ pub(crate) static ROFI_MEM: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 102
 const RT_MEM: usize = 100 * 1024 * 1024; // we add this space for things like team barrier buffers, but will work towards having teams get memory from rofi allocs
 #[derive(Debug)]
 pub(crate) struct RofiComm {
-    pub(crate) rofi_base_address: Arc<RwLock<usize>>,
     alloc: RwLock<Vec<BTreeAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -65,7 +64,6 @@ impl RofiComm {
         // println!("rofi comm total_mem {:?}",total_mem);
         let addr = rofi_alloc(total_mem, AllocationType::Global);
         let rofi = RofiComm {
-            rofi_base_address: Arc::new(RwLock::new(addr as usize)),
             alloc: RwLock::new(vec![BTreeAlloc::new("rofi_mem".to_string())]),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
@@ -79,11 +77,6 @@ impl RofiComm {
             // any_dropped: Arc::new(AtomicBool::new(false)),
             // alloc_mutex: Arc::new(Mutex::new(())),
         };
-        // trace!(
-        //     "[{:?}] Rofi base addr 0x{:x}",
-        //     rofi.my_pe,
-        //     *rofi.rofi_base_address.read()
-        // );
         rofi.alloc.write()[0].init(addr as usize, total_mem);
         rofi
     }
@@ -183,10 +176,9 @@ impl RofiComm {
             //.expect("error in rofi get")
             Err(ret) => {
                 println!(
-                        "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                        "Error in get from {:?} src {:x}   dst_addr {:p} size {:?} ret {:?}",
                         pe,
                         src_addr,
-                        *self.rofi_base_address.read(),
                         dst_addr,
                         dst_addr.len(),
                         ret,
@@ -326,11 +318,7 @@ impl CommOps for RofiComm {
         rofi_release(addr);
     }
 
-    #[allow(dead_code)]
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn base_addr(&self) -> usize {
-        *self.rofi_base_address.read()
-    }
+   
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
@@ -479,10 +467,9 @@ impl CommOps for RofiComm {
                 //not using rofi_get due to lost requests (TODO: implement better resource management in rofi)
                 Err(ret) => {
                     println!(
-                            "Error in get from {:?} src {:x} base_addr {:x} dst_addr {:p} size {:?} ret {:?}",
+                            "Error in get from {:?} src {:x} dst_addr {:p} size {:?} ret {:?}",
                             pe,
                             src_addr,
-                            *self.rofi_base_address.read(),
                             dst_addr,
                             dst_addr.len(),
                             ret,
@@ -592,55 +579,6 @@ impl CommOps for RofiComm {
         CommOpHandle::new(fut)
     }
 
-    //src address is relative to rofi base addr
-    #[tracing::instrument(skip_all, level = "debug")]
-    // fn iget_relative<T: Remote>(&self, pe: usize, src_addr: usize, dst_addr: &mut [T]) {
-    //     //-> RofiReq {
-    //     // let mut req = RofiReq{
-    //     //     txids: Vec::new(),
-    //     //     _drop_set: self.drop_set.clone(),
-    //     //     _any_dropped: self.any_dropped.clone(),
-    //     // };
-    //     if pe != self.my_pe {
-    //         // unsafe {
-    //         // let _lock = self.comm_mutex.write();
-    //         // println!("[{:?}]-({:?}) iget_relative [{:?}] entry",self.my_pe,thread::current().id(),pe);
-
-    //         match rofi_iget(*self.rofi_base_address.read() + src_addr, dst_addr, pe) {
-    //             //.expect("error in rofi get")
-    //             Err(_ret) => {
-    //                 println!(
-    //                     "[{:?}] Error in iget_relative from {:?} src_addr {:x} ({:x}) dst_addr {:?} base_addr {:x} size {:?}",
-    //                     self.my_pe,
-    //                     pe,
-    //                     src_addr,
-    //                     src_addr+*self.rofi_base_address.read() ,
-    //                     dst_addr.as_ptr(),
-    //                     *self.rofi_base_address.read(),
-    //                     dst_addr.len()
-    //                 );
-    //                 panic!();
-    //             }
-    //             Ok(_ret) => {
-    //                 self.get_cnt.fetch_add(1, Ordering::SeqCst);
-    //                 self.get_amt
-    //                     .fetch_add(dst_addr.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-    //                 // if ret != 0{
-    //                 //     req.txids.push(ret);
-    //                 // }
-    //             }
-    //         }
-    //         // };
-    //     } else {
-    //         unsafe {
-    //             std::ptr::copy(src_addr as *const T, dst_addr.as_mut_ptr(), dst_addr.len());
-    //         }
-    //     }
-    //     // req
-    //     // println!("[{:?}]- gc: {:?} pc: {:?} iget_relative exit",self.my_pe,self.get_cnt.load(Ordering::SeqCst),self.put_cnt.load(Ordering::SeqCst));
-    //     // println!("[{:?}]-({:?}) iget relative [{:?}] exit",self.my_pe,thread::current().id(),pe);
-    // }
-
     fn force_shutdown(&self) {
         let _res = rofi_finit();
     }
@@ -698,7 +636,7 @@ impl RofiData {
         let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
         let alloc_size = size + ref_cnt_size; //+  std::mem::size_of::<u64>();
         let relative_addr = rofi_comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let addr = relative_addr; // + rofi_comm.base_addr();
+        let addr = relative_addr;
         unsafe {
             let ref_cnt = addr as *const AtomicUsize;
             (*ref_cnt).store(1, Ordering::SeqCst)

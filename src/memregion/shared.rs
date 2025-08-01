@@ -301,7 +301,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
     ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self{
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         SubRegion::sub_region(self, range)
     }
 
@@ -326,7 +326,7 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
-    fn addr(&self) -> MemResult<usize> {
+    fn addr(&self) -> MemResult<CommAllocAddr> {
         let addr = self.mr.addr()?;
         Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
     }
@@ -348,12 +348,10 @@ impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
         }
     }
     unsafe fn as_ptr(&self) -> MemResult<*const T> {
-        let addr = self.addr()?;
-        Ok(addr as *const T)
+        self.addr().map(|addr| addr.as_ptr())
     }
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        let addr = self.addr()?;
-        Ok(addr as *mut T)
+        self.addr().map(|addr| addr.as_mut_ptr())
     }
     unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
         let slice = self.mr.as_casted_comm_slice()?;

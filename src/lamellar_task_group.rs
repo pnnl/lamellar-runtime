@@ -1017,7 +1017,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: self.team.remote_ptr_alloc.addr,
+            team_addr: self.team.remote_ptr_alloc.comm_addr(),
         };
         // println!("[{:?}] task group am all", std::thread::current().id());
         // self.team.scheduler.submit_am();
@@ -1059,7 +1059,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: self.team.remote_ptr_alloc.addr,
+            team_addr: self.team.remote_ptr_alloc.comm_addr(),
         };
         // println!("[{:?}] task group am pe", std::thread::current().id());
         // self.team.scheduler.submit_am(Am::Remote(req_data, func));
@@ -1107,7 +1107,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: self.team.remote_ptr_alloc.addr,
+            team_addr: self.team.remote_ptr_alloc.comm_addr(),
         };
         // println!("[{:?}] task group am local", std::thread::current().id());
         // self.team.scheduler.submit_am(Am::Local(req_data, func));

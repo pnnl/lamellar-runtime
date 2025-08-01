@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicIsize, AtomicUsize, Ordering};
 use shared_memory::*;
 use tracing::trace;
 
-use crate::lamellae::{CommAlloc, CommAllocAddr, CommAllocType};
+use crate::lamellae::{CommAlloc, CommAllocAddr, CommAllocInfo, CommAllocType};
 
 pub(crate) struct MyShmem {
     // pub(crate) data: *mut u8,
@@ -32,18 +32,24 @@ impl MyShmem {
         self.alloc.comm_addr()
     }
     pub(crate) fn len(&self) -> usize {
-        self.alloc.size
+        self.alloc.num_bytes()
     }
     pub(crate) fn contains(&self, addr: usize) -> bool {
-        self.alloc.addr <= addr && addr < self.alloc.addr + self.alloc.size
+        self.alloc.contains(&addr)
     }
 }
 
 #[tracing::instrument(skip_all, level = "debug")]
-fn attach_to_shmem(job_id: usize, size: usize, align:usize, id: &str, header: usize, create: bool) -> MyShmem {
+fn attach_to_shmem(
+    job_id: usize,
+    size: usize,
+    align: usize,
+    id: &str,
+    header: usize,
+    create: bool,
+) -> MyShmem {
     let padding = std::mem::size_of::<usize>() % align;
     let size = std::mem::size_of::<usize>() + padding + size;
-    
 
     let shmem_id =
         "lamellar_".to_owned() + &(job_id.to_string()) + "_" + &(size.to_string()) + "_" + id;
@@ -123,8 +129,10 @@ fn attach_to_shmem(job_id: usize, size: usize, align:usize, id: &str, header: us
             // data: m.as_ptr().add(std::mem::size_of::<usize>()),
             // len: size,
             alloc: CommAlloc {
-                addr: m.as_ptr().add(std::mem::size_of::<usize>() + padding) as usize,
-                size,
+                info: CommAllocInfo::Raw(
+                    m.as_ptr().add(std::mem::size_of::<usize>() + padding) as usize,
+                    size,
+                ),
                 alloc_type: CommAllocType::Fabric,
             },
             _shmem: m,
@@ -154,16 +162,27 @@ impl ShmemAlloc {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
-        let mut shmem = attach_to_shmem(job_id, size,std::mem::align_of::<usize>(), "alloc", job_id, pe == 0);
+        let mut shmem = attach_to_shmem(
+            job_id,
+            size,
+            std::mem::align_of::<usize>(),
+            "alloc",
+            job_id,
+            pe == 0,
+        );
         let data = unsafe { std::slice::from_raw_parts_mut(shmem.as_mut_ptr(), size) };
         if pe == 0 {
             for i in data {
                 *i = 0;
             }
         }
-        
+
         let base_ptr = shmem.as_ptr();
-        trace!("new shmem allocated! {:?} base_pointer{:?}", shmem,base_ptr);
+        trace!(
+            "new shmem allocated! {:?} base_pointer{:?}",
+            shmem,
+            base_ptr
+        );
         ShmemAlloc {
             _shmem: shmem,
             mutex: base_ptr as *mut AtomicUsize,
@@ -187,7 +206,12 @@ impl ShmemAlloc {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn alloc<I>(&self, size: usize, align: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
+    pub(crate) unsafe fn alloc<I>(
+        &self,
+        size: usize,
+        align: usize,
+        pes: I,
+    ) -> (MyShmem, usize, Vec<usize>)
     where
         I: Iterator<Item = usize> + Clone,
     {
@@ -237,7 +261,6 @@ impl ShmemAlloc {
                 }
             }
         }
-        
 
         // println!("going to attach to shmem {:?} {:?} {:?} {:?} {:?}",size*pes_len,*self.id,self.my_pe, barrier1,barrier2);
         let shmem = attach_to_shmem(
@@ -258,7 +281,7 @@ impl ShmemAlloc {
         cnt.as_ref().unwrap().fetch_sub(1, Ordering::SeqCst);
         while cnt.as_ref().unwrap().load(Ordering::SeqCst) != 0 {}
         let addrs = barrier2.to_vec();
-        trace!("attached {:?} {:?}",self.my_pe,shmem.as_ptr());
+        trace!("attached {:?} {:?}", self.my_pe, shmem.as_ptr());
         barrier1[self.my_pe] = 0;
         for pe in pes.into_iter() {
             // println!("{:?} pe {:?} {:?} {:?}",self.my_pe, pe, barrier1,barrier2);

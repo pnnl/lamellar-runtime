@@ -233,7 +233,7 @@ pub struct LocalAmHandle<T> {
     pub(crate) inner: Arc<AmHandleInner>,
     pub(crate) am: Option<(Am, usize)>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
-    pub(crate) thread: Option<usize>
+    pub(crate) thread: Option<usize>,
 }
 
 #[pinned_drop]
@@ -279,9 +279,8 @@ impl<T: 'static> LocalAmHandle<T> {
                 tg_counters.inc_launched(num_pes);
             }
             if let Some(thread) = self.thread {
-               self.inner.scheduler.submit_am_thread(am,thread);
-            }
-            else{
+                self.inner.scheduler.submit_am_thread(am, thread);
+            } else {
                 self.inner.scheduler.submit_am(am);
             }
         }

@@ -1,4 +1,3 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};

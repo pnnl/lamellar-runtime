@@ -283,9 +283,6 @@ impl LamellaeRDMA for RofiRustAsync {
     fn free(&self, addr: usize) {
         self.libfab_comm.free(addr)
     }
-    fn base_addr(&self) -> usize {
-        self.libfab_comm.base_addr()
-    }
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.libfab_comm.local_addr(remote_pe, remote_addr)
     }

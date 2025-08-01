@@ -36,9 +36,11 @@ impl LamellarAM for RdmaAM {
         let local_slice = unsafe { local.as_mut_slice() };
         local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
         unsafe {
-            self.array.get_unchecked(self.orig_pe, 0, local.clone()).await;
+            self.array
+                .get_unchecked(self.orig_pe, 0, local.clone())
+                .await;
         }
-        if local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8{
+        if local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
             println!("get failure")
         }
         // TODO: Not Needed
@@ -54,7 +56,8 @@ impl LamellarAM for RdmaAM {
         if my_index < ARRAY_LEN {
             unsafe {
                 self.array
-                    .put(self.orig_pe, my_index, local.sub_region(0..=0)).await;
+                    .put(self.orig_pe, my_index, local.sub_region(0..=0))
+                    .await;
             }
         }
     }
@@ -76,7 +79,7 @@ impl LamellarAM for RdmaLocalMRAM {
         unsafe {
             self.array.get_unchecked(0, local.clone()).await;
         }
-        if local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8{
+        if local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
             println!("get failure")
         }
         // TODO: Not Needed

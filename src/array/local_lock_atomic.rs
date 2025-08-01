@@ -750,17 +750,16 @@ impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
 }
 
 impl<T: Dist> From<&LocalLockByteArray> for LocalLockArray<T> {
-    fn from(array:&LocalLockByteArray) -> Self {
+    fn from(array: &LocalLockByteArray) -> Self {
         array.clone().into()
     }
 }
 
 impl<T: Dist> From<&mut LocalLockByteArray> for LocalLockArray<T> {
-    fn from(array:&mut LocalLockByteArray) -> Self {
+    fn from(array: &mut LocalLockByteArray) -> Self {
         array.clone().into()
     }
 }
-
 
 impl<T: Dist> private::ArrayExecAm<T> for LocalLockArray<T> {
     fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {

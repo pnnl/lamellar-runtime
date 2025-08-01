@@ -36,7 +36,6 @@ fn main() {
     //     histo.block();
     //     println!("local done: {:?}", start.elapsed().as_secs_f64());
     // }
-    
 
     world.barrier();
     println!(

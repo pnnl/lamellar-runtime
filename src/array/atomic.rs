@@ -1248,7 +1248,6 @@ impl<T: Dist> From<&mut AtomicByteArray> for AtomicArray<T> {
     }
 }
 
-
 impl<T: Dist + AmDist + 'static> AtomicArray<T> {
     #[doc(alias("One-sided", "onesided"))]
     /// Perform a reduction on the entire distributed array, returning the value to the calling PE.

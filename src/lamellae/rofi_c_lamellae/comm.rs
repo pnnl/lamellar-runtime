@@ -1,14 +1,16 @@
 use crate::{
     config,
-    lamellae::{AllocationType,comm::{CommInfo, CommProgress, CommShutdown,CommAlloc,CommAllocType,CommMem}},
+    lamellae::{
+        comm::{
+            CommAlloc, CommAllocAddr, CommAllocType, CommInfo, CommMem, CommProgress, CommShutdown,
+        },
+        AllocationType,
+    },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     Backend,
 };
 
-use super::{
-    fabric::*,
-    CommandQueue,
-};
+use super::{fabric::*, CommandQueue};
 
 use parking_lot::RwLock;
 
@@ -20,8 +22,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct RofiCComm {
     // _rofi_c: MyRofiC, //the global handle
-    pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
-    pub(crate) runtime_allocs: RwLock<Vec<BTreeAlloc>>,//runtime allocations
+    pub(crate) runtime_allocs: RwLock<Vec<BTreeAlloc>>, //runtime allocations
     pub(crate) fabric_allocs: RwLock<HashMap<usize, CommAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -29,7 +30,7 @@ pub(crate) struct RofiCComm {
     pub(crate) put_amt: Arc<AtomicUsize>,
     pub(crate) put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
-    pub(crate) get_cnt: Arc<AtomicUsize>
+    pub(crate) get_cnt: Arc<AtomicUsize>,
 }
 
 pub(crate) static ROFI_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
@@ -48,9 +49,9 @@ impl RofiCComm {
         let total_mem = cmd_q_mem + RT_MEM + ROFI_SIZE.load(Ordering::SeqCst);
         let mem_per_pe = total_mem; // / num_pes;
 
-        let addr = rofi_c_alloc(total_mem, AllocationType::Global).expect("error in rofi_c_alloc") as usize;
+        let addr = rofi_c_alloc(total_mem, AllocationType::Global).expect("error in rofi_c_alloc")
+            as usize;
         let rofi_c = RofiCComm {
-            base_address: Arc::new(RwLock::new(addr)),
             runtime_allocs: RwLock::new(vec![BTreeAlloc::new("rofi_c_mem".to_string())]),
             fabric_allocs: RwLock::new(HashMap::new()),
             _init: AtomicBool::new(true),
@@ -62,7 +63,13 @@ impl RofiCComm {
             get_cnt: Arc::new(AtomicUsize::new(0)),
         };
         rofi_c.runtime_allocs.write()[0].init(addr, total_mem);
-        rofi_c.fabric_allocs.write().insert(addr, CommAlloc{addr, size: mem_per_pe, alloc_type: CommAllocType::Fabric});
+        rofi_c.fabric_allocs.write().insert(
+            addr,
+            CommAlloc {
+                info: CommAllocInfo::Raw(addr, mem_per_pe),
+                alloc_type: CommAllocType::Fabric,
+            },
+        );
         rofi_c
     }
 
@@ -119,7 +126,7 @@ impl Drop for RofiCComm {
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, ROFI_SIZE.load(Ordering::SeqCst));
         }
-        for (addr,_alloc) in self.fabric_allocs.read().iter(){
+        for (addr, _alloc) in self.fabric_allocs.read().iter() {
             rofi_c_release(*addr);
         }
         rofi_c_barrier();

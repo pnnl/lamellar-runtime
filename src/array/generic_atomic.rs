@@ -647,15 +647,13 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
 }
 impl<T: Dist> From<&GenericAtomicByteArray> for AtomicArray<T> {
     fn from(array: &GenericAtomicByteArray) -> Self {
-        array.clone()
-        .into()
+        array.clone().into()
     }
 }
 
 impl<T: Dist> From<&mut GenericAtomicByteArray> for AtomicArray<T> {
     fn from(array: &mut GenericAtomicByteArray) -> Self {
-        array.clone()
-        .into()
+        array.clone().into()
     }
 }
 

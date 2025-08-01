@@ -1,11 +1,14 @@
 use super::{CommAllocAddr, CommSlice};
+#[cfg(feature = "rofi-c")]
+use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
 use crate::{
     active_messaging::AMCounters,
     lamellae::{local_lamellae::rdma::LocalFuture, shmem_lamellae::rdma::ShmemFuture, Scheduler},
     LamellarTask,
 };
-#[cfg(feature = "rofi-c")]
-use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
+
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric_lamellae::rdma::LibfabricFuture;
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
@@ -36,9 +39,9 @@ pub(crate) enum RdmaFuture<T> {
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync(#[pin] RofiRustAsyncFuture),
     #[cfg(feature = "enable-libfabric")]
-    LibFab(#[pin] LibFabFuture),
-    #[cfg(feature = "enable-libfabric")]
-    LibFabAsync(#[pin] LibFabAsyncFuture),
+    Libfabric(#[pin] LibfabricFuture<T>),
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricAsync(#[pin] LibfabricAsyncFuture),
     Shmem(#[pin] ShmemFuture<T>),
     Local(#[pin] LocalFuture<T>),
 }
@@ -54,9 +57,9 @@ impl<T: Remote> RdmaHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             RdmaFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaFuture::LibFab(f) => f.block(),
-            #[cfg(feature = "enable-libfabric")]
-            RdmaFuture::LibFabAsync(f) => f.block(),
+            RdmaFuture::Libfabric(f) => f.block(),
+            // #[cfg(feature = "enable-libfabric")]
+            // RdmaFuture::LibfabricAsync(f) => f.block(),
             RdmaFuture::Shmem(f) => f.block(),
             RdmaFuture::Local(f) => f.block(),
         }
@@ -76,9 +79,9 @@ impl<T: Remote> RdmaHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             RdmaFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaFuture::LibFab(f) => f.spawn(),
-            #[cfg(feature = "enable-libfabric")]
-            RdmaFuture::LibFabAsync(f) => f.spawn(),
+            RdmaFuture::Libfabric(f) => f.spawn(),
+            // #[cfg(feature = "enable-libfabric")]
+            // RdmaFuture::LibfabricAsync(f) => f.spawn(),
             RdmaFuture::Shmem(f) => f.spawn(),
             RdmaFuture::Local(f) => f.spawn(),
         }
@@ -98,9 +101,9 @@ impl<T: Remote> Future for RdmaHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             RdmaFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            RdmaFutureProj::LibFab(f) => f.poll(cx),
-            #[cfg(feature = "enable-libfabric")]
-            RdmaFutureProj::LibFabAsync(f) => f.poll(cx),
+            RdmaFutureProj::Libfabric(f) => f.poll(cx),
+            // #[cfg(feature = "enable-libfabric")]
+            // RdmaFutureProj::LibfabricAsync(f) => f.poll(cx),
             RdmaFutureProj::Shmem(f) => f.poll(cx),
             RdmaFutureProj::Local(f) => f.poll(cx),
         }

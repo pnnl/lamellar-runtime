@@ -225,7 +225,6 @@ pub extern crate serde;
 //#[doc(hidden)]
 pub use serde::*;
 
-
 #[doc(hidden)]
 pub extern crate serde_bytes;
 // #[doc(hidden)]
@@ -242,7 +241,6 @@ pub use parking_lot;
 //#[doc(hidden)]
 pub use ::tracing;
 pub use ::tracing::*;
-
 
 //#[doc(hidden)]
 pub use async_trait;

@@ -77,7 +77,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         unsafe {
-           let _ = mat.mat.get_unchecked(mat.pe, offset, data.clone()).spawn();
+            let _ = mat.mat.get_unchecked(mat.pe, offset, data.clone()).spawn();
         }
     }
     while sub_mat_slice[sub_mat.len() - 1].is_nan() {

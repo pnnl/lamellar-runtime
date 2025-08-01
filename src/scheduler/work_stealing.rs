@@ -47,7 +47,7 @@ impl WorkStealingThread {
         builder
             .spawn(move || {
                 let tid = LAMELLAR_THREAD_ID.with(|tid| *tid);
-                let id  = ids[tid % ids.len()];
+                let id = ids[tid % ids.len()];
                 println!(
                     "WorkStealing Worker thread running {:?} core: {:?} tid: {:?}",
                     std::thread::current().id(),
@@ -74,30 +74,29 @@ impl WorkStealingThread {
                         worker.imm_inj.steal().success()
                     } else {
                         match worker
-                                        .thread_only_inj
-                                        .steal_batch_and_pop(&worker.work_q)
-                                        .success(){
+                            .thread_only_inj
+                            .steal_batch_and_pop(&worker.work_q)
+                            .success()
+                        {
                             Some(runnable) => Some(runnable),
-                            None => {
-                                worker.work_q.pop().or_else(|| {
-                                    if worker.work_flag.compare_exchange(
-                                        0,
-                                        1,
-                                        Ordering::SeqCst,
-                                        Ordering::Relaxed,
-                                    ) == Ok(0)
-                                    {   
-                                        let ret = worker
-                                            .work_inj
-                                            .steal_batch_and_pop(&worker.work_q)
-                                            .success();
-                                        worker.work_flag.store(0, Ordering::SeqCst);
-                                        ret
-                                    } else {
-                                        worker.work_stealers[t.sample(&mut rng)].steal().success()
-                                    }
-                                })
-                            }
+                            None => worker.work_q.pop().or_else(|| {
+                                if worker.work_flag.compare_exchange(
+                                    0,
+                                    1,
+                                    Ordering::SeqCst,
+                                    Ordering::Relaxed,
+                                ) == Ok(0)
+                                {
+                                    let ret = worker
+                                        .work_inj
+                                        .steal_batch_and_pop(&worker.work_q)
+                                        .success();
+                                    worker.work_flag.store(0, Ordering::SeqCst);
+                                    ret
+                                } else {
+                                    worker.work_stealers[t.sample(&mut rng)].steal().success()
+                                }
+                            }),
                         }
                     };
 
@@ -344,10 +343,7 @@ impl LamellarExecutor for WorkStealing {
         let ret = if !self.imm_inj.is_empty() {
             self.imm_inj.steal().success()
         } else {
-            match self
-                        .thread_injs[0]
-                        .steal()
-                        .success(){
+            match self.thread_injs[0].steal().success() {
                 Some(runnable) => Some(runnable),
                 None => {
                     if self
@@ -391,7 +387,7 @@ impl WorkStealing {
             }
         };
         let tid = LAMELLAR_THREAD_ID.with(|tid| *tid);
-        let id  = core_ids[tid % core_ids.len()];
+        let id = core_ids[tid % core_ids.len()];
         core_affinity::set_for_current(id);
         println!(
             "WorkStealing Main thread running {:?} core: {:?} tid: {:?}",
@@ -427,7 +423,8 @@ impl WorkStealing {
             let thread_inj = Arc::new(crossbeam::deque::Injector::new());
             self.thread_injs.push(thread_inj);
         }
-        self.thread_injs.push(Arc::new(crossbeam::deque::Injector::new()));
+        self.thread_injs
+            .push(Arc::new(crossbeam::deque::Injector::new()));
 
         let orig_hook = panic::take_hook();
         panic::set_hook(Box::new(move |panic_info| {
@@ -445,7 +442,7 @@ impl WorkStealing {
         for i in 0..self.max_num_threads {
             let work_worker = work_workers.pop().unwrap();
             let worker: WorkStealingThread = WorkStealingThread {
-                thread_only_inj: self.thread_injs[i+1].clone(),
+                thread_only_inj: self.thread_injs[i + 1].clone(),
                 imm_inj: self.imm_inj.clone(),
                 work_inj: self.work_inj.clone(),
                 work_stealers: self.work_stealers.clone(),

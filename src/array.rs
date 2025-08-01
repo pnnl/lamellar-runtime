@@ -114,8 +114,8 @@ pub(crate) mod r#unsafe;
 pub use r#unsafe::{
     local_chunks::{UnsafeLocalChunks, UnsafeLocalChunksMut},
     operations::{
-        multi_val_multi_idx_ops_new, multi_val_single_idx_ops_new, single_val_multi_idx_ops_new,
-        multi_val_multi_idx_ops, multi_val_single_idx_ops, single_val_multi_idx_ops,
+        multi_val_multi_idx_ops, multi_val_multi_idx_ops_new, multi_val_single_idx_ops,
+        multi_val_single_idx_ops_new, single_val_multi_idx_ops, single_val_multi_idx_ops_new,
         BatchReturnType,
     },
     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
@@ -670,67 +670,64 @@ impl LamellarByteArray {
         }
     }
 
-    pub async fn local_data<'a,T: Dist>(&'a self) -> LamellarLocalData<'a,T>{
+    pub async fn local_data<'a, T: Dist>(&'a self) -> LamellarLocalData<'a, T> {
         match self {
-            LamellarByteArray::UnsafeArray(array) => {
-                LamellarLocalData::Slice(array.local_data())
-            },
+            LamellarByteArray::UnsafeArray(array) => LamellarLocalData::Slice(array.local_data()),
             LamellarByteArray::ReadOnlyArray(array) => LamellarLocalData::Slice(array.local_data()),
-            LamellarByteArray::AtomicArray(array) => {
-                match AtomicArray::from(array) {
-                    AtomicArray::NativeAtomicArray(array) => {
-                        LamellarLocalData::NativeAtomic(array.local_data())
-                    },
-                    AtomicArray::GenericAtomicArray(array) => {
-                        LamellarLocalData::GenericAtomic(array.local_data())
-                    },
+            LamellarByteArray::AtomicArray(array) => match AtomicArray::from(array) {
+                AtomicArray::NativeAtomicArray(array) => {
+                    LamellarLocalData::NativeAtomic(array.local_data())
+                }
+                AtomicArray::GenericAtomicArray(array) => {
+                    LamellarLocalData::GenericAtomic(array.local_data())
                 }
             },
             LamellarByteArray::NativeAtomicArray(array) => {
                 LamellarLocalData::NativeAtomic(NativeAtomicArray::from(array).local_data())
-            },
+            }
             LamellarByteArray::GenericAtomicArray(array) => {
                 LamellarLocalData::GenericAtomic(GenericAtomicArray::from(array).local_data())
-            },
+            }
             LamellarByteArray::LocalLockArray(array) => {
                 LamellarLocalData::LocalLock(LocalLockArray::from(array).read_local_data().await)
-            },
+            }
             LamellarByteArray::GlobalLockArray(array) => {
-                LamellarLocalData::GlobalLock(GlobalLockArray::from(array).read_local_data().await)   
+                LamellarLocalData::GlobalLock(GlobalLockArray::from(array).read_local_data().await)
             }
         }
     }
 
-    pub async fn mut_local_data<'a,T: Dist >(&'a mut self) -> LamellarMutLocalData<'a,T> {
+    pub async fn mut_local_data<'a, T: Dist>(&'a mut self) -> LamellarMutLocalData<'a, T> {
         match self {
             LamellarByteArray::UnsafeArray(ref mut array) => {
                 LamellarMutLocalData::Slice(array.mut_local_data())
-            },
-            LamellarByteArray::ReadOnlyArray(ref mut array) => panic!("ReadOnlyArray does not support mut_local_data"),
-            LamellarByteArray::AtomicArray(ref mut array) => {
-                match AtomicArray::from(array) {
-                    AtomicArray::NativeAtomicArray(ref mut array) => {
-                        LamellarMutLocalData::NativeAtomic(array.mut_local_data())
-                    },
-                    AtomicArray::GenericAtomicArray(ref mut array) => {
-                        LamellarMutLocalData::GenericAtomic(array.mut_local_data())
-                    },
+            }
+            LamellarByteArray::ReadOnlyArray(ref mut _array) => {
+                panic!("ReadOnlyArray does not support mut_local_data")
+            }
+            LamellarByteArray::AtomicArray(ref mut array) => match AtomicArray::from(array) {
+                AtomicArray::NativeAtomicArray(ref mut array) => {
+                    LamellarMutLocalData::NativeAtomic(array.mut_local_data())
+                }
+                AtomicArray::GenericAtomicArray(ref mut array) => {
+                    LamellarMutLocalData::GenericAtomic(array.mut_local_data())
                 }
             },
             LamellarByteArray::NativeAtomicArray(ref mut array) => {
                 LamellarMutLocalData::NativeAtomic(NativeAtomicArray::from(array).mut_local_data())
-            },
-            LamellarByteArray::GenericAtomicArray(ref mut array) => {
-                LamellarMutLocalData::GenericAtomic(GenericAtomicArray::from(array).mut_local_data())
-            },
-            LamellarByteArray::LocalLockArray(ref mut array) => {
-                LamellarMutLocalData::LocalLock(LocalLockArray::from(array).write_local_data().await)
-            },
-            LamellarByteArray::GlobalLockArray(ref mut array) => {
-                LamellarMutLocalData::GlobalLock(GlobalLockArray::from(array).write_local_data().await)   
             }
+            LamellarByteArray::GenericAtomicArray(ref mut array) => {
+                LamellarMutLocalData::GenericAtomic(
+                    GenericAtomicArray::from(array).mut_local_data(),
+                )
+            }
+            LamellarByteArray::LocalLockArray(ref mut array) => LamellarMutLocalData::LocalLock(
+                LocalLockArray::from(array).write_local_data().await,
+            ),
+            LamellarByteArray::GlobalLockArray(ref mut array) => LamellarMutLocalData::GlobalLock(
+                GlobalLockArray::from(array).write_local_data().await,
+            ),
         }
-        
     }
 }
 
@@ -775,8 +772,6 @@ enum LamellarLocalData<'a, T: Dist> {
     NativeAtomic(NativeAtomicLocalData<T>),
     GenericAtomic(GenericAtomicLocalData<T>),
 }
-
-
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
@@ -1192,7 +1187,7 @@ pub(crate) mod private {
             F: LamellarActiveMessage + LocalAM + 'static,
         {
             self.team_rt()
-                .exec_am_local_tg(am, Some(self.team_counters()),None)
+                .exec_am_local_tg(am, Some(self.team_counters()), None)
         }
         fn exec_am_pe_tg<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
         where

@@ -99,12 +99,16 @@ fn main() {
             println!("PE{my_pe}, smr {:?}", shared_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                block_array.get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2)).await
+                block_array
+                    .get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2))
+                    .await
             }; //uses local data of the shared memregion
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                block_array.get_unchecked(0, local_mem_region.sub_region(0..total_len / 2)).await
+                block_array
+                    .get_unchecked(0, local_mem_region.sub_region(0..total_len / 2))
+                    .await
             };
             world.async_barrier().await;
             block_array.print();

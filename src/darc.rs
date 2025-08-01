@@ -47,7 +47,6 @@
 use core::marker::PhantomData;
 use futures_util::future::join_all;
 use serde::{Deserialize, Deserializer};
-use tracing::{debug,trace};
 use std::cmp::PartialEq;
 use std::fmt;
 use std::ops::Deref;
@@ -55,6 +54,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+use tracing::{debug, trace};
 // use std::time::Instant;
 
 // //use tracing::*;
@@ -124,7 +124,7 @@ struct FinishedAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for FinishedAm {
     async fn exec() {
-        debug!("in finished! {:?}",self);
+        debug!("in finished! {:?}", self);
         let inner: &DarcInner<()> = unsafe { &*(self.inner_addr.as_ptr()) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
                                                                              // inner.team().print_cnt();
         inner.dist_cnt.fetch_sub(self.cnt, Ordering::SeqCst);
@@ -399,7 +399,7 @@ impl<T: 'static> DarcInner<T> {
         //     println!("{:?}", self);
         //     panic!();
         // }
-        trace!("inc_pe_ref_count pe: {} amt: {} {:?}", pe, amt,self);
+        trace!("inc_pe_ref_count pe: {} amt: {} {:?}", pe, amt, self);
         let team_pe = pe;
         let tot_ref_cnt = unsafe {
             // ((self.total_ref_cnt_addr + team_pe * std::mem::size_of::<AtomicUsize>())
@@ -436,10 +436,9 @@ impl<T: 'static> DarcInner<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn send_finished(&self) -> Vec<LamellarTask<()>> {
         let ref_cnts = unsafe {
-            std::slice::from_raw_parts_mut(
-                self.ref_cnt_slice.addr() as *mut AtomicUsize,
-                self.num_pes,
-            )
+            self.ref_cnt_slice
+                .as_casted_slice::<AtomicUsize>()
+                .expect("invalid ref cnt slice")
         };
         let team = self.team();
         let mut reqs = vec![];
@@ -516,7 +515,8 @@ impl<T: 'static> DarcInner<T> {
                         std::backtrace::Backtrace::capture()
                     );
                 }
-                if reset && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout / 2.0 {
+                if reset && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout / 2.0
+                {
                     return false;
                 }
                 if reset && inner.mode_slice.iter().any(|x| *x == DarcMode::RestartDrop) {
@@ -572,7 +572,11 @@ impl<T: 'static> DarcInner<T> {
         // let mode_refs =
         //     unsafe { std::slice::from_raw_parts_mut(inner.mode_addr as *mut u8, inner.num_pes) };
         let orig_state = inner.mode_slice[inner.my_pe];
-        debug!("[{:?}] entering block_on_outstanding {:?}", std::thread::current().id(),inner.as_ref());
+        debug!(
+            "[{:?}] entering block_on_outstanding {:?}",
+            std::thread::current().id(),
+            inner.as_ref()
+        );
         inner.await_all().await;
         if team.num_pes() == 1 {
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
@@ -587,22 +591,6 @@ impl<T: 'static> DarcInner<T> {
 
             let mut prev_ref_cnts = vec![0usize; inner.num_pes];
             let mut barrier_id = 1usize;
-
-            // let barrier_ref_cnt_slice = unsafe {
-            //     std::slice::from_raw_parts_mut(inner.mode_ref_cnt_addr as *mut usize, inner.num_pes)
-            // };
-            // let barrier_slice = unsafe {
-            //     std::slice::from_raw_parts_mut(inner.mode_barrier_addr as *mut usize, inner.num_pes)
-            // };
-
-            // let ref_cnts_slice = unsafe {
-            //     std::slice::from_raw_parts_mut(
-            //         inner.total_ref_cnt_addr as *mut usize,
-            //         inner.num_pes,
-            //     )
-            // };
-
-            // let rel_addr = inner.inner.as_ptr() as *const _ as usize - team.lamellae.comm().base_addr();
 
             while inner.local_cnt.load(Ordering::SeqCst) > 1 + extra_cnt {
                 async_std::task::yield_now().await;
@@ -877,7 +865,7 @@ impl<T> Darc<T> {
         // the_darc.print();
         weak
     }
-    
+
     pub(crate) fn inner(&self) -> &DarcInner<T> {
         self.inner.as_ref().expect("invalid darc inner ptr")
     }
@@ -930,7 +918,11 @@ impl<T> Darc<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
-        trace!("darc[{:?}] deserialize darc cnts {:?}", self.id, self.inner());
+        trace!(
+            "darc[{:?}] deserialize darc cnts {:?}",
+            self.id,
+            self.inner()
+        );
         self.inner().inc_pe_ref_count(self.src_pe, 1);
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
         self.inner().total_local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -941,7 +933,7 @@ impl<T> Darc<T> {
 
     #[doc(hidden)]
     #[tracing::instrument(skip_all, level = "debug")]
-    pub fn inc_local_cnt(&self, cnt: usize) -> usize{
+    pub fn inc_local_cnt(&self, cnt: usize) -> usize {
         trace!("darc[{:?}] inc_local_cnt {:?}", self.id, self.inner());
         self.inner().local_cnt.fetch_add(cnt, Ordering::SeqCst);
         self.inner()
@@ -958,16 +950,13 @@ impl<T> Darc<T> {
 
     #[doc(hidden)]
     pub fn print(&self) {
-        let rel_addr =
-            unsafe { self.inner.addr() - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
-            "[{:?}]--------\nid: {:?}:{:?} orig: {:?} 0x{:x} (0x{:x}) item_addr {:?} {:?}\n--------[{:?}]",
+            "[{:?}]--------\nid: {:?}:{:?} orig: {:?} 0x{:x} item_addr {:?} {:?}\n--------[{:?}]",
             std::thread::current().id(),
             self.inner().id,
             self.id,
             self.src_pe,
             self.inner.addr(),
-            rel_addr,
             self.inner().item,
             self.inner(),
             std::thread::current().id(),
@@ -1118,11 +1107,14 @@ impl<T: Send + Sync> Darc<T> {
             weak_local_cnt: AtomicUsize::new(0),
             dist_cnt: AtomicUsize::new(0),
             total_dist_cnt: AtomicUsize::new(0),
-            ref_cnt_slice: darc_alloc.slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes),
-            total_ref_cnt_slice: darc_alloc.slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes),
-            mode_slice: darc_alloc.slice_at_byte_offset(mode_offset, team_rt.num_pes),
-            mode_ref_cnt_slice: darc_alloc.slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes),
-            mode_barrier_slice: darc_alloc.slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes),
+            ref_cnt_slice: darc_alloc.comm_slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes),
+            total_ref_cnt_slice: darc_alloc
+                .comm_slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes),
+            mode_slice: darc_alloc.comm_slice_at_byte_offset(mode_offset, team_rt.num_pes),
+            mode_ref_cnt_slice: darc_alloc
+                .comm_slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes),
+            mode_barrier_slice: darc_alloc
+                .comm_slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes),
             barrier: barrier_ptr,
             // mode_barrier_rounds: num_rounds,
             am_counters: am_counters_ptr,
@@ -1132,7 +1124,7 @@ impl<T: Send + Sync> Darc<T> {
             valid: AtomicBool::new(true),
         };
         unsafe {
-            std::ptr::copy_nonoverlapping(&darc_temp, darc_alloc.addr as *mut DarcInner<T>, 1);
+            std::ptr::copy_nonoverlapping(&darc_temp, darc_alloc.as_mut_ptr::<DarcInner<T>>(), 1);
         }
         // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
 
@@ -1347,7 +1339,7 @@ macro_rules! launch_drop {
         team.world_counters.inc_outstanding(1); //ensure we don't trigger any warnings in wait all
         let mut am = team.exec_am_local(DroppedWaitAM {
             inner: $inner_ptr,//CommAllocAddr::from($inner_addr as usize),
-            mode_slice: $inner.mode_slice,
+            mode_slice: $inner.mode_slice.clone(),
             my_pe: $inner.my_pe,
             num_pes: $inner.num_pes,
             team: team.clone(),
@@ -1394,7 +1386,7 @@ impl<T: 'static> Drop for Darc<T> {
 
             // println!("[{:?}] launching drop task", std::thread::current().id());
 
-            let mut mode_refs = self.inner().mode_slice;
+            let mut mode_refs = self.inner().mode_slice.clone();
             if local_mode!(DarcMode::Darc, mode_refs, inner) {
                 launch_drop!(DarcMode::Darc, inner, self.inner.clone());
             } else if local_mode!(DarcMode::LocalRw, mode_refs, inner) {
@@ -1446,12 +1438,11 @@ impl<T> std::fmt::Debug for DroppedWaitAM<T> {
 unsafe impl<T> Send for DroppedWaitAM<T> {}
 unsafe impl<T> Sync for DroppedWaitAM<T> {}
 
-
 pub(crate) struct DarcCommPtr<T> {
     alloc: CommAlloc,
     _phantom: std::marker::PhantomData<DarcInner<T>>,
 }
-impl <T> std::fmt::Debug for DarcCommPtr<T> {
+impl<T> std::fmt::Debug for DarcCommPtr<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "DarcCommPtr {{ alloc: {:?} }}", self.alloc)
     }
@@ -1475,14 +1466,13 @@ impl<T> DarcCommPtr<T> {
     }
 
     pub(crate) fn addr(&self) -> CommAllocAddr {
-        CommAllocAddr::from(self.alloc.addr)
+        self.alloc.comm_addr()
     }
 
     pub(crate) fn transmute<U>(&self) -> DarcCommPtr<U> {
         DarcCommPtr {
             alloc: CommAlloc {
-                addr: self.alloc.addr,
-                size: self.alloc.size,
+                info: self.alloc.info.clone(),
                 alloc_type: self.alloc.alloc_type,
             },
             _phantom: std::marker::PhantomData,
@@ -1494,8 +1484,7 @@ impl<T> Clone for DarcCommPtr<T> {
     fn clone(&self) -> Self {
         DarcCommPtr {
             alloc: CommAlloc {
-                addr: self.alloc.addr,
-                size: self.alloc.size,
+                info: self.alloc.info.clone(),
                 alloc_type: self.alloc.alloc_type,
             },
             _phantom: self._phantom,
@@ -1558,7 +1547,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             std::thread::current().id(),
             self.inner,
             self.inner.id,
-            self.inner.total_local_cnt.load( Ordering::SeqCst)
+            self.inner.total_local_cnt.load(Ordering::SeqCst)
         );
         let block_on_fut =
             { DarcInner::block_on_outstanding(self.inner.clone(), DarcMode::Dropped, 0) };
@@ -1693,7 +1682,7 @@ impl std::fmt::Debug for __NetworkDarc {
 
 impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
-        trace!("net darc from darc id: {:?}",darc.id);
+        trace!("net darc from darc id: {:?}", darc.id);
         trace!("darc  {:?}", darc.inner());
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
@@ -1709,8 +1698,8 @@ impl<T> From<Darc<T>> for __NetworkDarc {
 
 impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
-        trace!("net darc from &darc {:?}",darc.id);
-        trace!("{:?}",std::backtrace::Backtrace::capture());
+        trace!("net darc from &darc {:?}", darc.id);
+        trace!("{:?}", std::backtrace::Backtrace::capture());
         trace!("darc  {:?}", darc.inner());
         let team = &darc.inner().team();
         let ndarc = __NetworkDarc {
@@ -1727,7 +1716,9 @@ impl<T> From<&Darc<T>> for __NetworkDarc {
 impl<T> From<__NetworkDarc> for Darc<T> {
     fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
-            let local_addr = lamellae.comm().local_addr(ndarc.orig_team_pe, ndarc.inner_addr.0);
+            let local_addr = lamellae
+                .comm()
+                .local_addr(ndarc.orig_team_pe, ndarc.inner_addr.0);
             let alloc = lamellae
                 .comm()
                 .get_alloc(local_addr)
@@ -1742,7 +1733,7 @@ impl<T> From<__NetworkDarc> for Darc<T> {
             inner.inc_pe_ref_count(ndarc.orig_team_pe, 1);
             inner.local_cnt.fetch_add(1, Ordering::SeqCst);
             let id = inner.total_local_cnt.fetch_add(1, Ordering::SeqCst);
-            trace!("darc id: {} {:?}", id,inner.as_ref());
+            trace!("darc id: {} {:?}", id, inner.as_ref());
             let darc = Darc {
                 inner,
                 src_pe: ndarc.orig_team_pe,

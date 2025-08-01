@@ -691,65 +691,91 @@ pub trait LocalShiftOps<T: Dist + ElementShiftOps> {
     fn local_shl(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_shl(idx_vals, false);
     }
-    fn local_fetch_shl(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_fetch_shl(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
     fn local_shr(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         self.local_fetch_shr(idx_vals, false);
     }
-    fn local_fetch_shr(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>;
+    fn local_fetch_shr(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>>;
 }
 
 macro_rules! impl_local_shift_op {
     ($op:ident) => {
-        fn $op(&mut self, idx_vals: impl Iterator<Item = (usize, T)>, fetch: bool) -> Option<Vec<T>> {
+        fn $op(
+            &mut self,
+            idx_vals: impl Iterator<Item = (usize, T)>,
+            fetch: bool,
+        ) -> Option<Vec<T>> {
             match self {
-                LamellarMutLocalData::Slice(data) => data.$op(idx_vals,fetch),
+                LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
                 LamellarMutLocalData::LocalLock(ref mut data) => {
                     let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals,fetch)
-                }   
+                    slice.$op(idx_vals, fetch)
+                }
                 LamellarMutLocalData::GlobalLock(ref mut data) => {
                     let mut slice: &mut [T] = &mut *data;
-                    slice.$op(idx_vals,fetch)
-                },
-                LamellarMutLocalData::NativeAtomic( ref mut  data) => data.$op(idx_vals,fetch),
-                LamellarMutLocalData::GenericAtomic(ref mut  data) => data.$op(idx_vals,fetch),
+                    slice.$op(idx_vals, fetch)
+                }
+                LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
             }
         }
-    }
+    };
 }
 
-impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for LamellarMutLocalData<'_,T> {
+impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for LamellarMutLocalData<'_, T> {
     impl_local_shift_op!(local_fetch_shl);
     impl_local_shift_op!(local_fetch_shr);
 }
 
-impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for &mut[T] {
-    fn local_fetch_shl(&mut self, idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>> {
+impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for &mut [T] {
+    fn local_fetch_shl(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
-                self[i] <<= val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] <<= val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] <<= val;
             });
             None
         }
     }
 
-    fn local_fetch_shr(&mut self,idx_vals: impl Iterator<Item = (usize, T)>,fetch: bool) -> Option<Vec<T>>  {
+    fn local_fetch_shr(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        fetch: bool,
+    ) -> Option<Vec<T>> {
         if fetch {
-            Some(idx_vals.map(|(i,val)| {
-                let old = self[i];
-                self[i] >>= val;
-                old
-            }).collect())
-        }
-        else {
-            idx_vals.for_each(|(i,val)| {
+            Some(
+                idx_vals
+                    .map(|(i, val)| {
+                        let old = self[i];
+                        self[i] >>= val;
+                        old
+                    })
+                    .collect(),
+            )
+        } else {
+            idx_vals.for_each(|(i, val)| {
                 self[i] >>= val;
             });
             None

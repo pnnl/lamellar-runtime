@@ -215,7 +215,7 @@ impl Barrier {
                                 // );
                                 // println!("barrier put_slice 1");
                                 unsafe {
-                                     let _ = self.barrier_buf[i - 1]
+                                    let _ = self.barrier_buf[i - 1]
                                         .put_comm_slice(
                                             send_pe,
                                             round,

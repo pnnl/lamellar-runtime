@@ -12,8 +12,8 @@ use crate::{
         TeamTryFrom,
     },
     lamellae::{
-        AllocationType, Backend, CommAlloc, CommAllocAddr, CommAllocType, CommAtomic, CommInfo,
-        CommMem, CommRdma, CommSlice, Lamellae, RdmaHandle,
+        AllocationType, Backend, CommAlloc, CommAllocAddr, CommAllocInfo, CommAllocType,
+        CommAtomic, CommInfo, CommMem, CommRdma, CommSlice, Lamellae, RdmaHandle,
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -40,7 +40,7 @@ pub(crate) mod handle;
 use handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle};
 
 use enum_dispatch::enum_dispatch;
-use tracing::{debug, trace};
+use tracing::trace;
 
 /// This error occurs when you are trying to directly access data locally on a PE through a memregion handle,
 /// but that PE does not contain any data for that memregion
@@ -316,7 +316,7 @@ pub(crate) trait RegisteredMemoryRegion<T: Dist> {
 
     //TODO: move this function to a private trait or private method
     #[doc(hidden)]
-    fn addr(&self) -> MemResult<usize>;
+    fn addr(&self) -> MemResult<CommAllocAddr>;
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return a slice of the local (to the calling PE) data of the memory region
@@ -446,7 +446,7 @@ pub(crate) trait MemRegionId {
 /// Trait for creating subregions of a memory region
 pub trait SubRegion<T: Dist> {
     #[doc(hidden)]
-    type Region:  MemoryRegionRDMA<T>;
+    type Region: MemoryRegionRDMA<T>;
     #[doc(alias("One-sided", "onesided"))]
     /// Create a sub region of this RegisteredMemoryRegion using the provided range
     ///
@@ -821,10 +821,7 @@ impl<T: Dist> MemoryRegion<T> {
             mode: mode,
             phantom: PhantomData,
         };
-        trace!(
-            "new memregion alloc {:?}",
-            temp.alloc,
-        );
+        trace!("new memregion alloc {:?}", temp.alloc,);
         Ok(temp)
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -837,8 +834,7 @@ impl<T: Dist> MemoryRegion<T> {
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         Ok(MemoryRegion {
             alloc: CommAlloc {
-                addr: addr.into(),
-                size: num_elems * std::mem::size_of::<T>(),
+                info: CommAllocInfo::Raw(addr.into(), num_elems * std::mem::size_of::<T>()),
                 alloc_type: CommAllocType::Remote,
             },
             pe: pe,
@@ -857,7 +853,7 @@ impl<T: Dist> MemoryRegion<T> {
     pub(crate) unsafe fn to_base<B: Dist>(mut self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
-            self.alloc.size % std::mem::size_of::<B>(),
+            self.alloc.num_bytes() % std::mem::size_of::<B>(),
             0,
             "Error converting memregion to new base, does not align"
         );
@@ -871,7 +867,7 @@ impl<T: Dist> MemoryRegion<T> {
         //     mode: self.mode,
         //     phantom: PhantomData,
         // }
-        self.num_elems = self.alloc.size / std::mem::size_of::<B>();
+        self.num_elems = self.alloc.num_bytes() / std::mem::size_of::<B>();
         std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
 
@@ -887,7 +883,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
-    #[tracing::instrument(skip(self,data), level = "debug")]
+    #[tracing::instrument(skip(self, data), level = "debug")]
     pub(crate) unsafe fn put<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
@@ -896,7 +892,9 @@ impl<T: Dist> MemoryRegion<T> {
     ) -> RdmaHandle<R> {
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
             if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma.comm().put(
                     &self.scheduler,
@@ -911,7 +909,7 @@ impl<T: Dist> MemoryRegion<T> {
         } else {
             println!(
                 "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.size,
+                self.alloc.num_bytes(),
                 std::mem::size_of::<T>(),
                 self.num_elems
             );
@@ -965,7 +963,9 @@ impl<T: Dist> MemoryRegion<T> {
         data: U,
     ) -> RdmaHandle<R> {
         let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
             if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma.comm().put_all(
                     &self.scheduler,
@@ -1000,7 +1000,9 @@ impl<T: Dist> MemoryRegion<T> {
     ) -> RdmaHandle<R> {
         trace!("get memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
             if let Ok(data_slice) = data.as_comm_slice() {
                 self.rdma.comm().get(
                     &self.scheduler,
@@ -1013,7 +1015,7 @@ impl<T: Dist> MemoryRegion<T> {
                 panic!("ERROR: get data dst is not local");
             }
         } else {
-            println!("{:?} {:?} {:?}", self.alloc.size, index, data.len(),);
+            println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, data.len(),);
             panic!("index out of bounds");
         }
     }
@@ -1073,10 +1075,12 @@ impl<T: Dist> MemoryRegion<T> {
             "put commslice memregion {:?} index: {:?} {:?} {:?}",
             self.alloc,
             index,
-            data.addr,
+            data.usize_addr(),
             data.len()
         );
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
             // let num_bytes = data.len() * std::mem::size_of::<R>();
             // let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
             // println!(
@@ -1123,7 +1127,9 @@ impl<T: Dist> MemoryRegion<T> {
         data: CommSlice<R>,
     ) -> RdmaHandle<R> {
         // let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.size && data.len() > 0 {
+        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
             // let num_bytes = data.len() * std::mem::size_of::<R>();
             // let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes);
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
@@ -1138,7 +1144,7 @@ impl<T: Dist> MemoryRegion<T> {
             //(remote pe, src, dst)
             // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
         } else {
-            println!("{:?} {:?} {:?}", self.alloc.size, index, data.len(),);
+            println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, data.len(),);
             panic!("index out of bounds");
         }
     }
@@ -1315,7 +1321,7 @@ impl<T: Dist> MemoryRegion<T> {
         //         result.as_mut_slice(),
         //     )
         // } else {
-        //     println!("{:?} {:?} {:?}", self.alloc.size, index, result.len());
+        //     println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, result.len());
         //     panic!("index out of bounds");
         // }
     }
@@ -1344,18 +1350,17 @@ impl<T: Dist> MemoryRegion<T> {
     //     }
     // }
 
-    #[allow(dead_code)]
+    // #[allow(dead_code)]
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn len(&self) -> usize {
+    //     self.alloc.info().len() / std::mem::size_of::<T>()
+    // }
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn len(&self) -> usize {
-        self.alloc.size
-    }
-
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn addr(&self) -> MemResult<usize> {
+    pub(crate) fn addr(&self) -> MemResult<CommAllocAddr> {
         if self.mode == Mode::Remote {
             return Err(MemRegionError::MemNotLocalError);
         }
-        Ok(self.alloc.addr)
+        Ok(self.alloc.info.addr())
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1363,17 +1368,15 @@ impl<T: Dist> MemoryRegion<T> {
         if self.mode == Mode::Remote {
             return Err(MemRegionError::MemNotLocalError);
         }
-        let num_bytes = self.alloc.size * std::mem::size_of::<T>();
+        let num_bytes = self.alloc.num_bytes();
         assert_eq!(
             num_bytes % std::mem::size_of::<R>(),
             0,
             "Error converting memregion to new base, does not align"
         );
         Ok(unsafe {
-            &std::slice::from_raw_parts(
-                self.alloc.addr as *const R,
-                num_bytes / std::mem::size_of::<R>(),
-            )[index]
+            &std::slice::from_raw_parts(self.alloc.as_ptr(), num_bytes / std::mem::size_of::<R>())
+                [index]
         })
     }
 
@@ -1390,10 +1393,9 @@ impl<T: Dist> MemoryRegion<T> {
         if self.mode == Mode::Remote {
             return &mut [];
         }
-        trace!("alloc {:?} len {:?} alighnment {:?} is address alligned {:?}" , self.alloc,self.alloc.size / std::mem::size_of::<T>(), std::mem::align_of::<T>(), self.alloc.addr % std::mem::align_of::<T>());
         std::slice::from_raw_parts_mut(
-            self.alloc.addr as *mut T,
-            self.alloc.size / std::mem::size_of::<T>(),
+            self.alloc.as_mut_ptr(),
+            self.alloc.num_bytes() / std::mem::size_of::<T>(),
         )
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1401,12 +1403,12 @@ impl<T: Dist> MemoryRegion<T> {
         if self.mode == Mode::Remote {
             return Ok(&mut []);
         }
-        if self.alloc.size % std::mem::size_of::<R>() != 0 {
+        if self.alloc.num_bytes() % std::mem::size_of::<R>() != 0 {
             return Err(MemRegionError::MemNotAlignedError);
         }
         Ok(std::slice::from_raw_parts_mut(
-            self.alloc.addr as *mut R,
-            self.alloc.size / std::mem::size_of::<R>(),
+            self.alloc.as_mut_ptr(),
+            self.alloc.num_bytes() / std::mem::size_of::<R>(),
         ))
     }
     // #[allow(dead_code)]
@@ -1440,13 +1442,13 @@ impl<T: Dist> MemoryRegion<T> {
         if self.mode == Mode::Remote {
             return Err(MemRegionError::MemNotLocalError);
         }
-        Ok(self.alloc.as_slice())
+        Ok(self.alloc.as_comm_slice())
     }
     pub(crate) unsafe fn as_casted_comm_slice<R: Dist>(&self) -> MemResult<CommSlice<R>> {
         if self.mode == Mode::Remote {
             return Err(MemRegionError::MemNotLocalError);
         }
-        Ok(self.alloc.as_slice())
+        Ok(self.alloc.as_comm_slice())
     }
     pub(crate) unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr> {
         if self.mode == Mode::Remote {
@@ -1459,7 +1461,7 @@ impl<T: Dist> MemoryRegion<T> {
 impl<T: Dist> MemRegionId for MemoryRegion<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn id(&self) -> usize {
-        self.alloc.addr //probably should be key
+        self.alloc.info.addr().into()
     }
 }
 
@@ -1540,7 +1542,7 @@ impl<T: Dist> Drop for MemoryRegion<T> {
         // println!("trying to dropping mem region {:?}",self);
 
         match self.mode {
-            Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()), // - self.rdma.comm().base_addr());
+            Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
             Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
             Mode::Remote => {}
         }
@@ -1554,8 +1556,8 @@ impl<T: Dist> std::fmt::Debug for MemoryRegion<T> {
         write!(
             f,
             "addr {:#x} size {:?} backend {:?}", // cnt: {:?}",
-            self.alloc.addr,
-            self.alloc.size,
+            self.alloc.comm_addr(),
+            self.alloc.num_bytes(),
             self.backend,
             // self.cnt.load(Ordering::SeqCst)
         )

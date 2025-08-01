@@ -29,12 +29,12 @@ use core::pin::Pin;
 use futures_util::future::join_all;
 use futures_util::Future;
 use parking_lot::{Mutex, RwLock};
-use tracing::trace;
 use std::collections::HashMap;
 use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
+use tracing::trace;
 
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -435,11 +435,12 @@ impl LamellarTeam {
         self.team.am_group_exec_am_all_tg(am, None)
     }
 
-    pub fn exec_am_local_thread<F>(&self, am: F,thread: usize) -> LocalAmHandle<F::Output>
+    pub fn exec_am_local_thread<F>(&self, am: F, thread: usize) -> LocalAmHandle<F::Output>
     where
-        F: LamellarActiveMessage + LocalAM + 'static{
-            self.team.exec_am_local_tg(am, None, Some(thread))
-        }
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.team.exec_am_local_tg(am, None, Some(thread))
+    }
 }
 
 impl LamellarEnv for Arc<LamellarTeam> {
@@ -511,7 +512,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        self.team.exec_am_local_tg(am, None,None)
+        self.team.exec_am_local_tg(am, None, None)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -767,10 +768,10 @@ impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
             panic!("unexepected lamellae backend {:?}", &remote_ptr.backend);
         };
         let local_team_addr = lamellae.comm().local_addr(remote_ptr.pe, remote_ptr.addr);
-        
+
         unsafe {
-            let team_ptr=  *local_team_addr.as_ptr::<*const LamellarTeamRT>() ;
-            trace!("team_ptr from local_team_addr {:?}",team_ptr);
+            let team_ptr = *local_team_addr.as_ptr::<*const LamellarTeamRT>();
+            trace!("team_ptr from local_team_addr {:?}", team_ptr);
             Arc::increment_strong_count(team_ptr);
             Pin::new_unchecked(Arc::from_raw(team_ptr))
         }
@@ -781,7 +782,7 @@ impl From<Pin<Arc<LamellarTeamRT>>> for LamellarTeamRemotePtr {
     #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Pin<Arc<LamellarTeamRT>>) -> Self {
         LamellarTeamRemotePtr {
-            addr: team.remote_ptr_alloc.addr,
+            addr: team.remote_ptr_alloc.comm_addr().into(),
             pe: team.world_pe,
             backend: team.lamellae.comm().backend(),
         }
@@ -965,7 +966,13 @@ impl LamellarTeamRT {
                                                        // we are copying the address of the team into the remote ptr address, because of the two previous calls, we ensure its location is pinned and its lifetime will live until the team is destroyed.
                                                        // std::ptr::copy_nonoverlapping(&team_ptr, team.remote_ptr_alloc.as_mut_ptr(), 1);
             *team.remote_ptr_alloc.as_mut_ptr() = team_ptr;
-            trace!("team_ptr: {:?} remote_ptr_alloc {:?} {:?} {:?}", team_ptr, team.remote_ptr_alloc, team.remote_ptr_alloc.as_ref::<*const LamellarTeamRT>(),team.remote_ptr_alloc.as_ref::<usize>());
+            trace!(
+                "team_ptr: {:?} remote_ptr_alloc {:?} {:?} {:?}",
+                team_ptr,
+                team.remote_ptr_alloc,
+                team.remote_ptr_alloc.as_ref::<*const LamellarTeamRT>(),
+                team.remote_ptr_alloc.as_ref::<usize>()
+            );
 
             // println!{"{:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_alloc as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_alloc as *mut (*const LamellarTeamRT))).as_ref()};
         }
@@ -1165,11 +1172,13 @@ impl LamellarTeamRT {
                 for world_pe in parent.arch.team_iter() {
                     if world_pe != parent.world_pe {
                         unsafe {
-                            temp_buf.put_comm_slice(
-                                world_pe,
-                                parent_world_pe,
-                                temp_array_slice.sub_slice(0..1),
-                            ).block();
+                            temp_buf
+                                .put_comm_slice(
+                                    world_pe,
+                                    parent_world_pe,
+                                    temp_array_slice.sub_slice(0..1),
+                                )
+                                .block();
                         }
                     }
                 }
@@ -1342,7 +1351,8 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            let _ = self.dropped
+                            let _ = self
+                                .dropped
                                 .put_comm_slice(
                                     world_pe,
                                     my_index,
@@ -1362,7 +1372,8 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            let _ = self.dropped
+                            let _ = self
+                                .dropped
                                 .put_comm_slice(
                                     world_pe,
                                     self.world_pe,
@@ -1744,7 +1755,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
@@ -1814,7 +1825,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team am group exec all", std::thread::current().id());
@@ -1887,7 +1898,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
 
         AmHandle {
@@ -1954,7 +1965,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
 
         self.scheduler.submit_am(Am::Remote(req_data, func));
@@ -2025,7 +2036,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
 
         // println!(
@@ -2095,7 +2106,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
 
         // println!(
@@ -2158,7 +2169,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
@@ -2224,7 +2235,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
 
         // println!("[{:?}] team arc exec am pe", std::thread::current().id());
@@ -2250,7 +2261,7 @@ impl LamellarTeamRT {
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
-        self.exec_am_local_tg(am, None,None)
+        self.exec_am_local_tg(am, None, None)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -2302,7 +2313,7 @@ impl LamellarTeamRT {
             lamellae: self.lamellae.clone(),
             world: world,
             team: self.clone(),
-            team_addr: self.remote_ptr_alloc.addr,
+            team_addr: self.remote_ptr_alloc.comm_addr(),
         };
         // println!("[{:?}] team exec am local", std::thread::current().id());
         // self.scheduler.submit_am(Am::Local(req_data, func));

@@ -311,7 +311,11 @@ impl<T> Deref for GlobalRwDarcReadGuard<T> {
 
 impl<T> Clone for GlobalRwDarcReadGuard<T> {
     fn clone(&self) -> Self {
-        tracing::trace!("glboal_rw_darc_read_guard[{:?}] deserialize_update_cnts {:?}", self.darc.darc.id, self.darc.inner());
+        tracing::trace!(
+            "glboal_rw_darc_read_guard[{:?}] deserialize_update_cnts {:?}",
+            self.darc.darc.id,
+            self.darc.inner()
+        );
         self.local_cnt.fetch_add(1, Ordering::SeqCst);
         GlobalRwDarcReadGuard {
             darc: self.darc.clone(),
@@ -550,13 +554,10 @@ impl<T> GlobalRwDarc<T> {
 
     #[doc(hidden)]
     pub fn print(&self) {
-        let rel_addr =
-            unsafe { self.darc.inner.addr() - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
-            "--------\norig: {:?} 0x{:x} (0x{:x}) {:?}\n--------",
+            "--------\norig: {:?} 0x{:x} {:?}\n--------",
             self.darc.src_pe,
             self.darc.inner.addr(),
-            rel_addr,
             self.inner()
         );
     }
@@ -833,8 +834,7 @@ impl<T: Send> GlobalRwDarc<T> {
         let inner = self.darc.inner.clone();
         let wrapped_lock = DarcCommPtr {
             alloc: CommAlloc {
-                addr: inner.alloc.addr,
-                size: inner.alloc.size,
+                info: inner.alloc.info.clone(),
                 alloc_type: inner.alloc.alloc_type,
             },
             _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
@@ -882,8 +882,7 @@ impl<T: Send> GlobalRwDarc<T> {
         let inner = self.darc.inner.clone();
         let wrapped_lock = DarcCommPtr {
             alloc: CommAlloc {
-                addr: inner.alloc.addr,
-                size: inner.alloc.size,
+                info: inner.alloc.info.clone(),
                 alloc_type: inner.alloc.alloc_type,
             },
             _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,

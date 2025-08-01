@@ -32,7 +32,9 @@ fn main() {
         }
 
         // we can use the local_array to initialize our local portion a shared memory region
-        unsafe { array.put(my_pe, 0, data.clone()).block(); };
+        unsafe {
+            array.put(my_pe, 0, data.clone()).block();
+        };
 
         //we can "put" from our segment of a shared mem region into another nodes shared mem region
         world.barrier();
@@ -99,7 +101,9 @@ fn main() {
         // unsafe{data.as_mut_slice()[0]=my_pe as u8;}
         while index < ARRAY_LEN {
             let cur_index = index;
-            unsafe { let _ = array.put_all(cur_index, data.sub_region(0..=0)).spawn(); };
+            unsafe {
+                let _ = array.put_all(cur_index, data.sub_region(0..=0)).spawn();
+            };
             index += num_pes;
         }
 

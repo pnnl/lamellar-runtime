@@ -272,7 +272,10 @@ impl RegisteredActiveMessages {
     ) {
         trace!(
             "send_am {:?} {:?} {:?} ({:?})",
-            am_id, am_size, cmd, *AM_HEADER_LEN
+            am_id,
+            am_size,
+            cmd,
+            *AM_HEADER_LEN
         );
         let header = self.create_header(&req_data, cmd);
         let mut data_buf = self
@@ -283,7 +286,7 @@ impl RegisteredActiveMessages {
         let am_header = AmHeader {
             am_id: am_id,
             req_id: req_data.id,
-            team_addr: req_data.team_addr,
+            team_addr: req_data.team_addr.into(),
         };
 
         crate::serialize_into(&mut data_slice[0..*AM_HEADER_LEN], &am_header, false).unwrap();
@@ -473,7 +476,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: team.team.remote_ptr_alloc.comm_addr(),
         };
 
         world.team.world_counters.inc_outstanding(1);
@@ -531,7 +534,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.addr,
+            team_addr: team.team.remote_ptr_alloc.comm_addr(),
         };
         self.exec_local_am(req_data, am.as_local(), world, team)
             .await;

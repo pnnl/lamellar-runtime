@@ -49,7 +49,9 @@ impl<'a> RuntimeWarning<'a> {
                         false
                     }
                 }
-                RuntimeWarning::BarrierTimeout(elapsed) => elapsed > &config().deadlock_warning_timeout,
+                RuntimeWarning::BarrierTimeout(elapsed) => {
+                    elapsed > &config().deadlock_warning_timeout
+                }
             }
         } else {
             false

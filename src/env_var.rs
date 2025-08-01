@@ -61,14 +61,11 @@ fn default_backend() -> String {
     if cfg!(feature = "rofi-c") {
         println!("rofi_c");
         return "rofi_c".to_owned();
-    }
-    else if cfg!(feature = "enable-rofi-rust") {
+    } else if cfg!(feature = "enable-rofi-rust") {
         return "rofi_rust".to_owned();
-    }
-    else if cfg!(feature = "enable-libfabric") {
-        return "libfab".to_owned();
-    }
-    else {
+    } else if cfg!(feature = "enable-libfabric") {
+        return "libfabric".to_owned();
+    } else {
         println!("local");
         return "local".to_owned();
     }

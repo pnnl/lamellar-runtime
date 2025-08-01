@@ -1270,7 +1270,6 @@ fn create_buf_ops(
                 res
             }
         }
-        
         #[allow(non_snake_case)]
         fn #dist_multi_val_multi_idx_am_buf_fetch_name(array: #lamellar::array::LamellarByteArray, op: #lamellar::array::ArrayOpCmd<Vec<u8>>, idx_vals: Vec<u8>,index_usize: u8) -> Arc<dyn RemoteActiveMessage + Sync + Send>{
                 Arc::new(#multi_val_multi_idx_am_buf_fetch_name{
@@ -1504,56 +1503,40 @@ fn create_buffered_ops(
 
 fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenStream {
     let lamellar = quote::format_ident!("crate");
-    let (am_data, am): (syn::Path, syn::Path) = 
-        (
-            syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
-            syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
-        );
-    let multi_val_multi_idx_name = quote::format_ident!(
-        "MultiValMultiIdxAm{}",type_to_string(&typeident)
+    let (am_data, am): (syn::Path, syn::Path) = (
+        syn::parse("lamellar_impl::AmDataRT".parse().unwrap()).unwrap(),
+        syn::parse("lamellar_impl::rt_am".parse().unwrap()).unwrap(),
     );
-    let multi_val_multi_idx_fetch_name = quote::format_ident!(
-        "MultiValMultiIdxFetchAm{}",type_to_string(&typeident)
-    );
-    let multi_val_multi_idx_result_name = quote::format_ident!(
-        "MultiValMultiIdxResultAm{}",type_to_string(&typeident)
-    );
-    let create_multi_val_multi_idx_name = quote::format_ident!(
-        "CreateMultiValMultiIdxAm{}",type_to_string(&typeident)
-    );
-    let multi_val_multi_idx_id_new_name = quote::format_ident!(
-        "MultiValMultiIdxId{}",type_to_string(&typeident)
-    );
-    let single_val_multi_idx_name = quote::format_ident!(
-        "SingleValMultiIdxAm{}",type_to_string(&typeident)
-    );
-    let single_val_multi_idx_fetch_name = quote::format_ident!(
-        "SingleValMultiIdxFetchAm{}",type_to_string(&typeident)
-    );
-    let single_val_multi_idx_result_name = quote::format_ident!(
-        "SingleValMultiIdxResultAm{}",type_to_string(&typeident)
-    );
-    let create_single_val_multi_idx_name = quote::format_ident!(
-        "CreateSingleValMultiIdxAm{}",type_to_string(&typeident)
-    );
-    let single_val_multi_idx_id_new_name = quote::format_ident!(
-        "SingleValMultiIdxId{}",type_to_string(&typeident)
-    );
-    let multi_val_single_idx_name = quote::format_ident!(
-        "MultiValSingleIdxAm{}",type_to_string(&typeident)
-    );
-    let multi_val_single_idx_fetch_name = quote::format_ident!(
-        "MultiValSingleIdxFetchAm{}",type_to_string(&typeident)
-    );
-    let multi_val_single_idx_result_name = quote::format_ident!(
-        "MultiValSingleIdxResultAm{}",type_to_string(&typeident)
-    );
-    let create_multi_val_single_idx_name = quote::format_ident!(
-        "CreateMultiValSingleIdxAm{}",type_to_string(&typeident)
-    );
-    let multi_val_single_idx_id_new_name = quote::format_ident!(
-        "MultiValSingleIdxId{}",type_to_string(&typeident)
-    );
+    let multi_val_multi_idx_name =
+        quote::format_ident!("MultiValMultiIdxAm{}", type_to_string(&typeident));
+    let multi_val_multi_idx_fetch_name =
+        quote::format_ident!("MultiValMultiIdxFetchAm{}", type_to_string(&typeident));
+    let multi_val_multi_idx_result_name =
+        quote::format_ident!("MultiValMultiIdxResultAm{}", type_to_string(&typeident));
+    let create_multi_val_multi_idx_name =
+        quote::format_ident!("CreateMultiValMultiIdxAm{}", type_to_string(&typeident));
+    let multi_val_multi_idx_id_new_name =
+        quote::format_ident!("MultiValMultiIdxId{}", type_to_string(&typeident));
+    let single_val_multi_idx_name =
+        quote::format_ident!("SingleValMultiIdxAm{}", type_to_string(&typeident));
+    let single_val_multi_idx_fetch_name =
+        quote::format_ident!("SingleValMultiIdxFetchAm{}", type_to_string(&typeident));
+    let single_val_multi_idx_result_name =
+        quote::format_ident!("SingleValMultiIdxResultAm{}", type_to_string(&typeident));
+    let create_single_val_multi_idx_name =
+        quote::format_ident!("CreateSingleValMultiIdxAm{}", type_to_string(&typeident));
+    let single_val_multi_idx_id_new_name =
+        quote::format_ident!("SingleValMultiIdxId{}", type_to_string(&typeident));
+    let multi_val_single_idx_name =
+        quote::format_ident!("MultiValSingleIdxAm{}", type_to_string(&typeident));
+    let multi_val_single_idx_fetch_name =
+        quote::format_ident!("MultiValSingleIdxFetchAm{}", type_to_string(&typeident));
+    let multi_val_single_idx_result_name =
+        quote::format_ident!("MultiValSingleIdxResultAm{}", type_to_string(&typeident));
+    let create_multi_val_single_idx_name =
+        quote::format_ident!("CreateMultiValSingleIdxAm{}", type_to_string(&typeident));
+    let multi_val_single_idx_id_new_name =
+        quote::format_ident!("MultiValSingleIdxId{}", type_to_string(&typeident));
 
     let single_val_multi_idx_idx_vals = quote::quote! {
         let idx_vals = unsafe{ match self.index_size {
@@ -1580,24 +1563,24 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
         }};
     };
 
-    let mut ops_mv_mi = quote!{};
-    let mut fetch_ops_mv_mi = quote!{};
-    let mut result_ops_mv_mi = quote!{};
-    let mut ops_sv_mi = quote!{};
-    let mut fetch_ops_sv_mi = quote!{};
-    let mut result_ops_sv_mi = quote!{};
-    let mut ops_mv_si = quote!{};
-    let mut fetch_ops_mv_si = quote!{};
-    let mut result_ops_mv_si = quote!{};
-    let mv_mi_idx_vals = quote!{let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals)};
-    let sv_mi_idx_vals = quote!{#single_val_multi_idx_idx_vals};
-    let mv_si_idx_vals = quote!{let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied())};
-    let local_data = quote!{let local_data = data.local_data::<#typeident>().await};
-    let mut_local_data = quote!{let mut local_data = data.mut_local_data::<#typeident>().await};
-    for op in op_types{
-        match op{
-            OpType::ReadOnly =>{
-                
+    let mut ops_mv_mi = quote! {};
+    let mut fetch_ops_mv_mi = quote! {};
+    let mut result_ops_mv_mi = quote! {};
+    let mut ops_sv_mi = quote! {};
+    let mut fetch_ops_sv_mi = quote! {};
+    let mut result_ops_sv_mi = quote! {};
+    let mut ops_mv_si = quote! {};
+    let mut fetch_ops_mv_si = quote! {};
+    let mut result_ops_mv_si = quote! {};
+    let mv_mi_idx_vals = quote! {let idx_vals = IdxVal::<u8, #typeident>::iter_from_bytes(self.index_size as usize, &self.idxs_vals)};
+    let sv_mi_idx_vals = quote! {#single_val_multi_idx_idx_vals};
+    let mv_si_idx_vals =
+        quote! {let idx_vals = std::iter::repeat(self.idx).zip(self.vals.iter().copied())};
+    let local_data = quote! {let local_data = data.local_data::<#typeident>().await};
+    let mut_local_data = quote! {let mut local_data = data.mut_local_data::<#typeident>().await};
+    for op in op_types {
+        match op {
+            OpType::ReadOnly => {
                 fetch_ops_mv_mi.extend(quote!{
                     ArrayOpCmd::Load =>  {#local_data; #mv_mi_idx_vals; local_data.local_load(idx_vals)},
                 });
@@ -1620,15 +1603,12 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                 });
                 fetch_ops_mv_mi.extend(quote!{
                     ArrayOpCmd::Swap =>  {#mut_local_data; #mv_mi_idx_vals; local_data.local_swap(idx_vals)},
-                    
                 });
                 fetch_ops_sv_mi.extend(quote!{
                     ArrayOpCmd::Swap =>  {#mut_local_data; #sv_mi_idx_vals; local_data.local_swap(idx_vals)},
-                    
                 });
                 fetch_ops_mv_si.extend(quote!{
                     ArrayOpCmd::Swap =>  {#mut_local_data; #mv_si_idx_vals; local_data.local_swap(idx_vals)},
-                    
                 });
             }
             OpType::Arithmetic => {
@@ -1675,7 +1655,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                     ArrayOpCmd::FetchRem => {#mut_local_data; #mv_si_idx_vals; local_data.local_fetch_rem(idx_vals, true).unwrap()},
                 });
             }
-            OpType::CompExEps=> {
+            OpType::CompExEps => {
                 result_ops_mv_mi.extend(quote!{
                     ArrayOpCmd::CompareExchangeEps(cur,eps) => {#mut_local_data; #mv_mi_idx_vals; local_data.local_compare_exchange_epsilon(idx_vals, cur, eps)},
                 });
@@ -1757,7 +1737,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
             }
         }
     }
-    
+
     quote! {
         #[allow(non_camel_case_types)]
         #[#am_data(AmGroup(false))]
@@ -1857,7 +1837,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
             #lamellar::array::multi_val_multi_idx_ops_new{
                 id: #multi_val_multi_idx_id_new_name,
                 op: #create_multi_val_multi_idx_name,
-            } 
+            }
         }
 
         #[lamellar_impl::AmDataRT(AmGroup(false))]
@@ -1926,7 +1906,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                     Arc::new(#single_val_multi_idx_name{
                         data: Into::into(array),
                         op: op.into(),
-                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)}, 
+                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
                         idxs: idxs,
                         index_size,
                     })
@@ -1935,7 +1915,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                     Arc::new(#single_val_multi_idx_fetch_name{
                         data: Into::into(array),
                         op: op.into(),
-                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)}, 
+                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
                         idxs: idxs,
                         index_size,
                     })
@@ -1944,7 +1924,7 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
                     Arc::new(#single_val_multi_idx_result_name{
                         data: Into::into(array),
                         op: op.into(),
-                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)}, 
+                        val: unsafe{*(val_bytes.as_ptr() as *const #typeident)},
                         idxs: idxs,
                         index_size,
                     })
@@ -2066,8 +2046,6 @@ fn test_ops(typeident: syn::Type, op_types: Vec<OpType>) -> proc_macro2::TokenSt
     }
 }
 
-
-
 pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     let mut output = quote! {};
     let items = item
@@ -2145,8 +2123,8 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         //     true,
         // ));
 
-        output.extend(test_ops(the_type.clone(),op_types.clone()));
-        output.extend(test_ops(opt_type,opt_op_types.clone()));
+        output.extend(test_ops(the_type.clone(), op_types.clone()));
+        output.extend(test_ops(opt_type, opt_op_types.clone()));
 
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }

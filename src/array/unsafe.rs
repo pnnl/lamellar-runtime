@@ -5,7 +5,6 @@ pub(crate) mod operations;
 mod rdma;
 
 pub use handle::UnsafeArrayHandle;
-use tracing::trace;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::active_messaging::*;
@@ -243,7 +242,6 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 let len = std::mem::size_of_val::<[T]>(
                     rmr_t.as_mut_slice(), //.expect("data should exist on pe"),
                 );
-                trace!("len: {} rmr_t len: {}", len, rmr_t.len());
                 std::ptr::write_bytes(
                     rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
                     0u8,
@@ -1025,7 +1023,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
         self.inner
             .data
             .team
-            .exec_am_local_tg(am, Some(self.team_counters()),None)
+            .exec_am_local_tg(am, Some(self.team_counters()), None)
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {

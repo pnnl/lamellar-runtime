@@ -1,3 +1,4 @@
+cargo-features = ["codegen-backend"]
 [package]
 name = "lamellar"
 version = "0.7.0"
@@ -19,16 +20,16 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [dependencies]
 lamellar-impl = { version = "0.7.0", path = "impl" }
-# libfabric = { path = "../rofi-junction/libfabric", features = [
-#     "use-async-std",
-#     #"thread-safe",
-# ], optional = true }
+libfabric = { path = "../rofi-junction/libfabric", features = [
+    # "use-async-std",
+    "threading-thread-safe",
+], optional = true }
 # rofi-rust = { path = "../rofi-junction/rofi-rust", features = [
 #     "async-rofi",
 # ], optional = true }
-# pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
-#     "with-pmix",
-# ], optional = true }
+pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
+    "with-pmix",
+], optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 rofisys = { version = "0.4", optional = true }
@@ -98,9 +99,9 @@ opt-level = 3
 enable-rofi-c = ["rofi-c", "rofisys", "libc"]
 enable-rofi-c-shared = ["rofi-c", "rofisys/shared", "libc"]
 rofi-c = []
-enable-libfabric = []
+# enable-libfabric = []
 enable-rofi-rust = []
-# enable-libfabric = ["libfabric", "pmi"]
+enable-libfabric = ["libfabric", "pmi"]
 # enable-rofi-rust = ["rofi-rust", "pmi"]
 tokio-executor = ["tokio"]
 disable-runtime-warnings = []
@@ -110,9 +111,10 @@ default = []
 
 [profile.release]
 opt-level = 3
-lto = false
+lto = true
 codegen-units = 1
 debug = true
+panic = "abort"
 
 
 [lib]

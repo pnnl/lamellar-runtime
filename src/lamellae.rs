@@ -8,18 +8,18 @@ pub(crate) use comm::*;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
 
-match_cfg::match_cfg!{
+match_cfg::match_cfg! {
     #[cfg(feature = "rofi-c")] => {
         pub(crate) mod rofi_c_lamellae;
         use rofi_c_lamellae::{RofiC, RofiCBuilder};
     }
 }
 
-// #[cfg(feature = "enable-libfabric")]
-// pub(crate) mod libfab_lamellae;
+#[cfg(feature = "enable-libfabric")]
+pub(crate) mod libfabric_lamellae;
 // #[cfg(feature = "enable-libfabric")]
 // pub(crate) mod libfabasync_lamellae;
-// #[cfg(feature = "rofi-c")] 
+// #[cfg(feature = "rofi-c")]
 // {
 // pub(crate) mod rofi_c_lamellae;
 // use rofi_c_lamellae::{RofiC, RofiCBuilder};
@@ -29,8 +29,6 @@ match_cfg::match_cfg!{
 // #[cfg(feature = "enable-rofi-rust")]
 // pub(crate) mod rofi_rust_lamellae;
 
-
-
 // #[cfg(feature = "rofi-c")]
 // use rofi_c_lamellae::{RofiC, RofiCBuilder};
 // #[cfg(feature = "enable-rofi-rust")]
@@ -38,12 +36,11 @@ match_cfg::match_cfg!{
 //     rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder},
 //     rofi_rust_lamellae::{RofiRust, RofiRustBuilder},
 // };
-// #[cfg(feature = "enable-libfabric")]
-// use {
-//     libfab_lamellae::{LibFab, LibFabBuilder},
-//     libfabasync_lamellae::{LibFabAsync, LibFabAsyncBuilder},
-// };
-
+#[cfg(feature = "enable-libfabric")]
+use {
+    libfabric_lamellae::{Libfabric, LibfabricBuilder},
+    // libfabasync_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
+};
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
@@ -66,14 +63,14 @@ pub enum Backend {
     #[cfg(feature = "rofi-c")]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     RofiC,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRust,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsync,
+    // #[cfg(feature = "enable-rofi-rust")]
+    // RofiRust,
+    // #[cfg(feature = "enable-rofi-rust")]
+    // RofiRustAsync,
     #[cfg(feature = "enable-libfabric")]
-    LibFab,
-    #[cfg(feature = "enable-libfabric")]
-    LibFabAsync,
+    Libfabric,
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricAsync,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -110,18 +107,18 @@ impl Default for Backend {
                 panic!("unable to set rofi-rust backend, recompile with 'enable-rofi-rust' feature")
             }
 
-            "libfab" => {
+            "libfabric" => {
                 #[cfg(feature = "enable-libfabric")]
-                return Backend::LibFab;
+                return Backend::Libfabric;
                 #[cfg(not(feature = "enable-libfabric"))]
                 panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
             }
-            "libfabasync" => {
-                #[cfg(feature = "enable-libfabric")]
-                return Backend::LibFabAsync;
-                #[cfg(not(feature = "enable-libfabric"))]
-                panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
-            }
+            // "libfabasync" => {
+            //     #[cfg(feature = "enable-libfabric")]
+            //     return Backend::LibfabricAsync;
+            //     #[cfg(not(feature = "enable-libfabric"))]
+            //     panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
+            // }
             "shmem" => {
                 return Backend::Shmem;
             }
@@ -189,20 +186,20 @@ impl SerializedData {
         let ser_data_offset = ref_cnt_size + ser_data_size_size;
         let alloc_size = size + ref_cnt_size + ser_data_size_size;
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let ref_cnt = alloc.addr as *const AtomicUsize;
-        let ser_data_size = (alloc.addr + ref_cnt_size) as *mut usize;
-        let ser_data_bytes = alloc.slice_at_byte_offset(ser_data_offset, size);
+        let ref_cnt = unsafe { alloc.as_ptr::<AtomicUsize>() };
+        let ser_data_size = unsafe { alloc.byte_add(ref_cnt_size).as_mut_ptr::<usize>() };
+        let ser_data_bytes = alloc.comm_slice_at_byte_offset(ser_data_offset, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
 
-        unsafe { 
+        unsafe {
             ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
-            *ser_data_size = alloc.size; 
+            *ser_data_size = alloc.num_bytes();
             trace!("creating new serialized data {:?} {:?} {:?} {:?} serialized data offset {:?} ref_cnt_addr {:x} size_addr {:x} size {:?}",
             alloc,ser_data_bytes,header_bytes,payload_bytes,
-            alloc.addr+ser_data_offset, alloc.addr,alloc.addr + ref_cnt_size, *ser_data_size);
+            alloc.byte_add(ser_data_offset), alloc.comm_addr(),alloc.byte_add(ref_cnt_size), *ser_data_size);
         }
-        
+
         Ok(SerializedData {
             alloc,
             ref_cnt,
@@ -220,14 +217,18 @@ impl SerializedData {
         let alloc_size = alloc_size.as_ref().expect("valid serialized data");
         let ref_cnt = alloc_addr as *const AtomicUsize;
         let ref_cnt = ref_cnt.as_ref().expect("valid serialized data");
-        trace!("alloc_addr {:x}  alloc_size {:?} ref_cnt {:?}",alloc_addr,alloc_size,ref_cnt.load(Ordering::SeqCst));
-        if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1  {
-            trace!("freeing serialized data from addr {:x} ",alloc_addr);
-            comm.rt_free(CommAlloc{
-                addr: alloc_addr,
-                size: *alloc_size,
-                alloc_type: CommAllocType::RtHeap
-            }); 
+        trace!(
+            "alloc_addr {:x}  alloc_size {:?} ref_cnt {:?}",
+            alloc_addr,
+            alloc_size,
+            ref_cnt.load(Ordering::SeqCst)
+        );
+        if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
+            trace!("freeing serialized data from addr {:x} ", alloc_addr);
+            comm.rt_free(CommAlloc {
+                info: CommAllocInfo::Raw(alloc_addr, *alloc_size),
+                alloc_type: CommAllocType::RtHeap,
+            });
         }
     }
 
@@ -237,9 +238,9 @@ impl SerializedData {
         RemoteSerializedData {
             alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
-            ser_data_bytes: self.ser_data_bytes,
-            header_bytes: self.header_bytes,
-            payload_bytes: self.payload_bytes,
+            ser_data_bytes: self.ser_data_bytes.clone(),
+            header_bytes: self.header_bytes.clone(),
+            payload_bytes: self.payload_bytes.clone(),
             comm: self.comm.clone(),
         }
     }
@@ -248,11 +249,11 @@ impl SerializedData {
 impl SerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
-        self.header_bytes
+        self.header_bytes.clone()
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
-        self.header_bytes
+        self.header_bytes.clone()
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_len(&self) -> usize {
@@ -261,12 +262,12 @@ impl SerializedData {
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
-        self.payload_bytes
+        self.payload_bytes.clone()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes_mut(&mut self) -> CommSlice<u8> {
-        self.payload_bytes
+        self.payload_bytes.clone()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -275,7 +276,7 @@ impl SerializedData {
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
-        self.ser_data_bytes
+        self.ser_data_bytes.clone()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -295,9 +296,7 @@ impl SerializedData {
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn print(&self) {
-        println!(
-            "{:?}",self
-        );
+        println!("{:?}", self);
     }
 }
 
@@ -309,12 +308,12 @@ impl std::fmt::Debug for SerializedData {
                 .as_ref()
                 .expect("valid serialized data")
                 .load(Ordering::SeqCst) },
-            self.alloc.addr,
+            self.alloc.comm_addr(),
             self.ser_data_bytes.as_ptr(),
             self.ser_data_bytes.len(),
             self.payload_bytes.as_ptr(),
             self.payload_bytes.len(),
-            self.alloc.size)
+            self.alloc.num_bytes())
     }
 }
 
@@ -338,8 +337,8 @@ impl SerializedData {
         SubSerializedData {
             alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
-            _ser_data_bytes: self.ser_data_bytes,
-            header_bytes: self.header_bytes,
+            _ser_data_bytes: self.ser_data_bytes.clone(),
+            header_bytes: self.header_bytes.clone(),
             payload_bytes: self.payload_bytes.sub_slice(start..end),
             comm: self.comm.clone(),
         }
@@ -347,11 +346,10 @@ impl SerializedData {
 }
 
 impl Drop for SerializedData {
-    #[tracing::instrument( level = "debug")]
+    #[tracing::instrument(level = "debug")]
     fn drop(&mut self) {
-        
         unsafe {
-            trace!("dropping SerializedData {:?} ",self);
+            trace!("dropping SerializedData {:?} ", self);
             if self
                 .ref_cnt
                 .as_ref()
@@ -368,13 +366,12 @@ impl Drop for SerializedData {
 impl SubSerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn header_as_bytes(&self) -> CommSlice<u8> {
-        self.header_bytes
+        self.header_bytes.clone()
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
-        self.payload_bytes
+        self.payload_bytes.clone()
     }
-
 }
 
 impl std::fmt::Debug for SubSerializedData {
@@ -385,12 +382,12 @@ impl std::fmt::Debug for SubSerializedData {
                 .as_ref()
                 .expect("valid serialized data")
                 .load(Ordering::SeqCst) },
-            self.alloc.addr,
+            self.alloc.comm_addr(),
             self._ser_data_bytes.as_ptr(),
             self._ser_data_bytes.len(),
             self.payload_bytes.as_ptr(),
             self.payload_bytes.len(),
-            self.alloc.size)
+            self.alloc.num_bytes())
     }
 }
 
@@ -406,11 +403,10 @@ impl Des for SubSerializedData {
 }
 
 impl Drop for SubSerializedData {
-    #[tracing::instrument( level = "debug")]
+    #[tracing::instrument(level = "debug")]
     fn drop(&mut self) {
-        
         unsafe {
-            trace!("dropping SubSerializedData {:?}",self);
+            trace!("dropping SubSerializedData {:?}", self);
             if self
                 .ref_cnt
                 .as_ref()
@@ -449,36 +445,35 @@ impl std::fmt::Debug for RemoteSerializedData {
                 .as_ref()
                 .expect("valid serialized data")
                 .load(Ordering::SeqCst) },
-            self.alloc.addr,
+            self.alloc.comm_addr(),
             self.ser_data_bytes.as_ptr(),
             self.ser_data_bytes.len(),
             self.payload_bytes.as_ptr(),
             self.payload_bytes.len(),
-            self.alloc.size)
+            self.alloc.num_bytes())
     }
 }
 
 impl Clone for RemoteSerializedData {
-    #[tracing::instrument( level = "debug")]
+    #[tracing::instrument(level = "debug")]
     fn clone(&self) -> Self {
         self.increment_cnt();
         RemoteSerializedData {
             alloc: self.alloc.clone(),
             ref_cnt: self.ref_cnt,
-            ser_data_bytes: self.ser_data_bytes,
-            header_bytes: self.header_bytes,
-            payload_bytes: self.payload_bytes,
+            ser_data_bytes: self.ser_data_bytes.clone(),
+            header_bytes: self.header_bytes.clone(),
+            payload_bytes: self.payload_bytes.clone(),
             comm: self.comm.clone(),
         }
     }
 }
 
 impl Drop for RemoteSerializedData {
-    #[tracing::instrument( level = "debug")]
+    #[tracing::instrument(level = "debug")]
     fn drop(&mut self) {
-        
         unsafe {
-            trace!("dropping RemoteSerializedData {:?}",self);
+            trace!("dropping RemoteSerializedData {:?}", self);
             if self
                 .ref_cnt
                 .as_ref()
@@ -507,9 +502,9 @@ pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsyncBuilder,
     #[cfg(feature = "enable-libfabric")]
-    LibFabBuilder,
-    #[cfg(feature = "enable-libfabric")]
-    LibFabAsyncBuilder,
+    LibfabricBuilder,
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricAsyncBuilder,
     ShmemBuilder,
     LocalBuilder,
 }
@@ -548,9 +543,9 @@ pub(crate) enum Lamellae {
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync,
     #[cfg(feature = "enable-libfabric")]
-    LibFab,
-    #[cfg(feature = "enable-libfabric")]
-    LibFabAsync,
+    Libfabric,
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricAsync,
     Shmem,
     Local,
 }
@@ -565,9 +560,9 @@ impl Lamellae {
             #[cfg(feature = "enable-rofi-rust")]
             Lamellae::RofiRustAsync => self.comm(),
             #[cfg(feature = "enable-libfabric")]
-            Lamellae::LibFab => self.comm(),
-            #[cfg(feature = "enable-libfabric")]
-            Lamellae::LibFabAsync => self.comm(),
+            Lamellae::Libfabric(libfabric) => libfabric.comm(),
+            // #[cfg(feature = "enable-libfabric")]
+            // Lamellae::LibfabricAsync => self.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
             Lamellae::Local(local) => local.comm(),
         }
@@ -595,30 +590,30 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::RofiCBuilder(RofiCBuilder::new(&provider, &domain))
         }
-        #[cfg(feature = "enable-rofi-rust")]
-        Backend::RofiRust => {
-            let provider = config().rofi_provider.clone();
-            let domain = config().rofi_domain.clone();
-            LamellaeBuilder::RofiRustBuilder(RofiRustBuilder::new(&provider, &domain))
-        }
-        #[cfg(feature = "enable-rofi-rust")]
-        Backend::RofiRustAsync => {
-            let provider = config().rofi_provider.clone();
-            let domain = config().rofi_domain.clone();
-            LamellaeBuilder::RofiRustAsyncBuilder(RofiRustAsyncBuilder::new(&provider, &domain))
-        }
+        // #[cfg(feature = "enable-rofi-rust")]
+        // Backend::RofiRust => {
+        //     let provider = config().rofi_provider.clone();
+        //     let domain = config().rofi_domain.clone();
+        //     LamellaeBuilder::RofiRustBuilder(RofiRustBuilder::new(&provider, &domain))
+        // }
+        // #[cfg(feature = "enable-rofi-rust")]
+        // Backend::RofiRustAsync => {
+        //     let provider = config().rofi_provider.clone();
+        //     let domain = config().rofi_domain.clone();
+        //     LamellaeBuilder::RofiRustAsyncBuilder(RofiRustAsyncBuilder::new(&provider, &domain))
+        // }
         #[cfg(feature = "enable-libfabric")]
-        Backend::LibFab => {
+        Backend::Libfabric => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
-            LamellaeBuilder::LibFabBuilder(LibFabBuilder::new(&provider, &domain))
+            LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain))
         }
-        #[cfg(feature = "enable-libfabric")]
-        Backend::LibFabAsync => {
-            let provider = config().rofi_provider.clone();
-            let domain = config().rofi_domain.clone();
-            LamellaeBuilder::LibFabAsyncBuilder(LibFabAsyncBuilder::new(&provider, &domain))
-        }
+        // #[cfg(feature = "enable-libfabric")]
+        // Backend::LibfabricAsync => {
+        //     let provider = config().rofi_provider.clone();
+        //     let domain = config().rofi_domain.clone();
+        //     LamellaeBuilder::LibfabricAsyncBuilder(LibfabricAsyncBuilder::new(&provider, &domain))
+        // }
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }

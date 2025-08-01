@@ -17,7 +17,7 @@ fn impl_lamellar_active_message_trait(
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
-                let __lamellar_thread_id = #lamellar::LAMELLAR_THREAD_ID.with(|id| *id); 
+                let __lamellar_thread_id = #lamellar::LAMELLAR_THREAD_ID.with(|id| *id);
                 Box::pin( async move {
                     #am_body
                 }

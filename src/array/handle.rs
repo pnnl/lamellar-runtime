@@ -136,10 +136,7 @@ impl<T: Dist> InnerRdmaHandle<T> {
             InnerRdmaHandle::Spawned(reqs) => InnerRdmaHandle::Spawned(reqs),
         });
     }
-    pub(crate) fn blocking_wait(
-        &mut self,
-        lamellae: &Arc<Lamellae>,
-    ) {
+    pub(crate) fn blocking_wait(&mut self, lamellae: &Arc<Lamellae>) {
         match self {
             InnerRdmaHandle::Am(reqs) => {
                 for req in reqs.drain(..) {
@@ -247,8 +244,7 @@ impl<T: Dist> LamellarRequest for ArrayRdmaHandle<T> {
     fn blocking_wait(mut self) -> Self::Output {
         self.spawned = true;
         let team_rt = self.array.team();
-        self.reqs
-            .blocking_wait( &team_rt.lamellae);
+        self.reqs.blocking_wait(&team_rt.lamellae);
         // for req in self.reqs.drain(0..) {
         //     req.blocking_wait();
         // }

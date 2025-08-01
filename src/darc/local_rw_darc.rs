@@ -7,7 +7,6 @@ use std::sync::Arc;
 use crate::{
     active_messaging::RemotePtr,
     darc::{Darc, DarcInner, DarcMode, __NetworkDarc},
-    lamellae::CommMem,
     lamellar_team::IntoLamellarTeam,
     IdError, LamellarEnv, LamellarTeam,
 };
@@ -168,7 +167,11 @@ impl<T> LocalRwDarc<T> {
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         // if self.darc.src_pe != cur_pe{
-        tracing::trace!("localrwdarc[{:?}] deserialize_update_cnts {:?}", self.darc.id, self.inner());
+        tracing::trace!(
+            "localrwdarc[{:?}] deserialize_update_cnts {:?}",
+            self.darc.id,
+            self.inner()
+        );
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...
                                                             // }
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -178,13 +181,10 @@ impl<T> LocalRwDarc<T> {
 
     #[doc(hidden)]
     pub fn print(&self) {
-        let rel_addr =
-            unsafe { self.darc.inner.addr() - (*self.inner().team).lamellae.comm().base_addr() };
         println!(
-            "--------\norig: {:?} 0x{:x} (0x{:x}) {:?}\n--------",
+            "--------\norig: {:?} 0x{:x} {:?}\n--------",
             self.darc.src_pe,
             self.darc.inner.addr(),
-            rel_addr,
             self.inner()
         );
     }
@@ -406,7 +406,11 @@ impl<T: Send + Sync> LocalRwDarc<T> {
 impl<T> Clone for LocalRwDarc<T> {
     fn clone(&self) -> Self {
         // self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
-        tracing::trace!("LocalRwDarc[{:?}] Clone {:?}",self.darc.id,self.darc.inner());
+        tracing::trace!(
+            "LocalRwDarc[{:?}] Clone {:?}",
+            self.darc.id,
+            self.darc.inner()
+        );
         LocalRwDarc {
             darc: self.darc.clone(),
         }

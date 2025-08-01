@@ -2,7 +2,7 @@ use super::{AtomicOp, NetworkAtomic};
 use crate::env_var::{config, HeapMode};
 use crate::lamellae::comm::{AllocResult, CmdQStatus, CommOps};
 use crate::lamellae::command_queues::CommandQueue;
-use crate::lamellae::libfabric::libfabric_comm::{LibFabComm, LibFabData};
+use crate::lamellae::libfabric::libfabric_comm::{LibfabricComm, LibfabricData};
 use crate::lamellae::{
     AllocationType, Backend, Comm, Lamellae, LamellaeAM, LamellaeComm, LamellaeInit, LamellaeRDMA,
     RdmaHandle, RdmaResult, Remote, Ser, SerializeHeader, SerializedData, SerializedDataOps,
@@ -20,14 +20,14 @@ use async_trait::async_trait;
 use futures_util::stream::FuturesUnordered;
 use futures_util::{Future, StreamExt};
 
-pub(crate) struct LibFabBuilder {
+pub(crate) struct LibfabricBuilder {
     my_pe: usize,
     num_pes: usize,
     libfab_comm: Arc<Comm>,
 }
 
-impl LibFabBuilder {
-    pub(crate) fn new(provider: &str, domain: &str) -> LibFabBuilder {
+impl LibfabricBuilder {
+    pub(crate) fn new(provider: &str, domain: &str) -> LibfabricBuilder {
         let provider = if !provider.is_empty() {
             Some(provider)
         } else {
@@ -38,8 +38,8 @@ impl LibFabBuilder {
         } else {
             None
         };
-        let libfab: Arc<Comm> = Arc::new(LibFabComm::new(provider, domain).unwrap().into());
-        LibFabBuilder {
+        let libfab: Arc<Comm> = Arc::new(LibfabricComm::new(provider, domain).unwrap().into());
+        LibfabricBuilder {
             my_pe: libfab.my_pe(),
             num_pes: libfab.num_pes(),
             libfab_comm: libfab,
@@ -47,12 +47,12 @@ impl LibFabBuilder {
     }
 }
 
-impl LamellaeInit for LibFabBuilder {
+impl LamellaeInit for LibfabricBuilder {
     fn init_fabric(&mut self) -> (usize, usize) {
         (self.my_pe, self.num_pes)
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
-        let libfab = LibFab::new(self.my_pe, self.num_pes, self.libfab_comm.clone());
+        let libfab = Libfabric::new(self.my_pe, self.num_pes, self.libfab_comm.clone());
         let cq_clone = libfab.cq();
         let cq_clone2 = libfab.cq();
         let cq_clone3 = libfab.cq();
@@ -60,7 +60,7 @@ impl LamellaeInit for LibFabBuilder {
         let scheduler_clone2 = scheduler.clone();
         let scheduler_clone3 = scheduler.clone();
 
-        let libfab = Arc::new(Lamellae::LibFab(libfab));
+        let libfab = Arc::new(Lamellae::Libfabric(libfab));
         let libfab_clone = libfab.clone();
         println!("Submitting Rofi Tasks");
         scheduler.submit_io_task(async move {
@@ -84,7 +84,7 @@ impl LamellaeInit for LibFabBuilder {
     }
 }
 
-pub(crate) struct LibFab {
+pub(crate) struct Libfabric {
     my_pe: usize,
     num_pes: usize,
     libfab_comm: Arc<Comm>,
@@ -92,7 +92,7 @@ pub(crate) struct LibFab {
     cq: Arc<CommandQueue>,
 }
 
-impl std::fmt::Debug for LibFab {
+impl std::fmt::Debug for Libfabric {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -102,11 +102,11 @@ impl std::fmt::Debug for LibFab {
     }
 }
 
-impl LibFab {
-    fn new(my_pe: usize, num_pes: usize, libfab_comm: Arc<Comm>) -> LibFab {
+impl Libfabric {
+    fn new(my_pe: usize, num_pes: usize, libfab_comm: Arc<Comm>) -> Libfabric {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
         let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
-        LibFab {
+        Libfabric {
             my_pe: my_pe,
             num_pes: num_pes,
             libfab_comm: libfab_comm.clone(),
@@ -134,7 +134,7 @@ impl LibFab {
 //     }
 // }
 
-impl LamellaeComm for LibFab {
+impl LamellaeComm for Libfabric {
     // this is a global barrier (hopefully using hardware)
     fn my_pe(&self) -> usize {
         self.my_pe
@@ -146,7 +146,7 @@ impl LamellaeComm for LibFab {
         self.libfab_comm.barrier()
     }
     fn backend(&self) -> Backend {
-        Backend::LibFab
+        Backend::Libfabric
     }
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64 {
@@ -186,7 +186,7 @@ impl LamellaeComm for LibFab {
 }
 
 #[async_trait]
-impl LamellaeAM for LibFab {
+impl LamellaeAM for Libfabric {
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -206,7 +206,7 @@ impl LamellaeAM for LibFab {
     }
 }
 
-impl Ser for LibFab {
+impl Ser for Libfabric {
     // fn serialize<T: serde::Serialize + ?Sized>(
     //     &self,
     //     header: Option<SerializeHeader>,
@@ -215,10 +215,10 @@ impl Ser for LibFab {
     //     let header_size = *SERIALIZE_HEADER_LEN;
     //     // let data_size = bincode::serialized_size(obj)? as usize;
     //     let data_size = crate::serialized_size(obj, true) as usize;
-    //     let ser_data = LibFabData::new(self.rofi_comm.clone(), header_size + data_size)?;
+    //     let ser_data = LibfabricData::new(self.rofi_comm.clone(), header_size + data_size)?;
     //     crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
     //     crate::serialize_into(ser_data.data_as_bytes(), obj, true)?;
-    //     Ok(SerializedData::LibFabData(ser_data))
+    //     Ok(SerializedData::LibfabricData(ser_data))
     // }
     fn serialize_header(
         &self,
@@ -226,15 +226,15 @@ impl Ser for LibFab {
         serialized_size: usize,
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
-        let ser_data = LibFabData::new(self.libfab_comm.clone(), header_size + serialized_size)?;
+        let ser_data = LibfabricData::new(self.libfab_comm.clone(), header_size + serialized_size)?;
         // bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
         crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
-        Ok(SerializedData::LibFabData(ser_data))
+        Ok(SerializedData::LibfabricData(ser_data))
     }
 }
 
 #[allow(dead_code, unused_variables)]
-impl LamellaeRDMA for LibFab {
+impl LamellaeRDMA for Libfabric {
     fn flush(&self) {
         self.libfab_comm.flush();
     }
@@ -296,9 +296,6 @@ impl LamellaeRDMA for LibFab {
     fn free(&self, addr: usize) {
         self.libfab_comm.free(addr)
     }
-    fn base_addr(&self) -> usize {
-        self.libfab_comm.base_addr()
-    }
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.libfab_comm.local_addr(remote_pe, remote_addr)
     }
@@ -315,7 +312,7 @@ impl LamellaeRDMA for LibFab {
     //     // println!("trying to alloc pool {:?}",min_size);
     //     match config().heap_mode {
     //         HeapMode::Static => {
-    //             panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes,set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",LibFabComm::heap_size())
+    //             panic!("[LAMELLAR ERROR] Heap out of memory, current heap size is {} bytes,set LAMELLAR_HEAP_SIZE envrionment variable to increase size, or set LAMELLAR_HEAP_MODE=dynamic to enable exprimental growable heaps",LibfabricComm::heap_size())
     //         }
     //         HeapMode::Dynamic => self.cq.send_alloc(min_size),
     //     }
@@ -325,9 +322,9 @@ impl LamellaeRDMA for LibFab {
     }
 }
 
-pub(crate) struct LibFabFuture {}
+pub(crate) struct LibfabricFuture {}
 
-impl Future for LibFabFuture {
+impl Future for LibfabricFuture {
     type Output = RdmaResult;
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         Poll::Ready(Ok(()))

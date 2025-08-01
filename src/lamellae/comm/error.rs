@@ -9,6 +9,7 @@ pub(crate) enum AllocError {
     RemoteNotFound(CommAllocAddr),
     UnexpectedAllocationType(AllocationType),
     FabricAllocationError(i32),
+    InvalidSubAlloc(usize, usize),
 }
 
 impl std::fmt::Display for AllocError {
@@ -40,6 +41,13 @@ impl std::fmt::Display for AllocError {
             AllocError::FabricAllocationError(err_no) => {
                 write!(f, "Fabric allocation error: {:?}", err_no)
             }
+            AllocError::InvalidSubAlloc(size, align) => {
+                write!(
+                    f,
+                    "Invalid sub allocation size {} with alignment {}",
+                    size, align
+                )
+            }
         }
     }
 }
@@ -47,6 +55,33 @@ impl std::fmt::Display for AllocError {
 impl std::error::Error for AllocError {}
 
 pub(crate) type AllocResult<T> = Result<T, AllocError>;
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum FabricError {
+    InitError(u32),
+    BarrierError(u32),
+    FabricError(u32),
+}
+
+impl std::fmt::Display for FabricError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            FabricError::InitError(err_no) => {
+                write!(f, "Fabric initialization error: {}", err_no)
+            }
+            FabricError::BarrierError(err_no) => {
+                write!(f, "Barrier error: {}", err_no)
+            }
+            FabricError::FabricError(err_no) => {
+                write!(f, "Fabric error: {}", err_no)
+            }
+        }
+    }
+}
+
+impl std::error::Error for FabricError {}
+
+pub(crate) type FabricResult<T> = Result<T, FabricError>;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RdmaError {

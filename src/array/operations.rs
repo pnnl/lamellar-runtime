@@ -16,7 +16,7 @@ pub use handle::{
     ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
 };
 pub(crate) mod access;
-pub use access::{AccessOps,LocalAccessOps, UnsafeAccessOps};
+pub use access::{AccessOps, LocalAccessOps, UnsafeAccessOps};
 pub(crate) mod arithmetic;
 pub use arithmetic::{
     ArithmeticOps, ElementArithmeticOps, LocalArithmeticOps, UnsafeArithmeticOps,
@@ -26,10 +26,11 @@ pub use bitwise::{BitWiseOps, ElementBitWiseOps, LocalBitWiseOps, UnsafeBitWiseO
 pub(crate) mod compare_exchange;
 pub use compare_exchange::{
     CompareExchangeEpsilonOps, CompareExchangeOps, ElementCompareEqOps, ElementComparePartialEqOps,
-    UnsafeCompareExchangeEpsilonOps, UnsafeCompareExchangeOps, LocalCompareExchangeOps, LocalCompareExchangeOpsEpsilon
+    LocalCompareExchangeOps, LocalCompareExchangeOpsEpsilon, UnsafeCompareExchangeEpsilonOps,
+    UnsafeCompareExchangeOps,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyOps, UnsafeReadOnlyOps, LocalReadOnlyOps};
+pub use read_only::{LocalReadOnlyOps, ReadOnlyOps, UnsafeReadOnlyOps};
 pub(crate) mod shift;
 pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps, UnsafeShiftOps};
 
@@ -210,7 +211,7 @@ impl<T: Dist> From<ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
 }
 
 #[doc(hidden)]
-#[repr(C,packed)] //required as we reinterpret as bytes
+#[repr(C, packed)] //required as we reinterpret as bytes
 #[lamellar_impl::AmLocalDataRT]
 pub struct IdxVal<I, T> {
     pub index: I,
@@ -231,34 +232,56 @@ impl<I, T: Dist> IdxVal<I, T> {
         std::mem::size_of::<Self>()
     }
 
-    pub fn iter_from_bytes<'a>(index_size: usize, bytes: &'a [u8]) -> impl Iterator<Item = (usize, T)> + 'a {
+    pub fn iter_from_bytes<'a>(
+        index_size: usize,
+        bytes: &'a [u8],
+    ) -> impl Iterator<Item = (usize, T)> + 'a {
         unsafe {
             match index_size {
-                1 => {
-                    Box::new(std::slice::from_raw_parts(bytes.as_ptr() as *const IdxVal<u8, T>, bytes.len() / std::mem::size_of::<IdxVal<u8, T>>()).iter()
-                        .map(|idx_val| (idx_val.index as usize, idx_val.val))) as Box<dyn Iterator<Item = (usize, T)>>
-                }
-                2 => {
-                    Box::new(std::slice::from_raw_parts(bytes.as_ptr() as *const IdxVal<u16, T>, bytes.len() / std::mem::size_of::<IdxVal<u16, T>>()).iter()
-                        .map(|idx_val| (idx_val.index as usize, idx_val.val))) as Box<dyn Iterator<Item = (usize, T)>>
-                }
-                4 => {
-                    Box::new(std::slice::from_raw_parts(bytes.as_ptr() as *const IdxVal<u32, T>, bytes.len() / std::mem::size_of::<IdxVal<u32, T>>()).iter()
-                        .map(|idx_val| (idx_val.index as usize, idx_val.val))) as Box<dyn Iterator<Item = (usize, T)>>
-                }
-                8 => {
-                    Box::new(std::slice::from_raw_parts(bytes.as_ptr() as *const IdxVal<u64, T>, bytes.len() / std::mem::size_of::<IdxVal<u64, T>>()).iter()
-                        .map(|idx_val| (idx_val.index as usize, idx_val.val))) as Box<dyn Iterator<Item = (usize, T)>>
-                }
-                _ => {
-                    Box::new(std::slice::from_raw_parts(bytes.as_ptr() as *const IdxVal<usize, T>, bytes.len() / std::mem::size_of::<IdxVal<usize, T>>()).iter()
-                        .map(|idx_val| (idx_val.index as usize, idx_val.val))) as Box<dyn Iterator<Item = (usize, T)>>
-                }
+                1 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u8, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u8, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                2 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u16, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u16, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                4 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u32, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u32, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                8 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u64, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u64, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                _ => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<usize, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<usize, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
             }
         }
     }
 }
-
 
 #[doc(hidden)]
 #[derive(Clone, serde::Serialize, Debug)]
