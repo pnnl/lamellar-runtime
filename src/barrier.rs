@@ -337,26 +337,26 @@ impl Barrier {
                     handle.barrier_id = barrier_id;
                     handle.my_index = my_index;
 
-                    if barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
-                        handle.state = State::Waiting;
-                        return handle;
-                    }
+                    // if barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                    handle.state = State::Waiting;
+                    return handle;
+                    // }
                     // else if barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
                     //     println!("should this happen>?");
                     // }
 
-                    handle.state = State::RoundInit(0);
-                    let mut round = 0;
-                    while round < self.num_rounds {
-                        handle.do_send_round(round);
-                        if let Some(recv_pe) = handle.do_recv_round(round, 1) {
-                            handle.state = State::RoundInProgress(round, recv_pe);
-                            return handle;
-                        }
-                        round += 1;
-                    }
-                    self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
-                    handle.state = State::RoundInit(self.num_rounds);
+                    // handle.state = State::RoundInit(0);
+                    // let mut round = 0;
+                    // while round < self.num_rounds {
+                    //     handle.do_send_round_async(round);
+                    //     if let Some(recv_pe) = handle.do_recv_round(round, 1) {
+                    //         handle.state = State::RoundInProgress(round, recv_pe);
+                    //         return handle;
+                    //     }
+                    //     round += 1;
+                    // }
+                    // self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
+                    // handle.state = State::RoundInit(self.num_rounds);
                 }
             }
         }
@@ -365,12 +365,12 @@ impl Barrier {
 
     pub(crate) async fn async_barrier(&self) {
         // println!("calling libfabasync barrier");
-        if let crate::lamellae::Lamellae::LibFabAsync(libfabasync) = self.lamellae.as_ref() {
-            libfabasync.barrier().await;
-        }
-        else {
-            self.barrier_handle().await;
-        }
+        // if let crate::lamellae::Lamellae::LibFabAsync(libfabasync) = self.lamellae.as_ref() {
+        //     libfabasync.barrier().await;
+        // }
+        // else {
+            self.barrier_handle().wait().await;
+        // }
         // println!("Done calling libfabasync barrier");
     }
 
@@ -487,6 +487,21 @@ impl BarrierHandle {
         }
     }
 
+    async fn do_send_round_async(&self, round: usize) {
+        // println!("do send round {:?}", round);
+        let barrier_slice = &[self.barrier_id];
+        for i in 1..=self.n {
+            let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
+            if team_send_pe != self.my_index {
+                let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
+                unsafe {
+                    self.barrier_buf[i - 1].put_slice(send_pe, round, barrier_slice).await;
+                    //safe as we are the only ones writing to our index
+                }
+            }
+        }
+    }
+
     fn do_recv_round(&self, round: usize, recv_pe_index: usize) -> Option<usize> {
         // println!("do recv round {:?}", round);
         for i in recv_pe_index..=self.n {
@@ -510,6 +525,75 @@ impl BarrierHandle {
             }
         }
         None
+    }
+
+    pub(crate) async fn wait(&mut self) {
+        loop {
+            match self.state {
+                State::Waiting => {
+                    while self.barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                        async_std::task::yield_now().await;
+                    }
+                    // else if self.barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
+                    //     println!("barrier id is less than cur barrier id");
+                    // }
+                    self.state = State::RoundInit(0);
+                }
+                State::RoundInit(round) => {
+                    let mut round = round;
+                    while round < self.num_rounds {
+                        self.do_send_round_async(round).await;
+                        loop{
+                            if let Some(recv_pe) = self.do_recv_round(round, 1) {
+                            // println!("waiting for pe {:?}", recv_pe);
+                                self.state = State::RoundInProgress(round, recv_pe);
+                                async_std::task::yield_now().await;
+                            }
+                            else {
+                                break;
+                            }
+                        }
+                        round += 1;
+                    }
+                    self.cur_barrier_id
+                        .store(self.barrier_id + 1, Ordering::SeqCst);
+                    self.state = State::RoundInit(round);
+                    return;
+                }
+                State::RoundInProgress(round, recv_pe) => {
+                    let mut round = round;
+                    loop {
+                        if let Some(recv_pe) = self.do_recv_round(round, recv_pe) {
+                            // println!("waiting for pe {:?}", recv_pe);
+                            self.state = State::RoundInProgress(round, recv_pe);
+                            async_std::task::yield_now().await;
+                        }
+                        else {
+                            break;
+                        }
+                    }
+                    round += 1;
+                    while round < self.num_rounds {
+                        self.do_send_round_async(round).await;
+                        loop {
+                            if let Some(recv_pe) = self.do_recv_round(round, 1) {
+                                // println!("waiting for pe {:?}", recv_pe);
+                                self.state = State::RoundInProgress(round, recv_pe);
+                                async_std::task::yield_now().await;
+                            }
+                            else {
+                                break;
+                            }
+                        }
+                        round += 1;
+                    }
+                    self.cur_barrier_id
+                        .store(self.barrier_id + 1, Ordering::SeqCst);
+                    self.state = State::RoundInit(round);
+                    return;
+                }
+            }
+        }
     }
 }
 

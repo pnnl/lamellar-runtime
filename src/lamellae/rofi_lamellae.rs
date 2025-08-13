@@ -68,6 +68,10 @@ impl LamellaeInit for RofiBuilder {
         });
         rofi
     }
+    
+    fn set_scheduler(&self,scheduler:Arc<Scheduler>) {
+        self.rofi_comm.set_scheduler(scheduler);
+    }
 }
 
 pub(crate) struct Rofi {
@@ -225,20 +229,20 @@ impl LamellaeRDMA for Rofi {
     fn flush(&self) {
         self.rofi_comm.flush();
     }
-    fn put(&self, pe: usize, src: &[u8], dst: usize) {
-        self.rofi_comm.put(pe, src, dst);
+    fn put<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        self.rofi_comm.put(pe, src, dst)
     }
-    fn iput<'a>(&'a self, pe: usize, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
-        self.rofi_comm.iput(pe, src, dst)
+    fn iput(&self, pe: usize, src: &[u8], dst: usize) {
+        self.rofi_comm.iput(pe, src, dst);
     }
-    fn put_all(&self, src: &[u8], dst: usize) {
-        self.rofi_comm.put_all(src, dst);
+    fn put_all<'a>(&'a self, src: &'a [u8], dst: usize) -> CommOpHandle<'a>{
+        self.rofi_comm.put_all(src, dst)
     }
-    fn get(&self, pe: usize, src: usize, dst: &mut [u8]) {
-        self.rofi_comm.get(pe, src, dst);
+    fn get<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
+        self.rofi_comm.get(pe, src, dst)
     }
-    fn iget<'a>(&'a self, pe: usize, src: usize, dst: &'a mut [u8]) -> CommOpHandle<'a>{
-        self.rofi_comm.iget(pe, src, dst)
+    fn iget(&self, pe: usize, src: usize, dst: &mut [u8]) {
+        self.rofi_comm.iget(pe, src, dst);
     }
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<usize> {
         self.rofi_comm.rt_alloc(size, align)

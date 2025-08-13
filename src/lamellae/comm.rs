@@ -183,14 +183,20 @@ pub(crate) trait CommOps {
 
 pub struct CommOpHandle<'a, T = ()> {
     fut: Pin<Box<dyn Future<Output =T> + Send + 'a> >,
-    scheduler: Arc<crate::lamellae::Scheduler>,
+    scheduler: Option<Arc<crate::lamellae::Scheduler>>,
 }
 
 impl<'a, T> CommOpHandle<'a, T> {
+    // pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a,) -> Self {
+    //     Self {
+    //         fut: Box::pin(fut),
+    //         scheduler:None,
+    //     }
+    // }
     pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a, scheduler: Arc<crate::lamellae::Scheduler>) -> Self {
         Self {
             fut: Box::pin(fut),
-            scheduler: scheduler.clone(),
+            scheduler: Some(scheduler),
         }
     }
 
@@ -199,7 +205,15 @@ impl<'a, T> CommOpHandle<'a, T> {
         // return Handle::current().block_on(async {self.fut.await});
         // #[cfg(not(feature="tokio-executor"))]
         // return block_on(async {self.fut.await});
-        self.scheduler.block_on(async {self.fut.await})
+        if let Some(scheduler) = self.scheduler {
+            scheduler.block_on(async {self.fut.await})
+        }
+        else {
+            #[cfg(feature="tokio-executor")]
+            return Handle::current().block_on(async {self.fut.await});
+            #[cfg(not(feature="tokio-executor"))]
+            return block_on(async {self.fut.await});
+        }
     }
     
     // pub(crate) fn spawn(self) -> async_std::task::JoinHandle<T> {
