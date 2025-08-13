@@ -206,13 +206,14 @@ pub struct DistIterForEachHandle {
 
 impl DistIterForEachHandle {
     pub(crate) fn new(
-        barrier: BarrierHandle,
+        mut barrier: BarrierHandle,
         reqs: Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
         array: &UnsafeArrayInner,
     ) -> Self {
+        let barrier_id = barrier.barrier_id;
         DistIterForEachHandle {
             team: array.data.team.clone(),
-            state: State::Barrier(barrier, reqs),
+            state: State::Barrier((Box::pin(barrier.wait()), barrier_id, false), reqs),
         }
     }
 
@@ -241,7 +242,8 @@ impl DistIterForEachHandle {
 #[pin_project(project = StateProj)]
 enum State {
     Barrier(
-        #[pin] BarrierHandle,
+
+        (Pin<Box<dyn Future<Output = ()> + Send >>, usize, bool),
         Pin<Box<dyn Future<Output = InnerDistIterForEachHandle> + Send>>,
     ),
     Reqs(#[pin] InnerDistIterForEachHandle, usize),
@@ -253,9 +255,10 @@ impl Future for DistIterForEachHandle {
         let mut this = self.project();
         match this.state.as_mut().project() {
             StateProj::Barrier(barrier, inner) => {
-                let barrier_id = barrier.barrier_id;
+                let barrier_id = barrier.1;
                 // println!("in task barrier {:?}", barrier_id);
-                ready!(barrier.poll(cx));
+                ready!(Future::poll(barrier.0.as_mut(), cx));
+                barrier.2 = true;
                 // println!("past barrier {:?}", barrier_id);
                 let mut inner: InnerDistIterForEachHandle =
                     ready!(Future::poll(inner.as_mut(), cx));
@@ -299,7 +302,8 @@ impl LamellarRequest for DistIterForEachHandle {
     fn blocking_wait(self) -> Self::Output {
         match self.state {
             State::Barrier(barrier, reqs) => {
-                barrier.blocking_wait();
+                // barrier.blocking_wait();
+                self.team.block_on(barrier.0);
                 self.team.block_on(reqs).blocking_wait();
             }
             State::Reqs(inner, _) => {
@@ -310,7 +314,7 @@ impl LamellarRequest for DistIterForEachHandle {
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         match &mut self.state {
             State::Barrier(barrier, _) => {
-                if !barrier.ready_or_set_waker(waker) {
+                if !barrier.2 {
                     return false;
                 }
                 waker.wake_by_ref();
