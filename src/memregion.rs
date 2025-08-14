@@ -130,16 +130,16 @@ impl<T: Dist> crate::active_messaging::DarcSerde for LamellarMemoryRegion<T> {
             // LamellarMemoryRegion::Unsafe(mr) => mr.ser(num_pes,darcs),
         }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in shared des");
-        match self {
-            LamellarMemoryRegion::Shared(mr) => mr.des(cur_pe),
-            LamellarMemoryRegion::Local(mr) => mr.des(cur_pe),
-            // LamellarMemoryRegion::Unsafe(mr) => mr.des(cur_pe),
-        }
-        // self.mr.print();
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     // println!("in shared des");
+    //     match self {
+    //         LamellarMemoryRegion::Shared(mr) => mr.des(cur_pe),
+    //         LamellarMemoryRegion::Local(mr) => mr.des(cur_pe),
+    //         // LamellarMemoryRegion::Unsafe(mr) => mr.des(cur_pe),
+    //     }
+    //     // self.mr.print();
+    // }
 }
 
 impl<T: Dist> LamellarMemoryRegion<T> {

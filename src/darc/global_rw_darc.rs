@@ -512,16 +512,16 @@ impl<T> crate::active_messaging::DarcSerde for GlobalRwDarc<T> {
         // }
         darcs.push(RemotePtr::NetworkDarc(self.darc.clone().into()));
     }
-    fn des(&self, cur_pe: Result<usize, IdError>) {
-        // match cur_pe {
-        //     Ok(_) => {
-        //         self.darc.deserialize_update_cnts();
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access darcs within team members ({:?})", err);
-        //     }
-        // }
-    }
+    // fn des(&self, cur_pe: Result<usize, IdError>) {
+    // match cur_pe {
+    //     Ok(_) => {
+    //         self.darc.deserialize_update_cnts();
+    //     }
+    //     Err(err) => {
+    //         panic!("can only access darcs within team members ({:?})", err);
+    //     }
+    // }
+    // }
 }
 
 impl<T> GlobalRwDarc<T> {

@@ -35,19 +35,18 @@ pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 10
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl LibfabricComm {
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn new(provider: Option<&str>,
-        domain: Option<&str>,) -> LibfabricComm {
+    pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> LibfabricComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
         }
-        let ofi = Ofi::new(provider,domain).expect("error in ofi init");
+        let ofi = Ofi::new(provider, domain).expect("error in ofi init");
         trace!("ofi initialized: {:?}", ofi);
 
         ofi.barrier();
         let num_pes = ofi.num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
         let total_mem = cmd_q_mem + RT_MEM + HEAP_SIZE.load(Ordering::SeqCst);
-        let mem_per_pe = total_mem; // / num_pes;
+        // let mem_per_pe = total_mem; // / num_pes;
 
         let alloc_info = ofi
             .alloc(total_mem, AllocationType::Global)
@@ -94,12 +93,12 @@ impl CommShutdown for LibfabricComm {
 impl CommProgress for LibfabricComm {
     fn flush(&self) {
         if let Err(e) = self.ofi.progress() {
-            println!("libfabric flush error: {}", e);
+            panic!("libfabric flush error: {}", e);
         }
     }
     fn wait(&self) {
         if let Err(e) = self.ofi.wait_all() {
-            println!("libfabric wait error");
+            panic!("libfabric wait error: {}", e);
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]

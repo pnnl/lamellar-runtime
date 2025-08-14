@@ -565,8 +565,8 @@ fn create_am_group_remote(
     let mut am_group_ser = fields.ser_as_vecs();
     am_group_ser.extend(static_fields.ser());
 
-    let mut am_group_des = fields.des_as_vecs();
-    am_group_des.extend(static_fields.des());
+    // let mut am_group_des = fields.des_as_vecs();
+    // am_group_des.extend(static_fields.des());
 
     let (the_struct, the_traits) = create_am_struct(
         generics,
@@ -577,7 +577,7 @@ fn create_am_group_remote(
         &am_group_name,
         &am_group_fields,
         &am_group_ser,
-        &am_group_des,
+        // &am_group_des,
         lamellar,
         local,
     );

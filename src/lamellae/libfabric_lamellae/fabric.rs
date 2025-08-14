@@ -1,7 +1,6 @@
 use libfabric::{
     av::{AddressVector, AddressVectorBuilder, AddressVectorSetBuilder, AvInAddress},
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
-    cntr_caps_type,
     comm::{
         atomic::{AtomicCASEp, AtomicFetchEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp, MulticastGroupCollective},
@@ -9,25 +8,18 @@ use libfabric::{
     },
     connless_ep::ConnectionlessEndpoint,
     cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq},
-    cq_caps_type,
     domain::{Domain, DomainBuilder},
     enums::{
         AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CqFormat,
         EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ResourceMgmt,
-        TferOptions, Threading, TrafficClass, TransferOptions,
+        Threading, TrafficClass, TransferOptions,
     },
-    ep::{ActiveEndpoint, Address, BaseEndpoint, Endpoint, EndpointBuilder},
+    ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder},
     eq::{Event, EventQueue, EventQueueBuilder},
-    eq_caps_type,
-    error::{Error, ErrorKind},
     fabric::{Fabric, FabricBuilder},
-    info::{libfabric_version, Info, InfoEntry, Version},
-    info_caps_type,
+    info::{libfabric_version, Info, InfoEntry},
     infocapsoptions::InfoCaps,
-    mr::{
-        DisabledMemoryRegion, MappedMemoryRegionKey, MaybeDisabledMemoryRegion, MemoryRegion,
-        MemoryRegionBuilder, MemoryRegionDesc, MemoryRegionKey,
-    },
+    mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder},
     *,
 };
 

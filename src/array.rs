@@ -187,8 +187,8 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, i64);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, i64);
@@ -200,18 +200,18 @@ lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, usize);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 // // //------------------------------------
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 
@@ -743,17 +743,17 @@ impl crate::active_messaging::DarcSerde for LamellarByteArray {
             LamellarByteArray::GlobalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        match self {
-            LamellarByteArray::UnsafeArray(array) => array.des(cur_pe),
-            LamellarByteArray::ReadOnlyArray(array) => array.des(cur_pe),
-            LamellarByteArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarByteArray::NativeAtomicArray(array) => array.des(cur_pe),
-            LamellarByteArray::GenericAtomicArray(array) => array.des(cur_pe),
-            LamellarByteArray::LocalLockArray(array) => array.des(cur_pe),
-            LamellarByteArray::GlobalLockArray(array) => array.des(cur_pe),
-        }
-    }
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     match self {
+    //         LamellarByteArray::UnsafeArray(array) => array.des(cur_pe),
+    //         LamellarByteArray::ReadOnlyArray(array) => array.des(cur_pe),
+    //         LamellarByteArray::AtomicArray(array) => array.des(cur_pe),
+    //         LamellarByteArray::NativeAtomicArray(array) => array.des(cur_pe),
+    //         LamellarByteArray::GenericAtomicArray(array) => array.des(cur_pe),
+    //         LamellarByteArray::LocalLockArray(array) => array.des(cur_pe),
+    //         LamellarByteArray::GlobalLockArray(array) => array.des(cur_pe),
+    //     }
+    // }
 }
 #[doc(hidden)]
 enum LamellarMutLocalData<'a, T: Dist> {
@@ -784,16 +784,16 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray
             LamellarReadArray::GlobalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in shared des");
-        match self {
-            LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
-            LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
-            LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarReadArray::LocalLockArray(array) => array.des(cur_pe),
-            LamellarReadArray::GlobalLockArray(array) => array.des(cur_pe),
-        }
-    }
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     // println!("in shared des");
+    //     match self {
+    //         LamellarReadArray::UnsafeArray(array) => array.des(cur_pe),
+    //         LamellarReadArray::ReadOnlyArray(array) => array.des(cur_pe),
+    //         LamellarReadArray::AtomicArray(array) => array.des(cur_pe),
+    //         LamellarReadArray::LocalLockArray(array) => array.des(cur_pe),
+    //         LamellarReadArray::GlobalLockArray(array) => array.des(cur_pe),
+    //     }
+    // }
 }
 
 impl<T: Dist> ActiveMessaging for LamellarReadArray<T> {
@@ -988,15 +988,15 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarWriteArra
             LamellarWriteArray::GlobalLockArray(array) => array.ser(num_pes, darcs),
         }
     }
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in shared des");
-        match self {
-            LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
-            LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
-            LamellarWriteArray::LocalLockArray(array) => array.des(cur_pe),
-            LamellarWriteArray::GlobalLockArray(array) => array.des(cur_pe),
-        }
-    }
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     // println!("in shared des");
+    //     match self {
+    //         LamellarWriteArray::UnsafeArray(array) => array.des(cur_pe),
+    //         LamellarWriteArray::AtomicArray(array) => array.des(cur_pe),
+    //         LamellarWriteArray::LocalLockArray(array) => array.des(cur_pe),
+    //         LamellarWriteArray::GlobalLockArray(array) => array.des(cur_pe),
+    //     }
+    // }
 }
 
 impl<T: Dist> ActiveMessaging for LamellarWriteArray<T> {

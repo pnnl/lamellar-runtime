@@ -102,7 +102,7 @@ impl<T: AmDist> TaskGroupAmHandle<T> {
                         match darc {
                             RemotePtr::NetworkDarc(darc) => {
                                 let temp: Darc<()> = darc.into();
-                                temp.des(Ok(0));
+                                // temp.des(Ok(0));
                                 temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
@@ -325,7 +325,7 @@ impl<T: AmDist> TaskGroupMultiAmHandle<T> {
                         match darc {
                             RemotePtr::NetworkDarc(darc) => {
                                 let temp: Darc<()> = darc.into();
-                                temp.des(Ok(0));
+                                // temp.des(Ok(0));
                                 temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
@@ -1149,11 +1149,11 @@ impl DarcSerde for AmGroupAm {
         }
     }
 
-    fn des(&self, _cur_pe: Result<usize, crate::IdError>) {
-        // println!("task group des");
-        // we dont actually do anything here, as each individual am will call its
-        // own des funcion during the deserialization of the AmGroupAm
-    }
+    // fn des(&self, _cur_pe: Result<usize, crate::IdError>) {
+    //     // println!("task group des");
+    //     // we dont actually do anything here, as each individual am will call its
+    //     // own des funcion during the deserialization of the AmGroupAm
+    // }
 }
 
 impl LocalAM for AmGroupAm {
@@ -1289,7 +1289,7 @@ fn am_group_am_unpack(
         si: 0,
         ei: ei,
     };
-    <AmGroupAm as DarcSerde>::des(&tg_am, cur_pe);
+    // <AmGroupAm as DarcSerde>::des(&tg_am, cur_pe);
     Arc::new(tg_am)
 }
 

@@ -86,7 +86,7 @@ impl LamellarRequestResult {
                     match darc {
                         RemotePtr::NetworkDarc(darc) => {
                             let temp: Darc<()> = darc.into();
-                            temp.des(Ok(0));
+                            // temp.des(Ok(0));
                         }
                         RemotePtr::NetMemRegionHandle(mr) => {
                             let temp: Arc<MemRegionHandleInner> = mr.into();

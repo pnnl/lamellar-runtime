@@ -361,19 +361,21 @@ impl<T> crate::active_messaging::DarcSerde for Darc<T> {
         darcs.push(RemotePtr::NetworkDarc(self.clone().into()));
         // self.print();
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn des(&self, cur_pe: Result<usize, IdError>) {
-        trace!("darc des");
-        // match cur_pe {
-        //     Ok(_) => {
-        //         self.deserialize_update_cnts();
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access darcs within team members ({:?})", err);
-        //     }
-        // }
-        // self.print();
-    }
+
+    // this occurs in the From<NetworkDarc> for Darc impl so we should be able to delete this...
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // fn des(&self, cur_pe: Result<usize, IdError>) {
+    // trace!("darc des");
+    // match cur_pe {
+    //     Ok(_) => {
+    //         self.deserialize_update_cnts();
+    //     }
+    //     Err(err) => {
+    //         panic!("can only access darcs within team members ({:?})", err);
+    //     }
+    // }
+    // self.print();
+    // }
 }
 
 impl<T: 'static> DarcInner<T> {
@@ -926,6 +928,7 @@ impl<T> Darc<T> {
         // println!("done serialize darc cnts");
     }
 
+    // this occurs in the From<NetworkDarc> for Darc impl so we should be able to delete this...
     #[doc(hidden)]
     #[tracing::instrument(skip_all, level = "debug")]
     pub fn deserialize_update_cnts(&self) {
@@ -1683,13 +1686,13 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
 
             //need to make sure we free all the sub allocs so need to copy the inner data out first and then let it drop
             let mut darc_temp = std::mem::MaybeUninit::<DarcInner<T>>::uninit();
-            unsafe {
-                std::ptr::copy_nonoverlapping(
-                    self.inner.alloc.as_ptr::<DarcInner<T>>(),
-                    darc_temp.as_mut_ptr(),
-                    1,
-                )
-            };
+
+            std::ptr::copy_nonoverlapping(
+                self.inner.alloc.as_ptr::<DarcInner<T>>(),
+                darc_temp.as_mut_ptr(),
+                1,
+            );
+
             darc_temp.assume_init();
 
             // now we can free the alloc

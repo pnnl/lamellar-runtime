@@ -123,113 +123,113 @@ impl FieldInfo {
         ser
     }
 
-    pub(crate) fn des(&self) -> proc_macro2::TokenStream {
-        let mut des = quote! {};
-        for (field, darc_iter) in &self.fields {
-            match &field.ty {
-                syn::Type::Path(_) => {
-                    des.extend(self.des_path(field, *darc_iter, false));
-                }
-                syn::Type::Tuple(ty) => {
-                    des.extend(self.des_tuple(field, &ty, false));
-                }
-                _ => {
-                    abort!(
-                        field.span(),
-                        "unsupported type in Remote Active Message {:?}",
-                        field.ty
-                    );
-                }
-            }
-        }
-        des
-    }
+    // pub(crate) fn des(&self) -> proc_macro2::TokenStream {
+    //     let mut des = quote! {};
+    //     for (field, darc_iter) in &self.fields {
+    //         match &field.ty {
+    //             syn::Type::Path(_) => {
+    //                 des.extend(self.des_path(field, *darc_iter, false));
+    //             }
+    //             syn::Type::Tuple(ty) => {
+    //                 des.extend(self.des_tuple(field, &ty, false));
+    //             }
+    //             _ => {
+    //                 abort!(
+    //                     field.span(),
+    //                     "unsupported type in Remote Active Message {:?}",
+    //                     field.ty
+    //                 );
+    //             }
+    //         }
+    //     }
+    //     des
+    // }
 
-    pub(crate) fn des_as_vecs(&self) -> proc_macro2::TokenStream {
-        let mut des = quote! {};
-        for (field, darc_iter) in &self.fields {
-            match &field.ty {
-                syn::Type::Path(_) => {
-                    des.extend(self.des_path(field, *darc_iter, true));
-                }
-                syn::Type::Tuple(ty) => {
-                    des.extend(self.des_tuple(field, &ty, true));
-                }
-                _ => {
-                    abort!(
-                        field.span(),
-                        "unsupported type in Remote Active Message {:?}",
-                        field.ty
-                    );
-                }
-            }
-        }
-        des
-    }
+    // pub(crate) fn des_as_vecs(&self) -> proc_macro2::TokenStream {
+    //     let mut des = quote! {};
+    //     for (field, darc_iter) in &self.fields {
+    //         match &field.ty {
+    //             syn::Type::Path(_) => {
+    //                 des.extend(self.des_path(field, *darc_iter, true));
+    //             }
+    //             syn::Type::Tuple(ty) => {
+    //                 des.extend(self.des_tuple(field, &ty, true));
+    //             }
+    //             _ => {
+    //                 abort!(
+    //                     field.span(),
+    //                     "unsupported type in Remote Active Message {:?}",
+    //                     field.ty
+    //                 );
+    //             }
+    //         }
+    //     }
+    //     des
+    // }
 
-    fn des_path(
-        &self,
-        field: &syn::Field,
-        darc_iter: bool,
-        as_vecs: bool,
-    ) -> proc_macro2::TokenStream {
-        let field_name = field.ident.as_ref().unwrap();
+    // fn des_path(
+    //     &self,
+    //     field: &syn::Field,
+    //     darc_iter: bool,
+    //     as_vecs: bool,
+    // ) -> proc_macro2::TokenStream {
+    //     let field_name = field.ident.as_ref().unwrap();
 
-        if as_vecs && darc_iter {
-            //both
-            quote! {
-                for e in (&(self.#field_name)).iter(){
-                    for d in e.iter(){
-                        d.des(cur_pe);
-                    }
-                }
-            }
-        } else if as_vecs ^ darc_iter {
-            //either or
-            quote! {
-                for e in (&(self.#field_name)).iter(){
-                    e.des(cur_pe);
-                }
-            }
-        } else {
-            //neither
-            quote! {
-                (&(self.#field_name)).des(cur_pe);
-            }
-        }
-    }
+    //     if as_vecs && darc_iter {
+    //         //both
+    //         quote! {
+    //             for e in (&(self.#field_name)).iter(){
+    //                 for d in e.iter(){
+    //                     d.des(cur_pe);
+    //                 }
+    //             }
+    //         }
+    //     } else if as_vecs ^ darc_iter {
+    //         //either or
+    //         quote! {
+    //             for e in (&(self.#field_name)).iter(){
+    //                 e.des(cur_pe);
+    //             }
+    //         }
+    //     } else {
+    //         //neither
+    //         quote! {
+    //             (&(self.#field_name)).des(cur_pe);
+    //         }
+    //     }
+    // }
 
-    fn des_tuple(
-        &self,
-        field: &syn::Field,
-        ty: &syn::TypeTuple,
-        as_vecs: bool,
-    ) -> proc_macro2::TokenStream {
-        let mut des = quote! {};
-        let field_name = field.ident.as_ref().unwrap();
-        let mut ind = 0;
-        for elem in &ty.elems {
-            if let syn::Type::Path(ref _ty) = elem {
-                let temp_ind = syn::Index {
-                    index: ind,
-                    span: field.span(),
-                };
-                ind += 1;
-                if !as_vecs {
-                    des.extend(quote_spanned! {field.span()=>
-                        ( &(self.#field_name.#temp_ind)).des(cur_pe);
-                    });
-                } else {
-                    des.extend(quote_spanned! {field.span()=>
-                        for e in (&(self.#field_name)).iter(){
-                            (&(e.#temp_ind)).des(cur_pe);
-                        }
-                    });
-                }
-            }
-        }
-        des
-    }
+    // fn des_tuple(
+    //     &self,
+    //     field: &syn::Field,
+    //     ty: &syn::TypeTuple,
+    //     as_vecs: bool,
+    // ) -> proc_macro2::TokenStream {
+    //     let mut des = quote! {};
+    //     let field_name = field.ident.as_ref().unwrap();
+    //     let mut ind = 0;
+    //     for elem in &ty.elems {
+    //         if let syn::Type::Path(ref _ty) = elem {
+    //             let temp_ind = syn::Index {
+    //                 index: ind,
+    //                 span: field.span(),
+    //             };
+    //             ind += 1;
+    //             if !as_vecs {
+    //                 des.extend(quote_spanned! {field.span()=>
+    //                     ( &(self.#field_name.#temp_ind)).des(cur_pe);
+    //                 });
+    //             } else {
+    //                 des.extend(quote_spanned! {field.span()=>
+    //                     for e in (&(self.#field_name)).iter(){
+    //                         (&(e.#temp_ind)).des(cur_pe);
+    //                     }
+    //                 });
+    //             }
+    //         }
+    //     }
+    //     des
+    // }
 
     pub(crate) fn names(&self) -> Vec<syn::Ident> {
         self.fields

@@ -16,7 +16,7 @@ use std::ops::Bound;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-// //use tracing::*;
+use tracing::trace;
 // use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 lazy_static! {
@@ -40,9 +40,10 @@ pub struct NetMemRegionHandle {
 impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
     fn from(net_handle: NetMemRegionHandle) -> Self {
         // let net_handle: NetMemRegionHandle = Deserialize::deserialize(remote).expect("error deserializing, expected NetMemRegionHandle");
-        println!(
+        trace!(
             "received handle: pid {:?} gpid{:?}",
-            net_handle.my_id, net_handle.parent_id
+            net_handle.my_id,
+            net_handle.parent_id
         );
         let grand_parent_id = net_handle.parent_id;
         let parent_id = net_handle.my_id;
@@ -60,7 +61,7 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         // }
         let mrh = match mrh_map.get(&parent_id) {
             Some(mrh) => {
-                println!("already existed");
+                trace!("already existed");
                 mrh.clone()
             }
             None => {
@@ -91,22 +92,26 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                     local_dropped: AtomicBool::new(false),
                 });
                 mrh_map.insert(parent_id, mrh.clone());
-                println!(
+                trace!(
                     "inserting onesided mem region {:?} {:?} 0x{:x} {:?}",
-                    parent_id, net_handle.mr_pe, net_handle.mr_addr, mrh
+                    parent_id,
+                    net_handle.mr_pe,
+                    net_handle.mr_addr,
+                    mrh
                 );
                 mrh
             }
         };
+        mrh.remote_recv.fetch_add(1, Ordering::SeqCst);
         mrh.local_ref.fetch_add(1, Ordering::SeqCst);
-        println!("recived mrh: {:?}", mrh);
+        trace!("recived mrh: {:?}", mrh);
         mrh
     }
 }
 
 impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
-        println!("creating net handle {:?}", mem_reg);
+        trace!("creating net handle {:?}", mem_reg);
         NetMemRegionHandle {
             mr_addr: mem_reg.mr.alloc.comm_addr().into(),
             mr_size: mem_reg.mr.alloc.num_bytes(),
@@ -140,6 +145,7 @@ struct MemRegionHandle {
 pub(crate) mod memregion_handle_serde {
     use serde::Serialize;
     use std::sync::Arc;
+    use tracing::trace;
 
     pub(crate) fn serialize<S>(
         inner: &Arc<super::MemRegionHandleInner>,
@@ -148,9 +154,11 @@ pub(crate) mod memregion_handle_serde {
     where
         S: serde::Serializer,
     {
-        println!(
+        trace!(
             "serializing memregion handle id {:?} pid {:?} gpid {:?}",
-            inner.my_id, inner.parent_id, inner.grand_parent_id
+            inner.my_id,
+            inner.parent_id,
+            inner.grand_parent_id
         );
         let nethandle = super::NetMemRegionHandle::from(inner.clone());
         // println!("nethandle {:?} {:?}",crate::serialized_size(&nethandle,false),crate::serialized_size(&nethandle,true));
@@ -163,7 +171,7 @@ pub(crate) mod memregion_handle_serde {
     where
         D: serde::Deserializer<'de>,
     {
-        println!("in deserialize memregion_handle_serde");
+        trace!("in deserialize memregion_handle_serde");
         let net_handle: super::NetMemRegionHandle = serde::Deserialize::deserialize(deserializer)?;
         Ok(net_handle.into())
     }
@@ -174,9 +182,11 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
         //TODO need to be able to return NetMemRegionHandle
         // match cur_pe {
         //     Ok(cur_pe) => {
-        println!(
+        trace!(
             "in ser id {:?} pid {:?} gpid {:?}",
-            self.inner.my_id, self.inner.parent_id, self.inner.grand_parent_id
+            self.inner.my_id,
+            self.inner.parent_id,
+            self.inner.grand_parent_id
         );
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
         //     }
@@ -186,21 +196,17 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
         // }
         darcs.push(RemotePtr::NetMemRegionHandle(self.inner.clone().into()));
     }
-    fn des(&self, _cur_pe: Result<usize, IdError>) {
-        // match cur_pe {
-        //     Ok(cur_pe) => {
-        println!(
-            "in des id {:?} pid {:?} gpid {:?}",
-            self.inner.my_id, self.inner.parent_id, self.inner.grand_parent_id
-        );
-        self.inner.remote_recv.fetch_add(1, Ordering::SeqCst);
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access MemRegionHandles within team members ({:?})", err);
-        //     }
-        // }
-        // println!("deserailized mrh: {:?}",self.inner);
-    }
+    // fn des(&self, _cur_pe: Result<usize, IdError>) {
+    //     // match cur_pe {
+    //     //     Ok(cur_pe) => {
+    //     self.inner.remote_recv.fetch_add(1, Ordering::SeqCst);
+    //     //     }
+    //     //     Err(err) => {
+    //     //         panic!("can only access MemRegionHandles within team members ({:?})", err);
+    //     //     }
+    //     // }
+    //     // trace!("deserailized mrh: {:?}",self.inner);
+    // }
 }
 
 impl Clone for MemRegionHandle {
@@ -218,7 +224,7 @@ impl Drop for MemRegionHandle {
 
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1, Ordering::SeqCst);
-        println!("mem region dropping {:?}", self.inner);
+        trace!("mem region dropping {:?}", self.inner);
         if cnt == 1
             && self
                 .inner
@@ -227,10 +233,10 @@ impl Drop for MemRegionHandle {
                 .is_ok()
         {
             //last local reference (for the first time)
-            println!("last local ref {:?}", self.inner);
+            trace!("last local ref {:?}", self.inner);
             if self.inner.remote_sent.load(Ordering::SeqCst) == 0 {
                 mrh_map.remove(&self.inner.parent_id);
-                println!("removed {:?}", self.inner);
+                trace!("removed {:?}", self.inner);
                 if self.inner.my_id != self.inner.parent_id {
                     let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                     if cnt > 0 {
@@ -238,9 +244,10 @@ impl Drop for MemRegionHandle {
                             cnt: cnt,
                             parent_id: self.inner.grand_parent_id,
                         };
-                        println!(
+                        trace!(
                             "sending finished am {:?} pe: {:?}",
-                            temp, self.inner.parent_id.1
+                            temp,
+                            self.inner.parent_id.1
                         );
                         let _ = self
                             .inner
@@ -272,19 +279,19 @@ struct MemRegionFinishedAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for MemRegionFinishedAm {
     async fn exec(self) {
-        println!("in finished am {:?}", self);
+        trace!("in finished am {:?}", self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let _mrh = match mrh_map.get(&self.parent_id) {
             Some(mrh) => {
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
-                println!("in finished am {:?} mrh {:?}", self, mrh);
+                trace!("in finished am {:?} mrh {:?}", self, mrh);
             }
-            None => println!(
+            None => trace!(
                 "in finished am this should only be possible on the original pe? {:?} ",
                 self
             ), //or we are on the original node?
         };
-        println!("leaving finished am");
+        trace!("leaving finished am");
     }
 }
 

@@ -159,7 +159,7 @@ fn impl_unpack_and_register_function(
     quote! {
         fn #am_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>  {
             let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).expect("can deserialize into remote active message"));
-            <#am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
+            // <#am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
             __lamellar_data
         }
 
@@ -190,7 +190,7 @@ fn impl_darc_serde_trait(
     generics: &syn::Generics,
     name: &syn::Ident,
     ser: &proc_macro2::TokenStream,
-    des: &proc_macro2::TokenStream,
+    // des: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
@@ -199,9 +199,9 @@ fn impl_darc_serde_trait(
             fn ser (&self,  num_pes: usize, darcs: &mut Vec<#lamellar::active_messaging::RemotePtr>){
                 #ser
             }
-            fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
-                #des
-            }
+            // fn des (&self,cur_pe: Result<usize, #lamellar::IdError>){
+            //     #des
+            // }
         }
     }
 }
@@ -478,7 +478,7 @@ pub(crate) fn create_am_struct(
     name: &syn::Ident,
     fields: &proc_macro2::TokenStream,
     ser: &proc_macro2::TokenStream,
-    des: &proc_macro2::TokenStream,
+    // des: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
     _local: bool,
 ) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
@@ -493,7 +493,7 @@ pub(crate) fn create_am_struct(
         }
     };
 
-    let darc_serde = impl_darc_serde_trait(generics, name, ser, des, lamellar);
+    let darc_serde = impl_darc_serde_trait(generics, name, ser, /*des,*/ lamellar);
 
     (the_struct, darc_serde)
 }

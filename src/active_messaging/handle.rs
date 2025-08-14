@@ -109,7 +109,7 @@ impl<T: AmDist> AmHandle<T> {
                         match darc {
                             RemotePtr::NetworkDarc(darc) => {
                                 let temp: Darc<()> = darc.into();
-                                temp.des(Ok(0));
+                                // temp.des(Ok(0));
                                 temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
@@ -449,7 +449,7 @@ impl<T: AmDist> MultiAmHandle<T> {
                         match darc {
                             RemotePtr::NetworkDarc(darc) => {
                                 let temp: Darc<()> = darc.into();
-                                temp.des(Ok(0));
+                                // temp.des(Ok(0));
                                 temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {

@@ -757,12 +757,13 @@ pub enum RemotePtr {
 #[doc(hidden)]
 pub trait DarcSerde {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>);
-    fn des(&self, cur_pe: Result<usize, IdError>);
+    //TODO: we can probably remmove the des function as this occurs when the NetworkDarc is converted to the Darc now
+    // fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
 impl<T> DarcSerde for &T {
     fn ser(&self, _num_pes: usize, _darcs: &mut Vec<RemotePtr>) {}
-    fn des(&self, _cur_pe: Result<usize, IdError>) {}
+    // fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
 #[doc(hidden)]

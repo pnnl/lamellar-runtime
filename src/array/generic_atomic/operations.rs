@@ -155,7 +155,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for GenericAtomicLocalData<
 
 impl<T: ElementOps> LocalReadOnlyOps<T> for GenericAtomicLocalData<T> {
     fn local_load(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
-        idx_vals.map(|(i, val)| self.at(i).load()).collect()
+        idx_vals.map(|(i, _val)| self.at(i).load()).collect()
     }
 }
 

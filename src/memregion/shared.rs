@@ -70,18 +70,18 @@ impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
         self.mr.serialize_update_cnts(num_pes);
         darcs.push(RemotePtr::NetworkDarc(self.mr.clone().into()));
     }
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in shared des");
-        // match cur_pe {
-        //     Ok(_) => {
-        //         self.mr.deserialize_update_cnts();
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access darcs within team members ({:?})", err);
-        //     }
-        // }
-        // self.mr.print();
-    }
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     // println!("in shared des");
+    //     // match cur_pe {
+    //     //     Ok(_) => {
+    //     //         self.mr.deserialize_update_cnts();
+    //     //     }
+    //     //     Err(err) => {
+    //     //         panic!("can only access darcs within team members ({:?})", err);
+    //     //     }
+    //     // }
+    //     // self.mr.print();
+    // }
 }
 
 impl<T: Dist> SharedMemoryRegion<T> {

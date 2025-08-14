@@ -538,12 +538,12 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.ser(num_pes, darcs),
         }
     }
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        match self {
-            AtomicArray::NativeAtomicArray(array) => array.des(cur_pe),
-            AtomicArray::GenericAtomicArray(array) => array.des(cur_pe),
-        }
-    }
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     match self {
+    //         AtomicArray::NativeAtomicArray(array) => array.des(cur_pe),
+    //         AtomicArray::GenericAtomicArray(array) => array.des(cur_pe),
+    //     }
+    // }
 }
 
 impl<T: Dist> SubArray<T> for AtomicArray<T> {
@@ -694,12 +694,12 @@ impl crate::active_messaging::DarcSerde for AtomicByteArray {
         }
     }
 
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.des(cur_pe),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.des(cur_pe),
-        }
-    }
+    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
+    //     match self {
+    //         AtomicByteArray::NativeAtomicByteArray(array) => array.des(cur_pe),
+    //         AtomicByteArray::GenericAtomicByteArray(array) => array.des(cur_pe),
+    //     }
+    // }
 }
 
 #[doc(hidden)]

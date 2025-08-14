@@ -2070,7 +2070,7 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     } else {
         panic! ("first argument of generate_ops_for_type expects 'true' or 'false' specifying whether type implements bitwise operations");
     };
-    let native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
+    let _native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
         val.value
     } else {
         panic! ("second argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
