@@ -40,7 +40,10 @@ pub struct NetMemRegionHandle {
 impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
     fn from(net_handle: NetMemRegionHandle) -> Self {
         // let net_handle: NetMemRegionHandle = Deserialize::deserialize(remote).expect("error deserializing, expected NetMemRegionHandle");
-        // println!("received handle: pid {:?} gpid{:?}",net_handle.my_id,net_handle.parent_id);
+        println!(
+            "received handle: pid {:?} gpid{:?}",
+            net_handle.my_id, net_handle.parent_id
+        );
         let grand_parent_id = net_handle.parent_id;
         let parent_id = net_handle.my_id;
         let lamellae = if let Some(lamellae) = LAMELLAES.read().get(&net_handle.team.backend) {
@@ -56,7 +59,10 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         //     println!("elem: {:?}",elem);
         // }
         let mrh = match mrh_map.get(&parent_id) {
-            Some(mrh) => mrh.clone(),
+            Some(mrh) => {
+                println!("already existed");
+                mrh.clone()
+            }
             None => {
                 let local_mem_region_addr =
                     lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle)
@@ -85,19 +91,22 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                     local_dropped: AtomicBool::new(false),
                 });
                 mrh_map.insert(parent_id, mrh.clone());
-                // println!("inserting onesided mem region {:?} {:?} 0x{:x} {:?}",parent_id,net_handle.mr_pe,net_handle.mr_addr,mrh);
+                println!(
+                    "inserting onesided mem region {:?} {:?} 0x{:x} {:?}",
+                    parent_id, net_handle.mr_pe, net_handle.mr_addr, mrh
+                );
                 mrh
             }
         };
         mrh.local_ref.fetch_add(1, Ordering::SeqCst);
-        // println!("recived mrh: {:?}",mrh);
+        println!("recived mrh: {:?}", mrh);
         mrh
     }
 }
 
 impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
-        // println!("creating net handle {:?}",mem_reg);
+        println!("creating net handle {:?}", mem_reg);
         NetMemRegionHandle {
             mr_addr: mem_reg.mr.alloc.comm_addr().into(),
             mr_size: mem_reg.mr.alloc.num_bytes(),
@@ -139,6 +148,10 @@ pub(crate) mod memregion_handle_serde {
     where
         S: serde::Serializer,
     {
+        println!(
+            "serializing memregion handle id {:?} pid {:?} gpid {:?}",
+            inner.my_id, inner.parent_id, inner.grand_parent_id
+        );
         let nethandle = super::NetMemRegionHandle::from(inner.clone());
         // println!("nethandle {:?} {:?}",crate::serialized_size(&nethandle,false),crate::serialized_size(&nethandle,true));
         nethandle.serialize(serializer)
@@ -150,7 +163,7 @@ pub(crate) mod memregion_handle_serde {
     where
         D: serde::Deserializer<'de>,
     {
-        // println!("in deserialize memregion_handle_serde");
+        println!("in deserialize memregion_handle_serde");
         let net_handle: super::NetMemRegionHandle = serde::Deserialize::deserialize(deserializer)?;
         Ok(net_handle.into())
     }
@@ -161,6 +174,10 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
         //TODO need to be able to return NetMemRegionHandle
         // match cur_pe {
         //     Ok(cur_pe) => {
+        println!(
+            "in ser id {:?} pid {:?} gpid {:?}",
+            self.inner.my_id, self.inner.parent_id, self.inner.grand_parent_id
+        );
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
         //     }
         //     Err(err) => {
@@ -172,6 +189,10 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
     fn des(&self, _cur_pe: Result<usize, IdError>) {
         // match cur_pe {
         //     Ok(cur_pe) => {
+        println!(
+            "in des id {:?} pid {:?} gpid {:?}",
+            self.inner.my_id, self.inner.parent_id, self.inner.grand_parent_id
+        );
         self.inner.remote_recv.fetch_add(1, Ordering::SeqCst);
         //     }
         //     Err(err) => {
