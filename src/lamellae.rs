@@ -333,6 +333,7 @@ impl SerializedData {
     // unsafe because user must ensure that multiple sub_data do not overlap if mutating the underlying data
     #[tracing::instrument(level = "debug")]
     pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
+        trace!("sub_data start: {} end: {}", start, end);
         self.increment_cnt();
         SubSerializedData {
             alloc: self.alloc.clone(),

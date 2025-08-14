@@ -1074,9 +1074,7 @@ impl InnerCQ {
             calc_hash(data_slice.as_ptr() as usize, len),
             cmd.msg_hash
         );
-        if let Some(header) = ser_data.deserialize_header() {
-            trace!("header: {header:?}");
-        }
+        
         while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
@@ -1093,6 +1091,9 @@ impl InnerCQ {
                 self.send_print(src, cmd).await;
                 timer = std::time::Instant::now();
             }
+        }
+        if let Some(header) = ser_data.deserialize_header() {
+            trace!("header: {header:?}");
         }
     }
 

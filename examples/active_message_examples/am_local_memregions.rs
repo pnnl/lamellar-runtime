@@ -8,6 +8,9 @@ use std::time::Instant;
 
 use rand::distributions::{Distribution, Uniform};
 
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
+
 // const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
 #[lamellar::AmData(Clone, Debug)]
@@ -23,13 +26,13 @@ impl LamellarAM for DataAM {
     async fn exec() {
         let mut rng = rand::thread_rng();
         let pes = Uniform::from(0..lamellar::team.num_pes());
-        // println!("depth {:?} {:?}",self.depth, self.path);
+        println!("depth {:?} {:?}", self.depth, self.path);
         let mut path = self.path.clone();
         path.push(lamellar::current_pe);
         if self.depth > 0 {
             for _i in 0..self.width {
                 let pe = pes.sample(&mut rng);
-                // println!("sending {:?} to {:?}",path,pe);
+                println!("sending {:?} to {:?}", path, pe);
                 let _ = lamellar::team
                     .exec_am_pe(
                         pe,
@@ -47,6 +50,16 @@ impl LamellarAM for DataAM {
 }
 
 fn main() {
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true),
+        )
+        .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();

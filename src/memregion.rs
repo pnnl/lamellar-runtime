@@ -782,11 +782,11 @@ impl<T: Dist> MemoryRegion<T> {
         lamellae: &Arc<Lamellae>,
         alloc: AllocationType,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
-        // println!(
-        //     "creating new lamellar memory region size: {:?} align: {:?}",
-        //     size * std::mem::size_of::<T>(),
-        //     std::mem::align_of::<T>()
-        // );
+        trace!(
+            "creating new lamellar memory region size: {:?} align: {:?}",
+            num_elems * std::mem::size_of::<T>(),
+            std::mem::align_of::<T>()
+        );
         let mut mode = Mode::Shared;
         let alloc = if num_elems > 0 {
             if let AllocationType::Local = alloc {
@@ -1111,6 +1111,7 @@ impl<T: Dist> MemoryRegion<T> {
             panic!("index out of bounds");
         }
     }
+
     /// copy data from remote memory location into provided data buffer
     ///
     /// # Arguments
@@ -1393,6 +1394,13 @@ impl<T: Dist> MemoryRegion<T> {
         if self.mode == Mode::Remote {
             return &mut [];
         }
+        // trace!(
+        //     "as_mut_slice memregion {:?} num_elems: {:?} size: {:?} calced elems: {:?}",
+        //     self.alloc,
+        //     self.num_elems,
+        //     self.alloc.num_bytes(),
+        //     self.alloc.num_bytes() / std::mem::size_of::<T>()
+        // );
         std::slice::from_raw_parts_mut(
             self.alloc.as_mut_ptr(),
             self.alloc.num_bytes() / std::mem::size_of::<T>(),

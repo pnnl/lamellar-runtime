@@ -7,7 +7,8 @@
 ///----------------------------------------------------------------
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
-use tracing_subscriber::fmt;
+use tracing_subscriber::{fmt,EnvFilter};
+use tracing_subscriber::prelude::*;
 
 const ARRAY_LEN: usize = 100;
 
@@ -71,7 +72,10 @@ impl LamellarAM for RdmaAM {
 // SharedMemoryRegions are serializable and can be transfered
 // as part of a LamellarAM
 fn main() {
-    let subscriber = fmt::init();
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(tracing_subscriber::fmt::layer().with_thread_ids(true).with_file(true).with_line_number(true).with_level(true))
+        .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -112,9 +116,10 @@ fn main() {
     }
     world.barrier();
     let mut index = 0;
-    while index < ARRAY_LEN / num_pes {
+    // while index < ARRAY_LEN / num_pes {
+    if my_pe == 0 {
         let _ = world
-            .exec_am_all(RdmaAM {
+            .exec_am_pe(1,RdmaAM {
                 array: array.clone(),
                 orig_pe: my_pe,
                 index: index,

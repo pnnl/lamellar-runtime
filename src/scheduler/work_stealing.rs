@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
-use tracing::{trace_span, Instrument};
+use tracing::{trace, trace_span, Instrument};
 //, Weak};
 use std::thread;
 
@@ -48,7 +48,7 @@ impl WorkStealingThread {
             .spawn(move || {
                 let tid = LAMELLAR_THREAD_ID.with(|tid| *tid);
                 let id = ids[tid % ids.len()];
-                println!(
+                trace!(
                     "WorkStealing Worker thread running {:?} core: {:?} tid: {:?}",
                     std::thread::current().id(),
                     id,
@@ -389,7 +389,7 @@ impl WorkStealing {
         let tid = LAMELLAR_THREAD_ID.with(|tid| *tid);
         let id = core_ids[tid % core_ids.len()];
         core_affinity::set_for_current(id);
-        println!(
+        trace!(
             "WorkStealing Main thread running {:?} core: {:?} tid: {:?}",
             std::thread::current().id(),
             id,

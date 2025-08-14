@@ -1299,6 +1299,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
+        self.inner.data.team.tasking_barrier();
     }
 }
 

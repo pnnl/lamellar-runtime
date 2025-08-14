@@ -558,6 +558,12 @@ impl RegisteredActiveMessages {
             crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
         *i += data_header.darc_list_size;
 
+        trace!(
+            "i: {} data_header.size: {} i+dhs {}",
+            *i,
+            data_header.size,
+            *i + data_header.size
+        );
         let data = ser_data.sub_data(*i, *i + data_header.size); // i is incermented preventing overlapping sub_data
         *i += data_header.size;
 
@@ -570,6 +576,7 @@ impl RegisteredActiveMessages {
 
     // #[tracing::instrument(skip_all)]
 
+    // this represents the completion of an active message that returns nothing
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn exec_unit_am(
         &self,

@@ -2,7 +2,7 @@ use crate::{
     config,
     lamellae::{
         comm::{
-            CommAlloc, CommAllocAddr, CommAllocType, CommInfo, CommMem, CommProgress, CommShutdown,
+            CommAlloc, CommAllocAddr, CommAllocType, CommInfo, CommMem, CommProgress, CommShutdown, CommAllocInfo
         },
         AllocationType,
     },

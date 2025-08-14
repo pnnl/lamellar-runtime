@@ -1203,10 +1203,10 @@ impl LamellarAm for UnsafeRemoteSmallGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
-        // println!(
-        //     "in remotegetam index {:?} len {:?}",
-        //     self.start_index, self.len
-        // );
+        trace!(
+            "in remotegetam index {:?} len {:?}",
+            self.start_index, self.len
+        );
         // let _lock = self.array.lock.read();
         let vals = unsafe {
             match self

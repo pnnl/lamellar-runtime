@@ -153,6 +153,7 @@ impl CommAllocInfo {
         }
     }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAllocInfo {
+        trace!("sub_alloc offset: {} size: {}", offset, size);
         debug_assert!(offset + size <= self.size());
         match self {
             CommAllocInfo::Raw(addr, _) => CommAllocInfo::Raw(*addr + offset, size),
@@ -428,7 +429,7 @@ impl<T> CommSlice<T> {
         };
         debug_assert!(start <= end);
         debug_assert!(end <= self.len());
-        // trace!("subslice start: {} end: {} new addr: {:?} new size: {}", start, end, self.addr + start*std::mem::size_of::<T>(), end - start);
+        trace!("subslice start: {} end: {} new size: {} ({} {})", start, end, end - start,start * std::mem::size_of::<T>(),(end - start) * std::mem::size_of::<T>());
         CommSlice {
             info: self.info.sub_alloc(
                 start * std::mem::size_of::<T>(),

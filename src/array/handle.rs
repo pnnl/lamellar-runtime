@@ -390,16 +390,11 @@ pub(crate) struct ArrayRdmaGetHandle<T: Dist> {
 
 impl<T: Dist> ArrayRdmaGetHandle<T> {
     fn spawn(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
-        unsafe { self.array.get_unchecked(self.index, &buf) };
-        let team = self.array.team_rt();
-        team.clone().spawn(async move {
-            team.lamellae.comm().wait();
-        })
+        unsafe { self.array.get_unchecked(self.index, &buf).spawn() }
     }
 
     fn block(&self, buf: OneSidedMemoryRegion<T>) {
-        unsafe { self.array.get_unchecked(self.index, &buf) };
-        self.array.team_rt().lamellae.comm().wait();
+        unsafe { self.array.get_unchecked(self.index, &buf).block() };
         // team.clone().spawn(async move {
         //     team.lamellae.comm().wait();
         // })

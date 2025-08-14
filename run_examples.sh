@@ -2,13 +2,14 @@
 
 
 # target_dir=/home/scratch/$USER
-target_dir=$PWD/target
+# target_dir=$PWD/target/x86_64-unknown-linux-
+target_dir=$PWD/target/
 output_dir=/home/scratch/$USER
 
 root=$PWD
 # . $root/../junction-prep.rc
 
-local_results_dir=v0.7.0
+local_results_dir=v0.8.0
 results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}
 ### test using rofi verbs lamellae
 rm -r ${results_dir}
@@ -18,7 +19,7 @@ mkdir -p ${results_dir}
 ln -s ${output_dir}/rofiverbs_lamellae rofiverbs_lamellae
 
 
-cargo build --release --features enable-rofi --features tokio-executor --features runtime-warnings-panic --examples -j 20
+# cargo build --release --features enable-rofi --features tokio-executor --features runtime-warnings-panic --examples -j 20
 
 
 cd rofiverbs_lamellae/${local_results_dir}

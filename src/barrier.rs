@@ -17,6 +17,7 @@ use std::sync::{
 };
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
+use tracing::trace;
 
 pub(crate) struct Barrier {
     my_pe: usize, // global pe id
@@ -60,9 +61,10 @@ impl Barrier {
                     pes.sort();
                     AllocationType::Sub(pes)
                 };
-                // println!("creating barrier {:?}", alloc);
+                trace!("creating barrier {:?}", alloc);
                 let mut buffs = vec![];
-                for _ in 0..n {
+                for r in 0..n {
+                    trace!("[r: {r}] creating barrier buff {:?}, num_rounds: {num_rounds}", alloc);
                     buffs.push(MemoryRegion::new(
                         num_rounds,
                         &scheduler,
@@ -179,11 +181,12 @@ impl Barrier {
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                     send_buf_slice[0] = barrier_id;
                     let barrier_slice = &[barrier_id];
-                    // println!(
-                    //     "[{:?}] barrier_id = {:?}",
-                    //     std::thread::current().id(),
-                    //     barrier_id
-                    // );
+                    trace!(
+                        "[{:?}] barrier_id = {:?} buf_slice len{}",
+                        std::thread::current().id(),
+                        barrier_id,
+                        send_buf_slice.len()
+                    );
                     while barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
                         wait_func();
                         if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
@@ -235,19 +238,18 @@ impl Barrier {
                             let recv_pe =
                                 self.arch.single_iter(team_recv_pe as usize).next().unwrap();
                             if team_recv_pe as usize != my_index {
-                                // println!(
-                                //     "[{:?}][{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
-                                //     std::thread::current().id(),
-                                //     self.my_pe,
-                                //     recv_pe,
-                                //     team_recv_pe,
-                                //     send_buf_slice,
-                                //     unsafe {
-                                //         self.barrier_buf[i - 1]
-                                //             .as_mut_slice()
-                                //             .expect("Data should exist on PE")
-                                //     }
-                                // );
+                                trace!(
+                                    "[{:?}][{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                    std::thread::current().id(),
+                                    self.my_pe,
+                                    recv_pe,
+                                    team_recv_pe,
+                                    send_buf_slice,
+                                    unsafe {
+                                        self.barrier_buf[i - 1]
+                                            .as_mut_slice()
+                                    }
+                                );
                                 unsafe {
                                     //safe as  each pe is only capable of writing to its own index
                                     while self.barrier_buf[i - 1].as_mut_slice()[round] < barrier_id
@@ -315,13 +317,13 @@ impl Barrier {
             state: State::RoundInit(self.num_rounds),
             launched: false,
         };
-        // println!("in barrier handle");
+        trace!("in barrier handle");
         // self.print_bar();
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(_) = &self.send_buf {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                    // println!("barrier id: {:?}", barrier_id);
+                    trace!("barrier id: {:?}", barrier_id);
                     handle.barrier_id = barrier_id;
                     handle.my_index = my_index;
 
@@ -398,7 +400,7 @@ enum State {
 
 impl BarrierHandle {
     fn do_send_round(&self, round: usize) {
-        // println!("do send round {:?}", round);
+        // trace!("do send round {:?}", round);
         let barrier_slice = &[self.barrier_id];
         for i in 1..=self.n {
             let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
@@ -415,7 +417,7 @@ impl BarrierHandle {
     }
 
     fn do_recv_round(&self, round: usize, recv_pe_index: usize) -> Option<usize> {
-        // println!("do recv round {:?}", round);
+        // trace!("do recv round {:?}", round);
         for i in recv_pe_index..=self.n {
             let team_recv_pe = ((self.my_index as isize
                 - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
@@ -427,11 +429,13 @@ impl BarrierHandle {
                     //safe as  each pe is only capable of writing to its own index
                     if self.barrier_buf[i - 1].as_mut_slice()[round] < self.barrier_id {
                         self.lamellae.comm().flush();
+                        // trace!("waiting for recv pe: {:?} round: {:?} i: {:?}",  team_recv_pe, round, i);
                         return Some(i);
                     }
                 }
             }
         }
+        // trace!("dont need to wait for any recv pe");
         None
     }
 }

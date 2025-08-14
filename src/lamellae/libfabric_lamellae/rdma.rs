@@ -18,25 +18,26 @@ use crate::{
     LamellarTask,
 };
 
-use super::{fabric::*,{comm::RofiCComm, Scheduler}};
+use super::{comm::LibfabricComm, fabric::Ofi, Scheduler};
 
 pub(super) enum Op<T> {
     Put(usize, CommSlice<T>, CommAllocAddr),
-    PutAll(CommSlice<T>,CommAllocAddr, Vec<usize>),
+    PutAll(CommSlice<T>, CommAllocAddr, Vec<usize>),
     Get(usize, CommAllocAddr, CommSlice<T>),
     Atomic,
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct RofiCFuture<T> {
+pub(crate) struct LibfabricFuture<T> {
     pub(crate) my_pe: usize,
+    pub(crate) ofi: Arc<Ofi>,
     pub(super) op: Op<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
 }
 
-impl<T: Remote> RofiCFuture<T> {
+impl<T: Remote> LibfabricFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn inner_put(&self, pe: usize, src: &CommSlice<T>, dst: &CommAllocAddr) {
         trace!(
@@ -47,9 +48,9 @@ impl<T: Remote> RofiCFuture<T> {
             src.len() * std::mem::size_of::<T>()
         );
         if pe != self.my_pe {
-            unsafe{rofi_c_put(src,  dst.into(), pe).expect("rofi_c_put failed")};
-        }
-        else{
+            unsafe { self.ofi.put(pe, src, dst, true) };
+            // unsafe{rofi_c_put(src,  dst.into(), pe).expect("rofi_c_put failed")};
+        } else {
             if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
                 unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
             } else {
@@ -58,7 +59,6 @@ impl<T: Remote> RofiCFuture<T> {
                 }
             }
         }
-        
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn inner_put_all(&self, src: &CommSlice<T>, dst: &CommAllocAddr, pes: &Vec<usize>) {
@@ -69,11 +69,11 @@ impl<T: Remote> RofiCFuture<T> {
             src.len()
         );
         for pe in pes {
-            self.inner_put(*pe,src, dst);
+            self.inner_put(*pe, src, dst);
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_get(&self,pe: usize, src: &CommAllocAddr, mut dst: CommSlice<T>) {
+    fn inner_get(&self, pe: usize, src: &CommAllocAddr, mut dst: CommSlice<T>) {
         trace!(
             "getting src: {:?} dst: {:?} len: {}",
             src,
@@ -81,9 +81,9 @@ impl<T: Remote> RofiCFuture<T> {
             dst.len()
         );
         if pe != self.my_pe {
-            unsafe{rofi_c_get(src.into(),  dst.as_mut_slice(), pe).expect("rofi_c_get failed")};
-        }
-        else{
+            unsafe { self.ofi.get(pe, src, &mut dst, true) };
+            // unsafe{rofi_c_get(src.into(),  dst.as_mut_slice(), pe).expect("rofi_c_get failed")};
+        } else {
             if !(dst.contains(src) || dst.contains(&(src + dst.len()))) {
                 unsafe {
                     std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
@@ -97,13 +97,13 @@ impl<T: Remote> RofiCFuture<T> {
     }
     fn exec_op(&self) {
         match &self.op {
-            Op::Put(pe,src, dst) => {
+            Op::Put(pe, src, dst) => {
                 self.inner_put(*pe, src, dst);
             }
-            Op::PutAll(src, dst,pes) => {
-                self.inner_put_all(src, dst,pes);
+            Op::PutAll(src, dst, pes) => {
+                self.inner_put_all(src, dst, pes);
             }
-            Op::Get(pe,src, dst) => {
+            Op::Get(pe, src, dst) => {
                 self.inner_get(*pe, src, dst.clone());
             }
             Op::Atomic => {}
@@ -111,7 +111,8 @@ impl<T: Remote> RofiCFuture<T> {
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        rofi_c_wait();
+        // rofi_c_wait();
+        self.ofi.wait_all();
         self.spawned = true;
         // Ok(())
     }
@@ -125,7 +126,7 @@ impl<T: Remote> RofiCFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for RofiCFuture<T> {
+impl<T> PinnedDrop for LibfabricFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -133,46 +134,50 @@ impl<T> PinnedDrop for RofiCFuture<T> {
     }
 }
 
-impl<T: Remote> From<RofiCFuture<T>> for RdmaHandle<T> {
-    fn from(f: RofiCFuture<T>) -> RdmaHandle<T> {
+impl<T: Remote> From<LibfabricFuture<T>> for RdmaHandle<T> {
+    fn from(f: LibfabricFuture<T>) -> RdmaHandle<T> {
         RdmaHandle {
-            future: RdmaFuture::RofiC(f),
+            future: RdmaFuture::Libfabric(f),
         }
     }
 }
 
-impl<T: Remote> Future for RofiCFuture<T> {
+impl<T: Remote> Future for LibfabricFuture<T> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
+            self.ofi.wait_all();
             *self.project().spawned = true;
+        } else {
+            self.ofi.wait_all();
         }
-        rofi_c_wait();
+        // rofi_c_wait();
+
         Poll::Ready(())
     }
 }
 
-impl CommRdma for RofiCComm {
+impl CommRdma for LibfabricComm {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
-        src: CommSlice<T>,
+        src: CommSlice<T>, //contains alloc info
         remote_addr: CommAllocAddr,
     ) -> RdmaHandle<T> {
         self.put_amt
             .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        RofiCFuture {
+        LibfabricFuture {
             my_pe: self.my_pe,
-            op: Op::Put(pe,src, remote_addr),
+            ofi: self.ofi.clone(),
+            op: Op::Put(pe, src, remote_addr),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
         }
         .into()
-        
     }
     fn put_all<T: Remote>(
         &self,
@@ -186,9 +191,10 @@ impl CommRdma for RofiCComm {
             Ordering::SeqCst,
         );
         let pes = (0..self.num_pes).collect();
-        RofiCFuture {
+        LibfabricFuture {
             my_pe: self.my_pe,
-            op: Op::PutAll(src, remote_addr,pes),
+            ofi: self.ofi.clone(),
+            op: Op::PutAll(src, remote_addr, pes),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -205,9 +211,10 @@ impl CommRdma for RofiCComm {
     ) -> RdmaHandle<T> {
         self.get_amt
             .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        RofiCFuture {
+        LibfabricFuture {
             my_pe: self.my_pe,
-            op: Op::Get(pe,src_addr, dst),
+            ofi: self.ofi.clone(),
+            op: Op::Get(pe, src_addr, dst),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,

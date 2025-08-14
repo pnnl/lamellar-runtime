@@ -830,19 +830,31 @@ impl<T: 'static> DarcInner<T> {
 
 impl<T: 'static> fmt::Debug for DarcInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // write!(
+        //     f,
+        //     "[{:}/{:?}] lc: {:?} dc: {:?} wc: {:?} ref_cnt: {:?} am_cnt ({:?},{:?}) mode {:?}",
+        //     self.my_pe,
+        //     self.num_pes,
+        //     self.local_cnt.load(Ordering::SeqCst),
+        //     self.dist_cnt.load(Ordering::SeqCst),
+        //     self.weak_local_cnt.load(Ordering::SeqCst),
+        //     self.ref_cnt_slice.as_slice(),
+        //     self.am_counters().outstanding_reqs.load(Ordering::Relaxed),
+        //     self.am_counters().send_req_cnt.load(Ordering::Relaxed),
+        //     self.mode_slice.as_slice(),
+        // )
+        write!(f, "[{:}/{:?}] ", self.my_pe, self.num_pes)?;
+        write!(f, "lc: {:?} ", self.local_cnt.load(Ordering::SeqCst))?;
+        write!(f, "dc: {:?} ", self.dist_cnt.load(Ordering::SeqCst))?;
+        write!(f, "wc: {:?} ", self.weak_local_cnt.load(Ordering::SeqCst))?;
+        write!(f, "ref_cnt: {:?} ", self.ref_cnt_slice.as_slice())?;
         write!(
             f,
-            "[{:}/{:?}] lc: {:?} dc: {:?} wc: {:?} ref_cnt: {:?} am_cnt ({:?},{:?}) mode {:?}",
-            self.my_pe,
-            self.num_pes,
-            self.local_cnt.load(Ordering::SeqCst),
-            self.dist_cnt.load(Ordering::SeqCst),
-            self.weak_local_cnt.load(Ordering::SeqCst),
-            self.ref_cnt_slice.as_slice(),
+            "am_cnt ({:?},{:?}) ",
             self.am_counters().outstanding_reqs.load(Ordering::Relaxed),
-            self.am_counters().send_req_cnt.load(Ordering::Relaxed),
-            self.mode_slice.as_slice(),
-        )
+            self.am_counters().send_req_cnt.load(Ordering::Relaxed)
+        )?;
+        write!(f, "mode {:?} ", self.mode_slice.as_slice())
     }
 }
 
@@ -1080,6 +1092,13 @@ impl<T: Send + Sync> Darc<T> {
             .comm()
             .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
             .expect("out of memory");
+        trace!(
+            "[{:?}] creating new darc[{:?}] {:?} alloc: {:?}",
+            std::thread::current().id(),
+            DARC_ID.load(Ordering::Relaxed),
+            team_rt.team_hash,
+            darc_alloc
+        );
         // let temp_team = team_rt.clone();
         // team_rt.print_cnt();
         let team_ptr = unsafe {
@@ -1098,34 +1117,40 @@ impl<T: Send + Sync> Darc<T> {
             team_rt.panic.clone(),
         ));
         let barrier_ptr = Box::into_raw(barrier);
-        let darc_temp = DarcInner {
-            id: DARC_ID.fetch_add(1, Ordering::Relaxed),
-            my_pe: my_pe,
-            num_pes: team_rt.num_pes,
-            local_cnt: AtomicUsize::new(1),
-            total_local_cnt: AtomicUsize::new(1),
-            weak_local_cnt: AtomicUsize::new(0),
-            dist_cnt: AtomicUsize::new(0),
-            total_dist_cnt: AtomicUsize::new(0),
-            ref_cnt_slice: darc_alloc.comm_slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes),
-            total_ref_cnt_slice: darc_alloc
-                .comm_slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes),
-            mode_slice: darc_alloc.comm_slice_at_byte_offset(mode_offset, team_rt.num_pes),
-            mode_ref_cnt_slice: darc_alloc
-                .comm_slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes),
-            mode_barrier_slice: darc_alloc
-                .comm_slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes),
-            barrier: barrier_ptr,
-            // mode_barrier_rounds: num_rounds,
-            am_counters: am_counters_ptr,
-            team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
-            item: Box::into_raw(Box::new(item)),
-            drop: drop,
-            valid: AtomicBool::new(true),
-        };
         unsafe {
-            std::ptr::copy_nonoverlapping(&darc_temp, darc_alloc.as_mut_ptr::<DarcInner<T>>(), 1);
+            let darc_temp_ptr = darc_alloc.as_mut_ptr::<DarcInner<T>>();
+            // let darc_temp = DarcInner {
+            (*darc_temp_ptr).id = DARC_ID.fetch_add(1, Ordering::Relaxed);
+            (*darc_temp_ptr).my_pe = my_pe;
+            (*darc_temp_ptr).num_pes = team_rt.num_pes;
+            (*darc_temp_ptr).local_cnt = AtomicUsize::new(1);
+            (*darc_temp_ptr).total_local_cnt = AtomicUsize::new(1);
+            (*darc_temp_ptr).weak_local_cnt = AtomicUsize::new(0);
+            (*darc_temp_ptr).dist_cnt = AtomicUsize::new(0);
+            (*darc_temp_ptr).total_dist_cnt = AtomicUsize::new(0);
+            (*darc_temp_ptr).ref_cnt_slice =
+                darc_alloc.comm_slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes);
+            (*darc_temp_ptr).total_ref_cnt_slice =
+                darc_alloc.comm_slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes);
+            (*darc_temp_ptr).mode_slice =
+                darc_alloc.comm_slice_at_byte_offset(mode_offset, team_rt.num_pes);
+            (*darc_temp_ptr).mode_ref_cnt_slice =
+                darc_alloc.comm_slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes);
+            (*darc_temp_ptr).mode_barrier_slice =
+                darc_alloc.comm_slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes);
+            (*darc_temp_ptr).barrier = barrier_ptr;
+            // mode_barrier_rounds: num_rounds,
+            (*darc_temp_ptr).am_counters = am_counters_ptr;
+            (*darc_temp_ptr).team = team_ptr; //&team_rt, //Arc::into_raw(temp_team),
+            (*darc_temp_ptr).item = Box::into_raw(Box::new(item));
+            (*darc_temp_ptr).drop = drop;
+            (*darc_temp_ptr).valid = AtomicBool::new(true);
         }
+        // };
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(&darc_temp, darc_alloc.as_mut_ptr::<DarcInner<T>>(), 1);
+        // }
+        // std::mem::forget(darc_temp); // prevent double free because CommSlices may contain Arc<AllocInfo>s, which would go down to a count of 0 if darc_temp is dropped
         // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
 
         let d = Darc {
@@ -1152,11 +1177,11 @@ impl<T: Send + Sync> Darc<T> {
             *elem = 0;
         }
         trace!(
-            " [{:?}] created new darc[{:?}] , next_inner_id: {:?} {:?}",
+            " [{:?}] created new darc[{:?}] , next_inner_id: {:?} {:?} ",
             std::thread::current().id(),
             d.id,
             DARC_ID.load(Ordering::Relaxed),
-            d.inner()
+            d.inner(),
         );
         // d.print();
         team_rt.async_barrier().await;
@@ -1655,6 +1680,19 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
                                                         // println!("Darc freed! {:x} {:?}",self.inner_addr,mode_refs);
             let _am_counters = Arc::from_raw(self.inner.am_counters);
             let _barrier = Box::from_raw(self.inner.barrier);
+
+            //need to make sure we free all the sub allocs so need to copy the inner data out first and then let it drop
+            let mut darc_temp = std::mem::MaybeUninit::<DarcInner<T>>::uninit();
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    self.inner.alloc.as_ptr::<DarcInner<T>>(),
+                    darc_temp.as_mut_ptr(),
+                    1,
+                )
+            };
+            darc_temp.assume_init();
+
+            // now we can free the alloc
             self.team.lamellae.comm().free(self.inner.alloc.clone());
             debug!(
                 "[{:?}]leaving DroppedWaitAM {:?}",
@@ -1718,7 +1756,7 @@ impl<T> From<__NetworkDarc> for Darc<T> {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
             let local_addr = lamellae
                 .comm()
-                .local_addr(ndarc.orig_team_pe, ndarc.inner_addr.0);
+                .local_addr(ndarc.orig_world_pe, ndarc.inner_addr.0);
             let alloc = lamellae
                 .comm()
                 .get_alloc(local_addr)
