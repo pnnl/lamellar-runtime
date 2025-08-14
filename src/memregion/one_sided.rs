@@ -218,7 +218,7 @@ impl Drop for MemRegionHandle {
 
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1, Ordering::SeqCst);
-        // println!("mem region dropping {:?}",self.inner);
+        println!("mem region dropping {:?}", self.inner);
         if cnt == 1
             && self
                 .inner
@@ -227,10 +227,10 @@ impl Drop for MemRegionHandle {
                 .is_ok()
         {
             //last local reference (for the first time)
-            // println!("last local ref {:?}", self.inner);
+            println!("last local ref {:?}", self.inner);
             if self.inner.remote_sent.load(Ordering::SeqCst) == 0 {
                 mrh_map.remove(&self.inner.parent_id);
-                // println!("removed {:?}",self.inner);
+                println!("removed {:?}", self.inner);
                 if self.inner.my_id != self.inner.parent_id {
                     let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                     if cnt > 0 {
@@ -238,7 +238,10 @@ impl Drop for MemRegionHandle {
                             cnt: cnt,
                             parent_id: self.inner.grand_parent_id,
                         };
-                        // println!("sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
+                        println!(
+                            "sending finished am {:?} pe: {:?}",
+                            temp, self.inner.parent_id.1
+                        );
                         let _ = self
                             .inner
                             .team
@@ -269,19 +272,19 @@ struct MemRegionFinishedAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for MemRegionFinishedAm {
     async fn exec(self) {
-        // println!("in finished am {:?}",self);
+        println!("in finished am {:?}", self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let _mrh = match mrh_map.get(&self.parent_id) {
             Some(mrh) => {
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
-                // println!("in finished am {:?} mrh {:?}",self,mrh);
+                println!("in finished am {:?} mrh {:?}", self, mrh);
             }
             None => println!(
                 "in finished am this should only be possible on the original pe? {:?} ",
                 self
             ), //or we are on the original node?
         };
-        // println!("leaving finished am");
+        println!("leaving finished am");
     }
 }
 
