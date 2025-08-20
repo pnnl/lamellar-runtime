@@ -225,7 +225,7 @@ There are a number of ways to run Lamellar applications, mostly dictated by the 
 1. allocate compute nodes on the cluster:
     - ```salloc -N 2```
 2. launch application using cluster launcher
-    - ```srun -N 2 -mpi=pmi2 ./target/release/<appname>``` 
+    - ```srun -N 2 --mpi=pmi2 ./target/release/<appname>``` 
         - `pmi2` library is required to grab info about the allocated nodes and helps set up initial handshakes
 
 
