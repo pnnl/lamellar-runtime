@@ -41,6 +41,7 @@ fn create_reduction(
     if !native {
         gen_match_stmts.extend(quote!{
             #lamellar::array::LamellarByteArray::NativeAtomicArray(_) => panic!("this type is not a native atomic"),
+            #lamellar::array::LamellarByteArray::NetworkAtomicArray(_) => panic!("this type is not a network atomic"),
         });
     }
     for array_type in array_types {
@@ -55,6 +56,7 @@ fn create_reduction(
         let iter_chain = if array_type == "AtomicArray"
             || array_type == "GenericAtomicArray"
             || array_type == "NativeAtomicArray"
+            || array_type == "NetworkAtomicArray"
         {
             quote! {.map(|elem| elem.load())}
         } else {
@@ -280,6 +282,7 @@ pub(crate) fn __generate_reductions_for_type_rt(item: TokenStream) -> TokenStrea
     ];
     if native {
         read_array_types.push(quote::format_ident!("NativeAtomicArray"));
+        read_array_types.push(quote::format_ident!("NetworkAtomicArray"));
     }
 
     for t in items[1..].iter() {

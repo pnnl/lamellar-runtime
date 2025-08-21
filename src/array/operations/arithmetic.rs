@@ -122,7 +122,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn add(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn add(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -161,7 +161,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
         self.inner_array().initiate_batch_op(
             val,
@@ -271,7 +271,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -310,7 +310,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
         self.inner_array().initiate_batch_op(
             val,
@@ -420,7 +420,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -459,7 +459,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
         self.inner_array().initiate_batch_op(
             val,
@@ -569,7 +569,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -608,7 +608,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
         self.inner_array().initiate_batch_op(
             val,
@@ -718,7 +718,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -757,7 +757,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
         self.inner_array().initiate_batch_op(
             val,
@@ -933,7 +933,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn add(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn add(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -972,7 +972,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
         self.inner_array().initiate_batch_op(
             val,
@@ -1082,7 +1082,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1121,7 +1121,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
         self.inner_array().initiate_batch_op(
             val,
@@ -1231,7 +1231,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1270,7 +1270,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
         self.inner_array().initiate_batch_op(
             val,
@@ -1380,7 +1380,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1419,7 +1419,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
         self.inner_array().initiate_batch_op(
             val,
@@ -1529,7 +1529,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1568,7 +1568,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
         self.inner_array().initiate_batch_op(
             val,
@@ -1720,6 +1720,7 @@ macro_rules! impl_local_arithmetic_op {
                 }
                 LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
                 LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
             }
         }
     };

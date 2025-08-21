@@ -8,7 +8,7 @@ use crate::{
     active_messaging::RemotePtr,
     darc::{Darc, DarcInner, DarcMode, __NetworkDarc},
     lamellar_team::IntoLamellarTeam,
-    IdError, LamellarEnv, LamellarTeam,
+    LamellarEnv, LamellarTeam,
 };
 
 use super::handle::LocalRwDarcHandle;

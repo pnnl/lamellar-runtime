@@ -1,9 +1,10 @@
 use crate::{
     array::{AmDist, LamellarByteArray},
+    lamellae::{AtomicFetchOpHandle, AtomicOpHandle, Remote},
     lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
     warnings::RuntimeWarning,
-    AmHandle,
+    AmHandle, Dist,
 };
 
 use std::{
@@ -18,17 +19,23 @@ use pin_project::{pin_project, pinned_drop};
 
 /// a task handle for a batched array operation that doesnt return any values
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
-pub struct ArrayBatchOpHandle {
+#[pin_project(PinnedDrop)]
+pub struct ArrayBatchOpHandle<T> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
-    pub(crate) state: BatchOpState,
+    #[pin]
+    pub(crate) state: BatchOpState<T>,
 }
 
-pub(crate) enum BatchOpState {
+#[pin_project(project = BatchOpStateProj)]
+pub(crate) enum BatchOpState<T> {
     Reqs(VecDeque<(AmHandle<()>, Vec<usize>)>),
+    Network(#[pin] AtomicOpHandle<T>),
     Launched(VecDeque<(LamellarTask<()>, Vec<usize>)>),
+    Completed,
 }
 
-impl Drop for ArrayBatchOpHandle {
+#[pinned_drop]
+impl<T> PinnedDrop for ArrayBatchOpHandle<T> {
     // fn drop(&mut self) {
     //     if self.reqs.len() > 0 {
     //         RuntimeWarning::disable_warnings();
@@ -37,7 +44,7 @@ impl Drop for ArrayBatchOpHandle {
     //         RuntimeWarning::DroppedHandle("an ArrayBatchOpHandle").print();
     //     }
     // }
-    fn drop(&mut self) {
+    fn drop(mut self: Pin<&mut Self>) {
         if let BatchOpState::Reqs(reqs) = &mut self.state {
             RuntimeWarning::disable_warnings();
             for _ in reqs.drain(0..) {}
@@ -48,24 +55,28 @@ impl Drop for ArrayBatchOpHandle {
 }
 
 /// a task handle for a single array operation that doesnt return any values
-pub type ArrayOpHandle = ArrayBatchOpHandle;
+pub type ArrayOpHandle<T> = ArrayBatchOpHandle<T>;
 
-impl ArrayBatchOpHandle {
+impl<T: Dist> ArrayBatchOpHandle<T> {
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
-        // let mut old_state =
-        //     std::mem::replace(&mut self.state, BatchOpState::Launched(VecDeque::new()));
-        match &mut self.state {
-            BatchOpState::Reqs(reqs) => {
+        let old_state = std::mem::replace(&mut self.state, BatchOpState::Completed);
+        match old_state {
+            BatchOpState::Reqs(mut reqs) => {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (am.spawn(), res))
                     .collect::<VecDeque<(LamellarTask<()>, Vec<usize>)>>();
                 self.state = BatchOpState::Launched(launched);
+                self.array.team().spawn(self)
+            }
+            BatchOpState::Network(op_handle) => {
+                self.state =
+                    BatchOpState::Launched(VecDeque::from([(op_handle.spawn(), Vec::new())]));
                 self.array.team().spawn(self)
             }
             _ => panic!("ArrayBatchOpHandle should already have been spawned"),
@@ -78,10 +89,9 @@ impl ArrayBatchOpHandle {
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        // let mut old_state =
-        //     std::mem::replace(&mut self.state, BatchOpState::Launched(VecDeque::new()));
-        match &mut self.state {
-            BatchOpState::Reqs(reqs) => {
+        let old_state = std::mem::replace(&mut self.state, BatchOpState::Completed);
+        match old_state {
+            BatchOpState::Reqs(mut reqs) => {
                 let launched = reqs
                     .drain(..)
                     .map(|(am, res)| (am.spawn(), res))
@@ -89,49 +99,65 @@ impl ArrayBatchOpHandle {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
+            BatchOpState::Network(op_handle) => {
+                op_handle.block();
+            }
             BatchOpState::Launched(_reqs) => self.array.team().block_on(self),
+            BatchOpState::Completed => {
+                // already completed
+            }
         }
     }
 }
 
-impl Future for ArrayBatchOpHandle {
+impl<T: 'static> Future for ArrayBatchOpHandle<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match &mut self.state {
-            BatchOpState::Reqs(reqs) => {
-                let launched = reqs
-                    .drain(..)
-                    .map(|(am, res)| (am.spawn(), res))
-                    .collect::<VecDeque<(LamellarTask<()>, Vec<usize>)>>();
-                self.state = BatchOpState::Launched(launched);
-                cx.waker().wake_by_ref();
-                return Poll::Pending;
-            }
-            BatchOpState::Launched(reqs) => {
-                while let Some(mut req) = reqs.pop_front() {
-                    if Future::poll(Pin::new(&mut req.0), cx).is_pending() {
-                        reqs.push_front(req);
-                        return Poll::Pending;
-                    }
+        if let BatchOpState::Reqs(reqs) = &mut self.state {
+            let launched = reqs
+                .drain(..)
+                .map(|(am, res)| (am.spawn(), res))
+                .collect::<VecDeque<(LamellarTask<()>, Vec<usize>)>>();
+            self.state = BatchOpState::Launched(launched);
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+        if let BatchOpState::Launched(reqs) = &mut self.state {
+            while let Some(mut req) = reqs.pop_front() {
+                if Future::poll(Pin::new(&mut req.0), cx).is_pending() {
+                    reqs.push_front(req);
+                    return Poll::Pending;
                 }
             }
+            return Poll::Ready(());
         }
+        let this = self.project();
+
+        if let BatchOpStateProj::Network(op_handle) = this.state.project() {
+            return op_handle.poll(cx);
+        }
+
         Poll::Ready(())
     }
 }
 
 /// a task handle for a single array operation that returns a value
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
+#[pin_project]
 pub struct ArrayFetchOpHandle<R: AmDist> {
     //AmHandle triggers Handle Dropped warning
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
+    #[pin]
     pub(crate) state: FetchOpState<R>,
     // pub(crate) req: AmHandle<Vec<R>>,
 }
 
+#[pin_project(project = FetchOpStateProj)]
 pub(crate) enum FetchOpState<R> {
     Req(AmHandle<Vec<R>>),
-    Launched(LamellarTask<Vec<R>>),
+    Network(#[pin] AtomicFetchOpHandle<R>),
+    AmLaunched(LamellarTask<Vec<R>>),
+    NetworkLaunched(LamellarTask<R>),
 }
 
 impl<R: AmDist> ArrayFetchOpHandle<R> {
@@ -143,7 +169,11 @@ impl<R: AmDist> ArrayFetchOpHandle<R> {
     pub fn spawn(mut self) -> LamellarTask<R> {
         match self.state {
             FetchOpState::Req(req) => {
-                self.state = FetchOpState::Launched(req.spawn());
+                self.state = FetchOpState::AmLaunched(req.spawn());
+                self.array.team().spawn(self)
+            }
+            FetchOpState::Network(op_handle) => {
+                self.state = FetchOpState::NetworkLaunched(op_handle.spawn());
                 self.array.team().spawn(self)
             }
             _ => panic!("ArrayBatchOpHandle should already have been spawned"),
@@ -158,11 +188,12 @@ impl<R: AmDist> ArrayFetchOpHandle<R> {
         )
         .print();
         match self.state {
-            FetchOpState::Req(req) => {
-                self.state = FetchOpState::Launched(req.spawn());
-                self.array.team().block_on(self)
+            FetchOpState::Req(req) => req.block().pop().expect("should have a single request"),
+            FetchOpState::Network(op_handle) => op_handle.block(),
+            FetchOpState::AmLaunched(req) => {
+                req.block().pop().expect("should have a single request")
             }
-            FetchOpState::Launched(ref _req) => self.array.team().block_on(self),
+            FetchOpState::NetworkLaunched(req) => req.block(),
         }
     }
 }
@@ -175,15 +206,28 @@ impl<R: AmDist> Future for ArrayFetchOpHandle<R> {
                 if req.ready_or_set_waker(cx.waker()) {
                     return Poll::Ready(req.val().pop().expect("should have a single request"));
                 }
+                return Poll::Pending;
             }
-            FetchOpState::Launched(req) => {
+            FetchOpState::AmLaunched(req) => {
                 if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
                     return Poll::Ready(res.pop().expect("should have a single request"));
                 }
+                return Poll::Pending;
             }
+            FetchOpState::NetworkLaunched(req) => {
+                if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
+                    return Poll::Ready(res);
+                }
+                return Poll::Pending;
+            }
+            _ => {}
         }
-        //
-        Poll::Pending
+        let this = self.project();
+        if let FetchOpStateProj::Network(op_handle) = this.state.project() {
+            return op_handle.poll(cx);
+        } else {
+            return Poll::Pending;
+        }
     }
 }
 
@@ -265,7 +309,7 @@ impl<R: AmDist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
             },
             FetchBatchOpState::Launched(reqs) => Self {
                 array: req.array.clone(),
-                state: FetchOpState::Launched(reqs.pop_front().unwrap().0),
+                state: FetchOpState::AmLaunched(reqs.pop_front().unwrap().0),
             },
         };
         req.state = FetchBatchOpState::Launched(VecDeque::new());

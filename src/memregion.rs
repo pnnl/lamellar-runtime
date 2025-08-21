@@ -12,8 +12,9 @@ use crate::{
         TeamTryFrom,
     },
     lamellae::{
-        AllocationType, Backend, CommAlloc, CommAllocAddr, CommAllocInfo, CommAllocType,
-        CommAtomic, CommInfo, CommMem, CommRdma, CommSlice, Lamellae, RdmaHandle,
+        AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc,
+        CommAllocAddr, CommAllocInfo, CommAllocType, CommAtomic, CommInfo, CommMem, CommProgress,
+        CommRdma, CommSlice, Lamellae, NetworkAtomic, RdmaHandle,
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -640,7 +641,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// for pe in 0..num_pes{
     ///     let start_i = pe*src_mem_region.len();
     ///     let end_i = start_i+src_mem_region.len();
-    ///     unsafe{src_mem_region.get_unchecked(pe,0,dst_mem_region.sub_region(start_i..end_i))};
+    ///     unsafe{src_mem_region.get(pe,0,dst_mem_region.sub_region(start_i..end_i))};
     /// }
     ///
     /// unsafe {
@@ -654,7 +655,7 @@ pub trait MemoryRegionRDMA<T: Dist> {
     ///     }      
     /// }
     ///```
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
@@ -924,6 +925,63 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
+    pub(crate) unsafe fn put2<R: Dist>(&self, pe: usize, index: usize, data: R) -> RdmaHandle<R> {
+        trace!("put memregion {:?} index: {:?}", self.alloc, index);
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            // if let Ok(data_slice) = data.as_comm_slice() {
+            self.rdma.comm().put2(
+                &self.scheduler,
+                self.counters.clone(),
+                pe,
+                data,
+                self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
+            )
+            // } else {
+            //     panic!("ERROR: put data src is not local");
+            // }
+        } else {
+            // println!(
+            //     "mem region bytes: {:?} sizeof elem {:?} len {:?}",
+            //     self.alloc.num_bytes(),
+            //     std::mem::size_of::<T>(),
+            //     self.num_elems
+            // );
+            // println!(
+            //     "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
+            //     data.len() * std::mem::size_of::<R>(),
+            //     std::mem::size_of::<R>(),
+            //     data.len(),
+            //     index
+            // );
+            panic!("index out of bounds");
+        }
+    }
+
+    pub(crate) unsafe fn put_test<R: Dist>(
+        &self,
+        pe: usize,
+        index: usize,
+        val: R,
+        // ) -> RdmaHandle<R> {
+    ) {
+        self.rdma.comm().put_test(
+            &self.scheduler,
+            self.counters.clone(),
+            pe,
+            val,
+            self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
+        )
+    }
+
+    pub(crate) unsafe fn get_test<R: Dist>(&self, pe: usize, index: usize) -> R {
+        self.rdma.comm().get_test(
+            &self.scheduler,
+            self.counters.clone(),
+            pe,
+            self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
+        )
+    }
+
     // /// copy data from local memory location into a remote memory localtion
     // ///
     // /// # Arguments
@@ -992,7 +1050,7 @@ impl<T: Dist> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     #[tracing::instrument(skip(self, data), level = "debug")]
-    pub(crate) unsafe fn get_unchecked<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn get<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -1150,182 +1208,228 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
-    /// atomically (element-wise)copy data from local memory location into a remote memory localtion
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer is free to be reused upon return of this function.
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn atomic_store<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn atomic_op<R: Dist>(
         &self,
         pe: usize,
         index: usize,
-        data: U,
-    ) {
-        // //todo make return a result?
-        // let data = data.into();
-        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-        //     self.rdma.comm().atomic_op(
-        //         AtomcicOp::Store,
-        //         pe,
-        //         data.as_slice(),
-        //         self.addr + index * std::mem::size_of::<R>(),
-        //     )
-        // } else {
-        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
-        //     panic!("index out of bounds");
-        // }
+        op: AtomicOp<R>,
+    ) -> AtomicOpHandle<R> {
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.rdma.comm().atomic_op(
+                &self.scheduler,
+                self.counters.clone(),
+                op,
+                pe,
+                self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
+            )
+        } else {
+            println!("{:?} {:?} ", self.alloc.num_bytes(), index,);
+            panic!("index out of bounds");
+        }
     }
 
-    /// atomically (element-wise)copy data from local memory location into a remote memory localtion
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer is free to be reused upon return of this function.
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn iatomic_store<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn atomic_fetch_op<R: Dist>(
         &self,
         pe: usize,
         index: usize,
-        data: U,
-    ) {
-        //todo make return a result?
-        // let data = data.into();
-        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-        //     self.rdma.comm().atomic_store(
-        //         pe,
-        //         data.as_slice(),
-        //         self.addr + index * std::mem::size_of::<R>(),
-        //     )
-        // } else {
-        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
-        //     panic!("index out of bounds");
-        // }
+        op: AtomicOp<R>,
+        result: R,
+    ) -> AtomicFetchOpHandle<R> {
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.rdma.comm().atomic_fetch_op(
+                &self.scheduler,
+                self.counters.clone(),
+                op,
+                pe,
+                self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
+                result,
+            )
+        } else {
+            println!("{:?} {:?} ", self.alloc.num_bytes(), index,);
+            panic!("index out of bounds");
+        }
     }
 
-    /// atomically(element-wise) copy data from remote memory location into provided data buffer
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    ///    data will be present within the buffer once this returns.
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn atomic_load<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) {
-        // let data = data.into();
-        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-        //     self.rdma
-        //         .atomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
-        //             data.as_mut_slice()
-        //         })
-        // } else {
-        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
-        //     panic!("index out of bounds");
-        // }
+    pub(crate) fn wait_all(&self) {
+        self.rdma.comm().wait();
     }
 
-    /// atomically(element-wise) copy data from remote memory location into provided data buffer
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    ///    data will be present within the buffer once this returns.
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn iatomic_load<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) {
-        // let data = data.into();
-        // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-        //     self.rdma
-        //         .comm().iatomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
-        //             data.as_mut_slice()
-        //         })
-        // } else {
-        //     println!("{:?} {:?} {:?}", self.size, index, data.len());
-        //     panic!("index out of bounds");
-        // }
-    }
+    // /// atomically (element-wise)copy data from local memory location into a remote memory localtion
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    // /// the data buffer is free to be reused upon return of this function.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) unsafe fn atomic_store<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // ) {
+    //     // //todo make return a result?
+    //     // let data = data.into();
+    //     // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //     //     self.rdma.comm().atomic_op(
+    //     //         AtomcicOp::Store,
+    //     //         pe,
+    //     //         data.as_slice(),
+    //     //         self.addr + index * std::mem::size_of::<R>(),
+    //     //     )
+    //     // } else {
+    //     //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+    //     //     panic!("index out of bounds");
+    //     // }
+    // }
 
-    /// atomically (element-wise)copy data from local memory location into a remote memory localtion
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer is free to be reused upon return of this function.
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn atomic_swap<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        operand: U,
-        result: U,
-    ) {
-        //todo make return a result?
-        // let operand = operand.into();
-        // let result = result.into();
-        // if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-        //     self.rdma.comm().atomic_swap(
-        //         pe,
-        //         operand.as_slice(),
-        //         self.addr + index * std::mem::size_of::<R>(),
-        //         result.as_mut_slice(),
-        //     )
-        // } else {
-        //     println!("{:?} {:?} {:?}", self.size, index, result.len());
-        //     panic!("index out of bounds");
-        // }
-    }
+    // /// atomically (element-wise)copy data from local memory location into a remote memory localtion
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    // /// the data buffer is free to be reused upon return of this function.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) unsafe fn iatomic_store<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // ) {
+    //     //todo make return a result?
+    //     // let data = data.into();
+    //     // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //     //     self.rdma.comm().atomic_store(
+    //     //         pe,
+    //     //         data.as_slice(),
+    //     //         self.addr + index * std::mem::size_of::<R>(),
+    //     //     )
+    //     // } else {
+    //     //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+    //     //     panic!("index out of bounds");
+    //     // }
+    // }
 
-    /// atomically (element-wise)copy data from local memory location into a remote memory localtion
-    ///
-    /// # Arguments
-    ///
-    /// * `pe` - id of remote PE to grab data from
-    /// * `index` - offset into the remote memory window
-    /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    /// the data buffer is free to be reused upon return of this function.
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn iatomic_swap<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        operand: U,
-        result: U,
-    ) {
-        //todo make return a result?
-        // let operand = operand.into();
-        // let result = result.into();
-        // if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-        //     self.rdma.comm().iatomic_swap(
-        //         pe,
-        //         operand.as_slice(),
-        //         self.addr() + index * std::mem::size_of::<R>(),
-        //         result.as_mut_slice(),
-        //     )
-        // } else {
-        //     println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, result.len());
-        //     panic!("index out of bounds");
-        // }
-    }
+    // /// atomically(element-wise) copy data from remote memory location into provided data buffer
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    // ///    data will be present within the buffer once this returns.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn atomic_load<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // ) {
+    //     // let data = data.into();
+    //     // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //     //     self.rdma
+    //     //         .atomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
+    //     //             data.as_mut_slice()
+    //     //         })
+    //     // } else {
+    //     //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+    //     //     panic!("index out of bounds");
+    //     // }
+    // }
+
+    // /// atomically(element-wise) copy data from remote memory location into provided data buffer
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
+    // ///    data will be present within the buffer once this returns.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn iatomic_load<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     data: U,
+    // ) {
+    //     // let data = data.into();
+    //     // if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //     //     self.rdma
+    //     //         .comm().iatomic_load(pe, self.addr + index * std::mem::size_of::<R>(), unsafe {
+    //     //             data.as_mut_slice()
+    //     //         })
+    //     // } else {
+    //     //     println!("{:?} {:?} {:?}", self.size, index, data.len());
+    //     //     panic!("index out of bounds");
+    //     // }
+    // }
+
+    // /// atomically (element-wise)copy data from local memory location into a remote memory localtion
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    // /// the data buffer is free to be reused upon return of this function.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) unsafe fn atomic_swap<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     operand: U,
+    //     result: U,
+    // ) {
+    //     //todo make return a result?
+    //     // let operand = operand.into();
+    //     // let result = result.into();
+    //     // if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //     //     self.rdma.comm().atomic_swap(
+    //     //         pe,
+    //     //         operand.as_slice(),
+    //     //         self.addr + index * std::mem::size_of::<R>(),
+    //     //         result.as_mut_slice(),
+    //     //     )
+    //     // } else {
+    //     //     println!("{:?} {:?} {:?}", self.size, index, result.len());
+    //     //     panic!("index out of bounds");
+    //     // }
+    // }
+
+    // /// atomically (element-wise)copy data from local memory location into a remote memory localtion
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `pe` - id of remote PE to grab data from
+    // /// * `index` - offset into the remote memory window
+    // /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
+    // /// the data buffer is free to be reused upon return of this function.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) unsafe fn iatomic_swap<R: Dist, U: Into<LamellarMemoryRegion<R>>>(
+    //     &self,
+    //     pe: usize,
+    //     index: usize,
+    //     operand: U,
+    //     result: U,
+    // ) {
+    //     //todo make return a result?
+    //     // let operand = operand.into();
+    //     // let result = result.into();
+    //     // if (index + operand.len()) * std::mem::size_of::<R>() <= self.num_bytes {
+    //     //     self.rdma.comm().iatomic_swap(
+    //     //         pe,
+    //     //         operand.as_slice(),
+    //     //         self.addr() + index * std::mem::size_of::<R>(),
+    //     //         result.as_mut_slice(),
+    //     //     )
+    //     // } else {
+    //     //     println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, result.len());
+    //     //     panic!("index out of bounds");
+    //     // }
+    // }
 
     // #[allow(dead_code)]
     #[tracing::instrument(skip_all, level = "debug")]

@@ -4,6 +4,7 @@ use crate::array::generic_atomic::*;
 use crate::array::global_lock_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
+use crate::array::NetworkAtomicLocalData;
 use crate::array::{AmDist, Dist, LamellarEnv, LamellarWriteArray};
 use crate::config;
 
@@ -293,6 +294,7 @@ pub enum OpInputEnum<'a, T: Dist> {
     GenericAtomicLocalData(GenericAtomicLocalData<T>),
     LocalLockLocalData(LocalLockLocalData<T>),
     GlobalLockLocalData(GlobalLockLocalData<T>),
+    NetworkAtomicLocalData(NetworkAtomicLocalData<T>),
     // Iter(Box<dyn Iterator<Item = T> + 'a>),
 
     // while it would be convienient to directly use the following, doing so
@@ -337,6 +339,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::GenericAtomicLocalData(a) => a.len(),
             OpInputEnum::LocalLockLocalData(a) => a.len(),
             OpInputEnum::GlobalLockLocalData(a) => a.len(),
+            OpInputEnum::NetworkAtomicLocalData(a) => a.len(),
             // OpInputEnum::MemoryRegion(mr) => {
             //     unsafe { mr.as_slice() }.expect("memregion not local").len()
             // }
@@ -356,6 +359,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::GenericAtomicLocalData(a) => a.at(0).load(),
             OpInputEnum::LocalLockLocalData(a) => *a.first().expect("array is empty"),
             OpInputEnum::GlobalLockLocalData(a) => *a.first().expect("array is empty"),
+            OpInputEnum::NetworkAtomicLocalData(a) => a.at(0).load(),
             // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
             //     .expect("memregion not local")
             //     .first()
@@ -408,6 +412,23 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             }
             OpInputEnum::GlobalLockLocalData(a) => {
                 a.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect()
+            }
+            OpInputEnum::NetworkAtomicLocalData(a) => {
+                let mut data = Vec::with_capacity(chunk_size);
+
+                a.iter()
+                    .enumerate()
+                    .filter_map(move |(i, elem)| {
+                        data.push(elem.load());
+                        if data.len() == chunk_size || i == a.len() - 1 {
+                            let mut new_data = Vec::with_capacity(chunk_size);
+                            std::mem::swap(&mut data, &mut new_data);
+                            Some(new_data)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
             } // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
               //     .expect("memregion not local")
               //     .first()
@@ -424,6 +445,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::GenericAtomicLocalData(a) => a.iter().map(|elem| elem.load()).collect(),
             OpInputEnum::LocalLockLocalData(a) => a.to_vec(),
             OpInputEnum::GlobalLockLocalData(a) => a.to_vec(),
+            OpInputEnum::NetworkAtomicLocalData(a) => a.iter().map(|elem| elem.load()).collect(),
         }
     }
 }
@@ -813,6 +835,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
         match self.array.clone() {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
             AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::NetworkAtomicArray(a) => a.local_data().as_op_input(),
         }
     }
 }
@@ -823,6 +846,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
         match self.array {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
             AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::NetworkAtomicArray(a) => a.local_data().as_op_input(),
         }
     }
 }
@@ -921,6 +945,55 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (&self).as_op_input()
+    }
+}
+
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NetworkAtomicLocalData<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // let slice = unsafe { self.__local_as_slice() };
+        // let len = slice.len();
+        // let local_data = self.local_data();
+        let local_data = self.clone();
+        let len = local_data.len();
+        let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
+        let my_pe = self.array.my_pe();
+        if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
+            let num = if len < 1000 {
+                1
+            } else {
+                match config().batch_op_threads {
+                    Some(n) => n,
+                    None => std::cmp::max(1, config().threads / 4),
+                }
+            };
+            let num_per_batch = len / num;
+            // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
+            for i in 0..num {
+                // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
+                let sub_data = local_data.sub_data(i * num_per_batch, (i + 1) * num_per_batch);
+                // for j in sub_data.clone().into_iter() {
+                //     println!("{:?} {:?}",i, j);
+                // }
+                iters.push(OpInputEnum::NetworkAtomicLocalData(sub_data));
+            }
+            let rem = len % num_per_batch;
+            if rem > 0 {
+                // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
+                let sub_data = local_data.sub_data(num * num_per_batch, len);
+                iters.push(OpInputEnum::NetworkAtomicLocalData(sub_data));
+            }
+        }
+        (iters, len)
+    }
+}
+
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NetworkAtomicLocalData<T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }

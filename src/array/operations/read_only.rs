@@ -264,6 +264,7 @@ impl<T: ElementOps> LocalReadOnlyOps<T> for LamellarMutLocalData<'_, T> {
             }
             LamellarMutLocalData::NativeAtomic(data) => data.local_load(idx_vals),
             LamellarMutLocalData::GenericAtomic(data) => data.local_load(idx_vals),
+            LamellarMutLocalData::NetworkAtomic(data) => data.local_load(idx_vals),
         }
     }
 }
@@ -282,6 +283,7 @@ impl<T: ElementOps> LocalReadOnlyOps<T> for LamellarLocalData<'_, T> {
             }
             LamellarLocalData::NativeAtomic(data) => data.local_load(idx_vals),
             LamellarLocalData::GenericAtomic(data) => data.local_load(idx_vals),
+            LamellarLocalData::NetworkAtomic(data) => data.local_load(idx_vals),
         }
     }
 }

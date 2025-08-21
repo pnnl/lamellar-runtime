@@ -94,7 +94,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
             .into()
@@ -130,7 +130,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -298,7 +298,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
             .into()
@@ -334,7 +334,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -435,6 +435,7 @@ impl<T: Dist + ElementOps> LocalAccessOps<T> for LamellarMutLocalData<'_, T> {
             }
             LamellarMutLocalData::NativeAtomic(ref mut data) => data.local_store(idx_vals),
             LamellarMutLocalData::GenericAtomic(ref mut data) => data.local_store(idx_vals),
+            LamellarMutLocalData::NetworkAtomic(ref mut data) => data.local_store(idx_vals),
         }
     }
 
@@ -451,6 +452,7 @@ impl<T: Dist + ElementOps> LocalAccessOps<T> for LamellarMutLocalData<'_, T> {
             }
             LamellarMutLocalData::NativeAtomic(ref mut data) => data.local_swap(idx_vals),
             LamellarMutLocalData::GenericAtomic(ref mut data) => data.local_swap(idx_vals),
+            LamellarMutLocalData::NetworkAtomic(ref mut data) => data.local_swap(idx_vals),
         }
     }
 }

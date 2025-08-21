@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use crate::array::native_atomic::*;
+use crate::array::network_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
@@ -8,7 +8,7 @@ use crate::lamellae::comm::CommAtomic;
 use crate::lamellae::CommSlice;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
-impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
+impl<T: Dist> LamellarArrayInternalGet<T> for NetworkAtomicArray<T> {
     unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
@@ -32,7 +32,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
 
             ArrayAtHandle {
                 array: self.as_lamellar_byte_array(),
-                state: ArrayAtHandleState::Atomic(ArrayRdmaAtomicLoadHandle {
+                state: ArrayAtHandleState::NetworkAtomic(ArrayRdmaNetworkAtomicLoadHandle {
                     array: self.clone(),
                     index: index,
                 }),
@@ -52,7 +52,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
         }
     }
 }
-impl<T: Dist> LamellarArrayGet<T> for NativeAtomicArray<T> {
+impl<T: Dist> LamellarArrayGet<T> for NetworkAtomicArray<T> {
     unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
@@ -72,7 +72,7 @@ impl<T: Dist> LamellarArrayGet<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
+impl<T: Dist> LamellarArrayInternalPut<T> for NetworkAtomicArray<T> {
     unsafe fn internal_put<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
@@ -91,7 +91,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
+impl<T: Dist> LamellarArrayPut<T> for NetworkAtomicArray<T> {
     unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
@@ -110,8 +110,8 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
 
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
-    array: NativeAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                //relative to inner
+    array: NetworkAtomicArray<T>, //inner of the indices we need to place data into
+    index: usize,                 //relative to inner
     buf: LamellarMemoryRegion<T>,
 }
 
@@ -121,7 +121,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
         // let buf = self.buf.into();
         // let u8_index = self.index * std::mem::size_of::<T>();
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
-        // println!("in native InitGetAm ");//{:?} {:?}",u8_index,u8_index + u8_len);
+        // println!("in Network InitGetAm ");//{:?} {:?}",u8_index,u8_index + u8_len);
         let mut reqs = vec![];
         for pe in self
             .array
@@ -130,7 +130,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
             .into_iter()
         {
             // println!("pe {:?}",pe);
-            let remote_am = NativeAtomicRemoteGetAm {
+            let remote_am = NetworkAtomicRemoteGetAm {
                 array: self.array.clone().into(),
                 start_index: self.index,
                 len: self.buf.len(),
@@ -181,18 +181,18 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
-struct NativeAtomicRemoteGetAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+struct NetworkAtomicRemoteGetAm {
+    array: NetworkAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAm for NativeAtomicRemoteGetAm {
+impl LamellarAm for NetworkAtomicRemoteGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
-        // println!("in nativeAtomic remotegetam {:?} {:?}",self.start_index,self.len);
+        // println!("in NetworkAtomic remotegetam {:?} {:?}",self.start_index,self.len);
         unsafe {
             match self
                 .array
@@ -219,8 +219,8 @@ impl LamellarAm for NativeAtomicRemoteGetAm {
 
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitPutAm<T: Dist> {
-    array: NativeAtomicArray<T>, //inner of the indices we need to place data into
-    index: usize,                //relative to inner
+    array: NetworkAtomicArray<T>, //inner of the indices we need to place data into
+    index: usize,                 //relative to inner
     buf: LamellarMemoryRegion<T>,
 }
 
@@ -249,7 +249,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         ) {
                             let u8_buf_len = len * std::mem::size_of::<T>();
                             // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
-                            let remote_am = NativeAtomicRemotePutAm {
+                            let remote_am = NetworkAtomicRemotePutAm {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
                                 len: self.buf.len(),
@@ -303,7 +303,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     }
                     for (pe, vec) in pe_u8_vecs.drain() {
                         // println!("pe {:?} vec {:?}",pe,vec);
-                        let remote_am = NativeAtomicRemotePutAm {
+                        let remote_am = NetworkAtomicRemotePutAm {
                             array: self.array.clone().into(), //inner of the indices we need to place data into
                             start_index: self.index,
                             len: self.buf.len(),
@@ -322,8 +322,8 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
-struct NativeAtomicRemotePutAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+struct NetworkAtomicRemotePutAm {
+    array: NetworkAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     #[serde(with = "serde_bytes")]
@@ -331,7 +331,7 @@ struct NativeAtomicRemotePutAm {
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAm for NativeAtomicRemotePutAm {
+impl LamellarAm for NetworkAtomicRemotePutAm {
     async fn exec(self) {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         // let _lock = self.array.lock.write();
@@ -364,7 +364,7 @@ impl LamellarAm for NativeAtomicRemotePutAm {
     }
 }
 
-// impl<T: Dist> NativeAtomicArray<T> {
+// impl<T: Dist> NetworkAtomicArray<T> {
 //     pub(crate) fn network_atomic_store(&self, index: usize, val: T) {
 //         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
 //             let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);

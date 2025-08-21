@@ -10,9 +10,11 @@ use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicEleme
 use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
 use crate::array::iterator::local_iterator::LocalIteratorLauncher;
 use crate::array::native_atomic::NativeAtomicElement;
+use crate::array::network_atomic::NetworkAtomicElement;
 use crate::array::*;
 // use crate::darc::{Darc, DarcMode};
 use crate::barrier::BarrierHandle;
+use crate::lamellae::comm::atomic::CommAtomic;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
@@ -51,6 +53,7 @@ pub enum AtomicElement<T: Dist> {
     NativeAtomicElement(NativeAtomicElement<T>),
     GenericAtomicElement(GenericAtomicElement<T>),
     LocalGenericAtomicElement(LocalGenericAtomicElement<T>),
+    NetworkAtomicElement(NetworkAtomicElement<T>),
 }
 
 impl<T: Dist> AtomicElement<T> {
@@ -77,6 +80,7 @@ impl<T: Dist> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.load(),
             AtomicElement::GenericAtomicElement(array) => array.load(),
             AtomicElement::LocalGenericAtomicElement(array) => array.load(),
+            AtomicElement::NetworkAtomicElement(array) => array.load(),
         }
     }
 
@@ -103,6 +107,7 @@ impl<T: Dist> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.store(val),
             AtomicElement::GenericAtomicElement(array) => array.store(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.store(val),
+            AtomicElement::NetworkAtomicElement(array) => array.store(val),
         }
     }
 
@@ -129,6 +134,7 @@ impl<T: Dist> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.swap(val),
             AtomicElement::GenericAtomicElement(array) => array.swap(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.swap(val),
+            AtomicElement::NetworkAtomicElement(array) => array.swap(val),
         }
     }
 }
@@ -157,6 +163,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_add(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_add(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_add(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_add(val),
         }
     }
     /// Atomically subtracts `val` from the current value, returning the previous value
@@ -182,6 +189,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_sub(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_sub(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_sub(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_sub(val),
         }
     }
 
@@ -208,6 +216,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_mul(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_mul(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_mul(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_mul(val),
         }
     }
 
@@ -234,6 +243,7 @@ impl<T: ElementArithmeticOps> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_div(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_div(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_div(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_div(val),
         }
     }
 }
@@ -261,6 +271,7 @@ impl<T: Dist + std::cmp::Eq> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.compare_exchange(current, new),
             AtomicElement::GenericAtomicElement(array) => array.compare_exchange(current, new),
             AtomicElement::LocalGenericAtomicElement(array) => array.compare_exchange(current, new),
+            AtomicElement::NetworkAtomicElement(array) => array.compare_exchange(current, new),
         }
     }
 }
@@ -302,6 +313,9 @@ impl<T: Dist + std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output
             AtomicElement::LocalGenericAtomicElement(array) => {
                 array.compare_exchange_epsilon(current, new, eps)
             }
+            AtomicElement::NetworkAtomicElement(array) => {
+                array.compare_exchange_epsilon(current, new, eps)
+            }
         }
     }
 }
@@ -326,6 +340,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_and(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_and(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_and(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_and(val),
         }
     }
     /// Atomically performs a bitwise and of `val` and the current value, returning the previous value
@@ -347,6 +362,7 @@ impl<T: ElementBitWiseOps + 'static> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_or(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_or(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_or(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_or(val),
         }
     }
 }
@@ -371,6 +387,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_shl(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_shl(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_shl(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_shl(val),
         }
     }
     /// Atomically performs a right shift of `val` bits with the current value, returning the previous value
@@ -392,6 +409,7 @@ impl<T: ElementShiftOps + 'static> AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fetch_shr(val),
             AtomicElement::GenericAtomicElement(array) => array.fetch_shr(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.fetch_shr(val),
+            AtomicElement::NetworkAtomicElement(array) => array.fetch_shr(val),
         }
     }
 }
@@ -402,6 +420,7 @@ impl<T: Dist + ElementArithmeticOps> AddAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.add_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.add_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.add_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.add_assign(val),
         }
     }
 }
@@ -412,6 +431,7 @@ impl<T: Dist + ElementArithmeticOps> SubAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.sub_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.sub_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.sub_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.sub_assign(val),
         }
     }
 }
@@ -422,6 +442,7 @@ impl<T: Dist + ElementArithmeticOps> MulAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.mul_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.mul_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.mul_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.mul_assign(val),
         }
     }
 }
@@ -432,6 +453,7 @@ impl<T: Dist + ElementArithmeticOps> DivAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.div_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.div_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.div_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.div_assign(val),
         }
     }
 }
@@ -442,6 +464,7 @@ impl<T: Dist + ElementArithmeticOps> RemAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.rem_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.rem_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.rem_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.rem_assign(val),
         }
     }
 }
@@ -452,6 +475,7 @@ impl<T: Dist + ElementBitWiseOps> BitAndAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.bitand_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitand_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.bitand_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.bitand_assign(val),
         }
     }
 }
@@ -462,6 +486,7 @@ impl<T: Dist + ElementBitWiseOps> BitOrAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.bitor_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitor_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.bitor_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.bitor_assign(val),
         }
     }
 }
@@ -472,6 +497,7 @@ impl<T: Dist + ElementBitWiseOps> BitXorAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.bitxor_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.bitxor_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.bitxor_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.bitxor_assign(val),
         }
     }
 }
@@ -482,6 +508,7 @@ impl<T: Dist + ElementShiftOps> ShlAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.shl_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.shl_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.shl_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.shl_assign(val),
         }
     }
 }
@@ -492,6 +519,7 @@ impl<T: Dist + ElementShiftOps> ShrAssign<T> for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.shr_assign(val),
             AtomicElement::GenericAtomicElement(array) => array.shr_assign(val),
             AtomicElement::LocalGenericAtomicElement(array) => array.shr_assign(val),
+            AtomicElement::NetworkAtomicElement(array) => array.shr_assign(val),
         }
     }
 }
@@ -502,6 +530,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
             AtomicElement::NativeAtomicElement(array) => array.fmt(f),
             AtomicElement::GenericAtomicElement(array) => array.fmt(f),
             AtomicElement::LocalGenericAtomicElement(array) => array.fmt(f),
+            AtomicElement::NetworkAtomicElement(array) => array.fmt(f),
         }
     }
 }
@@ -525,6 +554,8 @@ pub enum AtomicArray<T: Dist> {
     NativeAtomicArray(NativeAtomicArray<T>),
     /// an array containing generic types, each protected by a mutex
     GenericAtomicArray(GenericAtomicArray<T>),
+    /// an array containing network accelerated atomic types
+    NetworkAtomicArray(NetworkAtomicArray<T>),
 }
 
 impl<T: Dist> DistIteratorLauncher for AtomicArray<T> {}
@@ -536,6 +567,7 @@ impl<T: Dist + 'static> crate::active_messaging::DarcSerde for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.ser(num_pes, darcs),
             AtomicArray::GenericAtomicArray(array) => array.ser(num_pes, darcs),
+            AtomicArray::NetworkAtomicArray(array) => array.ser(num_pes, darcs),
         }
     }
     // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
@@ -552,12 +584,14 @@ impl<T: Dist> SubArray<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sub_array(range).into(),
             AtomicArray::GenericAtomicArray(array) => array.sub_array(range).into(),
+            AtomicArray::NetworkAtomicArray(array) => array.sub_array(range).into(),
         }
     }
     fn global_index(&self, sub_index: usize) -> usize {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.global_index(sub_index).into(),
             AtomicArray::GenericAtomicArray(array) => array.global_index(sub_index).into(),
+            AtomicArray::NetworkAtomicArray(array) => array.global_index(sub_index).into(),
         }
     }
 }
@@ -573,6 +607,7 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.exec_am_all(am),
             AtomicArray::GenericAtomicArray(array) => array.exec_am_all(am),
+            AtomicArray::NetworkAtomicArray(array) => array.exec_am_all(am),
         }
     }
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
@@ -582,6 +617,7 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.exec_am_pe(pe, am),
             AtomicArray::GenericAtomicArray(array) => array.exec_am_pe(pe, am),
+            AtomicArray::NetworkAtomicArray(array) => array.exec_am_pe(pe, am),
         }
     }
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
@@ -591,18 +627,21 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.exec_am_local(am),
             AtomicArray::GenericAtomicArray(array) => array.exec_am_local(am),
+            AtomicArray::NetworkAtomicArray(array) => array.exec_am_local(am),
         }
     }
     fn wait_all(&self) {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.wait_all(),
             AtomicArray::GenericAtomicArray(array) => array.wait_all(),
+            AtomicArray::NetworkAtomicArray(array) => array.wait_all(),
         }
     }
     fn await_all(&self) -> impl Future<Output = ()> + Send {
         let fut: Pin<Box<dyn Future<Output = ()> + Send>> = match self {
             AtomicArray::NativeAtomicArray(array) => Box::pin(array.await_all()),
             AtomicArray::GenericAtomicArray(array) => Box::pin(array.await_all()),
+            AtomicArray::NetworkAtomicArray(array) => Box::pin(array.await_all()),
         };
         fut
     }
@@ -610,12 +649,14 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.barrier(),
             AtomicArray::GenericAtomicArray(array) => array.barrier(),
+            AtomicArray::NetworkAtomicArray(array) => array.barrier(),
         }
     }
     fn async_barrier(&self) -> BarrierHandle {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.async_barrier(),
             AtomicArray::GenericAtomicArray(array) => array.async_barrier(),
+            AtomicArray::NetworkAtomicArray(array) => array.async_barrier(),
         }
     }
     fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
@@ -626,12 +667,14 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.spawn(f),
             AtomicArray::GenericAtomicArray(array) => array.spawn(f),
+            AtomicArray::NetworkAtomicArray(array) => array.spawn(f),
         }
     }
     fn block_on<F: Future>(&self, f: F) -> F::Output {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.block_on(f),
             AtomicArray::GenericAtomicArray(array) => array.block_on(f),
+            AtomicArray::NetworkAtomicArray(array) => array.block_on(f),
         }
     }
     fn block_on_all<I>(&self, iter: I) -> Vec<<<I as IntoIterator>::Item as Future>::Output>
@@ -643,6 +686,7 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.block_on_all(iter),
             AtomicArray::GenericAtomicArray(array) => array.block_on_all(iter),
+            AtomicArray::NetworkAtomicArray(array) => array.block_on_all(iter),
         }
     }
 }
@@ -653,6 +697,7 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
 pub enum AtomicByteArray {
     NativeAtomicByteArray(NativeAtomicByteArray),
     GenericAtomicByteArray(GenericAtomicByteArray),
+    NetworkAtomicByteArray(NetworkAtomicByteArray),
 }
 
 impl AtomicByteArray {
@@ -669,12 +714,18 @@ impl AtomicByteArray {
                     array,
                 ))
             }
+            AtomicByteArray::NetworkAtomicByteArray(array) => {
+                AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(NetworkAtomicByteArray::downgrade(
+                    array,
+                ))
+            }
         }
     }
     pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
         match self {
             AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.data.team(),
             AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.data.team(),
+            AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.data.team(),
         }
     }
 
@@ -682,6 +733,7 @@ impl AtomicByteArray {
         match self {
             AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.num_elems_local(),
             AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.num_elems_local(),
+            AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.num_elems_local(),
         }
     }
 }
@@ -691,6 +743,7 @@ impl crate::active_messaging::DarcSerde for AtomicByteArray {
         match self {
             AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, darcs),
             AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, darcs),
+            AtomicByteArray::NetworkAtomicByteArray(array) => array.ser(num_pes, darcs),
         }
     }
 
@@ -708,6 +761,7 @@ impl crate::active_messaging::DarcSerde for AtomicByteArray {
 pub enum AtomicByteArrayWeak {
     NativeAtomicByteArrayWeak(NativeAtomicByteArrayWeak),
     GenericAtomicByteArrayWeak(GenericAtomicByteArrayWeak),
+    NetworkAtomicByteArrayWeak(NetworkAtomicByteArrayWeak),
 }
 
 impl AtomicByteArrayWeak {
@@ -719,6 +773,9 @@ impl AtomicByteArrayWeak {
             }
             AtomicByteArrayWeak::GenericAtomicByteArrayWeak(array) => {
                 Some(AtomicByteArray::GenericAtomicByteArray(array.upgrade()?))
+            }
+            AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(array) => {
+                Some(AtomicByteArray::NetworkAtomicByteArray(array.upgrade()?))
             }
         }
     }
@@ -871,8 +928,11 @@ impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> AtomicArrayHandle<T> {
-        // println!("new atomic array");
-        if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
+        println!("new atomic array");
+        let team: Pin<Arc<LamellarTeamRT>> = team.into().team.clone();
+        if team.lamellae.comm().atomic_avail::<T>() {
+            NetworkAtomicArray::new_internal(team, array_size, distribution).into()
+        } else if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
             NativeAtomicArray::new_internal(team, array_size, distribution).into()
         } else {
             GenericAtomicArray::new(team, array_size, distribution).into()
@@ -884,6 +944,7 @@ impl<T: Dist + 'static> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => Some(array.get_element(index)?.into()),
             AtomicArray::GenericAtomicArray(array) => Some(array.get_element(index)?.into()),
+            AtomicArray::NetworkAtomicArray(array) => Some(array.get_element(index)?.into()),
         }
     }
 }
@@ -907,6 +968,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.use_distribution(distribution).into(),
             AtomicArray::GenericAtomicArray(array) => array.use_distribution(distribution).into(),
+            AtomicArray::NetworkAtomicArray(array) => array.use_distribution(distribution).into(),
         }
     }
 
@@ -963,6 +1025,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.__local_as_slice(),
             AtomicArray::GenericAtomicArray(array) => array.__local_as_slice(),
+            AtomicArray::NetworkAtomicArray(array) => array.__local_as_slice(),
         }
     }
     #[doc(hidden)]
@@ -970,6 +1033,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.__local_as_mut_slice(),
             AtomicArray::GenericAtomicArray(array) => array.__local_as_mut_slice(),
+            AtomicArray::NetworkAtomicArray(array) => array.__local_as_mut_slice(),
         }
     }
 
@@ -1021,6 +1085,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.into_unsafe(),
             AtomicArray::GenericAtomicArray(array) => array.into_unsafe(),
+            AtomicArray::NetworkAtomicArray(array) => array.into_unsafe(),
         }
     }
     // pub fn into_local_only(self) -> LocalOnlyArray<T> {
@@ -1075,6 +1140,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into_read_only(),
             AtomicArray::GenericAtomicArray(array) => array.array.into_read_only(),
+            AtomicArray::NetworkAtomicArray(array) => array.array.into_read_only(),
         }
     }
 
@@ -1122,6 +1188,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into_local_lock(),
             AtomicArray::GenericAtomicArray(array) => array.array.into_local_lock(),
+            AtomicArray::NetworkAtomicArray(array) => array.array.into_local_lock(),
         }
     }
 
@@ -1169,6 +1236,7 @@ impl<T: Dist> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.array.into_global_lock(),
             AtomicArray::GenericAtomicArray(array) => array.array.into_global_lock(),
+            AtomicArray::NetworkAtomicArray(array) => array.array.into_global_lock(),
         }
     }
 }
@@ -1185,7 +1253,9 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for AtomicArray<T
 impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("Converting from UnsafeArray to AtomicArray");
-        if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
+        if array.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+            NetworkAtomicArray::async_from(array).await.into()
+        } else if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {
             NativeAtomicArray::async_from(array).await.into()
         } else {
             GenericAtomicArray::async_from(array).await.into()
@@ -1198,6 +1268,7 @@ impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
         match array {
             AtomicArray::NativeAtomicArray(array) => array.into(),
             AtomicArray::GenericAtomicArray(array) => array.into(),
+            AtomicArray::NetworkAtomicArray(array) => array.into(),
         }
     }
 }
@@ -1207,6 +1278,7 @@ impl<T: Dist> From<AtomicArray<T>> for LamellarByteArray {
         match array {
             AtomicArray::NativeAtomicArray(array) => array.into(),
             AtomicArray::GenericAtomicArray(array) => array.into(),
+            AtomicArray::NetworkAtomicArray(array) => array.into(),
         }
     }
 }
@@ -1226,6 +1298,7 @@ impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
         match array {
             AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
             AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+            AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
         }
     }
 }
@@ -1235,6 +1308,7 @@ impl<T: Dist> From<&AtomicByteArray> for AtomicArray<T> {
         match array {
             AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
             AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+            AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
         }
     }
 }
@@ -1244,6 +1318,7 @@ impl<T: Dist> From<&mut AtomicByteArray> for AtomicArray<T> {
         match array {
             AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
             AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+            AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
         }
     }
 }
@@ -1295,6 +1370,7 @@ impl<T: Dist + AmDist + 'static> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.reduce(reduction),
             AtomicArray::GenericAtomicArray(array) => array.reduce(reduction),
+            AtomicArray::NetworkAtomicArray(array) => array.reduce(reduction),
         }
     }
 }
@@ -1344,6 +1420,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.sum(),
             AtomicArray::GenericAtomicArray(array) => array.sum(),
+            AtomicArray::NetworkAtomicArray(array) => array.sum(),
         }
     }
 
@@ -1388,6 +1465,7 @@ impl<T: Dist + AmDist + ElementArithmeticOps + 'static> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.prod(),
             AtomicArray::GenericAtomicArray(array) => array.prod(),
+            AtomicArray::NetworkAtomicArray(array) => array.prod(),
         }
     }
 }
@@ -1429,6 +1507,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.max(),
             AtomicArray::GenericAtomicArray(array) => array.max(),
+            AtomicArray::NetworkAtomicArray(array) => array.max(),
         }
     }
 
@@ -1471,6 +1550,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.min(),
             AtomicArray::GenericAtomicArray(array) => array.min(),
+            AtomicArray::NetworkAtomicArray(array) => array.min(),
         }
     }
 }
@@ -1500,6 +1580,7 @@ impl<T: Dist + std::fmt::Debug> AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.print(),
             AtomicArray::GenericAtomicArray(array) => array.print(),
+            AtomicArray::NetworkAtomicArray(array) => array.print(),
         }
     }
 }
@@ -1509,6 +1590,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.print(),
             AtomicArray::GenericAtomicArray(array) => array.print(),
+            AtomicArray::NetworkAtomicArray(array) => array.print(),
         }
     }
 }

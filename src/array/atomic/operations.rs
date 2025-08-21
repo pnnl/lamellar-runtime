@@ -7,15 +7,25 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.load(index),
             AtomicArray::GenericAtomicArray(array) => array.load(index),
+            AtomicArray::NetworkAtomicArray(array) => array.load(index),
         }
     }
 }
 
 impl<T: ElementOps + 'static> AccessOps<T> for AtomicArray<T> {
-    fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.store(index, val),
             AtomicArray::GenericAtomicArray(array) => array.store(index, val),
+            AtomicArray::NetworkAtomicArray(array) => array.store(index, val),
+        }
+    }
+
+    fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.swap(index, val),
+            AtomicArray::GenericAtomicArray(array) => array.swap(index, val),
+            AtomicArray::NetworkAtomicArray(array) => array.swap(index, val),
         }
     }
 }

@@ -13,7 +13,7 @@ use pin_project::{pin_project, pinned_drop};
 
 use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
-    array::LamellarByteArray,
+    array::{LamellarByteArray, NetworkAtomicArray},
     lamellae::{CommProgress, Lamellae, RdmaHandle},
     lamellar_request::LamellarRequest,
     scheduler::{LamellarTask, Scheduler},
@@ -368,6 +368,29 @@ impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
     }
 }
 
+pub(crate) struct ArrayRdmaNetworkAtomicLoadHandle<T: Dist> {
+    pub(crate) array: NetworkAtomicArray<T>,
+    pub(crate) index: usize,
+}
+
+impl<T: Dist> ArrayRdmaNetworkAtomicLoadHandle<T> {
+    fn spawn(&self, _buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+        // self.array.network_atomic_load(self.index, &buf);
+        let team = self.array.team_rt();
+        team.clone().spawn(async move {
+            team.lamellae.comm().wait();
+        })
+    }
+
+    fn block(&self, _buf: OneSidedMemoryRegion<T>) {
+        // self.array.network_iatomic_load(self.index, &buf);
+        // let team = self.array.team_rt().lamellae().wait;
+        // team.clone().spawn(async move {
+        //     team.lamellae.comm().wait();
+        // })
+    }
+}
+
 // pub(crate) struct ArrayRdmaAtomicStoreHandle<T: Dist> {
 //     pub(crate) array: NativeAtomicArray<T>,
 //     pub(crate) index: usize,
@@ -390,11 +413,11 @@ pub(crate) struct ArrayRdmaGetHandle<T: Dist> {
 
 impl<T: Dist> ArrayRdmaGetHandle<T> {
     fn spawn(&self, buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
-        unsafe { self.array.get_unchecked(self.index, &buf).spawn() }
+        unsafe { self.array.get(self.index, &buf).spawn() }
     }
 
     fn block(&self, buf: OneSidedMemoryRegion<T>) {
-        unsafe { self.array.get_unchecked(self.index, &buf).block() };
+        unsafe { self.array.get(self.index, &buf).block() };
         // team.clone().spawn(async move {
         //     team.lamellae.comm().wait();
         // })
@@ -426,6 +449,7 @@ pub struct ArrayAtHandle<T: Dist> {
 pub(crate) enum ArrayAtHandleState<T: Dist> {
     Am(Option<LocalAmHandle<()>>),
     Atomic(ArrayRdmaAtomicLoadHandle<T>),
+    NetworkAtomic(ArrayRdmaNetworkAtomicLoadHandle<T>),
     Get(ArrayRdmaGetHandle<T>),
     Launched(LamellarTask<()>),
 }
@@ -469,6 +493,9 @@ impl<T: Dist> ArrayAtHandle<T> {
             ArrayAtHandleState::Get(op) => {
                 self.state = ArrayAtHandleState::Launched(op.spawn(self.buf.clone()));
             }
+            ArrayAtHandleState::NetworkAtomic(op) => {
+                self.state = ArrayAtHandleState::Launched(op.spawn(self.buf.clone()));
+            }
             _ => panic!("ArrayAtHandle should already have been spawned"),
         }
         self.array.team().spawn(self)
@@ -501,6 +528,11 @@ impl<T: Dist> ArrayAtHandle<T> {
                 // self.array.team().block_on(self)
             }
             ArrayAtHandleState::Launched(_) => self.array.team().block_on(self),
+            ArrayAtHandleState::NetworkAtomic(op) => {
+                op.block(self.buf.clone());
+                unsafe { self.buf.as_slice()[0] }
+                // self.state = ArrayAtHandleState::Launched(op.exec(self.buf.clone()));
+            }
         }
         // self.array.team().block_on(self)
         // self.spawned = true;
@@ -581,6 +613,15 @@ impl<T: Dist> Future for ArrayAtHandle<T> {
             ArrayAtHandleState::Launched(task) => {
                 if let Poll::Ready(_res) = Future::poll(Pin::new(task), cx) {
                     return Poll::Ready(unsafe { self.buf.as_slice()[0] });
+                }
+            }
+            ArrayAtHandleState::NetworkAtomic(op) => {
+                let mut task = op.spawn(buf);
+                if let Poll::Ready(_res) = Future::poll(Pin::new(&mut task), cx) {
+                    return Poll::Ready(unsafe { self.buf.as_slice()[0] });
+                } else {
+                    self.state = ArrayAtHandleState::Launched(task);
+                    cx.waker().wake_by_ref();
                 }
             }
         }

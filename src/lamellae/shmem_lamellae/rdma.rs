@@ -166,6 +166,38 @@ impl CommRdma for ShmemComm {
         }
         panic!("shmem segment invalid for put");
     }
+    fn put2<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: T,
+        remote_addr: CommAllocAddr,
+    ) -> RdmaHandle<T> {
+        return ShmemFuture {
+            op: Op::Atomic,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into();
+    }
+    fn put_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: T,
+        remote_addr: CommAllocAddr,
+    ) { //-> RdmaHandle<T> {
+         // ShmemFuture {
+         //     op: Op::Atomic,
+         //     spawned: false,
+         //     scheduler: scheduler.clone(),
+         //     counters,
+         // }
+         // .into()
+    }
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

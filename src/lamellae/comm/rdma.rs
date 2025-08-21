@@ -120,6 +120,22 @@ pub(crate) trait CommRdma {
         src: CommSlice<T>,
         dst: CommAllocAddr,
     ) -> RdmaHandle<T>;
+    fn put2<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: T,
+        dst: CommAllocAddr,
+    ) -> RdmaHandle<T>;
+    fn put_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: T,
+        dst: CommAllocAddr,
+    ); //-> RdmaHandle<T>;
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -135,4 +151,14 @@ pub(crate) trait CommRdma {
         src: CommAllocAddr,
         dst: CommSlice<T>,
     ) -> RdmaHandle<T>;
+    fn get_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: CommAllocAddr,
+    ) -> T {
+        let data: std::mem::MaybeUninit<T> = std::mem::MaybeUninit::uninit();
+        unsafe { data.assume_init() }
+    }
 }

@@ -637,14 +637,14 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone())
+        OneSidedMemoryRegion::try_new(size, &self.team)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
-        let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
+        let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team);
         while let Err(_err) = lmr {
             std::thread::yield_now();
             // println!(
@@ -656,7 +656,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
                 .lamellae
                 .comm()
                 .alloc_pool(size * std::mem::size_of::<T>());
-            lmr = OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone());
+            lmr = OneSidedMemoryRegion::try_new(size, &self.team);
         }
         lmr.expect("out of memory")
     }
@@ -2361,7 +2361,7 @@ impl LamellarTeamRT {
         self: &Pin<Arc<LamellarTeamRT>>,
         size: usize,
     ) -> OneSidedMemoryRegion<T> {
-        let mut lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
+        let mut lmr = OneSidedMemoryRegion::try_new(size, self);
         while let Err(_err) = lmr {
             std::thread::yield_now();
             // println!(
@@ -2372,7 +2372,7 @@ impl LamellarTeamRT {
             self.lamellae
                 .comm()
                 .alloc_pool(size * std::mem::size_of::<T>());
-            lmr = OneSidedMemoryRegion::try_new(size, self, self.lamellae.clone());
+            lmr = OneSidedMemoryRegion::try_new(size, self);
         }
         lmr.expect("out of memory")
     }

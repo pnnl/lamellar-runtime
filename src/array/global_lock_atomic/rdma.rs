@@ -91,7 +91,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,

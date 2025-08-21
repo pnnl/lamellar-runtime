@@ -2,7 +2,7 @@ use libfabric::{
     av::{AddressVector, AddressVectorBuilder, AddressVectorSetBuilder, AvInAddress},
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
-        atomic::{AtomicCASEp, AtomicFetchEp, AtomicWriteEp},
+        atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp, MulticastGroupCollective},
         rma::{ReadEp, WriteEp},
     },
@@ -10,7 +10,7 @@ use libfabric::{
     cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq},
     domain::{Domain, DomainBuilder},
     enums::{
-        AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CqFormat,
+        AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp,
         EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ResourceMgmt,
         Threading, TrafficClass, TransferOptions,
     },
@@ -25,7 +25,7 @@ use libfabric::{
 
 use crate::lamellae::{
     comm::error::{AllocError, AllocResult, FabricError, FabricResult},
-    AllocationType, CommAllocAddr, CommSlice,
+    AllocationType, AtomicOp as LamellarAtomicOp, CommAllocAddr, CommSlice, NetworkAtomic, Remote,
 };
 
 use parking_lot::RwLock;
@@ -68,9 +68,10 @@ pub(crate) struct Ofi {
     _fabric: Fabric,
     info_entry: InfoEntry<RmaAtomicCollEp>,
     alloc_manager: AllocInfoManager,
-    my_pmi: Arc<PmiX>,
+    _my_pmi: Arc<PmiX>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
+    completion_lock: RwLock<()>,
 }
 
 impl std::fmt::Debug for Ofi {
@@ -89,7 +90,7 @@ impl Ofi {
             FabricError::InitError(1)
         })?);
 
-        // println!("Using PMI my_pe {} num_pes {}",my_pmi.rank(),my_pmi.ranks().len());
+        // trace!("Using PMI my_pe {} num_pes {}",my_pmi.rank(),my_pmi.ranks().len());
 
         let info = Info::new(&libfabric_version())
             .enter_hints()
@@ -117,7 +118,7 @@ impl Ofi {
             .get()
             .map_err(|e| FabricError::InitError(e.c_err))?;
 
-        // println!("Found the following providers");
+        // trace!("Found the following providers");
         // info.iter().for_each(|e| println!("{:?}", e));
         let info_entry = info
             .into_iter()
@@ -142,7 +143,7 @@ impl Ofi {
                 "Error! No provider with name {:?} / domain {:?} was found",
                 provider, domain
             ));
-        //println!("Using provider: {:?}", info_entry);
+        //trace!("Using provider: {:?}", info_entry);
 
         let fabric = FabricBuilder::new()
             .build(&info_entry)
@@ -231,7 +232,7 @@ impl Ofi {
         let mut ofi = Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
-            my_pmi,
+            _my_pmi: my_pmi,
             info_entry,
             _fabric: fabric,
             domain,
@@ -246,6 +247,7 @@ impl Ofi {
             barrier_impl: BarrierImpl::Uninit,
             put_cnt: AtomicU64::new(0),
             get_cnt: AtomicU64::new(0),
+            completion_lock: RwLock::new(()),
         };
 
         ofi.init_barrier()?;
@@ -253,11 +255,53 @@ impl Ofi {
         Ok(Arc::new(ofi))
     }
 
+    fn atomic_avail_inner<T: AsFiType>(&self) -> bool {
+        unsafe {
+            self.ep.atomicvalid::<T>(AtomicOp::Sum).is_ok()
+                && self
+                    .ep
+                    .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead)
+                    .is_ok()
+                && self
+                    .ep
+                    .compare_atomicvalid::<T>(CompareAtomicOp::Cswap)
+                    .is_ok()
+        }
+    }
+
+    pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
+        let id = std::any::TypeId::of::<T>();
+
+        if id == std::any::TypeId::of::<u8>() {
+            self.atomic_avail_inner::<u8>()
+        } else if id == std::any::TypeId::of::<u16>() {
+            self.atomic_avail_inner::<u16>()
+        } else if id == std::any::TypeId::of::<u32>() {
+            self.atomic_avail_inner::<u32>()
+        } else if id == std::any::TypeId::of::<u64>() {
+            self.atomic_avail_inner::<u64>()
+        } else if id == std::any::TypeId::of::<i8>() {
+            self.atomic_avail_inner::<i8>()
+        } else if id == std::any::TypeId::of::<i16>() {
+            self.atomic_avail_inner::<i16>()
+        } else if id == std::any::TypeId::of::<i32>() {
+            self.atomic_avail_inner::<i32>()
+        } else if id == std::any::TypeId::of::<i64>() {
+            self.atomic_avail_inner::<i64>()
+        } else if id == std::any::TypeId::of::<usize>() {
+            self.atomic_avail_inner::<usize>()
+        } else if id == std::any::TypeId::of::<isize>() {
+            self.atomic_avail_inner::<isize>()
+        } else {
+            false
+        }
+    }
+
     fn create_mc_group(
         &self,
         pes: &[usize],
     ) -> Result<MulticastGroupCollective, libfabric::error::Error> {
-        // println!("Creating MC group of len: {}", pes.len());
+        // trace!("Creating MC group of len: {}", pes.len());
         let mut av_set = AddressVectorSetBuilder::new_from_range(
             &self.av,
             &self.mapped_addresses[pes[0]],
@@ -277,7 +321,7 @@ impl Ofi {
         mc.join_collective_with_context(&self.ep, JoinOptions::new(), &mut ctx)
             .unwrap();
         self.wait_for_join_event(&ctx).unwrap();
-        // println!("Done Creating MC group");
+        // trace!("Done Creating MC group");
 
         Ok(mc)
     }
@@ -365,46 +409,46 @@ impl Ofi {
         Ok(())
     }
 
-    pub(crate) fn wait_all_put(&self) -> Result<(), libfabric::error::Error> {
-        let mut cnt = self.put_cnt.load(Ordering::SeqCst);
+    // pub(crate) fn wait_all_put(&self) -> Result<(), libfabric::error::Error> {
+    //     let mut cnt = self.put_cnt.load(Ordering::SeqCst);
 
-        loop {
-            let prev_cnt = cnt;
-            match self.put_cntr.wait(prev_cnt as u64, -1) {
-                Ok(_) => {}
-                Err(e) => {
-                    println!("put Error {e}");
-                    let err = self.put_cntr.readerr();
+    //     loop {
+    //         let prev_cnt = cnt;
+    //         match self.put_cntr.wait(prev_cnt as u64, -1) {
+    //             Ok(_) => {}
+    //             Err(e) => {
+    //                 println!("put Error {e}");
+    //                 let err = self.put_cntr.readerr();
 
-                    continue;
-                }
-            }
-            cnt = self.put_cnt.load(Ordering::SeqCst);
+    //                 continue;
+    //             }
+    //         }
+    //         cnt = self.put_cnt.load(Ordering::SeqCst);
 
-            if prev_cnt >= cnt {
-                break;
-            }
-        }
+    //         if prev_cnt >= cnt {
+    //             break;
+    //         }
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    pub(crate) fn wait_all_get(&self) -> Result<(), libfabric::error::Error> {
-        let mut cnt = self.get_cnt.load(Ordering::SeqCst);
-        // println!("Waiting for all gets, current count: {}", cnt);
-        loop {
-            let prev_cnt = cnt;
-            self.get_cntr.wait(prev_cnt as u64, -1)?;
-            cnt = self.get_cnt.load(Ordering::SeqCst);
+    // pub(crate) fn wait_all_get(&self) -> Result<(), libfabric::error::Error> {
+    //     let mut cnt = self.get_cnt.load(Ordering::SeqCst);
+    //     // println!("Waiting for all gets, current count: {}", cnt);
+    //     loop {
+    //         let prev_cnt = cnt;
+    //         self.get_cntr.wait(prev_cnt as u64, -1)?;
+    //         cnt = self.get_cnt.load(Ordering::SeqCst);
 
-            if prev_cnt >= cnt {
-                break;
-            }
-        }
-        // println!("Done waiting for all gets, final count: {}", cnt);
+    //         if prev_cnt >= cnt {
+    //             break;
+    //         }
+    //     }
+    //     // println!("Done waiting for all gets, final count: {}", cnt);
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     // fn wait_for_tx_cntr(&self, target: usize) -> Result<(), libfabric::error::Error> {
     //     self.put_cntr.wait(target as u64, -1)
@@ -423,11 +467,12 @@ impl Ofi {
         cntr: &Counter<WaitableCntr>,
         dir: &str,
     ) -> Result<(), libfabric::error::Error> {
+        let _guard = self.completion_lock.read();
         let mut expected_cnt = pending.load(Ordering::SeqCst);
         let mut prev_expected_cnt = expected_cnt;
         let mut cur_cnt = cntr.read();
         let mut old_cnt = cur_cnt;
-        let mut err_cnt = cntr.readerr();
+        // let  err_cnt = cntr.readerr();
         let mut first = true;
         trace!(
             "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
@@ -454,6 +499,7 @@ impl Ofi {
                     //     );
                     //     timer = std::time::Instant::now();
                     // }
+
                     if let Err(err) = self.progress() {
                         match err.kind {
                             libfabric::error::ErrorKind::TryAgain => {}
@@ -483,54 +529,54 @@ impl Ofi {
         // self.get_cntr.wait(target as u64, -1)
     }
 
-    fn pmi_exchange_mr_info(
-        &self,
-        mem: &[u8],
-        mr: &MemoryRegion,
-    ) -> HashMap<usize, RemoteMemAddressInfo> {
-        let mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
+    // fn pmi_exchange_mr_info(
+    //     &self,
+    //     mem: &[u8],
+    //     mr: &MemoryRegion,
+    // ) -> HashMap<usize, RemoteMemAddressInfo> {
+    //     let mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
 
-        let mut mem_info_bytes = mem_info.to_bytes();
-        self.my_pmi.put("mr_info", &mem_info_bytes).unwrap();
-        self.my_pmi.exchange().unwrap();
-        // self.my_pmi.barrier(true).unwrap();
-        let mut all_mem_info_bytes = vec![0u8; mem_info_bytes.len() * self.num_pes];
-        for i in 0..self.num_pes {
-            let mem_info_bytes = self
-                .my_pmi
-                .get("mr_info", &mem_info_bytes.len(), &i)
-                .unwrap();
-            all_mem_info_bytes[i * mem_info_bytes.len()..(i + 1) * mem_info_bytes.len()]
-                .copy_from_slice(&mem_info_bytes);
-        }
+    //     let mem_info_bytes = mem_info.to_bytes();
+    //     self.my_pmi.put("mr_info", &mem_info_bytes).unwrap();
+    //     self.my_pmi.exchange().unwrap();
+    //     // self.my_pmi.barrier(true).unwrap();
+    //     let mut all_mem_info_bytes = vec![0u8; mem_info_bytes.len() * self.num_pes];
+    //     for i in 0..self.num_pes {
+    //         let mem_info_bytes = self
+    //             .my_pmi
+    //             .get("mr_info", &mem_info_bytes.len(), &i)
+    //             .unwrap();
+    //         all_mem_info_bytes[i * mem_info_bytes.len()..(i + 1) * mem_info_bytes.len()]
+    //             .copy_from_slice(&mem_info_bytes);
+    //     }
 
-        all_mem_info_bytes
-            .chunks_exact(std::mem::size_of::<MemAddressInfo>())
-            .enumerate()
-            .map(|(pe, chunk)| {
-                let mut mem_info = unsafe { MemAddressInfo::from_bytes(chunk) };
-                let rem_mem_info = mem_info
-                    .into_remote_info(&self.domain)
-                    .expect("Failed to convert MemAddressInfo to RemoteMemAddressInfo");
-                trace!(
-                    "PE {}: RemoteMemAddressInfo: {:?} {:?} ",
-                    pe,
-                    rem_mem_info.mem_address(),
-                    rem_mem_info.mem_len()
-                );
+    //     all_mem_info_bytes
+    //         .chunks_exact(std::mem::size_of::<MemAddressInfo>())
+    //         .enumerate()
+    //         .map(|(pe, chunk)| {
+    //             let mem_info = unsafe { MemAddressInfo::from_bytes(chunk) };
+    //             let rem_mem_info = mem_info
+    //                 .into_remote_info(&self.domain)
+    //                 .expect("Failed to convert MemAddressInfo to RemoteMemAddressInfo");
+    //             trace!(
+    //                 "PE {}: RemoteMemAddressInfo: {:?} {:?} ",
+    //                 pe,
+    //                 rem_mem_info.mem_address(),
+    //                 rem_mem_info.mem_len()
+    //             );
 
-                (pe, rem_mem_info)
-            })
-            .collect::<HashMap<_, _>>()
-    }
+    //             (pe, rem_mem_info)
+    //         })
+    //         .collect::<HashMap<_, _>>()
+    // }
 
-    //fixme
     fn collective_exchange_mr_info(
         &self,
         pes: &[usize],
         mem: &[u8],
         mr: &MemoryRegion,
     ) -> Result<HashMap<usize, RemoteMemAddressInfo>, libfabric::error::Error> {
+        let _guard = self.completion_lock.write();
         let mc = self.create_mc_group(&pes)?;
 
         let mut mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
@@ -555,7 +601,7 @@ impl Ofi {
             .chunks_exact(std::mem::size_of::<MemAddressInfo>())
             .enumerate()
             .map(|(pe, chunk)| {
-                let mut mem_info = unsafe { MemAddressInfo::from_bytes(chunk) };
+                let mem_info = unsafe { MemAddressInfo::from_bytes(chunk) };
                 let rem_mem_info = mem_info
                     .into_remote_info(&self.domain)
                     .expect("Failed to convert MemAddressInfo to RemoteMemAddressInfo");
@@ -577,6 +623,7 @@ impl Ofi {
         &self,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
+        let _guard = self.completion_lock.read();
         loop {
             match fun() {
                 Ok(_) => break,
@@ -598,6 +645,7 @@ impl Ofi {
         &self,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
+        let _guard = self.completion_lock.read();
         loop {
             match fun() {
                 Ok(_) => break,
@@ -636,6 +684,7 @@ impl Ofi {
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
+            let _guard = self.completion_lock.write();
             self.barrier_impl = BarrierImpl::Collective(
                 self.create_mc_group(&all_pes)
                     .map_err(|e| FabricError::BarrierError(e.c_err))?,
@@ -668,7 +717,6 @@ impl Ofi {
         // Initialize mapped memory to zeros
         mem.iter_mut().map(|x| *x = 0).count();
 
-        let mem_addr = mem.as_ptr() as usize;
         let mr = MemoryRegionBuilder::new(&mem, HmemIface::System)
             .requested_key(self.alloc_manager.next_key() as u64)
             .access_read()
@@ -726,7 +774,6 @@ impl Ofi {
         // Initialize mapped memory to zeros
         mem.iter_mut().map(|x| *x = 0).count();
 
-        let mem_addr = mem.as_ptr() as usize;
         let mr = MemoryRegionBuilder::new(&mem, HmemIface::System)
             .requested_key(self.alloc_manager.next_key() as u64)
             .access_read()
@@ -740,12 +787,12 @@ impl Ofi {
             MaybeDisabledMemoryRegion::Disabled(mr) => {
                 match mr {
                     DisabledMemoryRegion::EpBind(mr) => {
-                        // println!("Binding memory region to endpoint");
+                        // trace!("Binding memory region to endpoint");
                         mr.enable(&self.ep)
                             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
                     }
                     DisabledMemoryRegion::RmaEvent(mr) => {
-                        // println!("Binding memory region to domain");
+                        // trace!("Binding memory region to domain");
                         mr.enable()
                             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
                         // This will bind the memory region to the domain
@@ -790,7 +837,7 @@ impl Ofi {
     }
 
     pub(crate) fn barrier(&self) -> Result<(), libfabric::error::Error> {
-        // println!("Running barrier");
+        // trace!("Running barrier");
         match &self.barrier_impl {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
@@ -808,8 +855,9 @@ impl Ofi {
                         }
                     }
                 }
+                let _guard = self.completion_lock.write();
                 self.wait_for_completion(&ctx)?;
-                // println!("Done with barrier");
+                // trace!("Done with barrier");
                 Ok(())
             }
             BarrierImpl::Manual(barrier_addr, barrier_id) => {
@@ -818,7 +866,7 @@ impl Ofi {
                 let num_pes = pes.len();
                 let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
                 let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
-
+                let _guard = self.completion_lock.read();
                 for round in 0..num_rounds as usize {
                     for i in 1..=n {
                         let send_pe = euclid_rem(
@@ -863,7 +911,7 @@ impl Ofi {
         self.inner_put(pe, src_addr.as_ref(), *(dst_addr as &usize), sync)
     }
 
-    unsafe fn inner_put<T: Copy>(
+    pub(crate) unsafe fn inner_put<T: Copy>(
         &self,
         pe: usize,
         src_addr: &[T],
@@ -911,15 +959,13 @@ impl Ofi {
             })?;
         } else {
             let mut curr_idx = 0;
-
-            let mut cntr_order = 0;
             while curr_idx < src_addr.len() {
                 let msg_len = std::cmp::min(
                     src_addr.len() - curr_idx,
                     self.info_entry.ep_attr().max_msg_size(),
                 );
 
-                let order = self.post_put(|| unsafe {
+                self.post_put(|| unsafe {
                     self.ep.write_to(
                         &src_addr[curr_idx..curr_idx + msg_len],
                         Some(&mr.descriptor()),
@@ -937,7 +983,7 @@ impl Ofi {
         if sync {
             self.wait_for_tx_cntr()?;
         }
-        // println!("Done putting");
+        // trace!("Done putting");
         Ok(())
     }
 
@@ -951,7 +997,7 @@ impl Ofi {
         self.inner_get(pe, *(src_addr as &usize), dst_addr, sync)
     }
 
-    unsafe fn inner_get<T: Copy>(
+    pub(crate) unsafe fn inner_get<T: Copy>(
         &self,
         pe: usize,
         src_addr: usize,
@@ -985,7 +1031,7 @@ impl Ofi {
                 dst_addr.len() - curr_idx,
                 self.info_entry.ep_attr().max_msg_size(),
             );
-            let order = self.post_get(|| unsafe {
+            self.post_get(|| unsafe {
                 self.ep.read_from(
                     &mut dst_addr[curr_idx..curr_idx + msg_len],
                     Some(&mr.descriptor()),
@@ -1004,6 +1050,214 @@ impl Ofi {
 
         Ok(())
     }
+
+    pub(crate) fn atomic_op<T: 'static>(
+        &self,
+        pe: usize,
+        op: &LamellarAtomicOp<T>,
+        dst_addr: &CommAllocAddr,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_atomic_op::<T, u8>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_atomic_op::<T, u16>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_atomic_op::<T, u32>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_atomic_op::<T, u64>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_atomic_op::<T, usize>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_atomic_op::<T, i8>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_atomic_op::<T, i16>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_atomic_op::<T, i32>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_atomic_op::<T, i64>(pe, op, *(dst_addr as &usize))
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_atomic_op::<T, isize>(pe, op, *(dst_addr as &usize))
+            } else {
+                panic!("Unsupported atomic operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_atomic_op<T, OFI: AsFiType>(
+        &self,
+        pe: usize,
+        op: &LamellarAtomicOp<T>,
+        dst_addr: usize,
+    ) -> Result<(), libfabric::error::Error> {
+        let (offset, mr, remote_alloc_info) = {
+            let table = self.alloc_manager.mr_info_table.read();
+            let alloc_info = table
+                .iter()
+                .find(|e| e.contains(&dst_addr))
+                .expect("Invalid address");
+
+            (
+                alloc_info.start(),
+                alloc_info.mr(),
+                alloc_info.remote_info(&pe).expect(&format!(
+                    "PE {} is not part of the sub allocation group",
+                    pe
+                )),
+            )
+        };
+        let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
+        trace!(
+            "Remote destination address for PE {}: {:?}",
+            pe,
+            remote_dst_addr
+        );
+
+        let remote_key = remote_alloc_info.key();
+        let src = op.src().expect("Atomic operation has no source");
+        let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+        self.post_put(|| {
+            self.ep.inject_atomic_to(
+                buf,
+                &self.mapped_addresses[pe],
+                remote_dst_addr,
+                &remote_key,
+                op.into(),
+            )
+        })?;
+        Ok(())
+    }
+
+    pub(crate) fn atomic_fetch_op<T: 'static>(
+        &self,
+        pe: usize,
+        op: &LamellarAtomicOp<T>,
+        dst_addr: &CommAllocAddr,
+        result: &mut [T],
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_atomic_fetch_op::<T, u8>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_atomic_fetch_op::<T, u16>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_atomic_fetch_op::<T, u32>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_atomic_fetch_op::<T, u64>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_atomic_fetch_op::<T, usize>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_atomic_fetch_op::<T, i8>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_atomic_fetch_op::<T, i16>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_atomic_fetch_op::<T, i32>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_atomic_fetch_op::<T, i64>(pe, op, *(dst_addr as &usize), result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_atomic_fetch_op::<T, isize>(pe, op, *(dst_addr as &usize), result)
+            } else {
+                panic!("Unsupported atomic operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_atomic_fetch_op<T, OFI: AsFiType>(
+        &self,
+        pe: usize,
+        op: &LamellarAtomicOp<T>,
+        dst_addr: usize,
+        result: &mut [T],
+    ) -> Result<(), libfabric::error::Error> {
+        let (offset, mr, remote_alloc_info) = {
+            let table = self.alloc_manager.mr_info_table.read();
+            let alloc_info = table
+                .iter()
+                .find(|e| e.contains(&dst_addr))
+                .expect("Invalid address");
+
+            (
+                alloc_info.start(),
+                alloc_info.mr(),
+                alloc_info.remote_info(&pe).expect(&format!(
+                    "PE {} is not part of the sub allocation group",
+                    pe
+                )),
+            )
+        };
+        let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
+        trace!(
+            "Remote destination address for PE {}: {:?}",
+            pe,
+            remote_dst_addr
+        );
+
+        let remote_key = remote_alloc_info.key();
+        let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+        match op.src() {
+            Some(src) => {
+                let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+                self.post_get(|| {
+                    self.ep.fetch_atomic_from(
+                        buf,
+                        None,
+                        res,
+                        None,
+                        &self.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                        op.into(),
+                    )
+                })?;
+            }
+            None => {
+                let buf_val = res[0];
+                self.post_get(|| {
+                    self.ep.fetch_atomic_from(
+                        std::slice::from_ref(&buf_val),
+                        None,
+                        res,
+                        None,
+                        &self.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                        op.into(),
+                    )
+                })?;
+            }
+        };
+
+        Ok(())
+    }
+
+    // impl<T: Copy + Default + libfabric::AsFiType> LibfabricArray<T> {
+    //     pub fn atomic_put(&self, index: usize, val: T) {
+    //         let (pe, offset) = self.pe_and_offset(index);
+    //         let remote_alloc_info = self
+    //             .alloc_info
+    //             .remote_info(&pe)
+    //             .expect(&format!("PE {} is not part of the allocation group", pe));
+    //         let remote_addr = unsafe {
+    //             remote_alloc_info
+    //                 .mem_address()
+    //                 .add(offset * std::mem::size_of::<T>())
+    //         };
+    //         let remote_key = remote_alloc_info.key();
+    //         let cntr_order = self
+    //             .ofi
+    //             .post_put(|| unsafe {
+    //                 self.ofi.ep.inject_atomic_to(
+    //                     &[val],
+    //                     &self.ofi.mapped_addresses[pe],
+    //                     remote_addr,
+    //                     &remote_key,
+    //                     AtomicOp::AtomicWrite,
+    //                 )
+    //             })
+    //             .expect("Failed to post atomic put operation");
+    //         // self.ofi.wait_for_tx_cntr(cntr_order)
+    //         //     .expect("Failed to wait for atomic put operation");
+    //     }
 
     pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.alloc_manager
@@ -1027,8 +1281,10 @@ impl Ofi {
 
 impl Drop for Ofi {
     fn drop(&mut self) {
-        self.wait_all_get().unwrap();
-        self.wait_all_put().unwrap();
+        let _ = self.wait_for_tx_cntr();
+        trace!("wait_all put done");
+        let _ = self.wait_for_rx_cntr();
+        trace!("wait_all done");
     }
 }
 
@@ -1075,10 +1331,10 @@ impl AllocInfoManager {
         table.remove(idx);
     }
 
-    pub(crate) fn get_alloc(&self, mem_addr: CommAllocAddr) -> Option<Arc<AllocInfo>> {
-        let table = self.mr_info_table.read();
-        table.iter().find(|e| e.contains(&mem_addr.0)).cloned()
-    }
+    // pub(crate) fn get_alloc(&self, mem_addr: CommAllocAddr) -> Option<Arc<AllocInfo>> {
+    //     let table = self.mr_info_table.read();
+    //     table.iter().find(|e| e.contains(&mem_addr.0)).cloned()
+    // }
 
     pub(crate) fn get_alloc_from_start_addr(
         &self,
@@ -1304,9 +1560,9 @@ impl AllocInfo {
         self.remote_allocs.get(remote_pe).cloned()
     }
 
-    pub(crate) fn mr_desc(&self) -> libfabric::mr::MemoryRegionDesc {
-        self.mr.descriptor()
-    }
+    // pub(crate) fn mr_desc(&self) -> libfabric::mr::MemoryRegionDesc {
+    //     self.mr.descriptor()
+    // }
     pub(crate) fn mr(&self) -> MemoryRegion {
         self.mr.clone()
     }
@@ -1575,3 +1831,81 @@ fn euclid_rem(a: i64, b: i64) -> usize {
 
 //     }
 // }
+
+// fn try_as_fi_type<T>(t: &CommSlice<T>) -> Option<CommSlice<impl libfabric::AsFiType>> {
+//     let id = std::any::TypeId::of::<T>();
+
+//         if id == std::any::TypeId::of::<u8>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u8>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<u16>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u16>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<u32>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u32>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<u64>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u64>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<usize>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<i8>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<i16>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<i32>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<i64>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
+//         }
+//         else if id == std::any::TypeId::of::<isize>() {
+//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
+//         }
+//         else{
+//             None
+//         }
+
+// }
+
+impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
+    fn from(op: &LamellarAtomicOp<T>) -> Self {
+        match op {
+            LamellarAtomicOp::Min(_) => AtomicOp::Min,
+            LamellarAtomicOp::Max(_) => AtomicOp::Max,
+            LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
+            LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
+            LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
+            LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
+            LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
+            LamellarAtomicOp::BitOr(_) => AtomicOp::Bor,
+            LamellarAtomicOp::BitXor(_) => AtomicOp::Bxor,
+            LamellarAtomicOp::BitAnd(_) => AtomicOp::Band,
+            LamellarAtomicOp::Write(_) => AtomicOp::AtomicWrite,
+            _ => panic!("unexpected atomic op"),
+        }
+    }
+}
+
+impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
+    fn from(op: &LamellarAtomicOp<T>) -> Self {
+        match op {
+            LamellarAtomicOp::Min(_) => FetchAtomicOp::Min,
+            LamellarAtomicOp::Max(_) => FetchAtomicOp::Max,
+            LamellarAtomicOp::Sum(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
+            LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
+            LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
+            LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,
+            LamellarAtomicOp::BitOr(_) => FetchAtomicOp::Bor,
+            LamellarAtomicOp::BitXor(_) => FetchAtomicOp::Bxor,
+            LamellarAtomicOp::BitAnd(_) => FetchAtomicOp::Band,
+            LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
+            LamellarAtomicOp::Read => FetchAtomicOp::AtomicRead,
+            _ => panic!("unexpected atomic op"),
+        }
+    }
+}

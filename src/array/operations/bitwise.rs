@@ -109,7 +109,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -148,7 +148,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
         self.inner_array().initiate_batch_op(
             val,
@@ -258,7 +258,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -297,7 +297,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
         self.inner_array().initiate_batch_op(
             val,
@@ -407,7 +407,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -446,7 +446,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
         self.inner_array().initiate_batch_op(
             val,
@@ -620,7 +620,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -659,7 +659,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
         self.inner_array().initiate_batch_op(
             val,
@@ -769,7 +769,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -808,7 +808,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
         self.inner_array().initiate_batch_op(
             val,
@@ -918,7 +918,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -957,7 +957,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
         self.inner_array().initiate_batch_op(
             val,
@@ -1091,6 +1091,7 @@ macro_rules! impl_local_bitwise_op {
                 }
                 LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
                 LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
             }
         }
     };
@@ -1119,7 +1120,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
                     .collect(),
             )
         } else {
-            idx_vals.map(|(i, val)| {
+            let _ = idx_vals.map(|(i, val)| {
                 self[i] &= val;
             });
             None
@@ -1142,7 +1143,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
                     .collect(),
             )
         } else {
-            idx_vals.map(|(i, val)| {
+            let _ = idx_vals.map(|(i, val)| {
                 self[i] |= val;
             });
             None
@@ -1165,7 +1166,7 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for &mut [T] {
                     .collect(),
             )
         } else {
-            idx_vals.map(|(i, val)| {
+            let _ = idx_vals.map(|(i, val)| {
                 self[i] ^= val;
             });
             None

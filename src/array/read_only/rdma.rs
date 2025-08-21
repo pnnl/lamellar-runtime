@@ -34,7 +34,7 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// array.barrier();
     /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
-    ///     unsafe {array.get_unchecked(0,&buf)} ;
+    ///     unsafe {array.get(0,&buf)} ;
     ///     println!();
     /// }
     /// // wait for the data to show up
@@ -61,12 +61,12 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,0,0,0,0,0,0,0,0,0,0,0] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_unchecked<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    pub unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle<T> {
-        self.array.get_unchecked(index, buf)
+        self.array.get(index, buf)
     }
 
     // /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer

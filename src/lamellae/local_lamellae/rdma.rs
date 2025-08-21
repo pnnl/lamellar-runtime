@@ -145,6 +145,43 @@ impl CommRdma for LocalComm {
         }
         .into()
     }
+    fn put2<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        _pe: usize,
+        src: T,
+        dst: CommAllocAddr,
+    ) -> RdmaHandle<T> {
+        self.put_amt
+            .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
+        LocalFuture {
+            op: Op::Atomic,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        _pe: usize,
+        src: T,
+        dst: CommAllocAddr,
+    ) {
+        //-> RdmaHandle<T> {
+        // self.put_amt
+        //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+        // LocalFuture {
+        //     op: Op::Atomic,
+        //     spawned: false,
+        //     scheduler: scheduler.clone(),
+        //     counters,
+        // }
+        // .into()
+    }
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

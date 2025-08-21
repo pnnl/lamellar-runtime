@@ -1,6 +1,4 @@
-use crate::active_messaging::{
-    AmHandleInner, DarcSerde, LamellarAny, MultiAmHandleInner, RemotePtr,
-};
+use crate::active_messaging::{AmHandleInner, LamellarAny, MultiAmHandleInner, RemotePtr};
 use crate::darc::Darc;
 use crate::lamellae::SubSerializedData;
 use crate::lamellar_task_group::{TaskGroupAmHandleInner, TaskGroupMultiAmHandleInner};
@@ -85,8 +83,7 @@ impl LamellarRequestResult {
                 for darc in darcs {
                     match darc {
                         RemotePtr::NetworkDarc(darc) => {
-                            let temp: Darc<()> = darc.into();
-                            // temp.des(Ok(0));
+                            let _temp: Darc<()> = darc.into();
                         }
                         RemotePtr::NetMemRegionHandle(mr) => {
                             let temp: Arc<MemRegionHandleInner> = mr.into();

@@ -22,9 +22,11 @@ use super::{comm::LibfabricComm, fabric::Ofi, Scheduler};
 
 pub(super) enum Op<T> {
     Put(usize, CommSlice<T>, CommAllocAddr),
+    Put2(usize, T, CommAllocAddr),
+    PutTest(usize, T, CommAllocAddr),
     PutAll(CommSlice<T>, CommAllocAddr, Vec<usize>),
     Get(usize, CommAllocAddr, CommSlice<T>),
-    Atomic,
+    // Atomic,
 }
 
 #[pin_project(PinnedDrop)]
@@ -48,7 +50,7 @@ impl<T: Remote> LibfabricFuture<T> {
             src.len() * std::mem::size_of::<T>()
         );
         if pe != self.my_pe {
-            unsafe { self.ofi.put(pe, src, dst, true) };
+            unsafe { self.ofi.put(pe, src, dst, false).unwrap() };
             // unsafe{rofi_c_put(src,  dst.into(), pe).expect("rofi_c_put failed")};
         } else {
             if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
@@ -58,6 +60,59 @@ impl<T: Remote> LibfabricFuture<T> {
                     std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
                 }
             }
+        }
+    }
+    fn inner_put2(&self, pe: usize, src: &T, dst: &CommAllocAddr) {
+        // trace!(
+        //     "putting src: {:?} dst: {:?} len: {} num bytes {}",
+        //     src.usize_addr(),
+        //     dst,
+        //     src.len(),
+        //     src.len() * std::mem::size_of::<T>()
+        // );
+        // if pe != self.my_pe {
+        unsafe {
+            self.ofi
+                .inner_put(pe, std::slice::from_ref(src), *(&dst as &usize), false)
+                .unwrap()
+        };
+        // unsafe{rofi_c_put(src,  dst.into(), pe).expect("rofi_c_put failed")};
+        // } else {
+        //     if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
+        //         unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
+        //     } else {
+        //         unsafe {
+        //             std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
+        //         }
+        //     }
+        // }
+    }
+    fn inner_put_test(&self, pe: usize, src: &T, dst: &CommAllocAddr) {
+        // trace!(
+        //     "putting src: {:?} dst: {:?} len: {} num bytes {}",
+        //     src.usize_addr(),
+        //     dst,
+        //     src.len(),
+        //     src.len() * std::mem::size_of::<T>()
+        // );
+        if pe != self.my_pe {
+            unsafe {
+                self.ofi
+                    .inner_put(pe, std::slice::from_ref(src), *(dst as &usize), false)
+                    .unwrap()
+            };
+            // unsafe{rofi_c_put(src,  dst.into(), pe).expect("rofi_c_put failed")};
+        } else {
+            // if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
+            unsafe {
+                dst.as_mut_ptr::<T>().write(*src);
+            }
+            // unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), 1) };
+            // } else {
+            //     unsafe {
+            //         std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), 1);
+            //     }
+            // }
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -81,7 +136,7 @@ impl<T: Remote> LibfabricFuture<T> {
             dst.len()
         );
         if pe != self.my_pe {
-            unsafe { self.ofi.get(pe, src, &mut dst, true) };
+            unsafe { self.ofi.get(pe, src, &mut dst, false).unwrap() };
             // unsafe{rofi_c_get(src.into(),  dst.as_mut_slice(), pe).expect("rofi_c_get failed")};
         } else {
             if !(dst.contains(src) || dst.contains(&(src + dst.len()))) {
@@ -100,19 +155,24 @@ impl<T: Remote> LibfabricFuture<T> {
             Op::Put(pe, src, dst) => {
                 self.inner_put(*pe, src, dst);
             }
+            Op::Put2(pe, src, dst) => {
+                self.inner_put2(*pe, src, dst);
+            }
+            Op::PutTest(pe, src, dst) => {
+                self.inner_put_test(*pe, src, dst);
+            }
             Op::PutAll(src, dst, pes) => {
                 self.inner_put_all(src, dst, pes);
             }
             Op::Get(pe, src, dst) => {
                 self.inner_get(*pe, src, dst.clone());
             }
-            Op::Atomic => {}
         }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
         // rofi_c_wait();
-        self.ofi.wait_all();
+        self.ofi.wait_all().unwrap();
         self.spawned = true;
         // Ok(())
     }
@@ -121,7 +181,9 @@ impl<T: Remote> LibfabricFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.spawn_task(async {}, counters)
+        let ofi = self.ofi.clone();
+        self.scheduler
+            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
     }
 }
 
@@ -147,10 +209,10 @@ impl<T: Remote> Future for LibfabricFuture<T> {
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            self.ofi.wait_all();
+            self.ofi.wait_all().unwrap();
             *self.project().spawned = true;
         } else {
-            self.ofi.wait_all();
+            self.ofi.wait_all().unwrap();
         }
         // rofi_c_wait();
 
@@ -178,6 +240,52 @@ impl CommRdma for LibfabricComm {
             counters,
         }
         .into()
+    }
+    fn put2<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: T, //contains alloc info
+        remote_addr: CommAllocAddr,
+    ) -> RdmaHandle<T> {
+        // self.put_amt
+        //     .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
+        LibfabricFuture {
+            my_pe: self.my_pe,
+            ofi: self.ofi.clone(),
+            op: Op::Put2(pe, src, remote_addr),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: T,
+        remote_addr: CommAllocAddr,
+    ) {
+        // if pe != self.my_pe {
+        unsafe {
+            self.ofi
+                .inner_put(
+                    pe,
+                    std::slice::from_ref(&src),
+                    *(&remote_addr as &usize),
+                    false,
+                )
+                .unwrap()
+        };
+
+        // } else {
+        //     unsafe {
+        //         remote_addr.as_mut_ptr::<T>().write(src);
+        //     }
+        // }
     }
     fn put_all<T: Remote>(
         &self,
@@ -220,5 +328,33 @@ impl CommRdma for LibfabricComm {
             counters,
         }
         .into()
+    }
+
+    fn get_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src_addr: CommAllocAddr,
+    ) -> T {
+        let mut dst: std::mem::MaybeUninit<T> = std::mem::MaybeUninit::uninit();
+
+        // if pe != self.my_pe {
+        unsafe {
+            self.ofi
+                .inner_get(
+                    pe,
+                    *(&src_addr as &usize),
+                    std::slice::from_mut(&mut *dst.as_mut_ptr()),
+                    true,
+                )
+                .unwrap()
+        };
+        unsafe { dst.assume_init() }
+        // } else {
+        //     unsafe {
+        //         src_addr.as_mut_ptr::<T>().read()
+        //     }
+        // }
     }
 }

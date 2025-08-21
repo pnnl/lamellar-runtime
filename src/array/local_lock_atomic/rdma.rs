@@ -82,7 +82,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,

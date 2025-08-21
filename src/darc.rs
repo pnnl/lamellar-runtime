@@ -102,6 +102,7 @@ pub(crate) enum DarcMode {
     // AtomicArray,
     GenericAtomicArray,
     NativeAtomicArray,
+    NetworkAtomicArray,
     LocalLockArray,
     GlobalLockArray,
     Dropping,

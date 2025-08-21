@@ -1,77 +1,111 @@
-use crate::array::native_atomic::*;
+use crate::array::network_atomic::*;
+use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
 use crate::array::operations::read_only::LocalReadOnlyOps;
-// use crate::array::native_atomic::rdma::atomic_store;
+use crate::array::private::LamellarArrayPrivate;
+// use crate::array::Network_atomic::rdma::atomic_store;
 // use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
 use crate::array::*;
+use crate::lamellae::AtomicOp;
+use crate::memregion::RegisteredMemoryRegion;
 // use std::collections::VecDeque;
 
-impl<T: ElementOps + 'static> ReadOnlyOps<T> for NativeAtomicArray<T> {
-    // fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
-    //     if self.array.team_rt().lamellae.atomic_avail::<T>() {
-    //         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-    //         self.network_iatomic_load(index, &buf);
-    //         let team = self.team_rt();
-    //         team.inc_outstanding(1);
-    //         let task = self.spawn(async move {
-    //             // team.lamellae.comm().wait();
-    //             team.dec_outstanding(1);
-    //             vec![unsafe { buf.as_slice().unwrap()[0] }]
-    //         });
-
-    //         ArrayFetchOpHandle {
-    //             array: self.clone().into(),
-    //             state: FetchOpState::Launched(task),
-    //         }
-    //     } else {
-    //         let dummy_val = self.array.dummy_val(); //we dont actually do anything with this except satisfy apis;
-    //         self.array
-    //             .initiate_batch_fetch_op_2(dummy_val, index, ArrayOpCmd::Load, self.clone().into())
-    //             .into()
-    //     }
-    // }
+impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
+    fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
+        // println!("in Network atomic store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                let handle = self.array.inner.data.mem_region.atomic_fetch_op(
+                    pe,
+                    offset,
+                    AtomicOp::Read,
+                    self.inner_array().dummy_val(),
+                );
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Network(handle),
+                }
+            }
+        } else {
+            self.inner_array()
+                .initiate_batch_fetch_op_2(
+                    self.inner_array().dummy_val(),
+                    index,
+                    ArrayOpCmd::Load,
+                    self.as_lamellar_byte_array(),
+                )
+                .into()
+        }
+    }
 }
 
-impl<T: ElementOps + 'static> AccessOps<T> for NativeAtomicArray<T> {
-    // fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-    //     // println!("in native atomic store");
-    //     if self.array.team_rt().lamellae.atomic_avail::<T>() {
-    //         // println!("performing network atomic");
-    //         self.network_atomic_store(index, val);
-    //         let mut req = VecDeque::new();
-    //         let team = self.team_rt();
-    //         team.inc_outstanding(1);
-    //         let task = self.spawn(async move {
-    //             team.lamellae.comm().wait();
-    //             team.dec_outstanding(1);
-    //         });
-    //         req.push_back((task, vec![index]));
-    //         ArrayOpHandle<T> {
-    //             array: self.clone().into(),
-    //             state: BatchOpState::Launched(req),
-    //         }
-    //     } else {
-    //         // println!("performing am atomic");
-    //         self.array
-    //             .initiate_batch_op(val, index, ArrayOpCmd::Store, self.clone().into())
-    //             .into()
-    //     }
-    // }
+//TODO can we add
+impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
+    fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        // println!("in Network atomic store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            // let mut buf: OneSidedMemoryRegion<T> =
+            //     self.array.team_rt().alloc_one_sided_mem_region(1);
+            unsafe {
+                // buf.as_mut_slice()[0] = val;
+                let handle =
+                    self.array
+                        .inner
+                        .data
+                        .mem_region
+                        .atomic_op(pe, offset, AtomicOp::Write(val));
+                ArrayBatchOpHandle {
+                    array: self.clone().into(),
+                    state: BatchOpState::Network(handle),
+                }
+            }
+        } else {
+            self.inner_array()
+                .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
+                .into()
+        }
+    }
+    fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        // println!("in Network atomic swap");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                let handle = self.array.inner.data.mem_region.atomic_fetch_op(
+                    pe,
+                    offset,
+                    AtomicOp::Write(val),
+                    self.inner_array().dummy_val(),
+                );
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Network(handle),
+                }
+            }
+        } else {
+            self.inner_array()
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::Swap,
+                    self.as_lamellar_byte_array(),
+                )
+                .into()
+        }
+    }
 }
 
-impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NativeAtomicArray<T> {}
+impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<T> {}
 
-impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NativeAtomicArray<T> {}
+impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {}
 
-impl<T: ElementShiftOps + 'static> ShiftOps<T> for NativeAtomicArray<T> {}
+impl<T: ElementShiftOps + 'static> ShiftOps<T> for NetworkAtomicArray<T> {}
 
-impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for NativeAtomicArray<T> {}
+impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for NetworkAtomicArray<T> {}
 
 impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T>
-    for NativeAtomicArray<T>
+    for NetworkAtomicArray<T>
 {
 }
 
-trait NativeAtomicOps<T, A> {
+trait NetworkAtomicOps<T, A> {
     unsafe fn local_load(&self, _val: *const T, res: *mut T);
     unsafe fn local_store(&self, val: *const T, _res: *mut T);
     unsafe fn local_swap(&self, val: *const T, res: *mut T);
@@ -95,9 +129,9 @@ trait NativeAtomicOps<T, A> {
     ) -> bool;
 }
 
-macro_rules! ImplNativeAtomicOps {
+macro_rules! ImplNetworkAtomicOps {
     ($t:ty,$at:ty) => {
-        impl<T: Dist  > NativeAtomicOps<T,$at> for $at {
+        impl<T: Dist  > NetworkAtomicOps<T,$at> for $at {
             unsafe fn local_load(&self, _val: *const T, res: *mut T){
                 *res = *(&self.load(Ordering::SeqCst) as *const $t as *const T);
             }
@@ -254,19 +288,19 @@ macro_rules! ImplNativeAtomicOps {
     };
 }
 
-ImplNativeAtomicOps!(u8, AtomicU8);
-ImplNativeAtomicOps!(u16, AtomicU16);
-ImplNativeAtomicOps!(u32, AtomicU32);
-ImplNativeAtomicOps!(u64, AtomicU64);
-ImplNativeAtomicOps!(usize, AtomicUsize);
-ImplNativeAtomicOps!(i8, AtomicI8);
-ImplNativeAtomicOps!(i16, AtomicI16);
-ImplNativeAtomicOps!(i32, AtomicI32);
-ImplNativeAtomicOps!(i64, AtomicI64);
-ImplNativeAtomicOps!(isize, AtomicIsize);
+ImplNetworkAtomicOps!(u8, AtomicU8);
+ImplNetworkAtomicOps!(u16, AtomicU16);
+ImplNetworkAtomicOps!(u32, AtomicU32);
+ImplNetworkAtomicOps!(u64, AtomicU64);
+ImplNetworkAtomicOps!(usize, AtomicUsize);
+ImplNetworkAtomicOps!(i8, AtomicI8);
+ImplNetworkAtomicOps!(i16, AtomicI16);
+ImplNetworkAtomicOps!(i32, AtomicI32);
+ImplNetworkAtomicOps!(i64, AtomicI64);
+ImplNetworkAtomicOps!(isize, AtomicIsize);
 
-impl<T: Dist> NativeAtomicLocalData<T> {
-    fn inner_op<A: NativeAtomicOps<T, A>>(
+impl<T: Dist> NetworkAtomicLocalData<T> {
+    fn inner_op<A: NetworkAtomicOps<T, A>>(
         &self,
         idx_vals: impl Iterator<Item = (usize, T)>,
         results: &mut Option<Vec<T>>,
@@ -274,7 +308,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     ) {
         let data = self
             .as_slice::<A>()
-            .expect("Slice to be equivalent of underlying native atomic type");
+            .expect("Slice to be equivalent of underlying Network atomic type");
         if let Some(results) = results.as_mut() {
             let mut new_res = idx_vals
                 .map(|(i, val)| {
@@ -291,7 +325,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
             });
         }
     }
-    fn inner_compare_exchange<A: NativeAtomicOps<T, A>>(
+    fn inner_compare_exchange<A: NetworkAtomicOps<T, A>>(
         &self,
         idx_vals: impl Iterator<Item = (usize, T)>,
         current: T,
@@ -299,7 +333,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     ) -> Vec<Result<T, T>> {
         let data = self
             .as_slice::<A>()
-            .expect("Slice to be equivalent of underlying native atomic type");
+            .expect("Slice to be equivalent of underlying Network atomic type");
         idx_vals
             .map(|(i, val)| {
                 let mut res = val;
@@ -317,7 +351,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
             })
             .collect()
     }
-    fn inner_compare_exchange_epsilon<A: NativeAtomicOps<T, A>>(
+    fn inner_compare_exchange_epsilon<A: NetworkAtomicOps<T, A>>(
         &self,
         idx_vals: impl Iterator<Item = (usize, T)>,
         current: T,
@@ -326,7 +360,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     ) -> Vec<Result<T, T>> {
         let data = self
             .as_slice::<A>()
-            .expect("Slice to be equivalent of underlying native atomic type");
+            .expect("Slice to be equivalent of underlying Network atomic type");
         idx_vals
             .map(|(i, val)| {
                 let mut res = val;
@@ -377,7 +411,7 @@ macro_rules! local_op {
                 $self.inner_op::<AtomicUsize>($idx_vals, &mut results, AtomicUsize::[<local_ $op>]);
             }
             else {
-                panic!("invalid native atomic type!");
+                panic!("invalid Network atomic type!");
             }
         }
 
@@ -385,7 +419,7 @@ macro_rules! local_op {
     }};
 }
 
-impl<T: Dist + ElementOps> LocalAccessOps<T> for NativeAtomicLocalData<T> {
+impl<T: Dist + ElementOps> LocalAccessOps<T> for NetworkAtomicLocalData<T> {
     fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         local_op!(self, idx_vals, false, store);
     }
@@ -395,7 +429,7 @@ impl<T: Dist + ElementOps> LocalAccessOps<T> for NativeAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for NativeAtomicLocalData<T> {
+impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for NetworkAtomicLocalData<T> {
     fn local_fetch_add(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -437,7 +471,7 @@ impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for NativeAtomicLocal
     }
 }
 
-impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for NativeAtomicLocalData<T> {
+impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for NetworkAtomicLocalData<T> {
     fn local_fetch_bit_and(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -463,13 +497,13 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for NativeAtomicLocalData<T
     }
 }
 
-impl<T: ElementOps> LocalReadOnlyOps<T> for NativeAtomicLocalData<T> {
+impl<T: ElementOps> LocalReadOnlyOps<T> for NetworkAtomicLocalData<T> {
     fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         local_op!(self, idx_vals, true, load).unwrap()
     }
 }
 
-impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for NativeAtomicLocalData<T> {
+impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for NetworkAtomicLocalData<T> {
     fn local_fetch_shl(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -487,7 +521,7 @@ impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for NativeAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist + ElementCompareEqOps> LocalCompareExchangeOps<T> for NativeAtomicLocalData<T> {
+impl<T: Dist + ElementCompareEqOps> LocalCompareExchangeOps<T> for NetworkAtomicLocalData<T> {
     fn local_compare_exchange(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -555,13 +589,13 @@ impl<T: Dist + ElementCompareEqOps> LocalCompareExchangeOps<T> for NativeAtomicL
                 AtomicUsize::local_compare_exchange,
             )
         } else {
-            panic!("invalid native atomic type!");
+            panic!("invalid Network atomic type!");
         }
     }
 }
 
 impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
-    for NativeAtomicLocalData<T>
+    for NetworkAtomicLocalData<T>
 {
     fn local_compare_exchange_epsilon(
         &mut self,
@@ -634,7 +668,7 @@ impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
                 AtomicUsize::local_compare_exchange_epsilon,
             )
         } else {
-            panic!("invalid native atomic type!");
+            panic!("invalid Network atomic type!");
         }
     }
 }

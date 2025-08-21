@@ -6,6 +6,7 @@ use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
+use std::mem::MaybeUninit;
 // use serde::ser::Serialize;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -309,6 +310,36 @@ impl<T: Dist> SharedMemoryRegion<T> {
     pub fn len(&self) -> usize {
         self.sub_region_size
     }
+    pub unsafe fn put2(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+        self.mr.put2(pe, self.sub_region_offset + index, data)
+    }
+    pub unsafe fn direct_put(&self, pe: usize, index: usize, data: T) {
+        self.mr.put_test(pe, self.sub_region_offset + index, data);
+    }
+    pub unsafe fn blocking_get(&self, pe: usize, index: usize) -> T {
+        self.mr.get_test(pe, self.sub_region_offset + index)
+    }
+    pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr
+            .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
+    }
+    pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
+        let res = MaybeUninit::uninit().assume_init();
+        self.mr
+            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read, res)
+    }
+    pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        let res = MaybeUninit::uninit().assume_init();
+        self.mr.atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(val),
+            res,
+        )
+    }
+    pub fn wait_all(&self) {
+        self.mr.wait_all();
+    }
 }
 
 // This could be useful for if we want to transfer the actual data instead of the pointer
@@ -447,14 +478,13 @@ impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     ) -> RdmaHandle<T> {
         self.mr.put_all(self.sub_region_offset + index, data)
     }
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
     ) -> RdmaHandle<T> {
-        self.mr
-            .get_unchecked(pe, self.sub_region_offset + index, data)
+        self.mr.get(pe, self.sub_region_offset + index, data)
     }
     // unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
     //     &self,

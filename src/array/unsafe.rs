@@ -850,6 +850,7 @@ impl<T: Dist> AsyncFrom<AtomicArray<T>> for UnsafeArray<T> {
         match array {
             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
             AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
+            AtomicArray::NetworkAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
         }
     }
 }
@@ -901,6 +902,17 @@ impl<T: Dist> AsyncFrom<GlobalLockArray<T>> for UnsafeArray<T> {
 #[async_trait]
 impl<T: Dist> AsyncFrom<ReadOnlyArray<T>> for UnsafeArray<T> {
     async fn async_from(array: ReadOnlyArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
+        array.array
+    }
+}
+
+#[async_trait]
+impl<T: Dist> AsyncFrom<NetworkAtomicArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: NetworkAtomicArray<T>) -> Self {
         array
             .array
             .await_on_outstanding(DarcMode::UnsafeArray)

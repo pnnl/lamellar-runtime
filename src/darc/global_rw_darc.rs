@@ -10,7 +10,7 @@ use crate::{
     darc::{Darc, DarcCommPtr, DarcInner, DarcMode, __NetworkDarc},
     lamellae::{CommAllocAddr, CommMem},
     lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
-    IdError, LamellarEnv, LamellarTeam,
+    LamellarEnv, LamellarTeam,
 };
 
 use super::handle::{

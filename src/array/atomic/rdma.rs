@@ -51,18 +51,20 @@ impl<T: Dist> LamellarArrayGet<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.get(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.get(index, buf),
+            AtomicArray::NetworkAtomicArray(array) => array.get(index, buf),
         }
     }
     fn at(&self, index: usize) -> ArrayAtHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.at(index),
             AtomicArray::GenericAtomicArray(array) => array.at(index),
+            AtomicArray::NetworkAtomicArray(array) => array.at(index),
         }
     }
 }
 
 impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,
@@ -70,6 +72,7 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => array.put(index, buf),
             AtomicArray::GenericAtomicArray(array) => array.put(index, buf),
+            AtomicArray::NetworkAtomicArray(array) => array.put(index, buf),
         }
     }
 }

@@ -107,9 +107,9 @@ impl ShmemComm {
         shmem
     }
 
-    pub(crate) fn heap_size() -> usize {
-        SHMEM_SIZE.load(Ordering::SeqCst)
-    }
+    // pub(crate) fn heap_size() -> usize {
+    //     SHMEM_SIZE.load(Ordering::SeqCst)
+    // }
 }
 
 impl CommShutdown for ShmemComm {

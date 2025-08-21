@@ -77,17 +77,24 @@ impl Comm {
 }
 
 impl CommAtomic for Comm {
-    fn atomic_avail<T>(&self) -> bool {
-        false
+    fn atomic_avail<T: 'static>(&self) -> bool {
+        match self {
+            #[cfg(feature = "rofi-c")]
+            Comm::RofiC(comm) => comm.atomic_avail::<T>(),
+            Comm::Shmem(comm) => comm.atomic_avail::<T>(),
+            Comm::Local(comm) => comm.atomic_avail::<T>(),
+            #[cfg(feature = "enable-libfabric")]
+            Comm::Libfabric(comm) => comm.atomic_avail::<T>(),
+        }
     }
-    fn atomic_op<T: NetworkAtomic>(
+    fn atomic_op<T>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         _op: AtomicOp<T>,
         _pe: usize,
-        _remote_addr: usize,
-    ) -> RdmaHandle<T> {
+        _remote_addr: CommAllocAddr,
+    ) -> AtomicOpHandle<T> {
         match self {
             #[cfg(feature = "rofi-c")]
             Comm::RofiC(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
@@ -97,29 +104,29 @@ impl CommAtomic for Comm {
             Comm::Libfabric(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
         }
     }
-    fn atomic_fetch_op<T: NetworkAtomic>(
+    fn atomic_fetch_op<T>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _remote_addr: usize,
-        _result: &mut [T],
-    ) -> RdmaHandle<T> {
+        op: AtomicOp<T>,
+        pe: usize,
+        remote_addr: CommAllocAddr,
+        result: T,
+    ) -> AtomicFetchOpHandle<T> {
         match self {
             #[cfg(feature = "rofi-c")]
             Comm::RofiC(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
+                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
             }
             Comm::Shmem(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
+                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
             }
             Comm::Local(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
+                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
             }
             #[cfg(feature = "enable-libfabric")]
             Comm::Libfabric(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, _op, _pe, _remote_addr, _result)
+                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
             }
         }
     }
@@ -270,9 +277,9 @@ impl CommAlloc {
         self.as_ptr::<T>().as_ref()
     }
 
-    pub(crate) unsafe fn as_mut<T>(&self) -> Option<&mut T> {
-        self.as_mut_ptr::<T>().as_mut()
-    }
+    // pub(crate) unsafe fn as_mut<T>(&self) -> Option<&mut T> {
+    //     self.as_mut_ptr::<T>().as_mut()
+    // }
     pub(crate) fn comm_addr(&self) -> CommAllocAddr {
         self.info.addr()
     }
@@ -347,9 +354,9 @@ impl CommAllocAddr {
         self.as_ptr::<T>().as_ref()
     }
 
-    pub(crate) unsafe fn as_mut<T>(&self) -> Option<&mut T> {
-        self.as_mut_ptr::<T>().as_mut()
-    }
+    // pub(crate) unsafe fn as_mut<T>(&self) -> Option<&mut T> {
+    //     self.as_mut_ptr::<T>().as_mut()
+    // }
 }
 
 impl std::ops::Add<usize> for CommAllocAddr {
@@ -403,9 +410,9 @@ impl<T> CommSlice<T> {
     pub(crate) fn as_slice(&self) -> &[T] {
         unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
-    pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
-        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
-    }
+    // pub(crate) fn as_mut_slice(&mut self) -> &mut [T] {
+    //     unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len()) }
+    // }
     pub(crate) unsafe fn as_casted_slice<R>(&self) -> Option<&[R]> {
         let len = self.len() * std::mem::size_of::<T>() / std::mem::size_of::<R>();
         if len * std::mem::size_of::<R>() != self.len() * std::mem::size_of::<T>() {
@@ -429,7 +436,14 @@ impl<T> CommSlice<T> {
         };
         debug_assert!(start <= end);
         debug_assert!(end <= self.len());
-        trace!("subslice start: {} end: {} new size: {} ({} {})", start, end, end - start,start * std::mem::size_of::<T>(),(end - start) * std::mem::size_of::<T>());
+        trace!(
+            "subslice start: {} end: {} new size: {} ({} {})",
+            start,
+            end,
+            end - start,
+            start * std::mem::size_of::<T>(),
+            (end - start) * std::mem::size_of::<T>()
+        );
         CommSlice {
             info: self.info.sub_alloc(
                 start * std::mem::size_of::<T>(),
@@ -471,9 +485,9 @@ impl<T> CommSlice<T> {
         self.info.contains(&addr)
     }
 
-    pub(crate) fn num_bytes(&self) -> usize {
-        self.info.size() * std::mem::size_of::<T>()
-    }
+    // pub(crate) fn num_bytes(&self) -> usize {
+    //     self.info.size() * std::mem::size_of::<T>()
+    // }
 }
 
 impl<T> std::ops::Deref for CommSlice<T> {

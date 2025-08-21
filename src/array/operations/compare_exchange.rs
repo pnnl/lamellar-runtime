@@ -713,6 +713,9 @@ impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for LamellarMutLocalData
             LamellarMutLocalData::GenericAtomic(ref mut data) => {
                 data.local_compare_exchange(idx_vals, current)
             }
+            LamellarMutLocalData::NetworkAtomic(ref mut data) => {
+                data.local_compare_exchange(idx_vals, current)
+            }
         }
     }
 }
@@ -771,6 +774,9 @@ impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
                 data.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
             LamellarMutLocalData::GenericAtomic(ref mut data) => {
+                data.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+            LamellarMutLocalData::NetworkAtomic(ref mut data) => {
                 data.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
         }

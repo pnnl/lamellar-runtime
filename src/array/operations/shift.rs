@@ -76,7 +76,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn shl(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn shl(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -115,7 +115,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shl)
         self.inner_array().initiate_batch_op(
             val,
@@ -225,7 +225,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -264,7 +264,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shr)
         self.inner_array().initiate_batch_op(
             val,
@@ -411,7 +411,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn shl(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn shl(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -450,7 +450,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shl)
         self.inner_array().initiate_batch_op(
             val,
@@ -560,7 +560,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
-    unsafe fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -599,7 +599,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shr)
         self.inner_array().initiate_batch_op(
             val,
@@ -725,6 +725,7 @@ macro_rules! impl_local_shift_op {
                 }
                 LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
                 LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
             }
         }
     };

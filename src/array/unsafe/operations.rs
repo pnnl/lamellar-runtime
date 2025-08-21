@@ -354,7 +354,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
-    ) -> ArrayBatchOpHandle {
+    ) -> ArrayBatchOpHandle<T> {
         let (indices, i_len) = index.as_op_input();
         let (vals, v_len) = val.as_op_input();
 
@@ -1131,7 +1131,34 @@ impl MultiValMultiIndex {
     }
 }
 
-impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {}
+impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
+    // fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
+    //     // println!("in Network atomic store");
+    //     if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+    //         unsafe {
+    //             let handle = self.inner.data.mem_region.atomic_fetch_op(
+    //                 pe,
+    //                 offset,
+    //                 AtomicOp::Read,
+    //                 self.dummy_val(),
+    //             );
+    //             ArrayFetchOpHandle {
+    //                 array: self.clone().into(),
+    //                 state: FetchOpState::Network(handle),
+    //             }
+    //         }
+    //     } else {
+    //         self.inner_array()
+    //             .initiate_batch_fetch_op_2(
+    //                 self.dummy_val(),
+    //                 index,
+    //                 ArrayOpCmd::Load,
+    //                 self.as_lamellar_byte_array(),
+    //             )
+    //             .into()
+    //     }
+    // }
+}
 
 impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {}
 

@@ -79,7 +79,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,

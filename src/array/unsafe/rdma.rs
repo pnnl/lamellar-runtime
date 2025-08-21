@@ -76,7 +76,7 @@ impl<T: Dist> UnsafeArray<T> {
                         ));
                     },
                     ArrayRdmaCmd::Get(_immediate) => unsafe {
-                        transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
+                        transfer_requests.add_rdma(self.inner.data.mem_region.get(
                             pe,
                             offset,
                             buf.sub_region(buf_index..(buf_index + len)),
@@ -88,7 +88,7 @@ impl<T: Dist> UnsafeArray<T> {
                         //         buf.sub_region(buf_index..(buf_index + len)),
                         //     )
                         // } else {
-                        //     self.inner.data.mem_region.get_unchecked(
+                        //     self.inner.data.mem_region.get(
                         //         pe,
                         //         offset,
                         //         buf.sub_region(buf_index..(buf_index + len)),
@@ -262,11 +262,10 @@ impl<T: Dist> UnsafeArray<T> {
                         let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems);
                         // println!("i {:?} pe {:?} num_elems {:?} offset {:?} rem {:?}",i,pe,num_elems,offset,rem);
                         transfer_requests.add_rdma_cyclic_get(
-                            self.inner.data.mem_region.get_unchecked(
-                                pe,
-                                offset,
-                                temp_memreg.clone(),
-                            ),
+                            self.inner
+                                .data
+                                .mem_region
+                                .get(pe, offset, temp_memreg.clone()),
                             temp_memreg,
                             buf.clone(),
                             (i..buf.len()).step_by(num_pes).enumerate(),
@@ -284,7 +283,7 @@ impl<T: Dist> UnsafeArray<T> {
 
                     // } else {
                     //     for i in 0..buf.len() {
-                    //         transfer_requests.add_rdma(self.inner.data.mem_region.get_unchecked(
+                    //         transfer_requests.add_rdma(self.inner.data.mem_region.get(
                     //             (index + i) % num_pes,
                     //             (index + i) / num_pes,
                     //             buf.sub_region(i..=i),
@@ -352,96 +351,96 @@ impl<T: Dist> UnsafeArray<T> {
             .num_elements_on_pe_for_range(pe, start_index, len)
     }
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Performs a raw RDMA "Put" of the data in the specified buffer into this array starting from the provided index
-    ///
-    /// The length of the Put is dictated by the length of the buffer.
-    ///
-    /// The runtime provides no internal mechanism to check for completion when using this call.
-    /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
-    ///
-    /// # Warning
-    /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
-    /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the data buffer is safe to reuse, but the data may or may not have been delivered to the remote memory
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// let buf_len = buf.len();
-    /// unsafe {
-    ///     let _ = array.dist_iter_mut().for_each(move |elem| *elem = buf_len).spawn(); //we will used this val as completion detection
-    ///     for (i,elem) in buf.as_mut_slice()
-    ///                          .expect("we just created it so we know its local")
-    ///                          .iter_mut()
-    ///                          .enumerate(){ //initialize mem_region
-    ///         *elem = i;
-    ///     }
-    /// }
-    /// array.wait_all();
-    /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
-    /// if my_pe == 0 { //only perfrom the transfer from one PE
-    ///     unsafe {array.put_unchecked(0,&buf);}
-    ///     println!();
-    /// }
-    /// // wait for the data to show up
-    /// for elem in unsafe{array.local_data()}{
-    ///     while *elem == buf.len(){
-    ///         std::thread::yield_now();    
-    ///     }
-    /// }
-    ///    
-    /// println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
-    ///```
-    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```text
-    /// PE0: array data [12,12,12]
-    /// PE1: array data [12,12,12]
-    /// PE2: array data [12,12,12]
-    /// PE3: array data [12,12,12]
-    ///
-    /// PE0: array data [0,1,2]
-    /// PE1: array data [3,4,5]
-    /// PE2: array data [6,7,8]
-    /// PE3: array data [9,10,11]
-    ///```
-    pub unsafe fn put_unchecked<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> ArrayRdmaHandle<T> {
-        match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => {
-                let inner_handle = match self.inner.distribution {
-                    Distribution::Block => self.block_op(ArrayRdmaCmd::Put, index, buf),
-                    Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Put, index, buf),
-                };
-                ArrayRdmaHandle {
-                    array: self.as_lamellar_byte_array(),
-                    reqs: inner_handle,
-                    spawned: false,
-                }
-            }
-            Err(_) => ArrayRdmaHandle {
-                array: self.as_lamellar_byte_array(),
-                reqs: InnerRdmaHandle::Am(VecDeque::new()),
-                spawned: false,
-            },
-        }
-    }
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Performs a raw RDMA "Put" of the data in the specified buffer into this array starting from the provided index
+    // ///
+    // /// The length of the Put is dictated by the length of the buffer.
+    // ///
+    // /// The runtime provides no internal mechanism to check for completion when using this call.
+    // /// i.e. this means the users themselves will be responsible for determining when the transfer is complete
+    // ///
+    // /// # Warning
+    // /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
+    // /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
+    // ///
+    // /// # Safety
+    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    // /// Additionally, when this call returns the data buffer is safe to reuse, but the data may or may not have been delivered to the remote memory
+    // ///
+    // /// # One-sided Operation
+    // /// the calling PE initaites the remote transfer
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// use lamellar::memregion::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let my_pe = world.my_pe();
+    // /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
+    // /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    // /// let buf_len = buf.len();
+    // /// unsafe {
+    // ///     let _ = array.dist_iter_mut().for_each(move |elem| *elem = buf_len).spawn(); //we will used this val as completion detection
+    // ///     for (i,elem) in buf.as_mut_slice()
+    // ///                          .expect("we just created it so we know its local")
+    // ///                          .iter_mut()
+    // ///                          .enumerate(){ //initialize mem_region
+    // ///         *elem = i;
+    // ///     }
+    // /// }
+    // /// array.wait_all();
+    // /// array.barrier();
+    // /// println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
+    // /// if my_pe == 0 { //only perfrom the transfer from one PE
+    // ///     unsafe {array.put_unchecked(0,&buf);}
+    // ///     println!();
+    // /// }
+    // /// // wait for the data to show up
+    // /// for elem in unsafe{array.local_data()}{
+    // ///     while *elem == buf.len(){
+    // ///         std::thread::yield_now();
+    // ///     }
+    // /// }
+    // ///
+    // /// println!("PE{my_pe} array data: {:?}",unsafe{array.local_data()});
+    // ///```
+    // /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+    // ///```text
+    // /// PE0: array data [12,12,12]
+    // /// PE1: array data [12,12,12]
+    // /// PE2: array data [12,12,12]
+    // /// PE3: array data [12,12,12]
+    // ///
+    // /// PE0: array data [0,1,2]
+    // /// PE1: array data [3,4,5]
+    // /// PE2: array data [6,7,8]
+    // /// PE3: array data [9,10,11]
+    // ///```
+    // pub unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    //     &self,
+    //     index: usize,
+    //     buf: U,
+    // ) -> ArrayRdmaHandle<T> {
+    //     match buf.team_try_into(&self.inner.data.team.team()) {
+    //         Ok(buf) => {
+    //             let inner_handle = match self.inner.distribution {
+    //                 Distribution::Block => self.block_op(ArrayRdmaCmd::Put, index, buf),
+    //                 Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Put, index, buf),
+    //             };
+    //             ArrayRdmaHandle {
+    //                 array: self.as_lamellar_byte_array(),
+    //                 reqs: inner_handle,
+    //                 spawned: false,
+    //             }
+    //         }
+    //         Err(_) => ArrayRdmaHandle {
+    //             array: self.as_lamellar_byte_array(),
+    //             reqs: InnerRdmaHandle::Am(VecDeque::new()),
+    //             spawned: false,
+    //         },
+    //     }
+    // }
 
     #[doc(alias("One-sided", "onesided"))]
     /// Performs a raw RDMA "Get" of the data in this array starting at the provided index into the specified buffer
@@ -478,7 +477,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// array.barrier();
     /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
     /// if my_pe == 0 { //only perfrom the transfer from one PE
-    ///     unsafe {array.get_unchecked(0,&buf)};
+    ///     unsafe {array.get(0,&buf)};
     ///     println!();
     /// }
     /// // wait for the data to show up
@@ -502,7 +501,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_unchecked<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
+    pub unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
         &self,
         index: usize,
         buf: U,
@@ -524,6 +523,15 @@ impl<T: Dist> UnsafeArray<T> {
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
+        }
+    }
+
+    pub unsafe fn put_test(&self, index: usize, val: T) {
+        //-> crate::lamellae::RdmaHandle<T> {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.inner.data.mem_region.put_test(pe, offset, val);
+        } else {
+            panic!();
         }
     }
 
@@ -593,73 +601,73 @@ impl<T: Dist> UnsafeArray<T> {
     //     }
     // }
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
-    ///
-    /// The length of the Get is dictated by the length of the buffer.
-    ///
-    /// This call returns a future that can be awaited to determine when the `put` has finished
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// unsafe {
-    ///     let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
-    ///     for elem in buf.as_mut_slice()
-    ///                          .expect("we just created it so we know its local") { //initialize mem_region
-    ///         *elem = buf.len();
-    ///     }
-    ///     array.wait_all();
-    ///     array.barrier();
-    ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
-    ///     if my_pe == 0 { //only perfrom the transfer from one PE
-    ///          println!();
-    ///         let req = array.get(0,&buf);
-    ///         world.block_on(req);
-    ///     }
-    ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
-    /// }
-    ///```
-    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```text
-    /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    ///
-    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
-    ///```
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle<T>
-    where
-        U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
-    {
-        trace!("array get {:?}", index);
-        match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => self.internal_get(index, buf),
-            Err(_) => ArrayRdmaHandle {
-                array: self.as_lamellar_byte_array(),
-                reqs: InnerRdmaHandle::Am(VecDeque::new()),
-                spawned: false,
-            },
-        }
-    }
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
+    // ///
+    // /// The length of the Get is dictated by the length of the buffer.
+    // ///
+    // /// This call returns a future that can be awaited to determine when the `put` has finished
+    // ///
+    // /// # Safety
+    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    // /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
+    // ///
+    // /// # One-sided Operation
+    // /// the calling PE initaites the remote transfer
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// use lamellar::memregion::prelude::*;
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let my_pe = world.my_pe();
+    // /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
+    // /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+    // /// unsafe {
+    // ///     let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
+    // ///     for elem in buf.as_mut_slice()
+    // ///                          .expect("we just created it so we know its local") { //initialize mem_region
+    // ///         *elem = buf.len();
+    // ///     }
+    // ///     array.wait_all();
+    // ///     array.barrier();
+    // ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
+    // ///     if my_pe == 0 { //only perfrom the transfer from one PE
+    // ///          println!();
+    // ///         let req = array.get(0,&buf);
+    // ///         world.block_on(req);
+    // ///     }
+    // ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
+    // /// }
+    // ///```
+    // /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+    // ///```text
+    // /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // ///
+    // /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+    // /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
+    // ///```
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub unsafe fn get<U>(&self, index: usize, buf: U) -> ArrayRdmaHandle<T>
+    // where
+    //     U: TeamTryInto<LamellarArrayRdmaOutput<T>>,
+    // {
+    //     trace!("array get {:?}", index);
+    //     match buf.team_try_into(&self.inner.data.team.team()) {
+    //         Ok(buf) => self.internal_get(index, buf),
+    //         Err(_) => ArrayRdmaHandle {
+    //             array: self.as_lamellar_byte_array(),
+    //             reqs: InnerRdmaHandle::Am(VecDeque::new()),
+    //             spawned: false,
+    //         },
+    //     }
+    // }
 
     pub(crate) unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
         let team = self.team_rt();
@@ -722,6 +730,15 @@ impl<T: Dist> UnsafeArray<T> {
     ///```
     pub unsafe fn at(&self, index: usize) -> ArrayAtHandle<T> {
         self.internal_at(index)
+    }
+
+    pub unsafe fn get_test(&self, index: usize) -> T {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.inner.data.mem_region.get_test(pe, offset)
+            
+        } else {
+            panic!("index out of bounds");
+        }
     }
 }
 
@@ -793,13 +810,23 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
 }
 
 impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle<T> {
         match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => self.internal_put(index, buf),
+            Ok(buf) => {
+                let inner_handle = match self.inner.distribution {
+                    Distribution::Block => self.block_op(ArrayRdmaCmd::Put, index, buf),
+                    Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Put, index, buf),
+                };
+                ArrayRdmaHandle {
+                    array: self.as_lamellar_byte_array(),
+                    reqs: inner_handle,
+                    spawned: false,
+                }
+            }
             Err(_) => ArrayRdmaHandle {
                 array: self.as_lamellar_byte_array(),
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
@@ -1053,7 +1080,7 @@ impl LamellarAm for UnsafeBlockGetAm {
                 .inner
                 .data
                 .mem_region
-                .get_unchecked(
+                .get(
                     self.pe,
                     self.offset * self.array.inner.elem_size,
                     self.data.clone(),
@@ -1083,7 +1110,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
                 .inner
                 .data
                 .mem_region
-                .get_unchecked(
+                .get(
                     self.pe,
                     self.offset * self.array.inner.elem_size,
                     self.temp_data.clone(),
@@ -1205,7 +1232,8 @@ impl LamellarAm for UnsafeRemoteSmallGetAm {
     async fn exec(self) -> Vec<u8> {
         trace!(
             "in remotegetam index {:?} len {:?}",
-            self.start_index, self.len
+            self.start_index,
+            self.len
         );
         // let _lock = self.array.lock.read();
         let vals = unsafe {

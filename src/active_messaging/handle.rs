@@ -23,7 +23,7 @@ use crate::{
     Darc, LamellarArchRT,
 };
 
-use super::{AMCounters, Am, AmDist, DarcSerde, RemotePtr};
+use super::{AMCounters, Am, AmDist, RemotePtr};
 
 pub(crate) struct AmHandleInner {
     pub(crate) ready: AtomicBool,

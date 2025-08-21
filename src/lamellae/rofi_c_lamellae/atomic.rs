@@ -15,10 +15,10 @@ use super::{
 };
 
 impl CommAtomic for RofiCComm {
-    fn atomic_avail<T>(&self) -> bool {
+    fn atomic_avail<T: 'static>(&self) -> bool {
         false
     }
-    fn atomic_op<T: NetworkAtomic>(
+    fn atomic_op<T>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -35,7 +35,7 @@ impl CommAtomic for RofiCComm {
         }
         .into()
     }
-    fn atomic_fetch_op<T: NetworkAtomic>(
+    fn atomic_fetch_op<T>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,

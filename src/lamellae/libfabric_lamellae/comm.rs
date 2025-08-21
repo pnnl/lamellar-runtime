@@ -42,7 +42,7 @@ impl LibfabricComm {
         let ofi = Ofi::new(provider, domain).expect("error in ofi init");
         trace!("ofi initialized: {:?}", ofi);
 
-        ofi.barrier();
+        ofi.barrier().unwrap();
         let num_pes = ofi.num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
         let total_mem = cmd_q_mem + RT_MEM + HEAP_SIZE.load(Ordering::SeqCst);
@@ -81,9 +81,9 @@ impl LibfabricComm {
         lib_fabric_comm
     }
 
-    pub(crate) fn heap_size() -> usize {
-        HEAP_SIZE.load(Ordering::SeqCst)
-    }
+    // pub(crate) fn heap_size() -> usize {
+    //     HEAP_SIZE.load(Ordering::SeqCst)
+    // }
 }
 
 impl CommShutdown for LibfabricComm {
@@ -139,7 +139,7 @@ impl Drop for LibfabricComm {
         // for (addr, _alloc) in self.fabric_allocs.write().drain(..) {
         //     self.ofi.free(addr).expect("error in ofi free");
         // }
-        self.ofi.clear_allocs();
-        self.ofi.barrier();
+        let _ = self.ofi.clear_allocs();
+        let _ = self.ofi.barrier();
     }
 }

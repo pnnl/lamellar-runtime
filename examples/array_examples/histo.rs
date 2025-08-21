@@ -22,21 +22,24 @@ fn main() {
     array.barrier();
     // println!("PE{} sum: {}", world.my_pe(), sum);
     let start = Instant::now();
-    let histo = array.batch_add(
-        &mut range.sample_iter(&mut rng).take(NUM_UPDATES_PER_PE)
-            as &mut dyn Iterator<Item = usize>,
-        1,
-    );
-    histo.block();
-    // if world.my_pe() == 0 {
-    //     let histo = array.batch_add(
-    //         &[ARRAY_SIZE-2, ARRAY_SIZE-1] as &[usize],
-    //         1,
-    //     );
-    //     histo.block();
-    //     println!("local done: {:?}", start.elapsed().as_secs_f64());
-    // }
-
+    // let histo = array.batch_add(
+    //     &mut range.sample_iter(&mut rng).take(NUM_UPDATES_PER_PE)
+    //         as &mut dyn Iterator<Item = usize>,
+    //     1,
+    // );
+    // histo.block();
+    // // if world.my_pe() == 0 {
+    // //     let histo = array.batch_add(
+    // //         &[ARRAY_SIZE-2, ARRAY_SIZE-1] as &[usize],
+    // //         1,
+    // //     );
+    // //     histo.block();
+    // //     println!("local done: {:?}", start.elapsed().as_secs_f64());
+    // // }
+    for i in range.sample_iter(&mut rng).take(NUM_UPDATES_PER_PE) {
+        let _ = array.store(i, i).spawn();
+    }
+    world.wait_all();
     world.barrier();
     println!(
         "PE{} time: {:?} done",

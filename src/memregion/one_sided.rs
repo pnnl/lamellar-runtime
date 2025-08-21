@@ -1,8 +1,7 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
-use crate::lamellae::{AllocationType, CommMem, CommSlice, Lamellae};
+use crate::lamellae::{AllocationType, CommMem, CommSlice};
 use crate::lamellar_team::LamellarTeamRemotePtr;
-use crate::IdError;
 use crate::LamellarTeamRT;
 use crate::LAMELLAES;
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
@@ -399,7 +398,6 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     pub(crate) fn try_new(
         size: usize,
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,
-        lamellae: Arc<Lamellae>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
         let mr_t: MemoryRegion<T> = MemoryRegion::try_new(
             size,
@@ -595,16 +593,8 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///     async fn exec(self){
     ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
     ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
-    ///         unsafe {
-    ///             for elem in temp_buffer.iter(){
-    ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
-    ///                 }
-    ///                 let num_pes = lamellar::num_pes;
-    ///                 assert_eq!(num_pes,*elem);
-    ///             }
-    ///         }
+    ///         unsafe{ self.mem_region.get(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone()).await};
+    ///         
     ///     }
     /// }
     ///
@@ -617,12 +607,12 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///
     /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+    pub unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
         data: U,
     ) -> RdmaHandle<T> {
-        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data)
+        MemoryRegionRDMA::<T>::get(self, self.pe, index, data)
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -655,7 +645,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     // ///     async fn exec(self){
     // ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
     // ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    // ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
+    // ///         unsafe{ self.mem_region.get(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
     // ///         unsafe {
     // ///             for elem in temp_buffer.iter(){
     // ///                 while *elem == lamellar::current_pe{
@@ -1088,7 +1078,7 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             .mr
             .put_all(self.sub_region_offset + index, data)
     }
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
@@ -1098,7 +1088,7 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .get_unchecked(pe, self.sub_region_offset + index, data)
+                .get(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",

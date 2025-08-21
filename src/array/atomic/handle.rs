@@ -5,9 +5,11 @@ use std::task::{Context, Poll};
 use super::{
     generic_atomic::GenericAtomicArrayHandle,
     native_atomic::{NativeAtomicArray, NativeAtomicArrayHandle, NativeAtomicType},
+    network_atomic::{NetworkAtomicArray, NetworkAtomicArrayHandle, NetworkAtomicType},
 };
 use super::{ArrayOps, AtomicArray};
 
+use crate::lamellae::NetworkAtomic;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Dist, LamellarTeamRT};
@@ -42,12 +44,14 @@ pub struct AtomicArrayHandle<T: Dist + ArrayOps + 'static> {
 pub(crate) enum InnerAtomicArrayHandle<T: Dist + ArrayOps + 'static> {
     Generic(GenericAtomicArrayHandle<T>),
     Native(NativeAtomicArrayHandle<T>),
+    Network(NetworkAtomicArrayHandle<T>),
 }
 impl<T: Dist + ArrayOps + 'static> InnerAtomicArrayHandle<T> {
     fn set_launched(&mut self, val: bool) {
         match self {
             InnerAtomicArrayHandle::Generic(handle) => handle.launched = val,
             InnerAtomicArrayHandle::Native(handle) => handle.launched = val,
+            InnerAtomicArrayHandle::Network(handle) => handle.launched = val,
         }
     }
 }
@@ -119,6 +123,13 @@ impl<T: Dist + ArrayOps + 'static> Future for AtomicArrayHandle<T> {
                     orig_t: NativeAtomicType::of::<T>(),
                 }))
             }
+            InnerAtomicArrayHandle::Network(ref mut handle) => {
+                let array = ready!(handle.creation_future.as_mut().poll(cx));
+                Poll::Ready(AtomicArray::NetworkAtomicArray(NetworkAtomicArray {
+                    array,
+                    orig_t: NetworkAtomicType::of::<T>(),
+                }))
+            }
         }
     }
 }
@@ -141,6 +152,18 @@ impl<T: Dist + ArrayOps + 'static> Into<AtomicArrayHandle<T>> for NativeAtomicAr
         let launched = self.launched;
         AtomicArrayHandle {
             inner: InnerAtomicArrayHandle::Native(self),
+            team,
+            launched,
+        }
+    }
+}
+
+impl<T: Dist + ArrayOps + 'static> Into<AtomicArrayHandle<T>> for NetworkAtomicArrayHandle<T> {
+    fn into(self) -> AtomicArrayHandle<T> {
+        let team = self.team.clone();
+        let launched = self.launched;
+        AtomicArrayHandle {
+            inner: InnerAtomicArrayHandle::Network(self),
             team,
             launched,
         }

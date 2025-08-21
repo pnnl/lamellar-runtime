@@ -5,6 +5,9 @@ pub(crate) mod shmem_lamellae;
 
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
+
+pub use comm::atomic::{AtomicFetchOpHandle, AtomicOpHandle};
+pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
 
@@ -255,10 +258,10 @@ impl SerializedData {
     pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
         self.header_bytes.clone()
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn header_len(&self) -> usize {
-        self.header_bytes.len()
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn header_len(&self) -> usize {
+    //     self.header_bytes.len()
+    // }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {

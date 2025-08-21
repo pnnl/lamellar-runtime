@@ -39,11 +39,11 @@ impl CommMem for LibfabricComm {
         match alloc.info {
             CommAllocInfo::Raw(addr, _) => {
                 println!("freeing raw alloc: {:x} should we ever be here?", addr);
-                self.ofi.free_addr(addr);
+                self.ofi.free_addr(addr).unwrap();
             }
             CommAllocInfo::AllocInfo(alloc_info) => {
                 trace!("freeing alloc info: {:?}", alloc_info);
-                self.ofi.free_alloc(&alloc_info);
+                self.ofi.free_alloc(&alloc_info).unwrap();
             }
         }
     }
@@ -53,10 +53,10 @@ impl CommMem for LibfabricComm {
         let allocs = self.runtime_allocs.read();
         for (info, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                trace!("new rt alloc: {:x} {} {}", addr,addr-info.start(), size);
+                trace!("new rt alloc: {:x} {} {}", addr, addr - info.start(), size);
 
                 return Ok(CommAlloc {
-                    info: CommAllocInfo::AllocInfo(info.sub_alloc(addr-info.start(), size)?),
+                    info: CommAllocInfo::AllocInfo(info.sub_alloc(addr - info.start(), size)?),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -81,7 +81,7 @@ impl CommMem for LibfabricComm {
         match alloc.info {
             CommAllocInfo::Raw(addr, _) => {
                 trace!("should i be here, rt_free should only be called with AllocInfo");
-                
+
                 trace!("freeing rt alloc: {:x}", addr);
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {
@@ -143,7 +143,7 @@ impl CommMem for LibfabricComm {
     fn print_pools(&self) {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
-        for (info, alloc) in allocs.iter() {
+        for (_info, alloc) in allocs.iter() {
             println!(
                 // "{:x} {:?} {:?} {:?}",
                 "{:x} {:?}",
