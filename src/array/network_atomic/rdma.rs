@@ -5,7 +5,7 @@ use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
 use crate::lamellae::comm::CommAtomic;
-use crate::lamellae::CommSlice;
+use crate::lamellae::{AtomicOp, CommSlice};
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
 impl<T: Dist> LamellarArrayInternalGet<T> for NetworkAtomicArray<T> {
@@ -26,30 +26,35 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        if self.array.team_rt().lamellae.comm().atomic_avail::<T>() {
-            // self.network_atomic_load(index, &buf);
-
-            ArrayAtHandle {
-                array: self.as_lamellar_byte_array(),
-                state: ArrayAtHandleState::NetworkAtomic(ArrayRdmaNetworkAtomicLoadHandle {
-                    array: self.clone(),
-                    index: index,
-                }),
-                buf: buf,
-            }
-        } else {
-            let req = self.exec_am_local(InitGetAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.clone().into(),
-            });
-            ArrayAtHandle {
-                array: self.as_lamellar_byte_array(),
-                state: ArrayAtHandleState::Am(Some(req)),
-                buf: buf,
-            }
+        // let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+        // if self.array.team_rt().lamellae.comm().atomic_avail::<T>() {
+        //     // self.network_atomic_load(index, &buf);
+        let (pe, offset) = self
+            .array
+            .pe_and_offset_for_global_index(index)
+            .expect("index out of bounds");
+        ArrayAtHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayAtHandleState::NetworkAtomic(
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .atomic_fetch_op(pe, offset, AtomicOp::Read),
+            ),
         }
+        // } else {
+        //     let req = self.exec_am_local(InitGetAm {
+        //         array: self.clone(),
+        //         index: index,
+        //         buf: buf.clone().into(),
+        //     });
+        //     ArrayAtHandle {
+        //         array: self.as_lamellar_byte_array(),
+        //         state: ArrayAtHandleState::Am(Some(req)),
+        //         buf: buf,
+        //     }
+        // }
     }
 }
 impl<T: Dist> LamellarArrayGet<T> for NetworkAtomicArray<T> {

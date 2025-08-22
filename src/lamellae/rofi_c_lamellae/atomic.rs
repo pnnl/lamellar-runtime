@@ -42,7 +42,6 @@ impl CommAtomic for RofiCComm {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: usize,
-        result: &mut [T],
     ) -> RdmaHandle<T> {
         RofiCFuture {
             my_pe: self.my_pe,

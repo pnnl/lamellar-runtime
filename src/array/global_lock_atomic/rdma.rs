@@ -37,16 +37,20 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        let req = self.exec_am_local_tg(InitGetAm {
+        // let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+        // let req = self.exec_am_local_tg(InitGetAm {
+        //     array: self.clone(),
+        //     index: index,
+        //     buf: buf.clone().into(),
+        // });
+        let req = self.exec_am_local_tg(GlobalLockAtAm {
             array: self.clone(),
-            index: index,
-            buf: buf.clone().into(),
+            global_index: index,
         });
+
         ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayAtHandleState::Am(Some(req)),
-            buf: buf,
+            state: ArrayAtHandleState::LocalAm(req),
         }
     }
 }
@@ -104,6 +108,20 @@ impl<T: Dist> LamellarArrayPut<T> for GlobalLockArray<T> {
                 spawned: false,
             },
         }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT(Debug)]
+struct GlobalLockAtAm<T: Dist> {
+    array: GlobalLockArray<T>, //inner of the indices we need to place data into
+    global_index: usize,       //local index
+}
+
+#[lamellar_impl::rt_am_local]
+impl<T: Dist> LamellarAm for GlobalLockAtAm<T> {
+    async fn exec(self) -> T {
+        let _lock = self.array.read_lock().await;
+        unsafe { self.array.array.at(self.global_index).await }
     }
 }
 

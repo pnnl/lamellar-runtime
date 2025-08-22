@@ -28,16 +28,26 @@ impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        let req = self.exec_am_local(InitGetAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.clone().into(),
-        });
+        // let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+        // let req = self.exec_am_local(InitGetAm {
+        //     array: self.clone(),
+        //     index: index,
+        //     buf: buf.clone().into(),
+        // });
+        let (pe, offset) = self
+            .array
+            .pe_and_offset_for_global_index(index)
+            .expect("index out of bounds");
+        let req = self.exec_am_pe_tg(
+            pe,
+            LocalLockAtAm {
+                array: self.clone().into(),
+                local_index: offset,
+            },
+        );
         ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayAtHandleState::Am(Some(req)),
-            buf: buf,
+            state: ArrayAtHandleState::Am(req),
         }
     }
 }
@@ -94,6 +104,25 @@ impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
+        }
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct LocalLockAtAm {
+    array: LocalLockByteArray, //inner of the indices we need to place data into
+    local_index: usize,        //local index
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for LocalLockAtAm<T> {
+    async fn exec(self) -> Vec<u8> {
+        unsafe {
+            let _lock = self.array.lock.read().await;
+            self.array
+                .array
+                .element_for_local_index(self.local_index)
+                .to_vec()
         }
     }
 }

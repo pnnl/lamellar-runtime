@@ -25,16 +25,25 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GenericAtomicArray<T> {
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        let req = self.exec_am_local(InitGetAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.clone().into(),
-        });
+        // let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
+        // let req = self.exec_am_local(InitGetAm {
+        //     array: self.clone(),
+        //     index: index,
+        //     buf: buf.clone().into(),
+        // });
+        let (pe, local_index) = self
+            .pe_and_offset_for_global_index(index)
+            .expect("Invalid index");
+        let req = self.exec_am_pe(
+            pe,
+            GenericAtomicAtAm {
+                array: self.clone().into(),
+                local_index,
+            },
+        );
         ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayAtHandleState::Am(Some(req)),
-            buf: buf,
+            state: ArrayAtHandleState::Am(req),
         }
     }
 }
@@ -91,6 +100,25 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
+        }
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct GenericAtomicAtAm {
+    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    local_index: usize,            //local index
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for GenericAtomicAtAm<T> {
+    async fn exec(self) -> Vec<u8> {
+        unsafe {
+            let _lock = self.array.lock_index(self.local_index);
+            self.array
+                .array
+                .element_for_local_index(self.local_index)
+                .to_vec()
         }
     }
 }

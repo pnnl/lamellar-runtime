@@ -26,29 +26,27 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
         }
     }
     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        if self.array.team_rt().lamellae.comm().atomic_avail::<T>() {
-            // self.network_atomic_load(index, &buf);
+        // let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
 
-            ArrayAtHandle {
-                array: self.as_lamellar_byte_array(),
-                state: ArrayAtHandleState::Atomic(ArrayRdmaAtomicLoadHandle {
-                    array: self.clone(),
-                    index: index,
-                }),
-                buf: buf,
-            }
-        } else {
-            let req = self.exec_am_local(InitGetAm {
-                array: self.clone(),
-                index: index,
-                buf: buf.clone().into(),
-            });
-            ArrayAtHandle {
-                array: self.as_lamellar_byte_array(),
-                state: ArrayAtHandleState::Am(Some(req)),
-                buf: buf,
-            }
+        // let req = self.exec_am_local(InitGetAm {
+        //     array: self.clone(),
+        //     index: index,
+        //     buf: buf.clone().into(),
+        // });
+        let (pe, offset) = self
+            .array
+            .pe_and_offset_for_global_index(index)
+            .expect("index out of bounds");
+        let req = self.exec_am_pe_tg(
+            pe,
+            NativeAtomicAtAm {
+                array: self.clone().into(),
+                local_index: offset,
+            },
+        );
+        ArrayAtHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayAtHandleState::Am(req),
         }
     }
 }
@@ -104,6 +102,30 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
+        }
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct NativeAtomicAtAm {
+    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    local_index: usize,           //local index
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for NativeAtomicAtAm<T> {
+    async fn exec(self) -> Vec<u8> {
+        unsafe {
+            let mut elem = self
+                .array
+                .array
+                .element_for_local_index(self.local_index)
+                .to_vec();
+            let mut result = vec![0u8; elem.len()];
+            self.array
+                .orig_t
+                .load(elem.as_mut_ptr(), result.as_mut_ptr());
+            result
         }
     }
 }

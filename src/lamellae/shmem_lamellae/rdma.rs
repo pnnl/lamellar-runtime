@@ -1,4 +1,5 @@
 use std::{
+    mem::MaybeUninit,
     pin::Pin,
     sync::{atomic::Ordering, Arc},
     task::{Context, Poll},
@@ -12,7 +13,7 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::{
         comm::rdma::{CommRdma, RdmaFuture, RdmaHandle, Remote},
-        CommAllocAddr, CommSlice,
+        CommAllocAddr, CommSlice, RdmaAtFuture, RdmaAtHandle,
     },
     warnings::RuntimeWarning,
     LamellarTask,
@@ -139,6 +140,88 @@ impl<T: Remote> Future for ShmemFuture<T> {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub(crate) struct ShmemAtFuture<T> {
+    pub(super) src: CommAllocAddr,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) result: MaybeUninit<T>,
+}
+
+impl<T: Remote> ShmemAtFuture<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn exec_at(&mut self) {
+        trace!("getting src: {:?} ", self.src);
+        unsafe {
+            self.result
+                .as_mut_ptr()
+                .write(self.src.as_ptr::<T>().read())
+        };
+    }
+
+    pub(crate) fn block(mut self) -> T {
+        self.exec_at();
+        self.spawned = true;
+        unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(&mut self.result, &mut res);
+            res.assume_init()
+        }
+    }
+    pub(crate) fn spawn(mut self) -> LamellarTask<T> {
+        self.exec_at();
+        self.spawned = true;
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.spawn_task(
+            async move {
+                unsafe {
+                    let mut res = MaybeUninit::uninit();
+                    std::mem::swap(&mut self.result, &mut res);
+                    res.assume_init()
+                }
+            },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for ShmemAtFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T: Remote> From<ShmemAtFuture<T>> for RdmaAtHandle<T> {
+    fn from(f: ShmemAtFuture<T>) -> RdmaAtHandle<T> {
+        RdmaAtHandle {
+            future: RdmaAtFuture::Shmem(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for ShmemAtFuture<T> {
+    type Output = T;
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_at();
+        }
+        let this = self.project();
+        *this.spawned = true;
+        // rofi_c_wait();
+
+        Poll::Ready(unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(this.result, &mut res);
+            res.assume_init()
+        })
+    }
+}
+
 impl CommRdma for ShmemComm {
     fn put<T: Remote>(
         &self,
@@ -255,5 +338,23 @@ impl CommRdma for ShmemComm {
             }
         }
         panic!("shmem segment invalid for get");
+    }
+    fn at<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: CommAllocAddr,
+    ) -> RdmaAtHandle<T> {
+        self.get_amt
+            .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
+        ShmemAtFuture {
+            src,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+        }
+        .into()
     }
 }

@@ -670,17 +670,15 @@ impl<T: Dist> UnsafeArray<T> {
     // }
 
     pub(crate) unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T> {
-        let team = self.team_rt();
-        let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
+        // let team = self.team_rt();
+        // let buf: OneSidedMemoryRegion<T> = team.alloc_one_sided_mem_region(1);
         // self.blocking_get(index, &buf);
-
+        let (pe, offset) = self
+            .pe_and_offset_for_global_index(index)
+            .expect("index out of bounds in LamellarArray at");
         ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayAtHandleState::Get(ArrayRdmaGetHandle {
-                array: self.clone(),
-                index,
-            }),
-            buf: buf,
+            state: ArrayAtHandleState::Rdma(self.inner.data.mem_region.at(pe, offset)),
         }
     }
 
@@ -732,14 +730,14 @@ impl<T: Dist> UnsafeArray<T> {
         self.internal_at(index)
     }
 
-    pub unsafe fn get_test(&self, index: usize) -> T {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.inner.data.mem_region.get_test(pe, offset)
-            
-        } else {
-            panic!("index out of bounds");
-        }
-    }
+    // pub unsafe fn get_test(&self, index: usize) -> T {
+    //     if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+    //         self.inner.data.mem_region.get_test(pe, offset)
+
+    //     } else {
+    //         panic!("index out of bounds");
+    //     }
+    // }
 }
 
 /// We dont implement this because "at" is actually same for all but UnsafeArray so we just implement those directly
@@ -845,6 +843,10 @@ impl UnsafeByteArray {
         self.inner.local_elements_for_range(index, len)
     }
 
+    pub(crate) unsafe fn element_for_local_index(&self, index: usize) -> &mut [u8] {
+        self.inner.element_for_local_index(index)
+    }
+
     pub(crate) fn comm_slice_for_range(&self, index: usize, len: usize) -> CommSlice<u8> {
         self.inner.comm_slice_for_range(index, len)
     }
@@ -881,6 +883,10 @@ impl UnsafeArrayInner {
                 return Box::new(pes.into_iter());
             }
         }
+    }
+
+    pub(crate) unsafe fn element_for_local_index(&self, index: usize) -> &mut [u8] {
+        &mut self.local_as_mut_slice()[index * self.elem_size..(index + 1) * self.elem_size]
     }
 
     //index with respect to inner

@@ -14,7 +14,7 @@ use crate::{
     lamellae::{
         AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc,
         CommAllocAddr, CommAllocInfo, CommAllocType, CommAtomic, CommInfo, CommMem, CommProgress,
-        CommRdma, CommSlice, Lamellae, NetworkAtomic, RdmaHandle,
+        CommRdma, CommSlice, Lamellae, NetworkAtomic, RdmaAtHandle, RdmaHandle,
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -1078,6 +1078,22 @@ impl<T: Dist> MemoryRegion<T> {
         }
     }
 
+    pub(crate) unsafe fn at<R: Dist>(&self, pe: usize, index: usize) -> RdmaAtHandle<R> {
+        trace!("at memregion {:?} index: {:?}", self.alloc, index);
+
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.rdma.comm().at(
+                &self.scheduler,
+                self.counters.clone(),
+                pe,
+                self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
+            )
+        } else {
+            println!("{:?} {:?}", self.alloc.num_bytes(), index);
+            panic!("index out of bounds");
+        }
+    }
+
     // /// copy data from remote memory location into provided data buffer
     // ///
     // /// # Arguments
@@ -1233,7 +1249,6 @@ impl<T: Dist> MemoryRegion<T> {
         pe: usize,
         index: usize,
         op: AtomicOp<R>,
-        result: R,
     ) -> AtomicFetchOpHandle<R> {
         if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
             self.rdma.comm().atomic_fetch_op(
@@ -1242,7 +1257,6 @@ impl<T: Dist> MemoryRegion<T> {
                 op,
                 pe,
                 self.alloc.comm_addr() + index * std::mem::size_of::<R>(),
-                result,
             )
         } else {
             println!("{:?} {:?} ", self.alloc.num_bytes(), index,);

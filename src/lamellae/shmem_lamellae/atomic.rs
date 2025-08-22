@@ -16,6 +16,7 @@ use super::{comm::ShmemComm, Scheduler};
 use pin_project::{pin_project, pinned_drop};
 use std::{
     future::Future,
+    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -82,7 +83,7 @@ impl<T> Future for ShmemAtomicFuture<T> {
 pub(crate) struct ShmemAtomicFetchFuture<T> {
     pub(super) op: AtomicOp<T>,
     pub(super) dst: CommAllocAddr,
-    pub(super) result: Option<T>,
+    pub(super) result: MaybeUninit<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -94,7 +95,11 @@ impl<T: Send + 'static> ShmemAtomicFetchFuture<T> {
         self.exec_op();
         // rofi_c_wait();
         self.spawned = true;
-        self.result.take().expect("Result should not be None")
+        unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(&mut self.result, &mut res);
+            res.assume_init()
+        }
         // Ok(())
     }
 
@@ -104,7 +109,13 @@ impl<T: Send + 'static> ShmemAtomicFetchFuture<T> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
-            async move { self.result.take().expect("Result should not be None") },
+            async move {
+                unsafe {
+                    let mut res = MaybeUninit::uninit();
+                    std::mem::swap(&mut self.result, &mut res);
+                    res.assume_init()
+                }
+            },
             counters,
         )
     }
@@ -137,7 +148,11 @@ impl<T: Send + 'static> Future for ShmemAtomicFetchFuture<T> {
         }
         // rofi_c_wait();
 
-        Poll::Ready(self.result.take().expect("Result should not be None"))
+        Poll::Ready(unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(&mut self.result, &mut res);
+            res.assume_init()
+        })
     }
 }
 
@@ -169,12 +184,11 @@ impl CommAtomic for ShmemComm {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: CommAllocAddr,
-        result: T,
     ) -> AtomicFetchOpHandle<T> {
         ShmemAtomicFetchFuture {
             op,
             dst: remote_addr,
-            result: Some(result),
+            result: MaybeUninit::uninit(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,

@@ -14,12 +14,12 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             unsafe {
-                let handle = self.array.inner.data.mem_region.atomic_fetch_op(
-                    pe,
-                    offset,
-                    AtomicOp::Read,
-                    self.inner_array().dummy_val(),
-                );
+                let handle =
+                    self.array
+                        .inner
+                        .data
+                        .mem_region
+                        .atomic_fetch_op(pe, offset, AtomicOp::Read);
                 ArrayFetchOpHandle {
                     array: self.clone().into(),
                     state: FetchOpState::Network(handle),
@@ -72,7 +72,6 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
                     pe,
                     offset,
                     AtomicOp::Write(val),
-                    self.inner_array().dummy_val(),
                 );
                 ArrayFetchOpHandle {
                     array: self.clone().into(),

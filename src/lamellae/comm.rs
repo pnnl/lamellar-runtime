@@ -111,23 +111,14 @@ impl CommAtomic for Comm {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: CommAllocAddr,
-        result: T,
     ) -> AtomicFetchOpHandle<T> {
         match self {
             #[cfg(feature = "rofi-c")]
-            Comm::RofiC(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
-            }
-            Comm::Shmem(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
-            }
-            Comm::Local(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
-            }
+            Comm::RofiC(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
+            Comm::Shmem(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
+            Comm::Local(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
             #[cfg(feature = "enable-libfabric")]
-            Comm::Libfabric(comm) => {
-                comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr, result)
-            }
+            Comm::Libfabric(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
         }
     }
 }

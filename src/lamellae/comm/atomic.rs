@@ -342,6 +342,5 @@ pub(crate) trait CommAtomic {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: CommAllocAddr,
-        result: T,
     ) -> AtomicFetchOpHandle<T>;
 }

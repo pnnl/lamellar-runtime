@@ -324,18 +324,14 @@ impl<T: Dist> SharedMemoryRegion<T> {
             .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
     }
     pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
-        let res = MaybeUninit::uninit().assume_init();
+        // let res = MaybeUninit::uninit().assume_init();
         self.mr
-            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read, res)
+            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read)
     }
     pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-        let res = MaybeUninit::uninit().assume_init();
-        self.mr.atomic_fetch_op(
-            pe,
-            self.sub_region_offset + index,
-            AtomicOp::Write(val),
-            res,
-        )
+        // let res = MaybeUninit::uninit().assume_init();
+        self.mr
+            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
     }
     pub fn wait_all(&self) {
         self.mr.wait_all();

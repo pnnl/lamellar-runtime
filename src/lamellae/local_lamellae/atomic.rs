@@ -16,6 +16,7 @@ use super::{comm::LocalComm, Scheduler};
 use pin_project::{pin_project, pinned_drop};
 use std::{
     future::Future,
+    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -82,7 +83,7 @@ impl<T> Future for LocalAtomicFuture<T> {
 pub(crate) struct LocalAtomicFetchFuture<T> {
     pub(super) op: AtomicOp<T>,
     pub(super) dst: CommAllocAddr,
-    pub(super) result: Option<T>,
+    pub(super) result: MaybeUninit<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -94,8 +95,11 @@ impl<T: Send + 'static> LocalAtomicFetchFuture<T> {
         self.exec_op();
         // rofi_c_wait();
         self.spawned = true;
-        self.result.take().expect("Result should be set")
-        // Ok(())
+        unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(&mut self.result, &mut res);
+            res.assume_init()
+        }
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
@@ -104,7 +108,13 @@ impl<T: Send + 'static> LocalAtomicFetchFuture<T> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
-            async move { self.result.take().expect("Result should be set") },
+            async move {
+                unsafe {
+                    let mut res = MaybeUninit::uninit();
+                    std::mem::swap(&mut self.result, &mut res);
+                    res.assume_init()
+                }
+            },
             counters,
         )
     }
@@ -137,7 +147,11 @@ impl<T: Send + 'static> Future for LocalAtomicFetchFuture<T> {
         *this.spawned = true;
         // rofi_c_wait();
 
-        Poll::Ready(this.result.take().expect("Result should be set"))
+        Poll::Ready(unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(this.result, &mut res);
+            res.assume_init()
+        })
     }
 }
 
@@ -169,12 +183,11 @@ impl CommAtomic for LocalComm {
         op: AtomicOp<T>,
         pe: usize,
         remote_addr: CommAllocAddr,
-        result: T,
     ) -> AtomicFetchOpHandle<T> {
         LocalAtomicFetchFuture {
             op,
             dst: remote_addr,
-            result: Some(result),
+            result: MaybeUninit::uninit(),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
