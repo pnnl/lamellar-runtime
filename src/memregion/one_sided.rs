@@ -77,8 +77,8 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                         ID_COUNTER.fetch_add(1, Ordering::Relaxed),
                         team.team_pe.expect("pe not part of team"),
                     ),
-                    parent_id: parent_id,
-                    grand_parent_id: grand_parent_id,
+                    parent_id,
+                    grand_parent_id,
                     local_dropped: AtomicBool::new(false),
                 });
                 mrh_map.insert(parent_id, mrh.clone());
@@ -211,7 +211,7 @@ impl Drop for MemRegionHandle {
                     let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                     if cnt > 0 {
                         let temp = MemRegionFinishedAm {
-                            cnt: cnt,
+                            cnt,
                             parent_id: self.inner.grand_parent_id,
                         };
                         // println!("sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
@@ -247,7 +247,7 @@ impl LamellarAM for MemRegionFinishedAm {
     async fn exec(self) {
         // println!("in finished am {:?}",self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
-        let _mrh = match mrh_map.get(&self.parent_id) {
+        match mrh_map.get(&self.parent_id) {
             Some(mrh) => {
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
                 // println!("in finished am {:?} mrh {:?}",self,mrh);
@@ -256,7 +256,7 @@ impl LamellarAM for MemRegionFinishedAm {
                 "in finished am this should only be possible on the original pe? {:?} ",
                 self
             ), //or we are on the original node?
-        };
+        }
         // println!("leaving finished am");
     }
 }
@@ -289,7 +289,7 @@ impl LamellarAM for MemRegionDropWaitAm {
                         let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                         if cnt > 0 {
                             let temp = MemRegionFinishedAm {
-                                cnt: cnt,
+                                cnt,
                                 parent_id: self.inner.grand_parent_id,
                             };
                             // println!("waited sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
@@ -374,7 +374,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let mrh = MemRegionHandle {
             inner: Arc::new(MemRegionHandleInner {
-                mr: mr,
+                mr,
                 team: team.clone(),
                 local_ref: AtomicUsize::new(1),
                 remote_sent: AtomicUsize::new(0),
@@ -393,7 +393,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
             .insert(mrh.inner.my_id, mrh.inner.clone());
         Ok(OneSidedMemoryRegion {
             mr: mrh,
-            pe: pe,
+            pe,
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,
@@ -407,11 +407,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// or you may use the similar blocking_put call (with a potential performance penalty);
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -468,10 +468,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// the data buffer is free to be reused upon return of this function.
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -525,11 +525,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// The user is responsible for transmission termination detection
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -582,10 +582,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// After calling this function, the data is guaranteed to be placed in the data buffer
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -693,11 +693,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///```
     pub fn data_local(&self) -> bool {
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(_addr) = self.mr.inner.mr.addr() {
-                true
-            } else {
-                false
-            }
+            matches!(self.mr.inner.mr.addr(), Ok(_addr))
         } else {
             false
         }

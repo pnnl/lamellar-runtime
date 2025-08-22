@@ -14,7 +14,7 @@ use std::task::Waker;
 #[derive(Debug)]
 pub(crate) enum InternalResult {
     Local(LamellarAny), // a local result from a local am (possibly a returned one)
-    Remote(SerializedData, Vec<RemotePtr>), // a remte result from a remote am
+    Remote(SerializedData, Vec<RemotePtr>), // a remote result from a remote am
     Unit,
 }
 
@@ -79,8 +79,8 @@ impl LamellarRequestResult {
         } else {
             // if the user dopped the handle we still need to handle if Darcs are returned
             if let InternalResult::Remote(_, darcs) = data {
-                // we need to appropraiately set the reference counts if the returned data contains any Darcs
-                // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                // we need to appropriately set the reference counts if the returned data contains any Darcs
+                // we "cheat" in that we don't actually care what the Darc wraps (hence the cast to ()) we just care
                 // that the reference count is updated.
                 for darc in darcs {
                     match darc {

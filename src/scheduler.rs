@@ -33,7 +33,7 @@ pub(crate) mod tokio_executor;
 use tokio_executor::TokioRt;
 
 // ACTIVE ENUM
-// since atomic enums would be another dependecy
+// since atomic enums would be another dependency
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -77,7 +77,7 @@ pub(crate) struct ReqId {
 /// Indicates the executor backend
 /// Default is a work stealing executor
 /// If the "tokio-executor" feature is enabled,the tokio executor can also be used
-/// allowing seemless integration with tokio based applications
+/// allowing seamless integration with tokio based applications
 #[derive(Debug)]
 pub enum ExecutorType {
     /// The default work stealing executor
@@ -134,7 +134,7 @@ unsafe impl<T: Send> Send for LamellarTaskInner<T> {}
 unsafe impl<T: Sync> Sync for LamellarTaskInner<T> {}
 
 impl<T> Drop for LamellarTaskInner<T> {
-    fn drop(self: &mut Self) {
+    fn drop(&mut self) {
         // let mut dropped = LamellarTaskInner::Dropped;
 
         // std::mem::swap(&mut dropped, self);
@@ -242,7 +242,7 @@ impl Scheduler {
         panic: Arc<AtomicU8>,
     ) -> Self {
         Self {
-            executor: executor,
+            executor,
             active_message_engine,
             num_ams: Arc::new(AtomicUsize::new(0)),
             max_ams: Arc::new(AtomicUsize::new(0)),

@@ -164,26 +164,24 @@
 //!     }
 //! }
 //!
-//! fn main(){
-//!     let mut world = lamellar::LamellarWorldBuilder::new().build();
-//!     let my_pe = world.my_pe();
-//!     let num_pes = world.num_pes();
-//!     let cnt = Darc::new(&world, AtomicUsize::new(0)).block().expect("Current PE is in world team");
-//!     for pe in 0..num_pes{
-//!         let _ = world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
-//!     }
-//!     let _ = world.exec_am_all(DarcAm{cnt: cnt.clone()}).spawn(); //also possible to execute on every PE with a single call
-//!     cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
-//!     world.wait_all(); // wait for all active messages to finish
-//!     world.barrier();  // synchronize with other PEs
-//!     assert_eq!(cnt.load(Ordering::SeqCst),num_pes*2 + 1);
+//! let mut world = lamellar::LamellarWorldBuilder::new().build();
+//! let my_pe = world.my_pe();
+//! let num_pes = world.num_pes();
+//! let cnt = Darc::new(&world, AtomicUsize::new(0)).block().expect("Current PE is in world team");
+//! for pe in 0..num_pes{
+//!     let _ = world.exec_am_pe(pe,DarcAm{cnt: cnt.clone()}).spawn(); // explicitly launch on each PE
 //! }
+//! let _ = world.exec_am_all(DarcAm{cnt: cnt.clone()}).spawn(); //also possible to execute on every PE with a single call
+//! cnt.fetch_add(1,Ordering::SeqCst); //this is valid as well!
+//! world.wait_all(); // wait for all active messages to finish
+//! world.barrier();  // synchronize with other PEs
+//! assert_eq!(cnt.load(Ordering::SeqCst),num_pes*2 + 1);
 //!```
 //! # Using Lamellar
 //! Lamellar is capable of running on single node workstations as well as distributed HPC systems.
 //! For a workstation, simply copy the following to the dependency section of you Cargo.toml file:
 //!
-//!``` lamellar = "0.7.0-rc.1" ```
+//!```lamellar = "0.7.0-rc.1"```
 //!
 //! If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 //!
@@ -333,84 +331,38 @@ lazy_static! {
 // }
 
 /// Wrapper function for serializing data
-pub fn serialize<T: ?Sized>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
+pub fn serialize<T>(obj: &T) -> Result<Vec<u8>, anyhow::Error>
 where
-    T: serde::Serialize,
+    T: ?Sized + serde::Serialize,
 {
-    // let start = std::time::Instant::now();
-    let res = if var {
-        // Ok(BINCODE.serialize(obj)?)
-        Ok(bincode::serde::encode_to_vec(obj, *BINCODE)?)
-    } else {
-        Ok(bincode::serde::encode_to_vec(obj, *BINCODE)?)
-    };
-    // unsafe {
-    //     SERIALIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
-    res
+    bincode::serde::encode_to_vec(obj, *BINCODE).map_err(Into::into)
 }
 
 /// Wrapper function for getting the size of serialized data
-pub fn serialized_size<T: ?Sized>(obj: &T, var: bool) -> usize
+pub fn serialized_size<T>(obj: &T) -> usize
 where
-    T: serde::Serialize,
+    T: ?Sized + serde::Serialize,
 {
-    // let start = std::time::Instant::now();
-    let res = if var {
-        // BINCODE.serialized_size(obj).unwrap() as usize
-        bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
-    } else {
-        bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
-    };
-    // unsafe {
-    //     SERIALIZE_SIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
-    res
+    bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
 }
 
 /// Wrapper function for serializing an object into a buffer
-pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
+pub fn serialize_into<T>(buf: &mut [u8], obj: &T) -> Result<(), anyhow::Error>
 where
-    T: serde::Serialize,
+    T: ?Sized + serde::Serialize,
 {
-    // let start = std::time::Instant::now();
     let mut cursor = Cursor::new(buf);
-    if var {
-        // BINCODE.serialize_into(buf, obj)?;
-        bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
-    } else {
-        bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
-    }
-    // unsafe {
-    //     SERIALIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
+    bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
     Ok(())
 }
 
 /// Wrapper function for deserializing data
-pub fn deserialize<'a, T>(bytes: &'a [u8], var: bool) -> Result<T, anyhow::Error>
+pub fn deserialize<'a, T>(bytes: &'a [u8]) -> Result<T, anyhow::Error>
 where
     T: serde::Deserialize<'a>,
 {
-    // let start = std::time::Instant::now();
-    let res = if var {
-        // Ok(BINCODE.deserialize(bytes)?)
-        Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
-    } else {
-        Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
-    };
-    // unsafe {
-    //     DESERIALIZE_TIMER
-    //         .get_or(|| Arc::new(AtomicUsize::new(0)))
-    //         .fetch_add(start.elapsed().as_micros() as usize, SeqCst);
-    // }
-    res
+    Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
 }
+
 //#[doc(hidden)]
 pub use async_std;

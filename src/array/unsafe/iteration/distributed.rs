@@ -21,7 +21,7 @@ impl<T> InnerArray for UnsafeArray<T> {
 
 impl InnerArray for UnsafeArrayInner {
     fn as_inner(&self) -> &UnsafeArrayInner {
-        &self
+        self
     }
 }
 

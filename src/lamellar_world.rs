@@ -28,7 +28,7 @@ lazy_static! {
 
 /// An abstraction representing all the PE's (processing elements) within a given distributed execution.
 ///
-/// Constructing a LamellarWorld is necessesary to perform any remote operations or distributed communications.
+/// Constructing a LamellarWorld is necessary to perform any remote operations or distributed communications.
 ///
 /// A LamellarWorld instance can launch and await the result of [active messages][ActiveMessaging],
 /// can create distributed [memory regions][RemoteMemoryRegion] and [LamellarArrays][array],
@@ -210,7 +210,7 @@ impl LamellarWorld {
     /// Create a team containing any number of pe's from the world using the provided LamellarArch (layout)
     ///
     /// # Collective Operation
-    /// Requrires all PEs present within the world to enter the call otherwise deadlock will occur.
+    /// Requires all PEs present within the world to enter the call otherwise deadlock will occur.
     /// Note that this *does* include the PEs that will not exist within the new team.
     ///
     /// # Examples
@@ -255,7 +255,7 @@ impl LamellarWorld {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Returns nummber of threads on this PE (including the main thread)
+    /// Returns number of threads on this PE (including the main thread)
     ///
     /// # One-sided Operation
     /// The result is returned only on the calling PE
@@ -305,8 +305,8 @@ impl Clone for LamellarWorld {
             team_rt: self.team_rt.clone(),
             // teams: self.teams.clone(),
             _counters: self._counters.clone(),
-            my_pe: self.my_pe.clone(),
-            num_pes: self.num_pes.clone(),
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
             ref_cnt: self.ref_cnt.clone(),
         }
     }
@@ -477,8 +477,8 @@ impl LamellarWorldBuilder {
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
-            executor: executor,
-            num_threads: num_threads,
+            executor,
+            num_threads,
         }
     }
 
@@ -571,7 +571,7 @@ impl LamellarWorldBuilder {
     //#[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
         // let mut timer = std::time::Instant::now();
-        assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
+        assert!(!INIT.fetch_or(true, Ordering::SeqCst), "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         // println!("{:?}: INIT", timer.elapsed());
 
@@ -632,8 +632,8 @@ impl LamellarWorldBuilder {
             team_rt: team_rt.clone(),
             // teams: teams.clone(),
             _counters: counters,
-            my_pe: my_pe,
-            num_pes: num_pes,
+            my_pe,
+            num_pes,
             ref_cnt: Arc::new(AtomicUsize::new(1)),
         };
         // println!("{:?}: init_world", timer.elapsed());
@@ -674,3 +674,10 @@ impl LamellarWorldBuilder {
         world
     }
 }
+
+impl Default for LamellarWorldBuilder {
+    fn default() -> Self {
+       Self::new()
+    }
+}
+
