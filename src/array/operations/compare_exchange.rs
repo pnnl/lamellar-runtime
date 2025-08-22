@@ -122,7 +122,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn compare_exchange<'a>(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
+    fn compare_exchange(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
         self.inner_array()
             .initiate_batch_result_op_2(
                 new,
@@ -288,7 +288,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn compare_exchange_epsilon<'a>(
+    fn compare_exchange_epsilon(
         &self,
         index: usize,
         current: T,
@@ -450,7 +450,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn compare_exchange<'a>(
+    unsafe fn compare_exchange(
         &self,
         index: usize,
         current: T,
@@ -618,7 +618,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let result = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn compare_exchange_epsilon<'a>(
+    unsafe fn compare_exchange_epsilon(
         &self,
         index: usize,
         current: T,

@@ -35,8 +35,8 @@ impl<I: InnerIter, A> InnerIter for Collect<I, A> {
     fn iter_clone(&self, _s: Sealed) -> Self {
         Collect {
             iter: self.iter.iter_clone(Sealed),
-            distribution: self.distribution.clone(),
-            _phantom: self._phantom.clone(),
+            distribution: self.distribution,
+            _phantom: self._phantom,
         }
     }
 }
@@ -54,15 +54,15 @@ where
     fn init(&self, start: usize, cnt: usize) -> Self {
         Collect {
             iter: self.iter.init(start, cnt, Sealed),
-            distribution: self.distribution.clone(),
-            _phantom: self._phantom.clone(),
+            distribution: self.distribution,
+            _phantom: self._phantom,
         }
     }
 
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CollectAm {
             iter: self.iter_clone(Sealed),
             schedule,
@@ -100,8 +100,8 @@ impl<I: InnerIter, A, B> InnerIter for CollectAsync<I, A, B> {
     fn iter_clone(&self, _s: Sealed) -> Self {
         CollectAsync {
             iter: self.iter.iter_clone(Sealed),
-            distribution: self.distribution.clone(),
-            _phantom: self._phantom.clone(),
+            distribution: self.distribution,
+            _phantom: self._phantom,
         }
     }
 }
@@ -120,14 +120,14 @@ where
     fn init(&self, start: usize, cnt: usize) -> Self {
         CollectAsync {
             iter: self.iter.init(start, cnt, Sealed),
-            distribution: self.distribution.clone(),
-            _phantom: self._phantom.clone(),
+            distribution: self.distribution,
+            _phantom: self._phantom,
         }
     }
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CollectAsyncAm {
             iter: self.iter_clone(Sealed),
             schedule,
@@ -161,8 +161,8 @@ where
     fn clone(&self) -> Self {
         CollectAsync {
             iter: self.iter.clone(),
-            distribution: self.distribution.clone(),
-            _phantom: self._phantom.clone(),
+            distribution: self.distribution,
+            _phantom: self._phantom,
         }
     }
 }
@@ -225,22 +225,22 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
                 let local_vals = vals.into_iter().map(|v| v.1).collect();
                 let mut collect = Box::pin(Self::async_create_array(
                     local_vals,
-                    this.distribution.clone(),
+                    *this.distribution,
                     this.team.clone(),
                 ));
                 match Future::poll(collect.as_mut(), cx) {
                     Poll::Ready(a) => {
-                        return Poll::Ready(a);
+                        Poll::Ready(a)
                     }
                     Poll::Pending => {
                         *this.state = InnerState::Collecting(collect);
-                        return Poll::Pending;
+                        Poll::Pending
                     }
                 }
             }
             InnerState::Collecting(collect) => {
                 let a = ready!(Future::poll(collect.as_mut(), cx));
-                return Poll::Ready(a);
+                Poll::Ready(a)
             }
         }
     }

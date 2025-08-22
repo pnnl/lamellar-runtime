@@ -320,7 +320,7 @@ impl<R: AmDist> Future for ArrayFetchBatchOpHandle<R> {
                 }
             }
         }
-        Poll::Ready(std::mem::take(&mut this.results))
+        Poll::Ready(std::mem::take(this.results))
     }
 }
 
@@ -525,6 +525,6 @@ impl<R: AmDist> Future for ArrayResultBatchOpHandle<R> {
                 }
             }
         }
-        Poll::Ready(std::mem::take(&mut this.results))
+        Poll::Ready(std::mem::take(this.results))
     }
 }

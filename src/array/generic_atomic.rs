@@ -353,6 +353,10 @@ impl<T: Dist> GenericAtomicLocalData<T> {
         unsafe { self.array.__local_as_mut_slice().len() }
     }
 
+    pub fn is_empty(&self) -> bool {
+        unsafe { self.array.__local_as_mut_slice().is_empty() }
+    }
+
     pub fn iter(&self) -> GenericAtomicLocalDataIter<T> {
         GenericAtomicLocalDataIter {
             array: self.array.clone(),

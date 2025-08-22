@@ -198,12 +198,12 @@ impl ShmemAlloc {
         let mut pes_len = 1;
 
         if self.my_pe == first_pe {
-            while let Err(_) = self.mutex.as_ref().unwrap().compare_exchange(
+            while self.mutex.as_ref().unwrap().compare_exchange(
                 0,
                 1,
                 Ordering::SeqCst,
                 Ordering::SeqCst,
-            ) {
+            ).is_err() {
                 std::thread::yield_now();
             }
             *self.id += 1;
@@ -330,9 +330,9 @@ impl ShmemComm {
 
         let mut allocs_map = HashMap::new();
         let mut pe_map = HashMap::new();
-        for pe in 0..num_pes {
-            if addrs[pe] > 0 {
-                pe_map.insert(pe, (addrs[pe], pe));
+        for (pe, addr) in addrs.iter().enumerate().take(num_pes) {
+            if *addr > 0 {
+                pe_map.insert(pe, (*addr, pe));
             }
         }
         allocs_map.insert(addr, (shmem, mem_per_pe, pe_map));
@@ -444,7 +444,7 @@ impl CommOps for ShmemComm {
     fn rt_free(&self, addr: usize) {
         let allocs = self.alloc.read();
         for alloc in allocs.iter() {
-            if let Ok(_) = alloc.free(addr) {
+            if alloc.free(addr).is_ok() {
                 return;
             }
         }
@@ -470,10 +470,10 @@ impl CommOps for ShmemComm {
         };
         let mut addr_map = HashMap::new();
         let mut relative_index = 0;
-        for pe in 0..self.num_pes {
-            if remote_addrs[pe] > 0 {
+        for (pe, remote_addr) in remote_addrs.iter().enumerate().take(self.num_pes) {
+            if *remote_addr > 0 {
                 // let local_addr = ret.as_ptr() as usize + size*relative_index;
-                addr_map.insert(pe, (remote_addrs[pe], relative_index));
+                addr_map.insert(pe, (*remote_addr, relative_index));
                 relative_index += 1;
             }
         }
@@ -673,10 +673,10 @@ impl SerializedDataOps for ShmemData {
 
 impl Des for ShmemData {
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(), false).unwrap()
+        crate::deserialize(self.header_as_bytes()).unwrap()
     }
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(), true)?)
+        crate::deserialize(self.data_as_bytes())
     }
     fn data_as_bytes(&self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut((self.data_start) as *mut u8, self.data_len) }

@@ -561,8 +561,8 @@ impl<T: Dist> SubArray<T> for AtomicArray<T> {
     }
     fn global_index(&self, sub_index: usize) -> usize {
         match self {
-            AtomicArray::NativeAtomicArray(array) => array.global_index(sub_index).into(),
-            AtomicArray::GenericAtomicArray(array) => array.global_index(sub_index).into(),
+            AtomicArray::NativeAtomicArray(array) => array.global_index(sub_index),
+            AtomicArray::GenericAtomicArray(array) => array.global_index(sub_index),
         }
     }
 }
@@ -799,6 +799,11 @@ impl<T: Dist> AtomicLocalData<T> {
     ///```
     pub fn len(&self) -> usize {
         unsafe { self.array.__local_as_mut_slice().len() }
+    }
+
+    /// Indicates if the PE contains local elements
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Returns an [Iterator] over the elements in the local data

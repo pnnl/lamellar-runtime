@@ -51,9 +51,7 @@ where
 
         iter.advance_index(advance);
 
-        let val = Skip::new(iter, self.skip_count, advance);
-        // println!("{:?} Skip init {in_start_i} {start_i} {advance} {in_cnt} {:?}",std::thread::current().id(),self.skip_count);
-        val
+        Skip::new(iter, self.skip_count, advance)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()

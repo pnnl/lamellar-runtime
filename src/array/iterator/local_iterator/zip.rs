@@ -78,7 +78,6 @@ where
     B: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.a.iterator_index(index);
-        i_index
+        self.a.iterator_index(index)
     }
 }

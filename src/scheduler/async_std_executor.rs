@@ -31,7 +31,7 @@ impl LamellarExecutor for AsyncStdRt {
         F::Output: Send,
     {
         // trace_span!("submit_task").in_scope(|| {
-        task::spawn(async move { task.await });
+        task::spawn(task);
         // });
     }
     fn submit_io_task<F>(&self, task: F)
@@ -40,7 +40,7 @@ impl LamellarExecutor for AsyncStdRt {
         F::Output: Send,
     {
         // trace_span!("submit_task").in_scope(|| {
-        task::spawn(async move { task.await });
+        task::spawn(task);
         // });
     }
 
@@ -50,7 +50,7 @@ impl LamellarExecutor for AsyncStdRt {
         F::Output: Send,
     {
         // trace_span!("submit_task").in_scope(|| {
-        task::spawn(async move { task.await });
+        task::spawn(task);
         // });
     }
 

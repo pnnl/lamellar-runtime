@@ -109,9 +109,8 @@ impl<T> DistRwLock<T> {
         // );
     }
     async fn async_writer_lock(&self, pe: usize) {
-        while let Err(_) =
-            self.writer
-                .compare_exchange(self.team.num_pes, pe, Ordering::SeqCst, Ordering::SeqCst)
+        while self.writer
+                .compare_exchange(self.team.num_pes, pe, Ordering::SeqCst, Ordering::SeqCst).is_err()
         {
             async_std::task::yield_now().await;
         }
@@ -834,8 +833,7 @@ impl<T: Send> GlobalRwDarc<T> {
                 .expect("invalid darc pointer"),
         };
         let wrapped_lock = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
-                .expect("invalid darc pointer"),
+            inner: NonNull::new(self.darc.inner).expect("invalid darc pointer"),
         };
         let team = self.darc.inner().team().clone();
         IntoDarcHandle {
@@ -878,8 +876,7 @@ impl<T: Send> GlobalRwDarc<T> {
                 .expect("invalid darc pointer"),
         };
         let wrapped_lock = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<DistRwLock<T>>)
-                .expect("invalid darc pointer"),
+            inner: NonNull::new(self.darc.inner).expect("invalid darc pointer"),
         };
         let team = self.darc.inner().team().clone();
         IntoLocalRwDarcHandle {

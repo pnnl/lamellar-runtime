@@ -42,7 +42,7 @@
 //! - `into_atomic`, `into_read_only`, etc., convert between disributed array types.
 //! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
 //! - We also provided access directly to the underlying local data of an array using functions (and container types) that preserve the safety guarantees of a given array type
-//!     -`local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
+//!     - `local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
 //!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput] for details.
 //! ```
 //! use lamellar::array::prelude::*;
@@ -85,6 +85,8 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+
+use anyhow::ensure;
 
 // use serde::de::DeserializeOwned;
 
@@ -307,7 +309,7 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     fn team_from(val: &T, team: &Arc<LamellarTeam>) -> Self {
         let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(1);
         unsafe {
-            buf.as_mut_slice().expect("Data should exist on PE")[0] = val.clone();
+            buf.as_mut_slice().expect("Data should exist on PE")[0] = *val;
         }
         LamellarArrayRdmaInput::LocalMemRegion(buf)
     }
@@ -405,37 +407,22 @@ impl<T: Dist> TeamTryFrom<T> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamTryFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(val: Vec<T>, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
-        if val.len() == 0 {
-            Err(anyhow::anyhow!(
-                "Trying to create an empty LamellarArrayRdmaInput"
-            ))
-        } else {
-            Ok(LamellarArrayRdmaInput::team_from(val, team))
-        }
+        ensure!(!val.is_empty(), "Trying to create an empty LamellarArrayRdmaInput");
+        Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
 
 impl<T: Dist> TeamTryFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
     fn team_try_from(val: &Vec<T>, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
-        if val.len() == 0 {
-            Err(anyhow::anyhow!(
-                "Trying to create an empty LamellarArrayRdmaInput"
-            ))
-        } else {
-            Ok(LamellarArrayRdmaInput::team_from(val, team))
-        }
+        ensure!(!val.is_empty(), "Trying to create an empty LamellarArrayRdmaInput");
+        Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
 
 impl<T: Dist> TeamTryFrom<&[T]> for LamellarArrayRdmaInput<T> {
     fn team_try_from(val: &[T], team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
-        if val.len() == 0 {
-            Err(anyhow::anyhow!(
-                "Trying to create an empty LamellarArrayRdmaInput"
-            ))
-        } else {
-            Ok(LamellarArrayRdmaInput::team_from(val, team))
-        }
+        ensure!(!val.is_empty(), "Trying to create an empty LamellarArrayRdmaInput");
+        Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
 
@@ -598,15 +585,15 @@ where
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarReadArray<T: Dist + 'static> {
-    ///
+    /// Unsafe distributed array
     UnsafeArray(UnsafeArray<T>),
-    ///
+    /// Safe read-only array
     ReadOnlyArray(ReadOnlyArray<T>),
-    ///
+    /// Safe atomic array
     AtomicArray(AtomicArray<T>),
-    ///
+    /// Safe local lock-based array
     LocalLockArray(LocalLockArray<T>),
-    ///
+    /// Safe global lock-based array
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -856,13 +843,13 @@ impl<T: Dist> LamellarEnv for LamellarReadArray<T> {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarWriteArray<T: Dist> {
-    ///
+    /// Unsafe distributed array
     UnsafeArray(UnsafeArray<T>),
-    ///
+    /// Safe atomic array
     AtomicArray(AtomicArray<T>),
-    ///
+    /// Safe local lock-based array
     LocalLockArray(LocalLockArray<T>),
-    ///
+    /// Safe global lock-based array
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -1145,6 +1132,15 @@ pub trait LamellarArray<T: Dist>:
     /// assert_eq!(100,array.len());
     ///```
     fn len(&self) -> usize;
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Convenience function to see if this array is empty
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     #[doc(alias("One-sided", "onesided"))]
     /// Return the number of elements of the array local to this PE
@@ -1706,6 +1702,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// use std::sync::atomic::{AtomicUsize,Ordering};
 /// use std::sync::Arc;
 /// use std::thread;
+///
 /// use rand::prelude::*;
 /// use std::time::Duration;
 ///

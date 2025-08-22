@@ -174,15 +174,9 @@ impl LamellarArchRT {
     pub(crate) fn team_pe(&self, world_pe: usize) -> ArchResult<usize> {
         if let Some(parent) = &self.parent {
             let parent_pe = parent.team_pe(world_pe)?;
-            // println!("world_pe {:?}   parent_pe {:?}  self: {:?}",world_pe, parent_pe,self);
-            let res = self.arch.team_pe_id(&parent_pe);
-            // println!("team_pe {:?}",res);
-            res
+            self.arch.team_pe_id(&parent_pe)
         } else {
-            // println!("root world_pe {:?}",world_pe);
-            let res = self.arch.team_pe_id(&world_pe);
-            // println!("team_pe {:?}",res);
-            res
+            self.arch.team_pe_id(&world_pe)
         }
     }
 
@@ -215,11 +209,7 @@ impl Iterator for LamellarArchRTiter {
     type Item = usize;
     fn next(&mut self) -> Option<usize> {
         let res = if self.cur_pe < self.arch.num_pes() {
-            if let Ok(pe) = self.arch.world_pe(self.cur_pe) {
-                Some(pe)
-            } else {
-                None
-            }
+            self.arch.world_pe(self.cur_pe).ok()
         } else {
             return None;
         };
@@ -353,7 +343,7 @@ impl LamellarArch for StridedArch {
     fn team_pe_id(&self, parent_pe: &usize) -> ArchResult<usize> {
         if *parent_pe >= self.start_pe
             && *parent_pe <= self.end_pe
-            && (parent_pe - self.start_pe) % self.stride == 0
+            && (parent_pe - self.start_pe).is_multiple_of(self.stride)
         {
             let team_pe = (parent_pe - self.start_pe) / self.stride;
             if team_pe < self.num_pes {

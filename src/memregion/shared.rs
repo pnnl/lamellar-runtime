@@ -115,7 +115,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
 
                 let mr = unsafe {
                     mr_t.expect("enough memory should have been allocated")
-                        .to_base::<u8>()
+                        .into_base::<u8>()
                 };
                 SharedMemoryRegion {
                     mr: Darc::async_try_new_with_drop(
@@ -148,7 +148,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
                 team.async_barrier().await;
                 let mr_t: MemoryRegion<T> =
                     MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
-                let mr = unsafe { mr_t.to_base::<u8>() };
+                let mr = unsafe { mr_t.into_base::<u8>() };
                 let res: Result<SharedMemoryRegion<T>, anyhow::Error> = Ok(SharedMemoryRegion {
                     mr: Darc::async_try_new_with_drop(
                         team.clone(),
@@ -261,7 +261,7 @@ impl<T: Dist> SubRegion<T> for SharedMemoryRegion<T> {
 }
 
 impl<T: Dist> AsBase for SharedMemoryRegion<T> {
-    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
+    unsafe fn into_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         // println!("to_base");

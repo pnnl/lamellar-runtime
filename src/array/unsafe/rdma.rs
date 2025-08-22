@@ -94,8 +94,7 @@ impl<T: Dist> UnsafeArray<T> {
                                 len: buf.len(),
                                 data: unsafe {
                                     buf.sub_region(buf_index..(buf_index + len))
-                                        .to_base::<u8>()
-                                        .into()
+                                        .into_base::<u8>()
                                 },
                                 pe: self.inner.data.my_pe,
                             };
@@ -107,7 +106,7 @@ impl<T: Dist> UnsafeArray<T> {
                                 len: buf.len(),
                                 data: unsafe {
                                     buf.sub_region(buf_index..(buf_index + len))
-                                        .to_base::<u8>()
+                                        .into_base::<u8>()
                                         .as_slice()
                                         .expect("array data to exist on PE")
                                         .to_vec()
@@ -123,8 +122,7 @@ impl<T: Dist> UnsafeArray<T> {
                             offset,
                             data: unsafe {
                                 buf.sub_region(buf_index..(buf_index + len))
-                                    .to_base::<u8>()
-                                    .into()
+                                    .into_base::<u8>()
                             },
                             pe,
                         };
@@ -201,12 +199,10 @@ impl<T: Dist> UnsafeArray<T> {
                         .data
                         .team
                         .alloc_one_sided_mem_region::<T>(num_elems_pe);
-                    let mut k = 0;
                     let pe = (start_pe + i) % num_pes;
                     // let offset = global_index / num_pes + overflow;
-                    for j in (i..buf.len()).step_by(num_pes) {
+                    for (k, j) in (i..buf.len()).step_by(num_pes).enumerate() {
                         unsafe { temp_memreg.put(k, buf.sub_region(j..=j)) };
-                        k += 1;
                     }
                     // println!("{:?}",temp_memreg.clone().to_base::<u8>().as_slice());
                     // println!("si: {:?} ei {:?}",offset,offset+k);
@@ -216,7 +212,7 @@ impl<T: Dist> UnsafeArray<T> {
                             array: self.clone().into(),
                             start_index: index,
                             len: buf.len(),
-                            data: unsafe { temp_memreg.to_base::<u8>().into() },
+                            data: unsafe { temp_memreg.into_base::<u8>().into() },
                             pe: self.inner.data.my_pe,
                         };
                         reqs.push_back(self.spawn_am_pe_tg(pe, am));
@@ -227,8 +223,8 @@ impl<T: Dist> UnsafeArray<T> {
                             len: buf.len(),
                             data: unsafe {
                                 temp_memreg
-                                    .to_base::<u8>()
-                                    .to_base::<u8>()
+                                    .into_base::<u8>()
+                                    .into_base::<u8>()
                                     .as_slice()
                                     .expect("array data to exist on PE")
                                     .to_vec()
@@ -297,9 +293,9 @@ impl<T: Dist> UnsafeArray<T> {
                     // println!("i {:?} pe {:?} k {:?} offset {:?}",i,pe,k,offset);
                     let am = UnsafeCyclicGetAm {
                         array: self.clone().into(),
-                        data: unsafe { buf.clone().to_base::<u8>() },
+                        data: unsafe { buf.clone().into_base::<u8>() },
                         temp_data: unsafe {
-                            temp_memreg.sub_region(0..num_elems).to_base::<u8>().into()
+                            temp_memreg.sub_region(0..num_elems).into_base::<u8>().into()
                         },
                         i,
                         pe,
@@ -416,17 +412,16 @@ impl<T: Dist> UnsafeArray<T> {
         index: usize,
         buf: U,
     ) {
-        match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => match self.inner.distribution {
+       if let Ok(buf) = buf.team_try_into(&self.inner.data.team.team()) {
+            match self.inner.distribution {
                 Distribution::Block => {
                     self.block_op(ArrayRdmaCmd::Put, index, buf);
                 }
                 Distribution::Cyclic => {
                     self.cyclic_op(ArrayRdmaCmd::Put, index, buf);
                 }
-            },
-            Err(_) => {}
-        };
+            };
+        }
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -493,16 +488,15 @@ impl<T: Dist> UnsafeArray<T> {
         index: usize,
         buf: U,
     ) {
-        match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => match self.inner.distribution {
+        if let Ok(buf) = buf.team_try_into(&self.inner.data.team.team()) {
+            match self.inner.distribution {
                 Distribution::Block => {
                     self.block_op(ArrayRdmaCmd::Get(false), index, buf);
                 }
                 Distribution::Cyclic => {
                     self.cyclic_op(ArrayRdmaCmd::Get(false), index, buf);
                 }
-            },
-            Err(_) => {}
+            }
         }
     }
 
@@ -698,7 +692,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 }
 
-// /// We dont implement this because "at" is actually the same for all but UnsafeArray so we just implement those directly
+// /// We don't implement this because "at" is actually the same for all but UnsafeArray so we just implement those directly
 // impl<T: Dist > LamellarArrayGet<T> for UnsafeArray<T> {
 //     fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
 //         &self,
@@ -820,7 +814,7 @@ impl UnsafeArrayInner {
                         break;
                     }
                 }
-                return Box::new(pes.into_iter());
+                Box::new(pes.into_iter())
             }
         }
     }
@@ -892,7 +886,7 @@ impl UnsafeArrayInner {
                 }
                 let start_index = local_index / num_pes;
                 let mut num_elems = len / num_pes;
-                if len % num_pes != 0 {
+                if !len.is_multiple_of(num_pes) {
                     //we have left over elements
                     if start_pe <= end_pe {
                         //no wrap around occurs
@@ -971,7 +965,7 @@ impl UnsafeArrayInner {
             Distribution::Cyclic => {
                 let num_pes = self.data.num_pes;
                 let mut num_elems = len / num_pes;
-                if len % num_pes != 0 {
+                if !len.is_multiple_of(num_pes) {
                     //we have left over elements
                     if start_pe <= end_pe {
                         //no wrap around occurs
@@ -1075,7 +1069,6 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
         for pe in self
             .array
             .pes_for_range(self.index, self.buf.len())
-            .into_iter()
         {
             // println!(
             //     "InitSmallGetAm pe {:?} index {:?} len {:?}",
@@ -1093,7 +1086,7 @@ impl<T: Dist + 'static> LamellarAm for InitSmallGetAm<T> {
         unsafe {
             match self.array.inner.distribution {
                 Distribution::Block => {
-                    let u8_buf = self.buf.clone().to_base::<u8>();
+                    let u8_buf = self.buf.clone().into_base::<u8>();
                     let mut cur_index = 0;
                     for req in reqs.drain(..) {
                         let data = req.await;
@@ -1136,12 +1129,7 @@ impl LamellarAm for UnsafeRemoteSmallGetAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
-        // println!(
-        //     "in remotegetam index {:?} len {:?}",
-        //     self.start_index, self.len
-        // );
-        // let _lock = self.array.lock.read();
-        let vals = unsafe {
+        unsafe {
             match self
                 .array
                 .local_elements_for_range(self.start_index, self.len)
@@ -1149,9 +1137,7 @@ impl LamellarAm for UnsafeRemoteSmallGetAm {
                 Some((elems, _)) => elems.to_vec(),
                 None => vec![],
             }
-        };
-        // println!("done remotegetam len {:?}", vals.len());
-        vals
+        }
     }
 }
 
@@ -1168,17 +1154,13 @@ impl LamellarAm for UnsafePutAm {
     async fn exec(self) {
         unsafe {
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
-            match self
+            if let Some((elems, _)) = self
                 .array
                 .inner
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, _)) => {
+                .local_elements_for_range(self.start_index, self.len) {
                     self.data.blocking_get_slice(self.pe, 0, elems);
-                }
-                None => {}
             }
-        };
+        }
     }
 }
 
@@ -1196,17 +1178,16 @@ impl LamellarAm for UnsafeSmallPutAm {
     async fn exec(self) {
         unsafe {
             // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
-            match self
+            if let Some((elems, _))= self
                 .array
                 .inner
                 .local_elements_for_range(self.start_index, self.len)
             {
-                Some((elems, _)) => std::ptr::copy_nonoverlapping(
+                 std::ptr::copy_nonoverlapping(
                     self.data.as_ptr(),
                     elems.as_mut_ptr(),
                     elems.len(),
-                ),
-                None => {}
+                )
             }
         };
     }

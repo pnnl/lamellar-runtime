@@ -29,7 +29,7 @@ impl UnsafeArrayInner {
                 let end_i = ((worker + 1) as f64 * elems_per_thread).round() as usize;
                 reqs.push_back(
                     self.data.task_group.exec_arc_am_local_inner(
-                        cons.into_am(IterSchedule::Static(start_i, end_i)),
+                        cons.as_am(IterSchedule::Static(start_i, end_i)),
                     ),
                 );
 
@@ -56,7 +56,7 @@ impl UnsafeArrayInner {
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local) {
                 reqs.push_back(self.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Dynamic(cur_i.clone(), num_elems_local)),
+                    cons.as_am(IterSchedule::Dynamic(cur_i.clone(), num_elems_local)),
                 ));
             }
         }
@@ -87,7 +87,7 @@ impl UnsafeArrayInner {
                 worker += 1;
             }
             for sibling in &siblings {
-                reqs.push_back(self.data.task_group.exec_arc_am_local_inner(cons.into_am(
+                reqs.push_back(self.data.task_group.exec_arc_am_local_inner(cons.as_am(
                     IterSchedule::WorkStealing(sibling.clone(), siblings.clone()),
                 )))
             }
@@ -113,7 +113,7 @@ impl UnsafeArrayInner {
             let mut cur_i = 0;
             let mut i;
             while elems_per_thread > 100.0 && cur_i < num_elems_local_orig {
-                num_elems_local = num_elems_local / 1.61; //golden ratio
+                num_elems_local /= 1.61; //golden ratio
                 let start_i = cur_i;
                 let end_i = std::cmp::min(
                     cur_i + num_elems_local.round() as usize,
@@ -147,7 +147,7 @@ impl UnsafeArrayInner {
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_elems_local_orig) {
                 reqs.push_back(self.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Chunk(ranges.clone(), range_i.clone())),
+                    cons.as_am(IterSchedule::Chunk(ranges.clone(), range_i.clone())),
                 ));
             }
         }
@@ -180,7 +180,7 @@ impl UnsafeArrayInner {
             // println!("ranges {:?}", ranges);
             for _ in 0..std::cmp::min(num_workers, num_chunks) {
                 reqs.push_back(self.data.task_group.exec_arc_am_local_inner(
-                    cons.into_am(IterSchedule::Chunk(ranges.clone(), range_i.clone())),
+                    cons.as_am(IterSchedule::Chunk(ranges.clone(), range_i.clone())),
                 ));
             }
         }

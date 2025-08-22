@@ -19,11 +19,11 @@ impl<T: Dist> LamellarArrayIterators<T> for ReadOnlyArray<T> {
     type LocalIter = LocalIter<'static, T, Self>;
     type OnesidedIter = OneSidedIter<'static, T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
-        DistIter::new(self.clone().into(), 0, 0)
+        DistIter::new(self.clone(), 0, 0)
     }
 
     fn local_iter(&self) -> Self::LocalIter {
-        LocalIter::new(self.clone().into(), 0, 0)
+        LocalIter::new(self.clone(), 0, 0)
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {

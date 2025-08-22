@@ -170,7 +170,7 @@ pub(crate) trait IterConsumer: SyncSend {
     type Handle;
     fn init(&self, start: usize, cnt: usize) -> Self;
     fn next(&mut self) -> Option<Self::Item>;
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm;
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm;
     fn create_handle(
         self,
         team: Pin<Arc<LamellarTeamRT>>,

@@ -61,8 +61,6 @@ where
     I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.iter.iterator_index(index);
-        // println!("{:?} \t Enumerate iterator index {index} {g_index:?}",std::thread::current().id());
-        i_index
+        self.iter.iterator_index(index)
     }
 }

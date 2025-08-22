@@ -1,3 +1,7 @@
+// The `consumer_impl!` macro generates an await block which is awaited later, so this is
+// likely a false positive.
+#![allow(clippy::async_yields_async)]
+
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::distributed_iterator::*;
 use crate::array::iterator::private::Sealed;
@@ -21,7 +25,7 @@ impl<T> InnerArray for UnsafeArray<T> {
 
 impl InnerArray for UnsafeArrayInner {
     fn as_inner(&self) -> &UnsafeArrayInner {
-        &self
+        self
     }
 }
 

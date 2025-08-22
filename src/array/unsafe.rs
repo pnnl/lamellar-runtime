@@ -91,11 +91,7 @@ pub struct UnsafeByteArrayWeak {
 
 impl UnsafeByteArrayWeak {
     pub fn upgrade(&self) -> Option<UnsafeByteArray> {
-        if let Some(inner) = self.inner.upgrade() {
-            Some(UnsafeByteArray { inner })
-        } else {
-            None
-        }
+        self.inner.upgrade().map(|inner| UnsafeByteArray { inner })
     }
 }
 
@@ -225,7 +221,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 )
             }
         }
-        let rmr = unsafe { rmr_t.to_base::<u8>() };
+        let rmr = unsafe { rmr_t.into_base::<u8>() };
 
         let data = Darc::async_try_new_with_drop(
             team.clone(),
@@ -246,7 +242,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data,
-                distribution: distribution.clone(),
+                distribution,
                 orig_elem_per_pe: elem_per_pe,
                 orig_remaining_elems: remaining_elems,
                 elem_size: std::mem::size_of::<T>(),
@@ -833,7 +829,7 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
             crate::darc::DarcMode::UnsafeArray,
         )
         .await;
-        if local_vals.len() > 0 {
+        if !local_vals.is_empty() {
             unsafe { array.put(my_start, local_vals).await };
         }
         team.async_barrier().await;
@@ -869,7 +865,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
                 });
         }
         let array = UnsafeArray::<T>::new(team.clone(), size, distribution).block();
-        if local_vals.len() > 0 {
+        if !local_vals.is_empty() {
             array.block_on(unsafe { array.put(my_start, local_vals) });
         }
         array.barrier();
@@ -1325,7 +1321,7 @@ impl<T: Dist + std::fmt::Debug> UnsafeArray<T> {
     /// cyclic_array.print();
     ///```
     pub fn print(&self) {
-        <UnsafeArray<T> as ArrayPrint<T>>::print(&self);
+        <UnsafeArray<T> as ArrayPrint<T>>::print(self);
     }
 }
 
@@ -1559,20 +1555,16 @@ impl<T: Dist + AmDist + 'static> UnsafeArray<T> {
 
 impl UnsafeArrayInnerWeak {
     pub(crate) fn upgrade(&self) -> Option<UnsafeArrayInner> {
-        if let Some(data) = self.data.upgrade() {
-            Some(UnsafeArrayInner {
-                data,
-                distribution: self.distribution.clone(),
-                orig_elem_per_pe: self.orig_elem_per_pe,
-                orig_remaining_elems: self.orig_remaining_elems,
-                elem_size: self.elem_size,
-                offset: self.offset,
-                size: self.size,
-                sub: self.sub,
-            })
-        } else {
-            None
-        }
+        self.data.upgrade().map(|d| UnsafeArrayInner {
+            data: d,
+            distribution: self.distribution,
+            orig_elem_per_pe: self.orig_elem_per_pe,
+            orig_remaining_elems: self.orig_remaining_elems,
+            elem_size: self.elem_size,
+            offset: self.offset,
+            size: self.size,
+            sub: self.sub,
+        })
     }
 }
 
@@ -1597,7 +1589,7 @@ impl UnsafeArrayInner {
     pub(crate) fn downgrade(array: &UnsafeArrayInner) -> UnsafeArrayInnerWeak {
         UnsafeArrayInnerWeak {
             data: Darc::downgrade(&array.data),
-            distribution: array.distribution.clone(),
+            distribution: array.distribution,
             orig_elem_per_pe: array.orig_elem_per_pe,
             orig_remaining_elems: array.orig_remaining_elems,
             elem_size: array.elem_size,
@@ -1634,11 +1626,10 @@ impl UnsafeArrayInner {
                     Some((pe, offset))
                 }
                 Distribution::Cyclic => {
-                    let res = Some((
+                    Some((
                         global_index % self.data.num_pes,
                         global_index / self.data.num_pes,
-                    ));
-                    res
+                    ))
                 }
             }
         } else {
@@ -1777,7 +1768,7 @@ impl UnsafeArrayInner {
                     //the (sub)array starts before my pe
                     if (start as usize) < self.size {
                         //sub(array) exists on my node
-                        Some(global_start as usize + index)
+                        Some(global_start + index)
                     } else {
                         //sub array does not exist on my node
                         None
@@ -1815,7 +1806,7 @@ impl UnsafeArrayInner {
                 let mut num_elems = self.size / num_pes;
                 // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);
 
-                if self.size % num_pes != 0 {
+                if !self.size.is_multiple_of(num_pes) {
                     //we have leftover elements
                     if start_pe <= end_pe {
                         //no wrap around occurs
@@ -1993,7 +1984,7 @@ impl UnsafeArrayInner {
                         ),
                     }; //inclusive
                     let mut num_elems = self.size / num_pes;
-                    if self.size % num_pes != 0 {
+                    if !self.size.is_multiple_of(num_pes) {
                         //we have left over elements
                         if start_pe <= end_pe {
                             //no wrap around occurs
@@ -2001,7 +1992,7 @@ impl UnsafeArrayInner {
                                 num_elems += 1
                             }
                         } else {
-                            //wrap arround occurs
+                            //wrap around occurs
                             if pe >= start_pe || pe <= end_pe {
                                 num_elems += 1
                             }

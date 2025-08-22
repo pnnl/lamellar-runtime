@@ -75,12 +75,11 @@ where
     }
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
-        let elems = if in_elems % self.chunk_size > 0 {
+        if !in_elems.is_multiple_of(self.chunk_size) {
             1 + in_elems / self.chunk_size
         } else {
             in_elems / self.chunk_size
-        };
-        elems
+        }
     }
 
     fn advance_index(&mut self, count: usize) {
@@ -93,8 +92,7 @@ where
     I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.iter.iterator_index(index);
-        i_index
+        self.iter.iterator_index(index)
     }
 }
 

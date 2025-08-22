@@ -61,7 +61,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ForEachAm {
             iter: self.iter_clone(Sealed),
             op: self.op.clone(),
@@ -131,7 +131,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ForEachAsyncAm {
             iter: self.iter_clone(Sealed),
             op: self.op.clone(),
@@ -364,9 +364,9 @@ where
 {
     async fn exec(&self) {
         // println!("foreacham: {:?}", std::thread::current().id());
-        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
-        while let Some(elem) = iter.next() {
-            (&self.op)(elem);
+        let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
+        for elem in iter {
+            (self.op)(elem);
         }
     }
 }
@@ -410,9 +410,9 @@ where
     Fut: Future<Output = ()> + Send + 'static,
 {
     async fn exec(&self) {
-        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
-        while let Some(elem) = iter.next() {
-            (&self.op)(elem).await;
+        let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
+        for elem in iter {
+            (self.op)(elem).await;
         }
     }
 }

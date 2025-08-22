@@ -52,13 +52,13 @@ impl ArrayRdmaHandle {
     }
 
     /// This method will block the calling thread until the associated Array RDMA Operation completes
-    pub fn block(self) -> () {
+    pub fn block(self) {
         RuntimeWarning::BlockingCall(
             "ArrayRdmaHandle::block",
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        self.array.team().block_on(self)
+        self.array.team().block_on(self);
     }
 }
 
@@ -191,15 +191,14 @@ impl<T: Dist> Future for ArrayRdmaAtHandle<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.spawned = true;
-        let mut this = self.project();
-        match &mut this.req {
-            Some(req) => {
-                if !req.ready_or_set_waker(cx.waker()) {
-                    return Poll::Pending;
-                }
+        let this = self.project();
+
+        if let Some(ref mut req) = this.req {
+            if !req.ready_or_set_waker(cx.waker()) {
+                return Poll::Pending;
             }
-            None => {} //this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
-        }
+        } // else: this means we did a blocking_get (With respect to RDMA) on either Unsafe or ReadOnlyArray so data is here
+
         Poll::Ready(unsafe { this.buf.as_slice().expect("Data should exist on PE")[0] })
     }
 }

@@ -983,9 +983,7 @@ impl<
     > IndexedDistributedIterator for DistIter<'static, T, A>
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-        // println!("{:?} \t DistIter iterator index {index} {g_index:?}",std::thread::current().id());
-        g_index
+        self.data.subarray_index_from_local(index, 1)
     }
 }
 
@@ -1102,8 +1100,6 @@ impl<
     > IndexedDistributedIterator for DistIterMut<'static, T, A>
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-
-        g_index
+        self.data.subarray_index_from_local(index, 1)
     }
 }

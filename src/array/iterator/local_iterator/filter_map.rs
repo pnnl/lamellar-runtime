@@ -77,9 +77,7 @@ where
     }
 
     fn elems(&self, in_elems: usize) -> usize {
-        let in_elems = self.iter.elems(in_elems);
-        // println!("enumerate elems {:?}",in_elems);
-        in_elems
+        self.iter.elems(in_elems)
     }
 
     fn advance_index(&mut self, count: usize) {

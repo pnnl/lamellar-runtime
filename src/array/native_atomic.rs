@@ -889,6 +889,10 @@ impl<T: Dist> NativeAtomicLocalData<T> {
         self.end_index - self.start_index
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.end_index == self.start_index
+    }
+
     pub fn iter(&self) -> NativeAtomicLocalDataIter<T> {
         NativeAtomicLocalDataIter {
             array: self.array.clone(),
@@ -1424,8 +1428,8 @@ impl NativeAtomicType {
                     *dst = src.load(Ordering::SeqCst);
                 }
                 NativeAtomicType::U8 => {
-                    let dst = &mut *(dst_addr as *mut u8);
-                    let src = &*(src_addr as *mut u8 as *mut AtomicU8);
+                    let dst = &mut *(dst_addr);
+                    let src = &*(src_addr as *mut AtomicU8);
                     *dst = src.load(Ordering::SeqCst);
                 }
                 NativeAtomicType::U16 => {
@@ -1481,7 +1485,7 @@ impl NativeAtomicType {
                     dst.store(src, Ordering::SeqCst);
                 }
                 NativeAtomicType::U8 => {
-                    let dst = &*(dst_addr as *mut u8 as *mut AtomicU8);
+                    let dst = &*(dst_addr as *mut AtomicU8);
                     let src = *(src_addr as *mut u8);
                     dst.store(src, Ordering::SeqCst);
                 }

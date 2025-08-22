@@ -60,29 +60,17 @@ where
                 }
             }
             iter.advance_index(skip_index - in_start_i);
-            let val = Skip::new(iter, self.count, skip_index - in_start_i);
-            // println!("{:?} Skip init {skip_index} {len} {:?} {}",std::thread::current().id(),self.count,skip_index-in_start_i);
-            val
+            Skip::new(iter, self.count, skip_index - in_start_i)
         } else {
             iter.advance_index(len);
-            let val = Skip::new(iter, self.count, in_start_i); // nothing to iterate so set len to 0
-                                                               // println!("{:?} Skip nothing init {in_start_i} {len} {:?} {in_start_i}",std::thread::current().id(),self.count);
-            val
+            Skip::new(iter, self.count, in_start_i) // nothing to iterate so set len to 0
         }
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        let val = self.iter.next();
-        // println!("skip next {}",self.skip_index);
-        // if val.is_some() {
-        //     println!("{:?} Skip next {:?}",std::thread::current().id(),self.skip_index);
-        // }
-        // else {
-        //     println!("{:?} Skip done",std::thread::current().id());
-        // }
-        val
+        self.iter.next()
     }
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);

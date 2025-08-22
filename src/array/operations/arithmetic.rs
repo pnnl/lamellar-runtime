@@ -271,7 +271,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn sub(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -345,7 +345,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_sub(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -420,7 +420,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn mul(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -494,7 +494,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_mul(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -569,7 +569,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn div(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -643,7 +643,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_div(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -718,7 +718,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn rem(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -792,7 +792,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_rem(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -1082,7 +1082,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn sub(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1156,7 +1156,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_sub(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -1231,7 +1231,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn mul(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1305,7 +1305,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_mul(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -1380,7 +1380,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn div(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1454,7 +1454,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_div<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_div(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -1529,7 +1529,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn rem(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -1603,7 +1603,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_rem<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_rem(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,

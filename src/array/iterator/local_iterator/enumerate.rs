@@ -36,9 +36,7 @@ where
     type Item = (usize, <I as LocalIterator>::Item);
     type Array = <I as LocalIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Enumerate<I> {
-        let val = Enumerate::new(self.iter.init(start_i, cnt, _s), start_i);
-        // println!("{:?} Enumerate init {start_i} {cnt} {start_i}",std::thread::current().id());
-        val
+        Enumerate::new(self.iter.init(start_i, cnt, _s), start_i)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -56,8 +54,7 @@ where
     }
 
     fn elems(&self, in_elems: usize) -> usize {
-        let in_elems = self.iter.elems(in_elems);
-        in_elems
+        self.iter.elems(in_elems)
     }
 
     fn advance_index(&mut self, count: usize) {
@@ -71,8 +68,6 @@ where
     I: IndexedLocalIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let i_index = self.iter.iterator_index(index);
-        // println!("{:?} \t Enumerate iterator index {index} {g_index:?}",std::thread::current().id());
-        i_index
+        self.iter.iterator_index(index)
     }
 }

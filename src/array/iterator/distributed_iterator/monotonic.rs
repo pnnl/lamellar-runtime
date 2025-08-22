@@ -36,9 +36,7 @@ where
     type Item = (usize, <I as DistributedIterator>::Item);
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Monotonic<I> {
-        let val = Monotonic::new(self.iter.init(start_i, cnt, _s), start_i);
-        // println!("{:?} Monotonic init {start_i} {cnt} {start_i}",std::thread::current().id());
-        val
+        Monotonic::new(self.iter.init(start_i, cnt, _s), start_i)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -56,8 +54,7 @@ where
     }
 
     fn elems(&self, in_elems: usize) -> usize {
-        let in_elems = self.iter.elems(in_elems);
-        in_elems
+        self.iter.elems(in_elems)
     }
 
     fn advance_index(&mut self, count: usize) {

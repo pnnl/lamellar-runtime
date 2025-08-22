@@ -65,16 +65,11 @@ where
                 }
             }
             iter.advance_index(offset_index);
-            let val = StepBy::new(iter, self.step_size, (offset_index > 0) as usize);
-
-            // println!("{:?} StepBy init {} {} {} ",std::thread::current().id(),in_start_i* self.step_size+offset_index,cnt * self.step_size,self.step_size);
-            val
+            StepBy::new(iter, self.step_size, (offset_index > 0) as usize)
         } else {
             // nothing to iterate so set len to 0
             iter.advance_index(cnt);
-            let val = StepBy::new(iter, self.step_size, 0);
-            // println!("{:?} StepBy nothing init {} {} {} ",std::thread::current().id(),in_start_i * self.step_size,cnt * self.step_size,self.step_size);
-            val
+            StepBy::new(iter, self.step_size, 0)
         }
     }
     fn array(&self) -> Self::Array {
