@@ -623,7 +623,7 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
             AtomicArray::GenericAtomicArray(array) => array.async_barrier(),
         }
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,

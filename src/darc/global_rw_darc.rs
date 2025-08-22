@@ -58,7 +58,7 @@ impl<T> DistRwLock<T> {
             collective_cnt: AtomicUsize::new(team.num_pes + 1),
             // local_cnt: AtomicUsize::new(0),
             // local_state: Mutex::new(None),
-            team: team,
+            team,
             data: std::cell::UnsafeCell::new(data),
         }
     }

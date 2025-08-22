@@ -24,7 +24,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
     ) -> ArrayRdmaHandle {
         let req = self.exec_am_local_tg(InitGetAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.into(),
         });
         ArrayRdmaHandle {
@@ -37,13 +37,13 @@ impl<T: Dist> LamellarArrayInternalGet<T> for GlobalLockArray<T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         let req = self.exec_am_local_tg(InitGetAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.clone().into(),
         });
         ArrayRdmaAtHandle {
             array: self.as_lamellar_byte_array(),
             req: Some(req),
-            buf: buf,
+            buf,
             spawned: false,
         }
     }
@@ -77,7 +77,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for GlobalLockArray<T> {
     ) -> ArrayRdmaHandle {
         let req = self.exec_am_local_tg(InitPutAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.into(),
         });
         ArrayRdmaHandle {
@@ -124,7 +124,6 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
             .array
             .array
             .pes_for_range(self.index, self.buf.len())
-            .into_iter()
         {
             // println!("pe {:?}",pe);
             let remote_am = GlobalLockRemoteGetAm {
@@ -218,7 +217,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -233,8 +231,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                                     start_index: self.index,
                                     len: self.buf.len(),
                                     data: u8_buf
-                                        .sub_region(cur_index..(cur_index + u8_buf_len))
-                                        .into(),
+                                        .sub_region(cur_index..(cur_index + u8_buf_len)),
                                     pe: self.array.my_pe(),
                                 };
                                 reqs.push(self.array.spawn_am_pe_tg(pe, remote_am));

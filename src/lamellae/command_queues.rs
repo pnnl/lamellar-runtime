@@ -268,7 +268,7 @@ impl CmdMsgBuffer {
             waiting_bufs: HashMap::new(),
             cur_buf: None,
             num_bufs: addrs.len(),
-            pe: pe,
+            pe,
             // base_addr: base_addr,
         }
     }
@@ -574,14 +574,14 @@ impl InnerCQ {
             free_buffer: Arc::new(Mutex::new(free_buffer)),
             alloc_buffer: Arc::new(Mutex::new(alloc_buffer)),
             panic_buffer: Arc::new(Mutex::new(panic_buffer)),
-            cmd_buffers: cmd_buffers,
+            cmd_buffers,
             release_cmd: Arc::new(release_cmd),
             clear_cmd: Arc::new(clear_cmd),
             free_cmd: Arc::new(free_cmd),
-            comm: comm,
-            my_pe: my_pe,
-            num_pes: num_pes,
-            send_waiting: send_waiting,
+            comm,
+            my_pe,
+            num_pes,
+            send_waiting,
             pending_cmds: Arc::new(AtomicUsize::new(0)),
             _active_cnt: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
@@ -589,7 +589,7 @@ impl InnerCQ {
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
             alloc_id: Arc::new(AtomicUsize::new(0)),
-            active: active,
+            active,
         }
     }
 
@@ -879,11 +879,9 @@ impl InnerCQ {
             }
             for pe in 0..self.num_pes {
                 while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear {
-                    if alloc_buf[pe].cmd == Cmd::Alloc {
-                        if alloc_buf[pe].daddr > alloc_id {
-                            new_alloc = true;
-                            break;
-                        }
+                    if alloc_buf[pe].cmd == Cmd::Alloc && alloc_buf[pe].daddr > alloc_id {
+                        new_alloc = true;
+                        break;
                     }
                     std::thread::yield_now();
                 }
@@ -1049,14 +1047,14 @@ impl InnerCQ {
 
     //#[tracing::instrument(skip_all)]
     async fn get_cmd(&self, src: usize, cmd: CmdMsg) -> SerializedData {
-        let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
+        let mut ser_data = self.comm.new_serialized_data(cmd.dsize);
         let mut timer = std::time::Instant::now();
         // let mut print = false;
         while ser_data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
             // println!("cq 848 need to alloc memory {:?}",cmd.dsize);
             self.send_alloc(cmd.dsize);
-            ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
+            ser_data = self.comm.new_serialized_data(cmd.dsize);
             // println!("cq 851 data {:?}",ser_data.is_ok());
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout && ser_data.is_err() {
                 println!(
@@ -1097,7 +1095,7 @@ impl InnerCQ {
     async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
         let mut data = self
             .comm
-            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
+            .rt_alloc(cmd.dsize, std::mem::align_of::<CmdMsg>());
         let mut timer = std::time::Instant::now();
         while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             async_std::task::yield_now().await;
@@ -1105,7 +1103,7 @@ impl InnerCQ {
             self.send_alloc(cmd.dsize);
             data = self
                 .comm
-                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
+                .rt_alloc(cmd.dsize, std::mem::align_of::<CmdMsg>());
             // println!("cq 874 data {:?}",data.is_ok());
             if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
                 println!("get cmd buf stuck waiting for alloc");
@@ -1304,17 +1302,17 @@ impl CommandQueue {
         );
         CommandQueue {
             cq: Arc::new(cq),
-            send_buffer_addr: send_buffer_addr,
-            recv_buffer_addr: recv_buffer_addr,
-            free_buffer_addr: free_buffer_addr,
-            alloc_buffer_addr: alloc_buffer_addr,
-            panic_buffer_addr: panic_buffer_addr,
-            release_cmd_addr: release_cmd_addr,
-            clear_cmd_addr: clear_cmd_addr,
-            free_cmd_addr: free_cmd_addr,
-            cmd_buffers_addrs: cmd_buffers_addrs,
-            comm: comm,
-            active: active,
+            send_buffer_addr,
+            recv_buffer_addr,
+            free_buffer_addr,
+            alloc_buffer_addr,
+            panic_buffer_addr,
+            release_cmd_addr,
+            clear_cmd_addr,
+            free_cmd_addr,
+            cmd_buffers_addrs,
+            comm,
+            active,
         }
     }
 
@@ -1406,7 +1404,6 @@ impl CommandQueue {
                 if src != my_pe {
                     if let Some(cmd_buf_cmd) = self.cq.ready(src) {
                         // timer =  std::time::Instant::now();
-                        let cmd_buf_cmd = cmd_buf_cmd;
                         // println!("recv_data {:?}", cmd_buf_cmd);
                         match cmd_buf_cmd.cmd {
                             Cmd::Alloc => panic!("should not encounter alloc here"),

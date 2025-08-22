@@ -240,7 +240,7 @@ pub(crate) struct GlobalArch {
 
 impl GlobalArch {
     pub(crate) fn new(num_pes: usize) -> GlobalArch {
-        GlobalArch { num_pes: num_pes }
+        GlobalArch { num_pes }
     }
 }
 
@@ -322,9 +322,9 @@ impl StridedArch {
         }
         StridedArch {
             num_pes: num_team_pes,
-            start_pe: start_pe,
-            end_pe: end_pe,
-            stride: stride,
+            start_pe,
+            end_pe,
+            stride,
         }
     }
 }
@@ -345,7 +345,7 @@ impl LamellarArch for StridedArch {
             Ok(parent_pe)
         } else {
             Err(IdError {
-                parent_pe: parent_pe,
+                parent_pe,
                 team_pe: *team_pe,
             })
         }
@@ -361,7 +361,7 @@ impl LamellarArch for StridedArch {
             } else {
                 Err(IdError {
                     parent_pe: *parent_pe,
-                    team_pe: team_pe,
+                    team_pe,
                 })
             }
         } else {
@@ -413,7 +413,7 @@ impl BlockedArch {
     pub fn new(start_pe: usize, num_team_pes: usize) -> BlockedArch {
         BlockedArch {
             num_pes: num_team_pes,
-            start_pe: start_pe,
+            start_pe,
             end_pe: start_pe + num_team_pes - 1,
         }
     }
@@ -435,7 +435,7 @@ impl LamellarArch for BlockedArch {
             Ok(parent_pe)
         } else {
             Err(IdError {
-                parent_pe: parent_pe,
+                parent_pe,
                 team_pe: *team_pe,
             })
         }
@@ -448,7 +448,7 @@ impl LamellarArch for BlockedArch {
             } else {
                 Err(IdError {
                     parent_pe: *parent_pe,
-                    team_pe: team_pe,
+                    team_pe,
                 })
             }
         } else {

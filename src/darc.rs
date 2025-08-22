@@ -185,17 +185,15 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 ///     }
 ///  }
 ///
-/// fn main(){
-///     let world = LamellarWorldBuilder::new().build();
-///     let my_pe = world.my_pe();
-///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
-///     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
-///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
-///     world.wait_all(); // wait for my active message to return
-///     world.barrier(); //at this point all updates will have been performed
-///     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
-/// }
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let num_pes = world.num_pes();
+/// let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+/// let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
+/// darc_counter.fetch_add(my_pe, Ordering::SeqCst);
+/// world.wait_all(); // wait for my active message to return
+/// world.barrier(); //at this point all updates will have been performed
+/// assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 ///```
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
@@ -252,7 +250,7 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 /// and it makes no guarantees itself about the value still being present, and thus can return `None` from `upgrade()`.
 /// Note that a `WeakDarc` does prevent the allocation itself from being deallocated.
 ///
-/// The typical way to obtian a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
+/// The typical way to obtain a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
 ///
 /// # Examples
 ///```
@@ -273,19 +271,17 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 ///     }
 ///  }
 ///
-/// fn main(){
-///     let world = LamellarWorldBuilder::new().build();
-///     let my_pe = world.my_pe();
-///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
-///     let weak = Darc::downgrade(&darc_counter);
-///     match weak.upgrade(){
-///         Some(counter) => {
-///             counter.fetch_add(my_pe, Ordering::SeqCst);
-///         }
-///         None => {
-///             println!("counter is gone");
-///         }   
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let num_pes = world.num_pes();
+/// let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+/// let weak = Darc::downgrade(&darc_counter);
+/// match weak.upgrade(){
+///     Some(counter) => {
+///         counter.fetch_add(my_pe, Ordering::SeqCst);
+///     }
+///     None => {
+///         println!("counter is gone");
 ///     }
 /// }
 ///```
@@ -374,7 +370,7 @@ impl<T: 'static> DarcInner<T> {
 
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
         if self.ref_cnt_addr + pe * std::mem::size_of::<AtomicUsize>() < 10 {
-            println!("error!!!! addrress makes no sense: {:?} ", pe);
+            println!("error!!!! address makes no sense: {:?} ", pe);
             println!("{:?}", self);
             panic!();
         }
@@ -436,7 +432,7 @@ impl<T: 'static> DarcInner<T> {
                     team.spawn_am_pe_tg(
                         pe,
                         FinishedAm {
-                            cnt: cnt,
+                            cnt,
                             src_pe: pe,
                             inner_addr: pe_addr,
                         },
@@ -1199,7 +1195,7 @@ impl<T: Send + Sync> Darc<T> {
         let barrier_ptr = Box::into_raw(barrier);
         let darc_temp = DarcInner {
             id: DARC_ID.fetch_add(1, Ordering::Relaxed),
-            my_pe: my_pe,
+            my_pe,
             num_pes: team_rt.num_pes,
             local_cnt: AtomicUsize::new(1),
             total_local_cnt: AtomicUsize::new(1),
@@ -1235,7 +1231,7 @@ impl<T: Send + Sync> Darc<T> {
             am_counters: am_counters_ptr,
             team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
-            drop: drop,
+            drop,
             valid: AtomicBool::new(true),
         };
         unsafe {
@@ -1850,31 +1846,25 @@ impl std::fmt::Debug for __NetworkDarc {
 
 impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
-        // println!("net darc from darc");
         let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
+        __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-        };
-        // darc.print();
-        ndarc
+        }
     }
 }
 
 impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
-        // println!("net darc from darc");
         let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
+        __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-        };
-        // darc.print();
-        ndarc
+        }
     }
 }
 

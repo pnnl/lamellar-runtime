@@ -14,7 +14,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
     ) -> ArrayRdmaHandle {
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.into(),
         });
         ArrayRdmaHandle {
@@ -27,13 +27,13 @@ impl<T: Dist> LamellarArrayInternalGet<T> for NativeAtomicArray<T> {
         let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
         let req = self.exec_am_local(InitGetAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.clone().into(),
         });
         ArrayRdmaAtHandle {
             array: self.as_lamellar_byte_array(),
             req: Some(req),
-            buf: buf,
+            buf,
             spawned: false,
         }
     }
@@ -66,7 +66,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for NativeAtomicArray<T> {
     ) -> ArrayRdmaHandle {
         let req = self.exec_am_local(InitPutAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.into(),
         });
         ArrayRdmaHandle {
