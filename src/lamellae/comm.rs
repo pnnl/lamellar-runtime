@@ -25,12 +25,13 @@ use crate::lamellae::libfabric_lamellae::{comm::LibfabricComm, fabric::AllocInfo
 // };
 use crate::{
     active_messaging::AMCounters,
+    array::LamellarArrayRdmaInput,
     lamellae::{
         local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
         SerializedData,
     },
     scheduler::Scheduler,
-    Deserialize, Serialize,
+    Deserialize, Dist, Serialize,
 };
 
 use derive_more::{Add, Into, Sub};

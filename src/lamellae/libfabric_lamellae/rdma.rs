@@ -11,12 +11,13 @@ use tracing::trace;
 
 use crate::{
     active_messaging::AMCounters,
+    array::LamellarArrayRdmaInput,
     lamellae::{
         comm::rdma::{CommRdma, RdmaAtFuture, RdmaAtHandle, RdmaFuture, RdmaHandle, Remote},
         CommAllocAddr, CommSlice,
     },
     warnings::RuntimeWarning,
-    LamellarTask,
+    Dist, LamellarTask,
 };
 
 use super::{comm::LibfabricComm, fabric::Ofi, Scheduler};
@@ -343,23 +344,18 @@ impl CommRdma for LibfabricComm {
         }
         .into()
     }
-    fn put_test<T: Remote>(
+    fn put_test<T: Dist>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
-        src: T,
+        src: LamellarArrayRdmaInput<T>,
         remote_addr: CommAllocAddr,
     ) {
         // if pe != self.my_pe {
         unsafe {
             self.ofi
-                .inner_put(
-                    pe,
-                    std::slice::from_ref(&src),
-                    *(&remote_addr as &usize),
-                    false,
-                )
+                .inner_put(pe, src.as_slice(), *(&remote_addr as &usize), false)
                 .unwrap()
         };
 

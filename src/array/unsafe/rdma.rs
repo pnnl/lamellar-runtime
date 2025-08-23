@@ -526,10 +526,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn put_test(&self, index: usize, val: T) {
+    pub unsafe fn put_test<U: TeamInto<LamellarArrayRdmaInput<T>>>(&self, index: usize, val: U) {
         //-> crate::lamellae::RdmaHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.inner.data.mem_region.put_test(pe, offset, val);
+            self.inner
+                .data
+                .mem_region
+                .put_test(pe, offset, val.team_into(&self.team()));
         } else {
             panic!();
         }

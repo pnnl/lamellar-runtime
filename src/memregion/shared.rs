@@ -314,7 +314,11 @@ impl<T: Dist> SharedMemoryRegion<T> {
         self.mr.put2(pe, self.sub_region_offset + index, data)
     }
     pub unsafe fn direct_put(&self, pe: usize, index: usize, data: T) {
-        self.mr.put_test(pe, self.sub_region_offset + index, data);
+        self.mr.put_test(
+            pe,
+            self.sub_region_offset + index,
+            LamellarArrayRdmaInput::Owned(data),
+        );
     }
     pub unsafe fn blocking_get(&self, pe: usize, index: usize) -> T {
         self.mr.get_test(pe, self.sub_region_offset + index)

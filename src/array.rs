@@ -278,7 +278,22 @@ pub enum LamellarArrayRdmaInput<T: Dist> {
     SharedMemRegion(SharedMemoryRegion<T>), //when used as input/output we are only using the local data
     /// Variant contiaining a onessided memory region that can be used as an input buffer
     LocalMemRegion(OneSidedMemoryRegion<T>),
+    /// Variant containing an owned value that can be used as an input buffer
+    Owned(T),
+    OwnedVec(Vec<T>),
 }
+impl<T: Dist> LamellarArrayRdmaInput<T> {
+    pub(crate) fn as_slice(&self) -> &[T] {
+        match self {
+            LamellarArrayRdmaInput::LamellarMemRegion(region) => unsafe { region.as_slice() },
+            LamellarArrayRdmaInput::SharedMemRegion(region) => unsafe { region.as_slice() },
+            LamellarArrayRdmaInput::LocalMemRegion(region) => unsafe { region.as_slice() },
+            LamellarArrayRdmaInput::Owned(value) => std::slice::from_ref(value),
+            LamellarArrayRdmaInput::OwnedVec(vec) => vec.as_slice(),
+        }
+    }
+}
+
 impl<T: Dist> LamellarRead for LamellarArrayRdmaOutput<T> {}
 
 /// Registered memory regions that can be used as output to various LamellarArray RDMA operations.
@@ -323,26 +338,26 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
 impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: T, team: &Arc<LamellarTeam>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(1);
-        unsafe {
-            buf.as_mut_slice()[0] = val;
-        }
-        LamellarArrayRdmaInput::LocalMemRegion(buf)
+        // let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(1);
+        // unsafe {
+        //     buf.as_mut_slice()[0] = val;
+        // }
+        LamellarArrayRdmaInput::Owned(val)
     }
 }
 
 impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
     fn team_from(vals: Vec<T>, team: &Arc<LamellarTeam>) -> Self {
-        let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(vals.len());
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                vals.as_ptr(),
-                buf.as_mut_ptr().expect("Data should exist on PE"),
-                vals.len(),
-            );
-        }
-        LamellarArrayRdmaInput::LocalMemRegion(buf)
+        // let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(vals.len());
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(
+        //         vals.as_ptr(),
+        //         buf.as_mut_ptr().expect("Data should exist on PE"),
+        //         vals.len(),
+        //     );
+        // }
+        LamellarArrayRdmaInput::OwnedVec(vals)
     }
 }
 impl<T: Dist> TeamFrom<&Vec<T>> for LamellarArrayRdmaInput<T> {
@@ -398,14 +413,14 @@ impl<T: Clone> TeamFrom<(Vec<T>, Distribution)> for Vec<T> {
     }
 }
 
-impl<T: Dist> TeamTryFrom<&T> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: &T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
+impl<T: Dist> TeamTryFrom<T> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
 
-impl<T: Dist> TeamTryFrom<T> for LamellarArrayRdmaInput<T> {
-    fn team_try_from(val: T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
+impl<T: Dist> TeamTryFrom<&T> for LamellarArrayRdmaInput<T> {
+    fn team_try_from(val: &T, team: &Arc<LamellarTeam>) -> Result<Self, anyhow::Error> {
         Ok(LamellarArrayRdmaInput::team_from(val, team))
     }
 }
@@ -1701,7 +1716,7 @@ pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
     /// PE3: array data [9,10,11]
     ///```
     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> >(
+    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
         &self,
         index: usize,
         src: U,

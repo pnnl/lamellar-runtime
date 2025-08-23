@@ -1,10 +1,10 @@
 use crate::{
     array::{AmDist, LamellarByteArray},
-    lamellae::{AtomicFetchOpHandle, AtomicOpHandle, Remote},
+    lamellae::{AtomicFetchOpHandle, AtomicOpHandle, RdmaAtHandle, Remote},
     lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
     warnings::RuntimeWarning,
-    AmHandle, Dist,
+    AmHandle, Dist, RdmaHandle,
 };
 
 use std::{
@@ -13,7 +13,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use futures_util::Future;
+use futures_util::{ready, Future};
 
 use pin_project::{pin_project, pinned_drop};
 
@@ -28,22 +28,15 @@ pub struct ArrayBatchOpHandle<T> {
 
 #[pin_project(project = BatchOpStateProj)]
 pub(crate) enum BatchOpState<T> {
-    Reqs(VecDeque<(AmHandle<()>, Vec<usize>)>),
+    Reqs(#[pin] VecDeque<(AmHandle<()>, Vec<usize>)>),
     Network(#[pin] AtomicOpHandle<T>),
-    Launched(VecDeque<(LamellarTask<()>, Vec<usize>)>),
+    Rdma(#[pin] RdmaHandle<T>),
+    Launched(#[pin] VecDeque<(LamellarTask<()>, Vec<usize>)>),
     Completed,
 }
 
 #[pinned_drop]
 impl<T> PinnedDrop for ArrayBatchOpHandle<T> {
-    // fn drop(&mut self) {
-    //     if self.reqs.len() > 0 {
-    //         RuntimeWarning::disable_warnings();
-    //         for _ in self.reqs.drain(0..) {}
-    //         RuntimeWarning::enable_warnings();
-    //         RuntimeWarning::DroppedHandle("an ArrayBatchOpHandle").print();
-    //     }
-    // }
     fn drop(mut self: Pin<&mut Self>) {
         if let BatchOpState::Reqs(reqs) = &mut self.state {
             RuntimeWarning::disable_warnings();
@@ -74,11 +67,8 @@ impl<T: Dist> ArrayBatchOpHandle<T> {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().spawn(self)
             }
-            BatchOpState::Network(op_handle) => {
-                self.state =
-                    BatchOpState::Launched(VecDeque::from([(op_handle.spawn(), Vec::new())]));
-                self.array.team().spawn(self)
-            }
+            BatchOpState::Rdma(op_handle) => op_handle.spawn(),
+            BatchOpState::Network(op_handle) => op_handle.spawn(),
             _ => panic!("ArrayBatchOpHandle should already have been spawned"),
         }
     }
@@ -99,6 +89,9 @@ impl<T: Dist> ArrayBatchOpHandle<T> {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
+            BatchOpState::Rdma(op_handle) => {
+                op_handle.block();
+            }
             BatchOpState::Network(op_handle) => {
                 op_handle.block();
             }
@@ -110,7 +103,7 @@ impl<T: Dist> ArrayBatchOpHandle<T> {
     }
 }
 
-impl<T: 'static> Future for ArrayBatchOpHandle<T> {
+impl<T: Dist> Future for ArrayBatchOpHandle<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let BatchOpState::Reqs(reqs) = &mut self.state {
@@ -132,19 +125,22 @@ impl<T: 'static> Future for ArrayBatchOpHandle<T> {
             return Poll::Ready(());
         }
         let this = self.project();
-
-        if let BatchOpStateProj::Network(op_handle) = this.state.project() {
-            return op_handle.poll(cx);
+        match this.state.project() {
+            BatchOpStateProj::Network(op_handle) => {
+                return op_handle.poll(cx);
+            }
+            BatchOpStateProj::Rdma(op_handle) => {
+                return op_handle.poll(cx);
+            }
+            _ => Poll::Ready(()),
         }
-
-        Poll::Ready(())
     }
 }
 
 /// a task handle for a single array operation that returns a value
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 #[pin_project]
-pub struct ArrayFetchOpHandle<R: AmDist> {
+pub struct ArrayFetchOpHandle<R: Dist> {
     //AmHandle triggers Handle Dropped warning
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     #[pin]
@@ -154,13 +150,13 @@ pub struct ArrayFetchOpHandle<R: AmDist> {
 
 #[pin_project(project = FetchOpStateProj)]
 pub(crate) enum FetchOpState<R> {
-    Req(AmHandle<Vec<R>>),
+    Req(#[pin] AmHandle<Vec<R>>),
+    Rdma(#[pin] RdmaAtHandle<R>),
     Network(#[pin] AtomicFetchOpHandle<R>),
-    AmLaunched(LamellarTask<Vec<R>>),
-    NetworkLaunched(LamellarTask<R>),
+    AmLaunched(#[pin] LamellarTask<Vec<R>>),
 }
 
-impl<R: AmDist> ArrayFetchOpHandle<R> {
+impl<R: Dist> ArrayFetchOpHandle<R> {
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -172,10 +168,8 @@ impl<R: AmDist> ArrayFetchOpHandle<R> {
                 self.state = FetchOpState::AmLaunched(req.spawn());
                 self.array.team().spawn(self)
             }
-            FetchOpState::Network(op_handle) => {
-                self.state = FetchOpState::NetworkLaunched(op_handle.spawn());
-                self.array.team().spawn(self)
-            }
+            FetchOpState::Rdma(op_handle) => op_handle.spawn(),
+            FetchOpState::Network(op_handle) => op_handle.spawn(),
             _ => panic!("ArrayBatchOpHandle should already have been spawned"),
         }
     }
@@ -189,45 +183,57 @@ impl<R: AmDist> ArrayFetchOpHandle<R> {
         .print();
         match self.state {
             FetchOpState::Req(req) => req.block().pop().expect("should have a single request"),
+            FetchOpState::Rdma(op_handle) => op_handle.block(),
             FetchOpState::Network(op_handle) => op_handle.block(),
             FetchOpState::AmLaunched(req) => {
                 req.block().pop().expect("should have a single request")
             }
-            FetchOpState::NetworkLaunched(req) => req.block(),
         }
     }
 }
 
-impl<R: AmDist> Future for ArrayFetchOpHandle<R> {
+impl<R: Dist> Future for ArrayFetchOpHandle<R> {
     type Output = R;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match &mut self.state {
-            FetchOpState::Req(req) => {
-                if req.ready_or_set_waker(cx.waker()) {
-                    return Poll::Ready(req.val().pop().expect("should have a single request"));
-                }
-                return Poll::Pending;
-            }
-            FetchOpState::AmLaunched(req) => {
-                if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
-                    return Poll::Ready(res.pop().expect("should have a single request"));
-                }
-                return Poll::Pending;
-            }
-            FetchOpState::NetworkLaunched(req) => {
-                if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
-                    return Poll::Ready(res);
-                }
-                return Poll::Pending;
-            }
-            _ => {}
-        }
+        // match &mut self.state {
+        //     FetchOpState::Req(req) => {
+        //         if req.ready_or_set_waker(cx.waker()) {
+        //             return Poll::Ready(req.val().pop().expect("should have a single request"));
+        //         }
+        //         return Poll::Pending;
+        //     }
+        //     FetchOpState::AmLaunched(req) => {
+        //         if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
+        //             return Poll::Ready(res.pop().expect("should have a single request"));
+        //         }
+        //         return Poll::Pending;
+        //     }
+        //     FetchOpState::NetworkLaunched(req) => {
+        //         if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
+        //             return Poll::Ready(res);
+        //         }
+        //         return Poll::Pending;
+        //     }
+        //     _ => {}
+        // }
         let this = self.project();
-        if let FetchOpStateProj::Network(op_handle) = this.state.project() {
-            return op_handle.poll(cx);
-        } else {
-            return Poll::Pending;
+        match this.state.project() {
+            FetchOpStateProj::Req(req) => {
+                let mut result = ready!(req.poll(cx));
+                return Poll::Ready(result.pop().unwrap());
+            }
+            FetchOpStateProj::Rdma(req) => req.poll(cx),
+            FetchOpStateProj::Network(req) => req.poll(cx),
+            FetchOpStateProj::AmLaunched(req) => {
+                let mut result = ready!(req.poll(cx));
+                return Poll::Ready(result.pop().unwrap());
+            }
         }
+        // if let FetchOpStateProj::Network(op_handle) = this.state.project() {
+        //     return op_handle.poll(cx);
+        // } else {
+        //     return Poll::Pending;
+        // }
     }
 }
 
@@ -300,7 +306,7 @@ impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
     }
 }
 
-impl<R: AmDist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
+impl<R: Dist> From<ArrayFetchBatchOpHandle<R>> for ArrayFetchOpHandle<R> {
     fn from(mut req: ArrayFetchBatchOpHandle<R>) -> Self {
         let handle = match &mut req.state {
             FetchBatchOpState::Reqs(reqs) => Self {

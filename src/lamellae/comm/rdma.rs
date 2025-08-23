@@ -3,12 +3,13 @@ use super::{CommAllocAddr, CommSlice};
 use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
 use crate::{
     active_messaging::AMCounters,
+    array::LamellarArrayRdmaInput,
     lamellae::{
         local_lamellae::rdma::{LocalAtFuture, LocalFuture},
         shmem_lamellae::rdma::{ShmemAtFuture, ShmemFuture},
         Scheduler,
     },
-    LamellarTask,
+    Dist, LamellarTask,
 };
 
 #[cfg(feature = "enable-libfabric")]
@@ -219,12 +220,12 @@ pub(crate) trait CommRdma {
         src: T,
         dst: CommAllocAddr,
     ) -> RdmaHandle<T>;
-    fn put_test<T: Remote>(
+    fn put_test<T: Dist>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
-        src: T,
+        src: LamellarArrayRdmaInput<T>,
         dst: CommAllocAddr,
     ); //-> RdmaHandle<T>;
     fn put_all<T: Remote>(

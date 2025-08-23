@@ -11,12 +11,13 @@ use tracing::trace;
 
 use crate::{
     active_messaging::AMCounters,
+    array::LamellarArrayRdmaInput,
     lamellae::{
         comm::rdma::{CommRdma, RdmaFuture, RdmaHandle, Remote},
         CommAllocAddr, CommSlice, RdmaAtFuture, RdmaAtHandle,
     },
     warnings::RuntimeWarning,
-    LamellarTask,
+    Dist, LamellarTask,
 };
 
 use super::{comm::ShmemComm, Scheduler};
@@ -265,12 +266,12 @@ impl CommRdma for ShmemComm {
         }
         .into();
     }
-    fn put_test<T: Remote>(
+    fn put_test<T: Dist>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
-        src: T,
+        src: LamellarArrayRdmaInput<T>,
         remote_addr: CommAllocAddr,
     ) { //-> RdmaHandle<T> {
          // ShmemFuture {

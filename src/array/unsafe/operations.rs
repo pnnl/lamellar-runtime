@@ -1,10 +1,11 @@
 use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::handle::*;
-use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
+use crate::array::{operations::*, LamellarArrayRdmaInput};
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
-use crate::AmHandle;
+use crate::lamellae::{comm::CommProgress, AtomicOp};
+use crate::{ActiveMessaging, AmHandle};
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
@@ -1132,35 +1133,77 @@ impl MultiValMultiIndex {
 }
 
 impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
-    // fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
-    //     // println!("in Network atomic store");
-    //     if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-    //         unsafe {
-    //             let handle = self.inner.data.mem_region.atomic_fetch_op(
-    //                 pe,
-    //                 offset,
-    //                 AtomicOp::Read,
-    //                 self.dummy_val(),
-    //             );
-    //             ArrayFetchOpHandle {
-    //                 array: self.clone().into(),
-    //                 state: FetchOpState::Network(handle),
-    //             }
-    //         }
-    //     } else {
-    //         self.inner_array()
-    //             .initiate_batch_fetch_op_2(
-    //                 self.dummy_val(),
-    //                 index,
-    //                 ArrayOpCmd::Load,
-    //                 self.as_lamellar_byte_array(),
-    //             )
-    //             .into()
-    //     }
-    // }
+    unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
+        // println!("in Network atomic store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                let handle = self.inner.data.mem_region.at(pe, offset);
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Rdma(handle),
+                }
+            }
+        } else {
+            self.initiate_batch_fetch_op_2(
+                self.dummy_val(),
+                index,
+                ArrayOpCmd::Load,
+                self.clone().into(),
+            )
+            .into()
+        }
+    }
 }
 
-impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {}
+impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
+    unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        // println!("in Network atomic store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            // let mut buf: OneSidedMemoryRegion<T> =
+            //     self.array.team_rt().alloc_one_sided_mem_region(1);
+            unsafe {
+                // buf.as_mut_slice()[0] = val;
+                let handle = self.inner.data.mem_region.put_test(
+                    pe,
+                    offset,
+                    LamellarArrayRdmaInput::Owned(val),
+                );
+                let team = self.team();
+                ArrayBatchOpHandle {
+                    array: self.clone().into(),
+                    state: BatchOpState::Launched(VecDeque::from(vec![(
+                        self.team().spawn(async move {
+                            team.team.lamellae.comm().wait();
+                        }),
+                        Vec::new(),
+                    )])),
+                }
+            }
+        } else {
+            self.initiate_batch_op(val, index, ArrayOpCmd::Store, self.clone().into())
+                .into()
+        }
+    }
+    unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        // println!("in Network atomic swap");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                let handle =
+                    self.inner
+                        .data
+                        .mem_region
+                        .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Network(handle),
+                }
+            }
+        } else {
+            self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())
+                .into()
+        }
+    }
+}
 
 impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T> {}
 
