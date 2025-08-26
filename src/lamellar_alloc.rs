@@ -226,7 +226,7 @@ impl FreeEntries {
     fn remove_size(&mut self, addr: usize, size: usize) {
         let mut remove_size = false;
         if let Some(addrs) = self.sizes.get_mut(&size) {
-            addrs.remove(&addr);
+            addrs.swap_remove(&addr);
             if addrs.is_empty() {
                 remove_size = true;
             }
