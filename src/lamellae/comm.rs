@@ -134,6 +134,8 @@ pub(crate) enum CommAllocInfo {
     Raw(usize, usize), //address, size
     #[cfg(feature = "enable-libfabric")]
     AllocInfo(Arc<AllocInfo>),
+    #[cfg(feature = "enable-ucx")]
+    UcxAlloc(Arc<UcxAlloc>),
 }
 
 impl CommAllocInfo {

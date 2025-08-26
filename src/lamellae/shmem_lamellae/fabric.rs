@@ -35,7 +35,8 @@ impl MyShmem {
         self.alloc.num_bytes()
     }
     pub(crate) fn contains(&self, addr: usize) -> bool {
-        self.alloc.contains(&addr)
+        // self.alloc.contains(&addr)
+        self.base_addr().0 <= addr && addr < self.base_addr().0 + self.len()
     }
 }
 

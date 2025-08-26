@@ -1186,6 +1186,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
     }
     unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
+        //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             unsafe {
                 let handle =

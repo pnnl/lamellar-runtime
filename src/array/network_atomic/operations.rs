@@ -26,14 +26,7 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
                 }
             }
         } else {
-            self.inner_array()
-                .initiate_batch_fetch_op_2(
-                    self.inner_array().dummy_val(),
-                    index,
-                    ArrayOpCmd::Load,
-                    self.as_lamellar_byte_array(),
-                )
-                .into()
+            panic!("invalid index");
         }
     }
 }
@@ -59,9 +52,7 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
                 }
             }
         } else {
-            self.inner_array()
-                .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
-                .into()
+            panic!("invalid index");
         }
     }
     fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
@@ -79,14 +70,7 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
                 }
             }
         } else {
-            self.inner_array()
-                .initiate_batch_fetch_op_2(
-                    val,
-                    index,
-                    ArrayOpCmd::Swap,
-                    self.as_lamellar_byte_array(),
-                )
-                .into()
+            panic!("invalid index");
         }
     }
 }

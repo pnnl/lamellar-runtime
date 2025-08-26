@@ -37,7 +37,7 @@ pub(crate) struct LibfabricAtomicFuture<T> {
     pub(crate) spawned: bool,
 }
 
-impl<T: 'static> LibfabricAtomicFuture<T> {
+impl<T: Send + 'static> LibfabricAtomicFuture<T> {
     fn exec_op(&self) {
         trace!("performing atomic op: {:?} dst: {:?} ", self.op, self.dst);
         unsafe {
@@ -56,9 +56,11 @@ impl<T: 'static> LibfabricAtomicFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let ofi = self.ofi.clone();
+        // let ofi = self.ofi.clone();
         self.scheduler
-            .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+            .clone()
+            .spawn_task(async move { self.ofi.wait_all().unwrap() }, counters)
+        // self.scheduler.clone().spawn_task(async move {}, counters)
     }
 }
 
@@ -79,7 +81,7 @@ impl<T> From<LibfabricAtomicFuture<T>> for AtomicOpHandle<T> {
     }
 }
 
-impl<T: 'static> Future for LibfabricAtomicFuture<T> {
+impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {

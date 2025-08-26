@@ -107,7 +107,7 @@ pub(crate) enum AtomicOpFuture<T> {
     Local(#[pin] LocalAtomicFuture<T>),
 }
 
-impl<T: 'static> AtomicOpHandle<T> {
+impl<T: Send + 'static> AtomicOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicOp Operation completes
     pub fn block(self) {
         match self.future {
@@ -149,7 +149,7 @@ impl<T: 'static> AtomicOpHandle<T> {
     }
 }
 
-impl<T: 'static> Future for AtomicOpHandle<T> {
+impl<T: Send + 'static> Future for AtomicOpHandle<T> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {

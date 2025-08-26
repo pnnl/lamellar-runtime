@@ -409,50 +409,6 @@ impl Ofi {
         Ok(())
     }
 
-    // pub(crate) fn wait_all_put(&self) -> Result<(), libfabric::error::Error> {
-    //     let mut cnt = self.put_cnt.load(Ordering::SeqCst);
-
-    //     loop {
-    //         let prev_cnt = cnt;
-    //         match self.put_cntr.wait(prev_cnt as u64, -1) {
-    //             Ok(_) => {}
-    //             Err(e) => {
-    //                 println!("put Error {e}");
-    //                 let err = self.put_cntr.readerr();
-
-    //                 continue;
-    //             }
-    //         }
-    //         cnt = self.put_cnt.load(Ordering::SeqCst);
-
-    //         if prev_cnt >= cnt {
-    //             break;
-    //         }
-    //     }
-
-    //     Ok(())
-    // }
-
-    // pub(crate) fn wait_all_get(&self) -> Result<(), libfabric::error::Error> {
-    //     let mut cnt = self.get_cnt.load(Ordering::SeqCst);
-    //     // println!("Waiting for all gets, current count: {}", cnt);
-    //     loop {
-    //         let prev_cnt = cnt;
-    //         self.get_cntr.wait(prev_cnt as u64, -1)?;
-    //         cnt = self.get_cnt.load(Ordering::SeqCst);
-
-    //         if prev_cnt >= cnt {
-    //             break;
-    //         }
-    //     }
-    //     // println!("Done waiting for all gets, final count: {}", cnt);
-
-    //     Ok(())
-    // }
-
-    // fn wait_for_tx_cntr(&self, target: usize) -> Result<(), libfabric::error::Error> {
-    //     self.put_cntr.wait(target as u64, -1)
-    // }
     fn wait_for_tx_cntr(&self) -> Result<(), libfabric::error::Error> {
         self.wait_for_cntr(&self.put_cnt, &self.put_cntr, "tx")
     }
@@ -467,108 +423,54 @@ impl Ofi {
         cntr: &Counter<WaitableCntr>,
         dir: &str,
     ) -> Result<(), libfabric::error::Error> {
-        let _guard = self.completion_lock.read();
-        let mut expected_cnt = pending.load(Ordering::SeqCst);
-        let mut prev_expected_cnt = expected_cnt;
-        let mut cur_cnt = cntr.read();
-        let mut old_cnt = cur_cnt;
-        // let  err_cnt = cntr.readerr();
-        let mut first = true;
-        trace!(
+        let mut prev_expected_cnt = pending.load(Ordering::SeqCst);
+        let mut old_cnt = cntr.read();
+        if prev_expected_cnt != old_cnt {
+            let _guard = self.completion_lock.read();
+            let mut expected_cnt = pending.load(Ordering::SeqCst);
+            // let mut prev_expected_cnt = expected_cnt;
+            let mut cur_cnt = cntr.read();
+            // let mut old_cnt = cur_cnt;
+            // let  err_cnt = cntr.readerr();
+            let mut first = true;
+            trace!(
             "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
             cntr.read(),
         );
-        // let mut timer = std::time::Instant::now();
+            // let mut timer = std::time::Instant::now();
 
-        while expected_cnt > cur_cnt
-            || prev_expected_cnt < expected_cnt
-            || cur_cnt != old_cnt
-            || first
-        {
-            first = false;
-            prev_expected_cnt = expected_cnt;
-            old_cnt = cur_cnt;
-            let _ = self.progress();
-            let wait_result = cntr.wait(prev_expected_cnt as u64, -1);
+            while expected_cnt > cur_cnt
+                || prev_expected_cnt < expected_cnt
+                || cur_cnt != old_cnt
+                || first
+            {
+                first = false;
+                prev_expected_cnt = expected_cnt;
+                old_cnt = cur_cnt;
+                let _ = self.progress();
+                let wait_result = cntr.wait(prev_expected_cnt as u64, -1);
 
-            if let Err(err) = wait_result {
-                if let libfabric::error::ErrorKind::TimedOut = err.kind {
-                    // if timer.elapsed() > std::time::Duration::from_millis(1000) {
-                    //     println!(
-                    //         "1. cnt {cnt} prev_cnt {prev_cnt} cur_cnt {cur_cnt} old_cnt {old_cnt} {}",cnt > cur_cnt || prev_cnt < cnt || cur_cnt != old_cnt
-                    //     );
-                    //     timer = std::time::Instant::now();
-                    // }
-
-                    if let Err(err) = self.progress() {
-                        match err.kind {
-                            libfabric::error::ErrorKind::TryAgain => {}
-                            _ => return Err(err),
+                if let Err(err) = wait_result {
+                    if let libfabric::error::ErrorKind::TimedOut = err.kind {
+                        if let Err(err) = self.progress() {
+                            match err.kind {
+                                libfabric::error::ErrorKind::TryAgain => {}
+                                _ => return Err(err),
+                            }
                         }
                     }
                 }
+
+                cur_cnt = cntr.read();
+                expected_cnt = pending.load(Ordering::SeqCst);
             }
-
-            cur_cnt = cntr.read();
-            expected_cnt = pending.load(Ordering::SeqCst);
-
-            // if timer.elapsed() > std::time::Duration::from_millis(1000) {
-            //     println!(
-            //         "2. cnt {cnt} prev_cnt {prev_cnt} cur_cnt {cur_cnt} old_cnt {old_cnt}  {}",
-            //         cnt > cur_cnt || prev_cnt < cnt || cur_cnt != old_cnt
-            //     );
-            //     timer = std::time::Instant::now();
-            // }
-            // cnt = pending.load(Ordering::SeqCst);
-        }
-        trace!(
+            trace!(
             "{dir} after.   expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
             cntr.read(),
         );
+        }
         Ok(())
-        // self.get_cntr.wait(target as u64, -1)
     }
-
-    // fn pmi_exchange_mr_info(
-    //     &self,
-    //     mem: &[u8],
-    //     mr: &MemoryRegion,
-    // ) -> HashMap<usize, RemoteMemAddressInfo> {
-    //     let mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
-
-    //     let mem_info_bytes = mem_info.to_bytes();
-    //     self.my_pmi.put("mr_info", &mem_info_bytes).unwrap();
-    //     self.my_pmi.exchange().unwrap();
-    //     // self.my_pmi.barrier(true).unwrap();
-    //     let mut all_mem_info_bytes = vec![0u8; mem_info_bytes.len() * self.num_pes];
-    //     for i in 0..self.num_pes {
-    //         let mem_info_bytes = self
-    //             .my_pmi
-    //             .get("mr_info", &mem_info_bytes.len(), &i)
-    //             .unwrap();
-    //         all_mem_info_bytes[i * mem_info_bytes.len()..(i + 1) * mem_info_bytes.len()]
-    //             .copy_from_slice(&mem_info_bytes);
-    //     }
-
-    //     all_mem_info_bytes
-    //         .chunks_exact(std::mem::size_of::<MemAddressInfo>())
-    //         .enumerate()
-    //         .map(|(pe, chunk)| {
-    //             let mem_info = unsafe { MemAddressInfo::from_bytes(chunk) };
-    //             let rem_mem_info = mem_info
-    //                 .into_remote_info(&self.domain)
-    //                 .expect("Failed to convert MemAddressInfo to RemoteMemAddressInfo");
-    //             trace!(
-    //                 "PE {}: RemoteMemAddressInfo: {:?} {:?} ",
-    //                 pe,
-    //                 rem_mem_info.mem_address(),
-    //                 rem_mem_info.mem_len()
-    //             );
-
-    //             (pe, rem_mem_info)
-    //         })
-    //         .collect::<HashMap<_, _>>()
-    // }
 
     fn collective_exchange_mr_info(
         &self,

@@ -273,14 +273,23 @@ impl CommRdma for ShmemComm {
         pe: usize,
         src: LamellarArrayRdmaInput<T>,
         remote_addr: CommAllocAddr,
-    ) { //-> RdmaHandle<T> {
-         // ShmemFuture {
-         //     op: Op::Atomic,
-         //     spawned: false,
-         //     scheduler: scheduler.clone(),
-         //     counters,
-         // }
-         // .into()
+    ) {
+        //-> RdmaHandle<T> {
+        let alloc = self.alloc_lock.read();
+        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            if shmem.contains(remote_addr.0) {
+                let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
+                let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
+                let src_slice = src.as_slice();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        src_slice.as_ptr(),
+                        real_dst_addr.as_mut_ptr(),
+                        src_slice.len(),
+                    );
+                }
+            }
+        }
     }
     fn put_all<T: Remote>(
         &self,
@@ -340,6 +349,15 @@ impl CommRdma for ShmemComm {
         }
         panic!("shmem segment invalid for get");
     }
+    fn get_test<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        src: CommAllocAddr,
+    ) -> T {
+        unsafe { src.as_ptr::<T>().read() }
+    }
     fn at<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -349,13 +367,21 @@ impl CommRdma for ShmemComm {
     ) -> RdmaAtHandle<T> {
         self.get_amt
             .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
-        ShmemAtFuture {
-            src,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-            result: MaybeUninit::uninit(),
+        let alloc = self.alloc_lock.read();
+        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
+            if shmem.contains(src.into()) {
+                let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
+                let real_src_addr = real_src_base + (src - *addr);
+                return ShmemAtFuture {
+                    src: real_src_addr,
+                    spawned: false,
+                    scheduler: scheduler.clone(),
+                    counters,
+                    result: MaybeUninit::uninit(),
+                }
+                .into();
+            }
         }
-        .into()
+        panic!("shmem segment invalid for at");
     }
 }
