@@ -28,7 +28,7 @@ lazy_static = "1.4.0"
 crossbeam = "0.8.2"
 rand = "0.8.5"
 parking_lot = {version = "0.12.1", features = ["arc_lock", "send_guard", "serde"] }
-indexmap = "1.9.1" #lamellar_alloc
+indexmap = "2.11.0" #lamellar_alloc
 core_affinity = "0.8.3"
 async-task = "4.3.0"
 async-trait = "0.1.58"
