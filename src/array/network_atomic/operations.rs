@@ -1,12 +1,10 @@
 use crate::array::network_atomic::*;
 use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
 use crate::array::operations::read_only::LocalReadOnlyOps;
-use crate::array::private::LamellarArrayPrivate;
 // use crate::array::Network_atomic::rdma::atomic_store;
 // use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
 use crate::array::*;
 use crate::lamellae::AtomicOp;
-use crate::memregion::RegisteredMemoryRegion;
 // use std::collections::VecDeque;
 
 impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {

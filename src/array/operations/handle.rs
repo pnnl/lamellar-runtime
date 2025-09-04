@@ -20,14 +20,14 @@ use pin_project::{pin_project, pinned_drop};
 /// a task handle for a batched array operation that doesnt return any values
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 #[pin_project(PinnedDrop)]
-pub struct ArrayBatchOpHandle<T> {
+pub struct ArrayBatchOpHandle<T: Remote> {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     #[pin]
     pub(crate) state: BatchOpState<T>,
 }
 
 #[pin_project(project = BatchOpStateProj)]
-pub(crate) enum BatchOpState<T> {
+pub(crate) enum BatchOpState<T: Remote> {
     Reqs(#[pin] VecDeque<(AmHandle<()>, Vec<usize>)>),
     Network(#[pin] AtomicOpHandle<T>),
     Rdma(#[pin] RdmaHandle<T>),
@@ -36,7 +36,7 @@ pub(crate) enum BatchOpState<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for ArrayBatchOpHandle<T> {
+impl<T: Remote> PinnedDrop for ArrayBatchOpHandle<T> {
     fn drop(mut self: Pin<&mut Self>) {
         if let BatchOpState::Reqs(reqs) = &mut self.state {
             RuntimeWarning::disable_warnings();
@@ -175,7 +175,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
     }
 
     /// This method will block the calling thread until the associated Array Operation completes
-    pub fn block(mut self) -> R {
+    pub fn block(self) -> R {
         RuntimeWarning::BlockingCall(
             "ArrayFetchOpHandle::block",
             "<handle>.spawn() or <handle>.await",
@@ -194,28 +194,7 @@ impl<R: Dist> ArrayFetchOpHandle<R> {
 
 impl<R: Dist> Future for ArrayFetchOpHandle<R> {
     type Output = R;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // match &mut self.state {
-        //     FetchOpState::Req(req) => {
-        //         if req.ready_or_set_waker(cx.waker()) {
-        //             return Poll::Ready(req.val().pop().expect("should have a single request"));
-        //         }
-        //         return Poll::Pending;
-        //     }
-        //     FetchOpState::AmLaunched(req) => {
-        //         if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
-        //             return Poll::Ready(res.pop().expect("should have a single request"));
-        //         }
-        //         return Poll::Pending;
-        //     }
-        //     FetchOpState::NetworkLaunched(req) => {
-        //         if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
-        //             return Poll::Ready(res);
-        //         }
-        //         return Poll::Pending;
-        //     }
-        //     _ => {}
-        // }
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.state.project() {
             FetchOpStateProj::Req(req) => {
@@ -229,11 +208,6 @@ impl<R: Dist> Future for ArrayFetchOpHandle<R> {
                 return Poll::Ready(result.pop().unwrap());
             }
         }
-        // if let FetchOpStateProj::Network(op_handle) = this.state.project() {
-        //     return op_handle.poll(cx);
-        // } else {
-        //     return Poll::Pending;
-        // }
     }
 }
 

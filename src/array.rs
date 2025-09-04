@@ -64,6 +64,7 @@
 //! let vec = array.local_data().to_vec();
 //! ```
 use crate::barrier::BarrierHandle;
+use crate::lamellae::comm::Remote;
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
@@ -292,6 +293,16 @@ impl<T: Dist> LamellarArrayRdmaInput<T> {
             LamellarArrayRdmaInput::OwnedVec(vec) => vec.as_slice(),
         }
     }
+
+    // pub(crate) fn len(&self) -> usize {
+    //     match self {
+    //         LamellarArrayRdmaInput::LamellarMemRegion(region) => unsafe { region.len() },
+    //         LamellarArrayRdmaInput::SharedMemRegion(region) => unsafe { region.len() },
+    //         LamellarArrayRdmaInput::LocalMemRegion(region) => unsafe { region.len() },
+    //         LamellarArrayRdmaInput::Owned(value) => std::mem::size_of_val(value),
+    //         LamellarArrayRdmaInput::OwnedVec(vec) => vec.len() * std::mem::size_of::<T>(),
+    //     }
+    // }
 }
 
 impl<T: Dist> LamellarRead for LamellarArrayRdmaOutput<T> {}
@@ -324,6 +335,12 @@ impl<T: Dist> LamellarRead for Vec<T> {}
 impl<T: Dist> LamellarRead for &Vec<T> {}
 impl<T: Dist> LamellarRead for &[T] {}
 
+// impl<T: Dist> TeamFrom<LamellarArrayRdmaInput<T>> for LamellarArrayRdmaInput<T> {
+//     fn team_from(lai: LamellarArrayRdmaInput<T>, _team: &Arc<LamellarTeam>) -> Self {
+//         lai
+//     }
+// }
+
 impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
     fn team_from(val: &T, team: &Arc<LamellarTeam>) -> Self {
@@ -337,7 +354,7 @@ impl<T: Dist> TeamFrom<&T> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
     /// Constructs a single element [OneSidedMemoryRegion] and copies `val` into it
-    fn team_from(val: T, team: &Arc<LamellarTeam>) -> Self {
+    fn team_from(val: T, _team: &Arc<LamellarTeam>) -> Self {
         // let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(1);
         // unsafe {
         //     buf.as_mut_slice()[0] = val;
@@ -348,7 +365,7 @@ impl<T: Dist> TeamFrom<T> for LamellarArrayRdmaInput<T> {
 
 impl<T: Dist> TeamFrom<Vec<T>> for LamellarArrayRdmaInput<T> {
     /// Constructs a [OneSidedMemoryRegion] equal in length to `vals` and copies `vals` into it
-    fn team_from(vals: Vec<T>, team: &Arc<LamellarTeam>) -> Self {
+    fn team_from(vals: Vec<T>, _team: &Arc<LamellarTeam>) -> Self {
         // let buf: OneSidedMemoryRegion<T> = team.team.alloc_one_sided_mem_region(vals.len());
         // unsafe {
         //     std::ptr::copy_nonoverlapping(

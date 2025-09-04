@@ -13,9 +13,9 @@ use crate::{
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
-use super::comm::{LibfabricComm, HEAP_SIZE};
+use super::comm::{UcxComm, HEAP_SIZE};
 
-impl CommMem for LibfabricComm {
+impl CommMem for UcxComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn alloc(
         &self,
@@ -23,11 +23,14 @@ impl CommMem for LibfabricComm {
         alloc_type: AllocationType,
         align: usize,
     ) -> AllocResult<CommAlloc> {
-        let inner_alloc = self.ofi.alloc(size, alloc_type)?;
+        // rucx_c allocs are aligned on page boundaries so no need to pass in alignment constraint
+        let inner_alloc = self.ucx.alloc(size, alloc_type);
+        // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
-            inner_alloc: CommAllocInner::LibfabricAlloc(inner_alloc),
+            inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
             alloc_type: CommAllocType::Fabric,
         };
+
         // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
         Ok(comm_alloc)
     }
@@ -38,14 +41,14 @@ impl CommMem for LibfabricComm {
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
                 println!("freeing raw alloc: {:x} should we ever be here?", addr);
-                self.ofi.free_addr(addr).unwrap();
+                self.ucx.free_addr(addr);
             }
-            CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                trace!("freeing  inner_alloc: {:?}", inner_alloc);
-                self.ofi.free_alloc(&inner_alloc).unwrap();
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                // println!("freeing ucx inner_alloc: {:?}", inner_alloc);
+                self.ucx.free_alloc(&inner_alloc);
             }
             _ => {
-                panic!("free should only be called with LibfabricAlloc or Raw addr");
+                panic!("free should only be called with UcxAlloc or Raw addr");
             }
         }
     }
@@ -55,15 +58,15 @@ impl CommMem for LibfabricComm {
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                trace!(
-                    "new rt alloc: {:x} {} {}",
-                    addr,
-                    addr - inner_alloc.start(),
-                    size
-                );
+                // trace!(
+                //     "new rt alloc: {:x} {} {}",
+                //     addr,
+                //     addr - inner_alloc.start(),
+                //     size
+                // );
 
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(
+                    inner_alloc: CommAllocInner::UcxAlloc(
                         inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?,
                     ),
                     alloc_type: CommAllocType::RtHeap,
@@ -99,7 +102,7 @@ impl CommMem for LibfabricComm {
                     }
                 }
             }
-            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 trace!("freeing rt alloc: {:?}", inner_alloc);
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {
@@ -135,14 +138,14 @@ impl CommMem for LibfabricComm {
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
-            if let CommAllocInner::LibfabricAlloc(inner_alloc) = alloc.inner_alloc {
-                let mut new_alloc = BTreeAlloc::new("libfabric_c_mem".to_string());
+            if let CommAllocInner::UcxAlloc(inner_alloc) = alloc.inner_alloc {
+                let mut new_alloc = BTreeAlloc::new("ucx_c_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
                 self.runtime_allocs
                     .write()
                     .push((inner_alloc.clone(), new_alloc));
             } else {
-                panic!("libfabric alloc pool should only be called with AllocInfo addr");
+                panic!("ucx alloc pool should only be called with AllocInfo addr");
             }
         } else {
             panic!("[Error] out of system memory");
@@ -158,7 +161,7 @@ impl CommMem for LibfabricComm {
     fn print_pools(&self) {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
-        for (_info, alloc) in allocs.iter() {
+        for (_inner_alloc, alloc) in allocs.iter() {
             println!(
                 // "{:x} {:?} {:?} {:?}",
                 "{:x} {:?}",
@@ -172,7 +175,10 @@ impl CommMem for LibfabricComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
-        self.ofi.local_addr(remote_pe, remote_addr).into()
+        self.ucx
+            .local_addr(remote_pe, remote_addr)
+            .expect("local_addr failed")
+            .into()
     }
 
     fn local_alloc_and_offset_from_addr(
@@ -180,22 +186,25 @@ impl CommMem for LibfabricComm {
         remote_pe: usize,
         remote_addr: usize,
     ) -> (CommAlloc, usize) {
-        self.ofi
+        self.ucx
             .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
             .expect("local_alloc_and_offset_from_addr failed")
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> CommAllocAddr {
-        self.ofi.remote_addr(pe, local_addr).into()
+        self.ucx
+            .remote_addr(pe, local_addr)
+            .expect("remote_addr failed")
+            .into()
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         trace!("get_alloc: {:?}", addr);
-        if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {
+        if let Ok(inner_alloc) = self.ucx.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
-                inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
+                inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
                 alloc_type: CommAllocType::Fabric,
             });
         }
@@ -204,9 +213,7 @@ impl CommMem for LibfabricComm {
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(
-                        inner_alloc.sub_alloc(addr.0, size)?,
-                    ),
+                    inner_alloc: CommAllocInner::UcxAlloc(inner_alloc.sub_alloc(addr.0, size)?),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }

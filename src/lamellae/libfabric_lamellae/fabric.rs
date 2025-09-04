@@ -25,12 +25,12 @@ use libfabric::{
 
 use crate::lamellae::{
     comm::error::{AllocError, AllocResult, FabricError, FabricResult},
-    AllocationType, AtomicOp as LamellarAtomicOp, CommAllocAddr, CommSlice, NetworkAtomic, Remote,
+    AllocationType, AtomicOp as LamellarAtomicOp, CommAlloc, CommAllocAddr, CommAllocInner,
+    CommAllocType, CommSlice
 };
 
 use parking_lot::RwLock;
-use pmi::pmi::Pmi;
-use pmi::pmix::PmiX;
+use pmi::{pmix::PmiX,pmi::Pmi};
 use std::{
     collections::HashMap,
     sync::{
@@ -57,7 +57,7 @@ pub(crate) struct Ofi {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     mapped_addresses: Vec<MappedAddress>,
-    barrier_impl: BarrierImpl,
+    barrier_impl: RwLock<BarrierImpl>,
     ep: ConnectionlessEndpoint<RmaAtomicCollEp>,
     cq: CompletionQueue<WaitableCq>,
     put_cntr: Counter<WaitableCntr>,
@@ -229,7 +229,7 @@ impl Ofi {
             mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
         let alloc_manager = AllocInfoManager::new();
 
-        let mut ofi = Self {
+        let mut ofi = Arc::new(Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
             _my_pmi: my_pmi,
@@ -244,15 +244,15 @@ impl Ofi {
             ep,
             mapped_addresses,
             alloc_manager,
-            barrier_impl: BarrierImpl::Uninit,
+            barrier_impl: RwLock::new(BarrierImpl::Uninit),
             put_cnt: AtomicU64::new(0),
             get_cnt: AtomicU64::new(0),
             completion_lock: RwLock::new(()),
-        };
+        });
 
         ofi.init_barrier()?;
 
-        Ok(Arc::new(ofi))
+        Ok(ofi)
     }
 
     fn atomic_avail_inner<T: AsFiType>(&self) -> bool {
@@ -564,7 +564,7 @@ impl Ofi {
         Ok(self.get_cnt.fetch_add(1, Ordering::SeqCst))
     }
 
-    fn init_barrier(&mut self) -> FabricResult<()> {
+    fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
         let mut coll_attr = CollectiveAttr::<()>::new();
 
         if self
@@ -582,19 +582,24 @@ impl Ofi {
                 }
             })?;
 
-            self.barrier_impl = BarrierImpl::Manual(barrier_addr.start(), AtomicUsize::new(0));
+            *self.barrier_impl.write() =
+                BarrierImpl::Manual(barrier_addr.start(), AtomicUsize::new(0));
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
             let _guard = self.completion_lock.write();
-            self.barrier_impl = BarrierImpl::Collective(
+            *self.barrier_impl.write() = BarrierImpl::Collective(
                 self.create_mc_group(&all_pes)
                     .map_err(|e| FabricError::BarrierError(e.c_err))?,
             );
             Ok(())
         }
     }
-    pub(crate) fn alloc(&self, size: usize, alloc: AllocationType) -> AllocResult<Arc<AllocInfo>> {
+    pub(crate) fn alloc(
+        self: &Arc<Ofi>,
+        size: usize,
+        alloc: AllocationType,
+    ) -> AllocResult<Arc<LibfabricAlloc>> {
         match alloc {
             AllocationType::Sub(pes) => self.sub_alloc(&pes, size),
             AllocationType::Global => self.full_alloc(size),
@@ -602,7 +607,7 @@ impl Ofi {
         }
     }
 
-    fn full_alloc(&self, size: usize) -> AllocResult<Arc<AllocInfo>> {
+    fn full_alloc(self: &Arc<Ofi>, size: usize) -> AllocResult<Arc<LibfabricAlloc>> {
         // Align to page boundaries
         let aligned_size = if (self.alloc_manager.page_size() - 1) & size != 0 {
             (size + self.alloc_manager.page_size()) & !(self.alloc_manager.page_size() - 1)
@@ -652,14 +657,14 @@ impl Ofi {
             .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), &mem, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let alloc = Arc::new(
-            AllocInfo::new(Arc::new(mem), mr, remote_alloc_infos, size)
+            LibfabricAlloc::new(self.clone(), Arc::new(mem), mr, remote_alloc_infos, size)
                 .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?,
         );
         self.alloc_manager.insert(alloc.clone());
         Ok(alloc)
     }
 
-    fn sub_alloc(&self, pes: &[usize], size: usize) -> AllocResult<Arc<AllocInfo>> {
+    fn sub_alloc(self: &Arc<Ofi>, pes: &[usize], size: usize) -> AllocResult<Arc<LibfabricAlloc>> {
         // Align to page boundaries
         let aligned_size = if (self.alloc_manager.page_size() - 1) & size != 0 {
             (size + self.alloc_manager.page_size()) & !(self.alloc_manager.page_size() - 1)
@@ -709,7 +714,7 @@ impl Ofi {
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
         let alloc = Arc::new(
-            AllocInfo::new(Arc::new(mem), mr, remote_alloc_infos, size)
+            LibfabricAlloc::new(self.clone(), Arc::new(mem), mr, remote_alloc_infos, size)
                 .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?,
         );
         self.alloc_manager.insert(alloc.clone());
@@ -719,12 +724,15 @@ impl Ofi {
     pub(crate) fn get_alloc_from_start_addr(
         &self,
         addr: CommAllocAddr,
-    ) -> AllocResult<Arc<AllocInfo>> {
+    ) -> AllocResult<Arc<LibfabricAlloc>> {
         self.alloc_manager.get_alloc_from_start_addr(addr)
     }
 
-    pub(crate) fn free_alloc(&self, alloc_info: &AllocInfo) -> Result<(), libfabric::error::Error> {
-        self.alloc_manager.remove_from_alloc(alloc_info);
+    pub(crate) fn free_alloc(
+        &self,
+        inner_alloc: &LibfabricAlloc,
+    ) -> Result<(), libfabric::error::Error> {
+        self.alloc_manager.remove_from_alloc(inner_alloc);
         Ok(())
     }
 
@@ -740,7 +748,7 @@ impl Ofi {
 
     pub(crate) fn barrier(&self) -> Result<(), libfabric::error::Error> {
         // trace!("Running barrier");
-        match &self.barrier_impl {
+        match &*self.barrier_impl.read() {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
             }
@@ -1170,6 +1178,15 @@ impl Ofi {
             ))
     }
 
+    pub(crate) fn local_alloc_and_offset_from_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+    ) -> Option<(CommAlloc, usize)> {
+        self.alloc_manager
+            .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
+    }
+
     pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
         self.alloc_manager
             .remote_addr(pe, local_addr)
@@ -1191,7 +1208,7 @@ impl Drop for Ofi {
 }
 
 pub(crate) struct AllocInfoManager {
-    pub(crate) mr_info_table: Arc<RwLock<Vec<Arc<AllocInfo>>>>,
+    pub(crate) mr_info_table: Arc<RwLock<Vec<Arc<LibfabricAlloc>>>>,
     mr_next_key: AtomicUsize,
     page_size: usize,
 }
@@ -1205,7 +1222,7 @@ impl AllocInfoManager {
         }
     }
 
-    pub(crate) fn insert(&self, alloc: Arc<AllocInfo>) {
+    pub(crate) fn insert(&self, alloc: Arc<LibfabricAlloc>) {
         self.mr_info_table.write().push(alloc);
     }
 
@@ -1223,7 +1240,7 @@ impl AllocInfoManager {
 
         table.remove(idx);
     }
-    pub(crate) fn remove_from_alloc(&self, mem_addr: &AllocInfo) {
+    pub(crate) fn remove_from_alloc(&self, mem_addr: &LibfabricAlloc) {
         let mut table = self.mr_info_table.write();
         let idx = table
             .iter()
@@ -1233,7 +1250,7 @@ impl AllocInfoManager {
         table.remove(idx);
     }
 
-    // pub(crate) fn get_alloc(&self, mem_addr: CommAllocAddr) -> Option<Arc<AllocInfo>> {
+    // pub(crate) fn get_alloc(&self, mem_addr: CommAllocAddr) -> Option<Arc<LibfabricAlloc>> {
     //     let table = self.mr_info_table.read();
     //     table.iter().find(|e| e.contains(&mem_addr.0)).cloned()
     // }
@@ -1241,7 +1258,7 @@ impl AllocInfoManager {
     pub(crate) fn get_alloc_from_start_addr(
         &self,
         mem_addr: CommAllocAddr,
-    ) -> AllocResult<Arc<AllocInfo>> {
+    ) -> AllocResult<Arc<LibfabricAlloc>> {
         let table = self.mr_info_table.read();
         table
             .iter()
@@ -1258,6 +1275,20 @@ impl AllocInfoManager {
         let remote_alloc_info = alloc_info.remote_allocs.get(&remote_pe)?;
         let remote_offset = remote_addr - remote_alloc_info.mem_address().as_ptr() as usize;
         Some(alloc_info.start() + remote_offset)
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+    ) -> Option<(CommAlloc, usize)> {
+        let table = self.mr_info_table.read();
+        let alloc_info = table
+            .iter()
+            .find(|x| x.remote_contains(&remote_pe, &remote_addr))?;
+        let remote_alloc_info = alloc_info.remote_allocs.get(&remote_pe)?;
+        let remote_offset = remote_addr - remote_alloc_info.mem_address().as_ptr() as usize;
+        Some((alloc_info.clone().into(), remote_offset))
     }
 
     pub(crate) fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> Option<usize> {
@@ -1283,69 +1314,35 @@ impl AllocInfoManager {
     }
 }
 
-// #[derive(Clone)]
-// pub(crate) struct RemoteAllocInfo {
-//     key: MappedMemoryRegionKey,
-//     range: std::ops::Range<usize>,
-// }
-
-// impl RemoteAllocInfo {
-//     pub(crate) fn from_rma_iov(
-//         rma_iov: RmaIoVec,
-//         key: MappedMemoryRegionKey,
-//     ) -> Self {
-//         let start = rma_iov.get_address() as usize;
-//         let end = start + rma_iov.get_len();
-
-//         Self {
-//             key,
-//             range: std::ops::Range { start, end },
-//         }
-//     }
-
-// //     #[allow(dead_code)]
-// //     pub(crate) fn new(
-// //         range: std::ops::Range<usize>,
-// //         key: MappedMemoryRegionKey,
-// //     ) -> Self {
-// //         Self { key, range }
-// //     }
-
-//     pub(crate) fn start(&self) -> usize {
-//         self.range.start
-//     }
-
-//     pub(crate) fn end(&self) -> usize {
-//         self.range.end
-//     }
-
-//     pub(crate) fn key(&self) -> &libfabric::mr::MappedMemoryRegionKey {
-//         &self.key
-//     }
-
-//     pub(crate) fn contains(&self, addr: &usize) -> bool {
-//         self.range.contains(addr)
-//     }
-// }
-
-pub(crate) struct AllocInfo {
+pub(crate) struct LibfabricAlloc {
+    pub(crate) ofi: Arc<Ofi>,
     mem: Arc<memmap::MmapMut>,
     mr: MemoryRegion,
     range: std::ops::Range<usize>,
     remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
 }
 
-impl std::fmt::Debug for AllocInfo {
+impl std::fmt::Debug for LibfabricAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AllocInfo")
+        f.debug_struct("LibfabricAlloc ")
             .field("range", &self.range)
             // .field("remote_allocs", &self.remote_allocs)
             .finish()
     }
 }
 
-impl AllocInfo {
+impl From<Arc<LibfabricAlloc>> for CommAlloc {
+    fn from(alloc: Arc<LibfabricAlloc>) -> Self {
+        CommAlloc {
+            inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
+            alloc_type: CommAllocType::Fabric,
+        }
+    }
+}
+
+impl LibfabricAlloc {
     pub(crate) fn new(
+        ofi: Arc<Ofi>,
         mem: Arc<memmap::MmapMut>,
         mr: MemoryRegion,
         remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
@@ -1355,19 +1352,20 @@ impl AllocInfo {
         let end = start + num_bytes; //mem.len();
 
         Ok(Self {
+            ofi,
             mem: mem,
             mr,
             range: std::ops::Range { start, end },
             remote_allocs,
         })
     }
+    pub(crate) fn num_pes(&self) -> usize{
+        self.remote_allocs.len()
+    }
     pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<Arc<Self>> {
         if offset + len > self.num_bytes() {
             return Err(AllocError::InvalidSubAlloc(offset, len));
         }
-        // let start = offset;
-        // let end = start + len;
-        // let range = std::ops::Range { start, end };
         let mut remote_allocs = HashMap::new();
         for (pe, remote_info) in self.remote_allocs.iter() {
             let new_remote_info = unsafe { remote_info.sub_region(offset..offset + len) };
@@ -1375,6 +1373,7 @@ impl AllocInfo {
         }
 
         Ok(Arc::new(Self {
+            ofi: self.ofi.clone(),
             mem: self.mem.clone(),
             mr: self.mr.clone(),
             range: self.range.start + offset..self.range.start + offset + len,
@@ -1388,49 +1387,6 @@ impl AllocInfo {
     pub(crate) fn num_bytes(&self) -> usize {
         self.range.end - self.range.start
     }
-
-    // #[allow(dead_code)]
-    // pub(crate) fn remote_start(&self, remote_id: &usize) -> usize {
-    //     self.remote_allocs
-    //         .get(remote_id)
-    //         .expect(&format!(
-    //             "PE {} is not part of the sub allocation group",
-    //             remote_id
-    //         ))
-    //         .start()
-    // }
-
-    //     #[allow(dead_code)]
-    //     pub(crate) fn remote_end(&self, remote_id: &usize) -> usize {
-    //         self.remote_allocs
-    //             .get(remote_id)
-    //             .expect(&format!(
-    //                 "PE {} is not part of the sub allocation group",
-    //                 remote_id
-    //             ))
-    //             .end()
-    //     }
-
-    //     #[allow(dead_code)]
-    //     pub(crate) fn end(&self) -> usize {
-    //         self.range.end
-    //     }
-
-    //     #[allow(dead_code)]
-    //     pub(crate) fn key(&self) -> &libfabric::mr::MemoryRegionKey {
-    //         &self.key
-    //     }
-
-    //     #[allow(dead_code)]
-    //     pub(crate) fn remote_key(&self, remote_id: &usize) -> &libfabric::mr::MappedMemoryRegionKey {
-    //         self.remote_allocs
-    //             .get(remote_id)
-    //             .expect(&format!(
-    //                 "PE {} is not part of the sub allocation group",
-    //                 remote_id
-    //             ))
-    //             .key()
-    //     }
 
     pub(crate) fn contains(&self, addr: &usize) -> bool {
         self.range.contains(addr)
@@ -1462,17 +1418,279 @@ impl AllocInfo {
         self.remote_allocs.get(remote_pe).cloned()
     }
 
-    // pub(crate) fn mr_desc(&self) -> libfabric::mr::MemoryRegionDesc {
-    //     self.mr.descriptor()
-    // }
     pub(crate) fn mr(&self) -> MemoryRegion {
         self.mr.clone()
     }
 
-    //     #[allow(dead_code)]
-    //     pub(crate) fn mr(&self) -> &libfabric::mr::MemoryRegion {
-    //         &self.mr
-    //     }
+    pub(crate) unsafe fn put<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        src_addr: &CommSlice<T>,
+        sync: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        self.inner_put(pe, offset, src_addr.as_ref(), sync)
+    }
+
+    unsafe fn inner_put<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        src_addr: &[T],
+        sync: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+
+        let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        trace!(
+            "Remote destination address for PE {}: {:?}",
+            pe,
+            remote_dst_addr
+        );
+
+        let remote_key = remote_alloc_info.key();
+        if std::mem::size_of_val(src_addr) < self.ofi.info_entry.tx_attr().inject_size() {
+            trace!(
+                "Injecting write to PE {} at address {:?}",
+                pe,
+                remote_dst_addr
+            );
+            self.ofi.post_put(|| unsafe {
+                self.ofi.ep.inject_write_to(
+                    src_addr,
+                    &self.ofi.mapped_addresses[pe],
+                    remote_dst_addr,
+                    &remote_key,
+                )
+            })?;
+        } else {
+            let mut curr_idx = 0;
+            while curr_idx < src_addr.len() {
+                let msg_len = std::cmp::min(
+                    src_addr.len() - curr_idx,
+                    self.ofi.info_entry.ep_attr().max_msg_size(),
+                );
+
+                self.ofi.post_put(|| unsafe {
+                    self.ofi.ep.write_to(
+                        &src_addr[curr_idx..curr_idx + msg_len],
+                        Some(&self.mr.descriptor()),
+                        &self.ofi.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                    )
+                })?;
+
+                remote_dst_addr = remote_dst_addr.add(msg_len);
+                curr_idx += msg_len;
+            }
+        }
+
+        if sync {
+            self.ofi.wait_for_tx_cntr()?;
+        }
+        // trace!("Done putting");
+        Ok(())
+    }
+
+    pub(crate) unsafe fn get<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst_addr: &mut CommSlice<T>,
+        sync: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        self.inner_get(pe, offset, dst_addr, sync)
+    }
+
+    pub(crate) unsafe fn inner_get<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst_addr: &mut [T],
+        sync: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let mut remote_src_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+
+        let mut curr_idx = 0;
+
+        while curr_idx < dst_addr.len() {
+            let msg_len = std::cmp::min(
+                dst_addr.len() - curr_idx,
+                self.ofi.info_entry.ep_attr().max_msg_size(),
+            );
+            self.ofi.post_get(|| unsafe {
+                self.ofi.ep.read_from(
+                    &mut dst_addr[curr_idx..curr_idx + msg_len],
+                    Some(&self.mr.descriptor()),
+                    &self.ofi.mapped_addresses[pe],
+                    remote_src_addr,
+                    &remote_key,
+                )
+            })?;
+            remote_src_addr = remote_src_addr.add(msg_len);
+            curr_idx += msg_len;
+        }
+
+        if sync {
+            self.ofi.wait_for_rx_cntr()?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn atomic_op<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &LamellarAtomicOp<T>,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_atomic_op::<T, u8>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_atomic_op::<T, u16>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_atomic_op::<T, u32>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_atomic_op::<T, u64>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_atomic_op::<T, usize>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_atomic_op::<T, i8>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_atomic_op::<T, i16>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_atomic_op::<T, i32>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_atomic_op::<T, i64>(pe, offset, op)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_atomic_op::<T, isize>(pe, offset, op)
+            } else {
+                panic!("Unsupported atomic operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_atomic_op<T, OFI: AsFiType>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &LamellarAtomicOp<T>,
+    ) -> Result<(), libfabric::error::Error> {
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+
+        let src = op.src().expect("Atomic operation has no source");
+        let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+        self.ofi.post_put(|| {
+            self.ofi.ep.inject_atomic_to(
+                buf,
+                &self.ofi.mapped_addresses[pe],
+                remote_dst_addr,
+                &remote_key,
+                op.into(),
+            )
+        })?;
+        Ok(())
+    }
+
+    pub(crate) fn atomic_fetch_op<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &LamellarAtomicOp<T>,
+        result: &mut [T],
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_atomic_fetch_op::<T, u16>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_atomic_fetch_op::<T, u32>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_atomic_fetch_op::<T, u64>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_atomic_fetch_op::<T, usize>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_atomic_fetch_op::<T, i8>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_atomic_fetch_op::<T, i16>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_atomic_fetch_op::<T, i32>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_atomic_fetch_op::<T, i64>(pe, offset, op, result)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_atomic_fetch_op::<T, isize>(pe, offset, op, result)
+            } else {
+                panic!("Unsupported atomic operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_atomic_fetch_op<T, OFI: AsFiType>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &LamellarAtomicOp<T>,
+        result: &mut [T],
+    ) -> Result<(), libfabric::error::Error> {
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+
+        let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+        match op.src() {
+            Some(src) => {
+                let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+                self.ofi.post_get(|| {
+                    self.ofi.ep.fetch_atomic_from(
+                        buf,
+                        None,
+                        res,
+                        None,
+                        &self.ofi.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                        op.into(),
+                    )
+                })?;
+            }
+            None => {
+                let buf_val = res[0];
+                self.ofi.post_get(|| {
+                    self.ofi.ep.fetch_atomic_from(
+                        std::slice::from_ref(&buf_val),
+                        None,
+                        res,
+                        None,
+                        &self.ofi.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                        op.into(),
+                    )
+                })?;
+            }
+        };
+
+        Ok(())
+    }
 }
 
 fn euclid_rem(a: i64, b: i64) -> usize {
@@ -1484,294 +1702,6 @@ fn euclid_rem(a: i64, b: i64) -> usize {
         (r + b.abs()) as usize
     }
 }
-
-// pub struct LibfabricWorld {
-//     ofi: Rc<Ofi>,
-// }
-
-// impl LibfabricWorld {
-//     pub fn new() -> Result<Self, libfabric::error::Error> {
-//         let ofi = Ofi::new(Some("verbs"), None)?;
-//         Ok(Self { ofi })
-//     }
-
-//     pub fn mype(&self) -> usize {
-//         self.ofi.my_pe
-//     }
-//     pub fn numpes(&self) -> usize {
-//         self.ofi.num_pes
-//     }
-//     pub fn barrier(&self) {
-//         self.ofi.barrier();
-//     }
-//     pub fn alloc<T: Copy>(&self, num_elems: usize) -> LibfabricArray<T> {
-//         let size = num_elems * std::mem::size_of::<T>();
-//         let pes = (0..self.ofi.num_pes).collect::<Vec<_>>();
-//         LibfabricArray {
-//             ofi: self.ofi.clone(),
-//             alloc_info: self.ofi.alloc(size).unwrap(),
-//             local_size: num_elems,
-//             total_size: num_elems * self.ofi.num_pes,
-//             num_pes: self.ofi.num_pes,
-//             _phantom: std::marker::PhantomData,
-//         }
-//     }
-// }
-
-// pub struct LibfabricArray<T: Copy> {
-//     ofi: Rc<Ofi>,
-//     alloc_info: AllocInfo,
-//     local_size: usize,
-//     total_size: usize,
-//     num_pes: usize,
-//     _phantom: std::marker::PhantomData<T>,
-// }
-
-// impl<T: Copy> LibfabricArray<T> {
-//     pub fn len(&self) -> usize {
-//         self.total_size
-//     }
-
-//     pub fn as_mut_slice(&self) -> &mut [T] {
-//         let start = self.alloc_info.start();
-//         let end = start + self.local_size * std::mem::size_of::<T>();
-//         unsafe { std::slice::from_raw_parts_mut(start as *mut T, self.local_size) }
-//     }
-//     pub fn as_slice(&self) -> &[T] {
-//         let start = self.alloc_info.start();
-//         let end = start + self.local_size * std::mem::size_of::<T>();
-//         unsafe { std::slice::from_raw_parts(start as *const T, self.local_size) }
-//     }
-//     fn pe_and_offset(&self, index: usize) -> (usize, usize) {
-//         if index >= self.total_size {
-//             panic!("Index out of bounds");
-//         }
-//         let pe = index % self.num_pes;
-//         let offset = index / self.num_pes;
-//         (pe, offset)
-//     }
-//     pub fn put(&self, index: usize, val: T) {
-//         let (pe, offset) = self.pe_and_offset(index);
-//         let remote_alloc_info = self
-//             .alloc_info
-//             .remote_info(&pe)
-//             .expect(&format!("PE {} is not part of the allocation group", pe));
-//         let remote_addr = unsafe {
-//             remote_alloc_info
-//                 .mem_address()
-//                 .add(offset * std::mem::size_of::<T>())
-//         };
-//         let remote_key = remote_alloc_info.key();
-//         let cntr_order = self
-//             .ofi
-//             .post_put(|| unsafe {
-//                 self.ofi.ep.inject_write_to(
-//                     &[val],
-//                     &self.ofi.mapped_addresses[pe],
-//                     remote_addr,
-//                     &remote_key,
-//                 )
-//             })
-//             .expect("Failed to post put operation");
-//         // self.ofi.wait_for_tx_cntr(cntr_order)
-//         //     .expect("Failed to wait for put operation");
-//     }
-
-//     pub fn wait_all(&self) {
-//         self.ofi
-//             .wait_all()
-//             .expect("Failed to wait for all operations");
-//     }
-// }
-// impl<T: Copy + Default + std::fmt::Debug> LibfabricArray<T> {
-//     pub fn get(&self, index: usize) -> T {
-//         let (pe, offset) = self.pe_and_offset(index);
-//         let remote_alloc_info = self
-//             .alloc_info
-//             .remote_info(&pe)
-//             .expect(&format!("PE {} is not part of the allocation group", pe));
-//         let remote_addr = unsafe {
-//             remote_alloc_info
-//                 .mem_address()
-//                 .add(offset * std::mem::size_of::<T>())
-//         };
-//         let remote_key = remote_alloc_info.key();
-//         // println!("Getting from PE {}, addr: {}, remote_addr: {:?}", pe, index, remote_addr);
-//         let mut val = vec![T::default()];
-//         let cntr_order = self
-//             .ofi
-//             .post_get(|| unsafe {
-//                 self.ofi.ep.read_from(
-//                     &mut val,
-//                     Some(&self.alloc_info.mr_desc()),
-//                     &self.ofi.mapped_addresses[pe],
-//                     remote_addr,
-//                     &remote_key,
-//                 )
-//             })
-//             .expect("Failed to post get operation");
-//         self.ofi
-//             .wait_for_rx_cntr(cntr_order)
-//             .expect("Failed to wait for get operation");
-//         // println!("Got value: {:?}", val);
-//         val[0]
-//     }
-// }
-
-// impl<T: Copy + Default + libfabric::AsFiType> LibfabricArray<T> {
-//     pub fn atomic_put(&self, index: usize, val: T) {
-//         let (pe, offset) = self.pe_and_offset(index);
-//         let remote_alloc_info = self
-//             .alloc_info
-//             .remote_info(&pe)
-//             .expect(&format!("PE {} is not part of the allocation group", pe));
-//         let remote_addr = unsafe {
-//             remote_alloc_info
-//                 .mem_address()
-//                 .add(offset * std::mem::size_of::<T>())
-//         };
-//         let remote_key = remote_alloc_info.key();
-//         let cntr_order = self
-//             .ofi
-//             .post_put(|| unsafe {
-//                 self.ofi.ep.inject_atomic_to(
-//                     &[val],
-//                     &self.ofi.mapped_addresses[pe],
-//                     remote_addr,
-//                     &remote_key,
-//                     AtomicOp::AtomicWrite,
-//                 )
-//             })
-//             .expect("Failed to post atomic put operation");
-//         // self.ofi.wait_for_tx_cntr(cntr_order)
-//         //     .expect("Failed to wait for atomic put operation");
-//     }
-
-//     pub fn atomic_get(&self, index: usize) -> T {
-//         let (pe, offset) = self.pe_and_offset(index);
-//         let remote_alloc_info = self
-//             .alloc_info
-//             .remote_info(&pe)
-//             .expect(&format!("PE {} is not part of the allocation group", pe));
-//         let remote_addr = unsafe {
-//             remote_alloc_info
-//                 .mem_address()
-//                 .add(offset * std::mem::size_of::<T>())
-//         };
-//         let remote_key = remote_alloc_info.key();
-//         // println!("Getting from PE {}, addr: {}, remote_addr: {:?}", pe, index, remote_addr);
-//         let mut val = vec![T::default()];
-//         let cntr_order = self
-//             .ofi
-//             .post_get(|| unsafe {
-//                 self.ofi.ep.fetch_atomic_from(
-//                     &[T::default()],
-//                     None,
-//                     &mut val,
-//                     None,
-//                     &self.ofi.mapped_addresses[pe],
-//                     remote_addr,
-//                     &remote_key,
-//                     FetchAtomicOp::AtomicRead,
-//                 )
-//             })
-//             .expect("Failed to post atomic get operation");
-//         self.ofi
-//             .wait_for_rx_cntr(cntr_order)
-//             .expect("Failed to wait for atomic get operation");
-//         // println!("Got value: {:?}", val);
-//         val[0]
-//     }
-
-//     pub fn swap(&self, index: usize, val: T) -> T {
-//         let (pe, offset) = self.pe_and_offset(index);
-//         let remote_alloc_info = self
-//             .alloc_info
-//             .remote_info(&pe)
-//             .expect(&format!("PE {} is not part of the allocation group", pe));
-//         let remote_addr = unsafe {
-//             remote_alloc_info
-//                 .mem_address()
-//                 .add(offset * std::mem::size_of::<T>())
-//         };
-//         let remote_key = remote_alloc_info.key();
-//         // println!("Swapping from PE {}, addr: {}, remote_addr: {:?}", pe, index, remote_addr);
-//         let mut old_val = vec![val];
-//         let mut new_val = vec![T::default()];
-//         let cntr_order = self
-//             .ofi
-//             .post_get(|| unsafe {
-//                 self.ofi.ep.fetch_atomic_from(
-//                     &old_val,
-//                     None,
-//                     &mut new_val,
-//                     None,
-//                     &self.ofi.mapped_addresses[pe],
-//                     remote_addr,
-//                     &remote_key,
-//                     FetchAtomicOp::AtomicWrite,
-//                 )
-//             })
-//             .expect("Failed to post atomic swap operation");
-//         self.ofi
-//             .wait_for_rx_cntr(cntr_order)
-//             .expect("Failed to wait for atomic swap operation");
-//         // println!("Got value: {:?}", old_val);
-//         new_val[0]
-//     }
-// }
-
-// impl<T: Copy> Drop for LibfabricArray<T> {
-//     fn drop(&mut self) {
-//         // println!("Dropping LibfabricArray");
-//         // self.ofi.alloc_manager.remove(&self.alloc_info.start());
-//     }
-// }
-
-// impl LibfabricWorld {
-//     fn init() -> Self {
-
-//     }
-// }
-
-// fn try_as_fi_type<T>(t: &CommSlice<T>) -> Option<CommSlice<impl libfabric::AsFiType>> {
-//     let id = std::any::TypeId::of::<T>();
-
-//         if id == std::any::TypeId::of::<u8>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u8>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<u16>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u16>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<u32>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u32>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<u64>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<u64>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<usize>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<i8>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<i16>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<i32>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<i64>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
-//         }
-//         else if id == std::any::TypeId::of::<isize>() {
-//             Some(unsafe { std::mem::transmute::<&CommSlice<T>, &CommSlice<R>>(t) })
-//         }
-//         else{
-//             None
-//         }
-
-// }
 
 impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
     fn from(op: &LamellarAtomicOp<T>) -> Self {

@@ -30,6 +30,7 @@ libfabric = { path = "../rofi-junction/libfabric", features = [
 pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
     "with-pmix",
 ], optional = true }
+ucx1-sys = { version =  "0.1.0",  optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 rofisys = { version = "0.4", optional = true }
@@ -75,6 +76,7 @@ tracing = { version = "0.1.41", features = ["release_max_level_warn"] }
 tracing-futures = "0.2.5"
 match_cfg = "0.1.0"
 bytemuck = "1.23.2"
+thiserror = { version = "2.0.16", optional = true }
 
 
 [dev-dependencies]
@@ -107,6 +109,7 @@ rofi-c = []
 # enable-libfabric = []
 enable-rofi-rust = []
 enable-libfabric = ["libfabric", "pmi"]
+enable-ucx = ["ucx1-sys", "pmi", "thiserror"]
 # enable-rofi-rust = ["rofi-rust", "pmi"]
 tokio-executor = ["tokio"]
 disable-runtime-warnings = []

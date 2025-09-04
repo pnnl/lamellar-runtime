@@ -14,7 +14,7 @@ use crate::array::network_atomic::NetworkAtomicElement;
 use crate::array::*;
 // use crate::darc::{Darc, DarcMode};
 use crate::barrier::BarrierHandle;
-use crate::lamellae::comm::atomic::CommAtomic;
+use crate::lamellae::comm::CommInfo;
 use crate::lamellar_team::IntoLamellarTeam;
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;

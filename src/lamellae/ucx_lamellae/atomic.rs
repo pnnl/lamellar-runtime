@@ -1,17 +1,21 @@
 use crate::{
     active_messaging::AMCounters,
-    lamellae::{
-        comm::atomic::{
+    lamellae::comm::{
+        atomic::{
             AtomicFetchOpFuture, AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
+            CommAllocAtomic,
         },
-        local_lamellae::comm::LocalAlloc,
-        net_atomic_fetch_op, net_atomic_op, CommAllocAddr, CommAllocAtomic,
+        CommAllocAddr, CommAllocInner,
     },
     warnings::RuntimeWarning,
     LamellarTask,
 };
 
-use super::Scheduler;
+use super::{
+    comm::UcxComm,
+    fabric::{UcxAlloc, UcxRequest, UcxWorld},
+    Scheduler,
+};
 
 use pin_project::{pin_project, pinned_drop};
 use std::{
@@ -22,31 +26,51 @@ use std::{
     task::{Context, Poll},
 };
 
+use tracing::trace;
+
 // #[pin_project(PinnedDrop)]
-// pub(crate) struct LocalAtomicFuture<T> {
+// pub(crate) struct UcxAtomicFuture<T> {
+//     pub(crate) my_pe: usize,
+//     pub(crate) ucx: Arc<UcxWorld>,
+//     pub(super) remote_pe: usize,
 //     pub(super) op: AtomicOp<T>,
 //     pub(super) dst: CommAllocAddr,
 //     pub(crate) scheduler: Arc<Scheduler>,
 //     pub(crate) counters: Vec<Arc<AMCounters>>,
 //     pub(crate) spawned: bool,
+//     pub(crate) request: Option<UcxRequest>,
 // }
 
-// impl<T: 'static> LocalAtomicFuture<T> {
+// impl<T: Copy + Send + 'static> UcxAtomicFuture<T> {
+//     fn exec_op(&mut self) {
+//         trace!("performing atomic op: {:?} dst: {:?} ", self.op, self.dst);
+//         self.request = Some(unsafe {
+//             self.ucx
+//                 .atomic_op(self.remote_pe, &self.op, &self.dst)
+//         });
+//     }
 //     pub(crate) fn block(mut self) {
-//         net_atomic_op(&self.op, &self.dst);
+//         self.exec_op();
+//         let request = self.request.take().expect("ucx request doesnt exist");
+//         request.wait();
 //         self.spawned = true;
 //     }
 //     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-//         net_atomic_op(&self.op, &self.dst);
+//         self.exec_op();
 //         self.spawned = true;
 //         let mut counters = Vec::new();
 //         std::mem::swap(&mut counters, &mut self.counters);
-//         self.scheduler.spawn_task(async {}, counters)
+//         let request = self.request.take().expect("ucx request doesnt exist");
+//         // let ucx = self.ucx.clone();
+//         self.scheduler
+//             .clone()
+//             .spawn_task(async move { request.wait(); }, counters)
+//         // self.scheduler.clone().spawn_task(async move {}, counters)
 //     }
 // }
 
 // #[pinned_drop]
-// impl<T> PinnedDrop for LocalAtomicFuture<T> {
+// impl<T> PinnedDrop for UcxAtomicFuture<T> {
 //     fn drop(self: Pin<&mut Self>) {
 //         if !self.spawned {
 //             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -54,39 +78,58 @@ use std::{
 //     }
 // }
 
-// impl<T> From<LocalAtomicFuture<T>> for AtomicOpHandle<T> {
-//     fn from(f: LocalAtomicFuture<T>) -> AtomicOpHandle<T> {
+// impl<T> From<UcxAtomicFuture<T>> for AtomicOpHandle<T> {
+//     fn from(f: UcxAtomicFuture<T>) -> AtomicOpHandle<T> {
 //         AtomicOpHandle {
-//             future: AtomicOpFuture::Local(f),
+//             future: AtomicOpFuture::Ucx(f),
 //         }
 //     }
 // }
 
-// impl<T: 'static> Future for LocalAtomicFuture<T> {
+// impl<T: Copy + Send + 'static> Future for UcxAtomicFuture<T> {
 //     type Output = ();
-//     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+//     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
 //         if !self.spawned {
-//             net_atomic_op(&self.op, &self.dst);
-//             *self.project().spawned = true;
-//         } else {
+//             self.exec_op();
+//             self.spawned = true;
 //         }
+//         let request = self.request.take().expect("ucx request doesnt exist");
+//         request.wait();
 //         Poll::Ready(())
 //     }
 // }
 
 // #[pin_project(PinnedDrop)]
-// pub(crate) struct LocalAtomicFetchFuture<T> {
+// pub(crate) struct UcxAtomicFetchFuture<T> {
+//     pub(crate) my_pe: usize,
+//     pub(crate) ucx: Arc<UcxWorld>,
+//     pub(super) remote_pe: usize,
 //     pub(super) op: AtomicOp<T>,
 //     pub(super) dst: CommAllocAddr,
-//     pub(super) result: MaybeUninit<T>,
+//     pub(crate) result: MaybeUninit<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
 //     pub(crate) counters: Vec<Arc<AMCounters>>,
 //     pub(crate) spawned: bool,
+//     pub(crate) request: Option<UcxRequest>,
 // }
 
-// impl<T: Send + 'static> LocalAtomicFetchFuture<T> {
+// impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
+//     fn exec_op(&mut self) {
+//         trace!("performing atomic op: {:?} dst: {:?} ", self.op, self.dst);
+//         self.request = Some(unsafe {
+//             self.ucx
+//                 .atomic_fetch_op(
+//                     self.remote_pe,
+//                     &self.op,
+//                     &self.dst,
+//                     std::slice::from_mut(&mut *self.result.as_mut_ptr()),
+//                 )
+//         });
+//     }
 //     pub(crate) fn block(mut self) -> T {
-//         net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut_ptr());
+//         self.exec_op();
+//         let request = self.request.take().expect("ucx request doesnt exist");
+//         request.wait();
 //         self.spawned = true;
 //         unsafe {
 //             let mut res = MaybeUninit::uninit();
@@ -96,12 +139,15 @@ use std::{
 //     }
 
 //     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
-//         net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut_ptr());
+//         self.exec_op();
 //         self.spawned = true;
 //         let mut counters = Vec::new();
 //         std::mem::swap(&mut counters, &mut self.counters);
+
 //         self.scheduler.clone().spawn_task(
 //             async move {
+//                 let request = self.request.take().expect("ucx request doesnt exist");
+//                 request.wait();
 //                 unsafe {
 //                     let mut res = MaybeUninit::uninit();
 //                     std::mem::swap(&mut self.result, &mut res);
@@ -114,7 +160,7 @@ use std::{
 // }
 
 // #[pinned_drop]
-// impl<T> PinnedDrop for LocalAtomicFetchFuture<T> {
+// impl<T> PinnedDrop for UcxAtomicFetchFuture<T> {
 //     fn drop(self: Pin<&mut Self>) {
 //         if !self.spawned {
 //             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -122,35 +168,34 @@ use std::{
 //     }
 // }
 
-// impl<T> From<LocalAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
-//     fn from(f: LocalAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
+// impl<T> From<UcxAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
+//     fn from(f: UcxAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
 //         AtomicFetchOpHandle {
-//             future: AtomicFetchOpFuture::Local(f),
+//             future: AtomicFetchOpFuture::Ucx(f),
 //         }
 //     }
 // }
 
-// impl<T: Send + 'static> Future for LocalAtomicFetchFuture<T> {
+// impl<T: Copy + Send + 'static> Future for UcxAtomicFetchFuture<T> {
 //     type Output = T;
 //     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
 //         if !self.spawned {
-//             let result_ptr =  self.result.as_mut_ptr();
-//             net_atomic_fetch_op(&self.op, &self.dst,result_ptr);
+//             self.exec_op();
+//             self.spawned = true;
 //         }
-//         let this = self.project();
-//         *this.spawned = true;
-
+//         let request = self.request.take().expect("ucx request doesnt exist");
+//         request.wait();
 //         Poll::Ready(unsafe {
 //             let mut res = MaybeUninit::uninit();
-//             std::mem::swap(this.result, &mut res);
+//             std::mem::swap(&mut self.result, &mut res);
 //             res.assume_init()
 //         })
 //     }
 // }
 
-// impl CommAtomic for LocalComm {
+// impl CommAtomic for UcxComm {
 //     fn atomic_avail<T: 'static>(&self) -> bool {
-//         false
+//         self.ucx.atomic_avail::<T>()
 //     }
 //     fn atomic_op<T: Copy>(
 //         &self,
@@ -161,12 +206,16 @@ use std::{
 //         remote_alloc: CommAllocInner,
 //         offset: usize,
 //     ) -> AtomicOpHandle<T> {
-//         LocalAtomicFuture {
+//         UcxAtomicFuture {
+//             my_pe: self.my_pe,
+//             ucx: self.ucx.clone(),
+//             remote_pe: pe,
 //             op,
 //             dst: remote_alloc.addr() + offset,
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
+//             request: None,
 //         }
 //         .into()
 //     }
@@ -179,34 +228,49 @@ use std::{
 //         remote_alloc: CommAllocInner,
 //         offset: usize,
 //     ) -> AtomicFetchOpHandle<T> {
-//         LocalAtomicFetchFuture {
-//             op,
+//         UcxAtomicFetchFuture {
+//             my_pe: self.my_pe,
+//             ucx: self.ucx.clone(),
+//             remote_pe: pe,
+//             op: op,
 //             dst: remote_alloc.addr() + offset,
 //             result: MaybeUninit::uninit(),
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
+//             request: None,
 //         }
 //         .into()
 //     }
 // }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LocalAllocAtomicFuture<T> {
-    alloc: Arc<LocalAlloc>,
-    offset: usize,
+pub(crate) struct UcxAllocAtomicFuture<T> {
+    pub(crate) alloc: Arc<UcxAlloc>,
+    pub(super) remote_pe: usize,
+    pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
+    pub(crate) request: Option<UcxRequest>,
 }
 
-impl<T: 'static> LocalAllocAtomicFuture<T> {
+impl<T: Copy + Send + 'static> UcxAllocAtomicFuture<T> {
     fn exec_op(&mut self) {
-        net_atomic_op(&self.op, &CommAllocAddr(self.alloc.start() + self.offset))
+        trace!(
+            "performing atomic op: {:?} offset: {:?} ",
+            self.op,
+            self.offset
+        );
+        self.request = Some(unsafe {
+            UcxAlloc::atomic_op(&self.alloc, self.remote_pe, self.offset, &self.op)
+        });
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
+        let request = self.request.take().expect("ucx request doesnt exist");
+        request.wait();
         self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -214,16 +278,18 @@ impl<T: 'static> LocalAllocAtomicFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        // LamellarTask {
-        //     task: LamellarTaskInner::Finished(Some(())),
-        //     executor: self.scheduler.executor.clone(),
-        // }
-        self.scheduler.spawn_task(async {}, counters)
+        let request = self.request.take().expect("ucx request doesnt exist");
+        self.scheduler.clone().spawn_task(
+            async move {
+                request.wait();
+            },
+            counters,
+        )
     }
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalAllocAtomicFuture<T> {
+impl<T> PinnedDrop for UcxAllocAtomicFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -231,49 +297,61 @@ impl<T> PinnedDrop for LocalAllocAtomicFuture<T> {
     }
 }
 
-impl<T> From<LocalAllocAtomicFuture<T>> for AtomicOpHandle<T> {
-    fn from(f: LocalAllocAtomicFuture<T>) -> AtomicOpHandle<T> {
+impl<T> From<UcxAllocAtomicFuture<T>> for AtomicOpHandle<T> {
+    fn from(f: UcxAllocAtomicFuture<T>) -> AtomicOpHandle<T> {
         AtomicOpHandle {
-            future: AtomicOpFuture::LocalAlloc(f),
+            future: AtomicOpFuture::UcxAlloc(f),
         }
     }
 }
 
-impl<T: 'static> Future for LocalAllocAtomicFuture<T> {
+impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            *self.project().spawned = true;
-        } else {
+            self.spawned = true;
         }
-        // rofi_c_wait();
-
+        let request = self.request.take().expect("ucx request doesnt exist");
+        request.wait();
         Poll::Ready(())
     }
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LocalAllocAtomicFetchFuture<T> {
-    alloc: Arc<LocalAlloc>,
-    offset: usize,
+pub(crate) struct UcxAllocAtomicFetchFuture<T> {
+    pub(crate) alloc: Arc<UcxAlloc>,
+    pub(super) remote_pe: usize,
+    pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
-    pub(super) result: MaybeUninit<T>,
+    pub(crate) result: MaybeUninit<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
+    pub(crate) request: Option<UcxRequest>,
 }
 
-impl<T: Send + 'static> LocalAllocAtomicFetchFuture<T> {
+impl<T: Copy + Send + 'static> UcxAllocAtomicFetchFuture<T> {
     fn exec_op(&mut self) {
-        net_atomic_fetch_op(
-            &self.op,
-            &CommAllocAddr(self.alloc.start() + self.offset),
-            self.result.as_mut_ptr(),
-        )
+        trace!(
+            "performing atomic op: {:?} offset: {:?} ",
+            self.op,
+            self.offset
+        );
+        self.request = Some(unsafe {
+            UcxAlloc::atomic_fetch_op(
+                &self.alloc,
+                self.remote_pe,
+                self.offset,
+                &self.op,
+                std::slice::from_mut(&mut *self.result.as_mut_ptr()),
+            )
+        });
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
+        let request = self.request.take().expect("ucx request doesnt exist");
+        request.wait();
         self.spawned = true;
         unsafe {
             let mut res = MaybeUninit::uninit();
@@ -289,6 +367,8 @@ impl<T: Send + 'static> LocalAllocAtomicFetchFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
+                let request = self.request.take().expect("ucx request doesnt exist");
+                request.wait();
                 unsafe {
                     let mut res = MaybeUninit::uninit();
                     std::mem::swap(&mut self.result, &mut res);
@@ -301,7 +381,7 @@ impl<T: Send + 'static> LocalAllocAtomicFetchFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalAllocAtomicFetchFuture<T> {
+impl<T> PinnedDrop for UcxAllocAtomicFetchFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -309,74 +389,78 @@ impl<T> PinnedDrop for LocalAllocAtomicFetchFuture<T> {
     }
 }
 
-impl<T> From<LocalAllocAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
-    fn from(f: LocalAllocAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
+impl<T> From<UcxAllocAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
+    fn from(f: UcxAllocAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
         AtomicFetchOpHandle {
-            future: AtomicFetchOpFuture::LocalAlloc(f),
+            future: AtomicFetchOpFuture::UcxAlloc(f),
         }
     }
 }
 
-impl<T: Send + 'static> Future for LocalAllocAtomicFetchFuture<T> {
+impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFetchFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
+            self.spawned = true;
         }
-        let this = self.project();
-        *this.spawned = true;
-        // rofi_c_wait();
-
+        let request = self.request.take().expect("ucx request doesnt exist");
+        request.wait();
         Poll::Ready(unsafe {
             let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
+            std::mem::swap(&mut self.result, &mut res);
             res.assume_init()
         })
     }
 }
 
-impl CommAllocAtomic for Arc<LocalAlloc> {
+impl CommAllocAtomic for Arc<UcxAlloc> {
     fn atomic_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: AtomicOp<T>,
-        _pe: usize,
+        pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        LocalAllocAtomicFuture {
+        UcxAllocAtomicFuture {
             alloc: self.clone(),
+            remote_pe: pe,
             offset,
             op,
+            spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            spawned: false,
+            request: None,
         }
         .into()
     }
     fn atomic_op_unmanaged<T: Copy>(
         &self,
         op: AtomicOp<T>,
-        _pe: usize,
+        pe: usize,
         offset: usize,
     ) {
+        unsafe { UcxAlloc::atomic_op(self, pe, offset, &op) };
     }
     fn atomic_fetch_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: AtomicOp<T>,
-        _pe: usize,
+        pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        LocalAllocAtomicFetchFuture {
+        UcxAllocAtomicFetchFuture {
             alloc: self.clone(),
+            remote_pe: pe,
             offset,
-            op,
+            op: op,
             result: MaybeUninit::uninit(),
+            spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            spawned: false,
+            request: None,
         }
         .into()
     }

@@ -3,12 +3,12 @@ use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::{
     ArrayAtHandle, ArrayRdmaHandle, Distribution, LamellarArrayGet, LamellarArrayInternalGet,
     LamellarArrayInternalPut, LamellarArrayPut, LamellarArrayRdmaInput, LamellarArrayRdmaOutput,
-    LamellarEnv, LamellarRead, LamellarWrite, TeamTryInto,
+    LamellarEnv, LamellarWrite, TeamTryInto,
 };
 use crate::config;
 use crate::lamellae::CommSlice;
 use crate::memregion::{
-    AsBase, Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RTMemoryRegionRDMA,
+    AsBase, Dist, LamellarMemoryRegion, RTMemoryRegionRDMA,
     RegisteredMemoryRegion, SubRegion,
 };
 

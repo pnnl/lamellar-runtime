@@ -6,46 +6,26 @@ use crate::{
 };
 
 use super::{
-    fabric::{MyShmem, ShmemAlloc},
+    fabric::{ShmemAlloc, ShmemAllocator},
     CommandQueue,
 };
 
 use parking_lot::RwLock;
 
-use std::collections::HashMap;
 use std::env;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug)]
 pub(crate) struct ShmemComm {
-    // _shmem: MyShmem, //the global handle
-    // pub(crate) base_address: Arc<RwLock<usize>>, //start address of my segment
-    // _size: usize,                                //size of my segment
-    pub(crate) allocs: RwLock<Vec<BTreeAlloc>>, //runtime allocations
+    //size of my segment
+    pub(crate) runtime_allocs: RwLock<Vec<(Arc<ShmemAlloc>, BTreeAlloc)>>, //runtime allocations
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
-    pub(crate) alloc_lock: Arc<
-        //fabric allocations
-        RwLock<(
-            HashMap<
-                usize, //local addr
-                (
-                    MyShmem,
-                    usize,
-                    HashMap<
-                        //share mem segment, per pe size,
-                        usize, //global pe id
-                        (usize, usize),
-                    >,
-                ), // remote addr, relative index (for subteams)
-            >,
-            ShmemAlloc,
-        )>,
-    >,
     pub(crate) put_amt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
+    pub(crate) allocator: ShmemAllocator,
 }
 
 pub(crate) static SHMEM_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
@@ -69,47 +49,36 @@ impl ShmemComm {
             SHMEM_SIZE.store(size, Ordering::SeqCst);
         }
 
-        // let mem_per_pe = SHMEM_SIZE.load(Ordering::SeqCst)/num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
         let total_mem = cmd_q_mem + RT_MEM + SHMEM_SIZE.load(Ordering::SeqCst);
         let mem_per_pe = total_mem; // / num_pes;
 
-        let alloc = ShmemAlloc::new(num_pes, my_pe, job_id);
-        // let shmem = attach_to_shmem(SHMEM_SIZE.load(Ordering::SeqCst),"main",job_id,my_pe==0);
+        let allocator = ShmemAllocator::new(num_pes, my_pe, job_id);
+        let alloc = unsafe {
+            allocator.alloc(
+                mem_per_pe,
+                std::mem::align_of::<u8>(),
+                &(0..num_pes).collect::<Vec<_>>(),
+            )
+        };
 
-        // let (shmem,index) =unsafe {alloc.alloc(mem_per_pe,0..num_pes)};
-        let (shmem, _index, addrs) =
-            unsafe { alloc.alloc(mem_per_pe, std::mem::align_of::<u8>(), 0..num_pes) };
-        let addr = shmem.as_ptr() as usize + mem_per_pe * my_pe;
-
-        let mut allocs_map = HashMap::new();
-        let mut pe_map = HashMap::new();
-        for pe in 0..num_pes {
-            if addrs[pe] > 0 {
-                pe_map.insert(pe, (addrs[pe], pe));
-            }
-        }
-        allocs_map.insert(addr, (shmem, mem_per_pe, pe_map));
-        // alloc.0.insert(addr,(ret,size))
         let shmem = ShmemComm {
-            // _shmem: shmem,
-            // base_address: Arc::new(RwLock::new(addr)),
-            // _size: mem_per_pe,
-            allocs: RwLock::new(vec![BTreeAlloc::new("shmem".to_string())]),
+            runtime_allocs: RwLock::new(vec![(
+                alloc.clone(),
+                BTreeAlloc::new("shmem_rt_mem".to_string()),
+            )]),
             _init: AtomicBool::new(true),
             num_pes: num_pes,
             my_pe: my_pe,
-            alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
+            allocator: allocator,
         };
-        shmem.allocs.write()[0].init(addr, mem_per_pe);
+        shmem.runtime_allocs.write()[0]
+            .1
+            .init(alloc.start(), mem_per_pe);
         shmem
     }
-
-    // pub(crate) fn heap_size() -> usize {
-    //     SHMEM_SIZE.load(Ordering::SeqCst)
-    // }
 }
 
 impl CommShutdown for ShmemComm {
@@ -124,10 +93,7 @@ impl CommProgress for ShmemComm {
     fn wait(&self) {}
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
-        let alloc = self.alloc_lock.write();
-        unsafe {
-            alloc.1.alloc(1, 1, 0..self.num_pes);
-        }
+        unsafe { self.allocator.barrier() };
     }
 }
 
@@ -140,6 +106,33 @@ impl CommInfo for ShmemComm {
     }
     fn backend(&self) -> Backend {
         Backend::Shmem
+    }
+    fn atomic_avail<T: 'static>(&self) -> bool {
+        let id = std::any::TypeId::of::<T>();
+
+        if id == std::any::TypeId::of::<u8>() {
+            true
+        } else if id == std::any::TypeId::of::<u16>() {
+            true
+        } else if id == std::any::TypeId::of::<u32>() {
+            true
+        } else if id == std::any::TypeId::of::<u64>() {
+            true
+        } else if id == std::any::TypeId::of::<i8>() {
+            true
+        } else if id == std::any::TypeId::of::<i16>() {
+            true
+        } else if id == std::any::TypeId::of::<i32>() {
+            true
+        } else if id == std::any::TypeId::of::<i64>() {
+            true
+        } else if id == std::any::TypeId::of::<usize>() {
+            true
+        } else if id == std::any::TypeId::of::<isize>() {
+            true
+        } else {
+            false
+        }
     }
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
@@ -157,8 +150,8 @@ impl Drop for ShmemComm {
         // if self.occupied() > 0 {
         //     println!("dropping shmem -- memory in use {:?}", self.occupied());
         // }
-        if self.allocs.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.allocs.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
+        if self.runtime_allocs.read().len() > 1 {
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, SHMEM_SIZE.load(Ordering::SeqCst));
         }
     }
 }

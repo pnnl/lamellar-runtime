@@ -59,13 +59,14 @@ use tracing::{debug, trace};
 
 // //use tracing::*;
 
+use crate::lamellae::CommAllocRdma;
 use crate::{
     active_messaging::{AMCounters, RemotePtr},
     barrier::Barrier,
     env_var::config,
     lamellae::{
         AllocationType, Backend, CommAlloc, CommAllocAddr, CommInfo, CommMem, CommProgress,
-        CommRdma, CommSlice,
+        CommSlice,
     },
     lamellar_request::LamellarRequest,
     lamellar_team::{IntoLamellarTeam, LamellarTeamRT},
@@ -542,7 +543,7 @@ impl<T: 'static> DarcInner<T> {
             (*(((&inner.mode_slice[inner.my_pe]) as *const DarcMode) as *const AtomicU8)) //this should be fine given that DarcMode uses Repr(u8)
                 .store(state as u8, Ordering::SeqCst)
         };
-        let rdma = team.lamellae.comm();
+        // let rdma = team.lamellae.comm();
         let mut txs = Vec::new();
         let my_pe = inner.my_pe;
         for pe in team.arch.team_iter() {
@@ -552,12 +553,20 @@ impl<T: 'static> DarcInner<T> {
             //     &mode_refs[inner.my_pe..=inner.my_pe],
             //     inner.mode_addr + inner.my_pe * std::mem::size_of::<DarcMode>(),
             // );
-            txs.push(rdma.put::<DarcMode>(
+            // txs.push(rdma.put::<DarcMode>(
+            //     &team.scheduler,
+            //     team.counters(),
+            //     pe,
+            //     inner.mode_slice.sub_slice(my_pe..=my_pe),
+            //     inner.mode_slice.index_addr(inner.my_pe),
+            // ));
+
+            txs.push(inner.mode_slice.put::<DarcMode>(
                 &team.scheduler,
                 team.counters(),
-                pe,
                 inner.mode_slice.sub_slice(my_pe..=my_pe),
-                inner.mode_slice.index_addr(inner.my_pe),
+                pe,
+                inner.my_pe,
             ));
         }
         join_all(txs).await;
@@ -670,17 +679,30 @@ impl<T: 'static> DarcInner<T> {
                     if prev_ref_cnts[pe] != old_ref_cnts[pe] {
                         let send_pe = team.arch.single_iter(pe).next().unwrap();
 
-                        rdma.put(
-                            &team.scheduler,
-                            team.counters(),
-                            send_pe,
-                            // poor mans way of essentially doing a "scoped" async task, we guarantee
-                            // the ref_cnt underlying data is valid since we will await the put immediately
-                            // (before old_ref_cnts is dropped)
-                            unsafe { CommSlice::from_raw_parts(&mut old_ref_cnts[pe], 1) },
-                            inner.mode_ref_cnt_slice.index_addr(inner.my_pe), //this is barrier_ref_cnt_slice
-                        )
-                        .await;
+                        // rdma.put(
+                        //     &team.scheduler,
+                        //     team.counters(),
+                        //     send_pe,
+                        //     // poor mans way of essentially doing a "scoped" async task, we guarantee
+                        //     // the ref_cnt underlying data is valid since we will await the put immediately
+                        //     // (before old_ref_cnts is dropped)
+                        //     unsafe { CommSlice::from_raw_parts(&mut old_ref_cnts[pe], 1) },
+                        //     inner.mode_ref_cnt_slice.index_addr(inner.my_pe), //this is barrier_ref_cnt_slice
+                        // )
+                        // .await;
+                        inner
+                            .mode_ref_cnt_slice
+                            .put(
+                                &team.scheduler,
+                                team.counters(),
+                                // poor mans way of essentially doing a "scoped" async task, we guarantee
+                                // the ref_cnt underlying data is valid since we will await the put immediately
+                                // (before old_ref_cnts is dropped)
+                                unsafe { CommSlice::from_raw_parts(&mut old_ref_cnts[pe], 1) },
+                                send_pe,
+                                inner.my_pe,
+                            )
+                            .await;
                         outstanding_refs = true;
                         barrier_id = 0;
                     }
@@ -715,19 +737,32 @@ impl<T: 'static> DarcInner<T> {
                 for pe in 0..inner.num_pes {
                     let send_pe = team.arch.single_iter(pe).next().unwrap();
 
-                    rdma.put(
-                        &team.scheduler,
-                        team.counters(),
-                        send_pe,
-                        // barrier_id_slice,
-                        // poor mans way of essentially doing a "scoped" async task, we guarantee
-                        // the barrier_id underlying data is valid since we will await the put immediately
-                        // (before old_ref_cnts is dropped)
-                        unsafe { CommSlice::from_raw_parts(&mut barrier_id, 1) },
-                        // inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
-                        inner.mode_barrier_slice.index_addr(inner.my_pe),
-                    )
-                    .await;
+                    // rdma.put(
+                    //     &team.scheduler,
+                    //     team.counters(),
+                    //     send_pe,
+                    //     // barrier_id_slice,
+                    //     // poor mans way of essentially doing a "scoped" async task, we guarantee
+                    //     // the barrier_id underlying data is valid since we will await the put immediately
+                    //     // (before old_ref_cnts is dropped)
+                    //     unsafe { CommSlice::from_raw_parts(&mut barrier_id, 1) },
+                    //     // inner.mode_barrier_addr + inner.my_pe * std::mem::size_of::<usize>(),
+                    //     inner.mode_barrier_slice.index_addr(inner.my_pe),
+                    // )
+                    // .await;
+                    inner
+                        .mode_barrier_slice
+                        .put(
+                            &team.scheduler,
+                            team.counters(),
+                            // poor mans way of essentially doing a "scoped" async task, we guarantee
+                            // the barrier_id underlying data is valid since we will await the put immediately
+                            // (before old_ref_cnts is dropped)
+                            unsafe { CommSlice::from_raw_parts(&mut barrier_id, 1) },
+                            send_pe,
+                            inner.my_pe,
+                        )
+                        .await;
                 }
                 //maybe we need to change the above to a get?
                 rdma.flush();
@@ -1154,7 +1189,7 @@ impl<T: Send + Sync> Darc<T> {
         // unsafe {
         //     std::ptr::copy_nonoverlapping(&darc_temp, darc_alloc.as_mut_ptr::<DarcInner<T>>(), 1);
         // }
-        // std::mem::forget(darc_temp); // prevent double free because CommSlices may contain Arc<AllocInfo>s, which would go down to a count of 0 if darc_temp is dropped
+        // std::mem::forget(darc_temp); // prevent double free because CommSlices may contain Arc<LibfabricAlloc>s, which would go down to a count of 0 if darc_temp is dropped
         // println!("Darc Inner Item Addr: {:?}", darc_temp.item);
 
         let d = Darc {
@@ -1351,17 +1386,18 @@ macro_rules! launch_drop {
         let team = $inner.team();
         // let mode_refs =
         //     unsafe { std::slice::from_raw_parts_mut($inner.mode_addr as *mut u8, $inner.num_pes) };
-        let rdma = team.lamellae.comm();
+        // let rdma = team.lamellae.comm();
         for pe in team.arch.team_iter() {
             // println!("darc block_on_outstanding put 3");
-            let _ = rdma.put(
-                &team.scheduler,
-                team.counters(),
-                pe,
-                $inner.mode_slice.sub_slice($inner.my_pe..=$inner.my_pe),
-                // &mode_refs[$inner.my_pe..=$inner.my_pe],
-                $inner.mode_slice.index_addr( $inner.my_pe),// * std::mem::size_of::<DarcMode>(),
-            ).spawn();
+            // let _ = rdma.put(
+            //     &team.scheduler,
+            //     team.counters(),
+            //     pe,
+            //     $inner.mode_slice.sub_slice($inner.my_pe..=$inner.my_pe),
+            //     // &mode_refs[$inner.my_pe..=$inner.my_pe],
+            //     $inner.mode_slice.index_addr( $inner.my_pe),// * std::mem::size_of::<DarcMode>(),
+            // ).spawn();
+            let _ = $inner.mode_slice.put(&team.scheduler,team.counters(),$inner.mode_slice.sub_slice($inner.my_pe..=$inner.my_pe),pe,$inner.my_pe).spawn();
         }
         // team.print_cnt();
         team.team_counters.inc_outstanding(1);
@@ -1501,7 +1537,7 @@ impl<T> DarcCommPtr<T> {
     pub(crate) fn transmute<U>(&self) -> DarcCommPtr<U> {
         DarcCommPtr {
             alloc: CommAlloc {
-                info: self.alloc.info.clone(),
+                inner_alloc: self.alloc.inner_alloc.clone(),
                 alloc_type: self.alloc.alloc_type,
             },
             _phantom: std::marker::PhantomData,
@@ -1513,7 +1549,7 @@ impl<T> Clone for DarcCommPtr<T> {
     fn clone(&self) -> Self {
         DarcCommPtr {
             alloc: CommAlloc {
-                info: self.alloc.info.clone(),
+                inner_alloc: self.alloc.inner_alloc.clone(),
                 alloc_type: self.alloc.alloc_type,
             },
             _phantom: self._phantom,

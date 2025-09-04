@@ -1,26 +1,25 @@
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::atomic::{
-    LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
+    LibfabricAllocAtomicFetchFuture, LibfabricAllocAtomicFuture,
 };
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::atomic::{UcxAllocAtomicFetchFuture, UcxAllocAtomicFuture};
 use crate::{
-    array::operations::handle::ResultOpState,
     lamellae::{
-        local_lamellae::atomic::{LocalAtomicFetchFuture, LocalAtomicFuture},
+        local_lamellae::atomic::{LocalAllocAtomicFetchFuture, LocalAllocAtomicFuture},
         shmem_lamellae::atomic::{ShmemAtomicFetchFuture, ShmemAtomicFuture},
-        CommAllocAddr, CommSlice,
+        CommAllocAddr,
     },
     LamellarTask,
 };
 
-use super::{AMCounters, Remote, Scheduler};
+use super::{AMCounters, Scheduler};
 
-use async_std::fs::write;
-use enum_dispatch::enum_dispatch;
 use futures_util::Future;
 use pin_project::pin_project;
 use std::{
     pin::Pin,
-    sync::Arc,
+    sync::{atomic::*, Arc},
     task::{Context, Poll},
 };
 pub(crate) trait NetworkAtomic {
@@ -100,14 +99,14 @@ pub(crate) enum AtomicOpFuture<T> {
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync(#[pin] RofiRustAsyncFuture),
     #[cfg(feature = "enable-libfabric")]
-    Libfabric(#[pin] LibfabricAtomicFuture<T>),
-    // #[cfg(feature = "enable-libfabric")]
-    // LibfabricAsync(#[pin] LibfabricAsyncFuture),
+    LibfabricAlloc(#[pin] LibfabricAllocAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxAlloc(#[pin] UcxAllocAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
-    Local(#[pin] LocalAtomicFuture<T>),
+    LocalAlloc(#[pin] LocalAllocAtomicFuture<T>),
 }
 
-impl<T: Send + 'static> AtomicOpHandle<T> {
+impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicOp Operation completes
     pub fn block(self) {
         match self.future {
@@ -118,11 +117,11 @@ impl<T: Send + 'static> AtomicOpHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             AtomicOpFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicOpFuture::Libfabric(f) => f.block(),
-            // #[cfg(feature = "enable-libfabric")]
-            // AtomicOpFuture::LibfabricAsync(f) => f.block(),
+            AtomicOpFuture::LibfabricAlloc(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicOpFuture::UcxAlloc(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
-            AtomicOpFuture::Local(f) => f.block(),
+            AtomicOpFuture::LocalAlloc(f) => f.block(),
         }
     }
 
@@ -140,16 +139,16 @@ impl<T: Send + 'static> AtomicOpHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             AtomicOpFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicOpFuture::Libfabric(f) => f.spawn(),
-            // #[cfg(feature = "enable-libfabric")]
-            // AtomicOpFuture::LibfabricAsync(f) => f.spawn(),
+            AtomicOpFuture::LibfabricAlloc(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicOpFuture::UcxAlloc(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
-            AtomicOpFuture::Local(f) => f.spawn(),
+            AtomicOpFuture::LocalAlloc(f) => f.spawn(),
         }
     }
 }
 
-impl<T: Send + 'static> Future for AtomicOpHandle<T> {
+impl<T: Copy + Send + 'static> Future for AtomicOpHandle<T> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -162,11 +161,11 @@ impl<T: Send + 'static> Future for AtomicOpHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             AtomicOpFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            AtomicOpFutureProj::Libfabric(f) => f.poll(cx),
-            // #[cfg(feature = "enable-libfabric")]
-            // AtomicOpFutureProj::LibfabricAsync(f) => f.poll(cx),
+            AtomicOpFutureProj::LibfabricAlloc(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            AtomicOpFutureProj::UcxAlloc(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
-            AtomicOpFutureProj::Local(f) => f.poll(cx),
+            AtomicOpFutureProj::LocalAlloc(f) => f.poll(cx),
         }
     }
 }
@@ -187,14 +186,14 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     #[cfg(feature = "enable-rofi-rust")]
     RofiRustAsync(#[pin] RofiRustAsyncFuture),
     #[cfg(feature = "enable-libfabric")]
-    Libfabric(#[pin] LibfabricAtomicFetchFuture<T>),
-    // #[cfg(feature = "enable-libfabric")]
-    // LibfabricAsync(#[pin] LibfabricAsyncFuture),
+    LibfabricAlloc(#[pin] LibfabricAllocAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxAlloc(#[pin] UcxAllocAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
-    Local(#[pin] LocalAtomicFetchFuture<T>),
+    LocalAlloc(#[pin] LocalAllocAtomicFetchFuture<T>),
 }
 
-impl<T: Send + 'static> AtomicFetchOpHandle<T> {
+impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> T {
         match self.future {
@@ -205,11 +204,11 @@ impl<T: Send + 'static> AtomicFetchOpHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             AtomicFetchOpFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicFetchOpFuture::Libfabric(f) => f.block(),
-            // #[cfg(feature = "enable-libfabric")]
-            // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
+            AtomicFetchOpFuture::LibfabricAlloc(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicFetchOpFuture::UcxAlloc(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
-            AtomicFetchOpFuture::Local(f) => f.block(),
+            AtomicFetchOpFuture::LocalAlloc(f) => f.block(),
         }
     }
 
@@ -227,16 +226,16 @@ impl<T: Send + 'static> AtomicFetchOpHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             AtomicFetchOpFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicFetchOpFuture::Libfabric(f) => f.spawn(),
-            // #[cfg(feature = "enable-libfabric")]
-            // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
+            AtomicFetchOpFuture::LibfabricAlloc(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicFetchOpFuture::UcxAlloc(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
-            AtomicFetchOpFuture::Local(f) => f.spawn(),
+            AtomicFetchOpFuture::LocalAlloc(f) => f.spawn(),
         }
     }
 }
 
-impl<T: Send + 'static> Future for AtomicFetchOpHandle<T> {
+impl<T: Copy + Send + 'static> Future for AtomicFetchOpHandle<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -249,11 +248,11 @@ impl<T: Send + 'static> Future for AtomicFetchOpHandle<T> {
             #[cfg(feature = "enable-rofi-rust")]
             AtomicFetchOpFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            AtomicFetchOpFutureProj::Libfabric(f) => f.poll(cx),
-            // #[cfg(feature = "enable-libfabric")]
-            // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
+            AtomicFetchOpFutureProj::LibfabricAlloc(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            AtomicFetchOpFutureProj::UcxAlloc(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
-            AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+            AtomicFetchOpFutureProj::LocalAlloc(f) => f.poll(cx),
         }
     }
 }
@@ -322,25 +321,208 @@ impl<T> AtomicOp<T> {
     }
 }
 
-pub(crate) trait CommAtomic {
-    fn atomic_avail<T: 'static>(&self) -> bool
+// pub(crate) trait CommAtomic {
+//     fn atomic_avail<T: 'static>(&self) -> bool
+//     where
+//         Self: Sized;
+
+//     fn atomic_op<T: Copy>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         op: AtomicOp<T>,
+//         pe: usize,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> AtomicOpHandle<T>;
+//     fn atomic_fetch_op<T: Copy>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         op: AtomicOp<T>,
+//         pe: usize,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> AtomicFetchOpHandle<T>;
+// }
+
+pub(crate) trait CommAllocAtomic {
+    fn atomic_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicOpHandle<T>;
+    fn atomic_op_unmanaged<T: Copy>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
+    fn atomic_fetch_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicFetchOpHandle<T>;
+}
+
+pub(crate) trait AsAtomic: Copy {
+    fn load(&self) -> Self;
+    fn store(&self, val: Self);
+    fn swap(&self, val: Self) -> Self;
+    fn fetch_add(&self, val: Self) -> Self;
+    fn fetch_sub(&self, val: Self) -> Self;
+    fn fetch_and(&self, val: Self) -> Self;
+    fn fetch_nand(&self, val: Self) -> Self;
+    fn fetch_or(&self, val: Self) -> Self;
+    fn fetch_xor(&self, val: Self) -> Self;
+    fn fetch_max(&self, val: Self) -> Self;
+    fn fetch_min(&self, val: Self) -> Self;
+    fn compare_exchange(&self, current: Self, new: Self) -> Result<Self, Self>
     where
         Self: Sized;
+}
 
-    fn atomic_op<T>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        op: AtomicOp<T>,
-        pe: usize,
-        remote_addr: CommAllocAddr,
-    ) -> AtomicOpHandle<T>;
-    fn atomic_fetch_op<T>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        op: AtomicOp<T>,
-        pe: usize,
-        remote_addr: CommAllocAddr,
-    ) -> AtomicFetchOpHandle<T>;
+//create a macro the implements AsAtomic for all the primitive integer types
+macro_rules! impl_as_atomic {
+    ($(($t:ty,$a:ty)),*) => {
+        $(
+            impl AsAtomic for $t {
+                fn load(&self) -> Self {
+                   unsafe{ (*(self as *const $t as *const $a)).load(Ordering::SeqCst) }
+                }
+                fn store(&self, val: Self) {
+                    unsafe{ (*(self as *const $t as *const $a)).store(val, Ordering::SeqCst) }
+                }
+                fn swap(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).swap(val, Ordering::SeqCst) }
+                }
+                fn fetch_add(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).fetch_add(val, Ordering::SeqCst) }
+                }
+                fn fetch_sub(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).fetch_sub(val, Ordering::SeqCst) }
+                }
+                fn fetch_and(&self, val: Self) -> Self {
+                   unsafe{ (*(self as *const $t as *const $a)).fetch_and(val, Ordering::SeqCst) }
+                }
+                fn fetch_nand(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).fetch_nand(val, Ordering::SeqCst) }
+                }
+                fn fetch_or(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).fetch_or(val, Ordering::SeqCst) }
+                }
+                fn fetch_xor(&self, val: Self) -> Self {
+                   unsafe{ (*(self as *const $t as *const $a)).fetch_xor(val, Ordering::SeqCst) }
+                }
+                fn fetch_max(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).fetch_max(val, Ordering::SeqCst) }
+                }
+                fn fetch_min(&self, val: Self) -> Self {
+                    unsafe{ (*(self as *const $t as *const $a)).fetch_min(val, Ordering::SeqCst) }
+                }
+                fn compare_exchange(&self, current: Self, new: Self) -> Result<Self, Self> {
+                    unsafe{ (*(self as *const $t as *const $a)).compare_exchange(current, new, Ordering::SeqCst , Ordering::Relaxed) }
+                }
+            }
+        )*
+    };
+}
+
+impl_as_atomic!(
+    (u8, AtomicU8),
+    (u16, AtomicU16),
+    (u32, AtomicU32),
+    (u64, AtomicU64),
+    (usize, AtomicUsize),
+    (i8, AtomicI8),
+    (i16, AtomicI16),
+    (i32, AtomicI32),
+    (i64, AtomicI64),
+    (isize, AtomicIsize)
+);
+
+pub(crate) fn net_atomic_op<T: 'static>(op: &AtomicOp<T>, dst_addr: &CommAllocAddr) {
+    unsafe {
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+            typed_atomic_op::<u8, T>(op, &*(dst_addr.as_ptr() as *const u8))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+            typed_atomic_op::<u16, T>(op, &*(dst_addr.as_ptr() as *const u16))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+            typed_atomic_op::<u32, T>(op, &*(dst_addr.as_ptr() as *const u32))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+            typed_atomic_op::<u64, T>(op, &*(dst_addr.as_ptr() as *const u64))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+            typed_atomic_op::<usize, T>(op, &*(dst_addr.as_ptr() as *const usize))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+            typed_atomic_op::<i8, T>(op, &*(dst_addr.as_ptr() as *const i8))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+            typed_atomic_op::<i16, T>(op, &*(dst_addr.as_ptr() as *const i16))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+            typed_atomic_op::<i32, T>(op, &*(dst_addr.as_ptr() as *const i32))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+            typed_atomic_op::<i64, T>(op, &*(dst_addr.as_ptr() as *const i64))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+            typed_atomic_op::<isize, T>(op, &*(dst_addr.as_ptr() as *const isize))
+        } else {
+            panic!("Unsupported atomic operation type");
+        }
+    }
+}
+
+pub(crate) fn net_atomic_fetch_op<T: 'static>(
+    op: &AtomicOp<T>,
+    dst_addr: &CommAllocAddr,
+    result: *mut T,
+) {
+    unsafe {
+        // println!("dst_addr: {:?}", (dst_addr.as_ptr() as *const usize).read());
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+            typed_atomic_fetch_op::<u8, T>(op, &*(dst_addr.as_ptr() as *const u8), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+            typed_atomic_fetch_op::<u16, T>(op, &*(dst_addr.as_ptr() as *const u16), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+            typed_atomic_fetch_op::<u32, T>(op, &*(dst_addr.as_ptr() as *const u32), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+            typed_atomic_fetch_op::<u64, T>(op, &*(dst_addr.as_ptr() as *const u64), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+            typed_atomic_fetch_op::<usize, T>(op, &*(dst_addr.as_ptr() as *const usize), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+            typed_atomic_fetch_op::<i8, T>(op, &*(dst_addr.as_ptr() as *const i8), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+            typed_atomic_fetch_op::<i16, T>(op, &*(dst_addr.as_ptr() as *const i16), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+            typed_atomic_fetch_op::<i32, T>(op, &*(dst_addr.as_ptr() as *const i32), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+            typed_atomic_fetch_op::<i64, T>(op, &*(dst_addr.as_ptr() as *const i64), result)
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+            typed_atomic_fetch_op::<isize, T>(op, &*(dst_addr.as_ptr() as *const isize), result)
+        } else {
+            panic!("Unsupported atomic operation type");
+        }
+    }
+}
+
+unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: &A) {
+    let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
+    match op {
+        AtomicOp::Write(val) => {
+            dst.store(*val);
+        }
+        _ => {
+            unimplemented!()
+        }
+    }
+}
+
+unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: &A, result: *mut T) {
+    let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
+    let res = match op {
+        AtomicOp::Read => dst.load(),
+        AtomicOp::Write(val) => dst.swap(*val),
+        _ => {
+            unimplemented!()
+        }
+    };
+    (result as *mut A).write(res);
 }

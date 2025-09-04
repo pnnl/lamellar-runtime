@@ -5,6 +5,9 @@ pub(crate) mod rdma;
 pub(crate) use atomic::*;
 pub(crate) use error::*;
 pub(crate) use rdma::*;
+
+pub use rdma::Remote;
+
 use tracing::trace;
 
 use super::Backend;
@@ -17,21 +20,25 @@ use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 //     libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibfabricAsyncData,
 // };
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_lamellae::{comm::LibfabricComm, fabric::AllocInfo};
+use crate::lamellae::libfabric_lamellae::{comm::LibfabricComm, fabric::LibfabricAlloc};
 // #[cfg(feature = "enable-rofi-rust")]
 // use crate::lamellae::{
 //     rofi_rust::rofi_rust_comm::*, rofi_rust_async::rofi_rust_async_comm::*, RofiRustAsyncData,
 //     RofiRustData,
 // };
+
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::{comm::UcxComm, fabric::UcxAlloc};
 use crate::{
     active_messaging::AMCounters,
-    array::LamellarArrayRdmaInput,
     lamellae::{
-        local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
-        SerializedData,
+        local_lamellae::comm::{LocalAlloc, LocalComm},
+        shmem_lamellae::{comm::ShmemComm, fabric::ShmemAlloc},
+        AllocationType, SerializedData,
     },
+    memregion::MemregionRdmaInput,
     scheduler::Scheduler,
-    Deserialize, Dist, Serialize,
+    Deserialize, Serialize,
 };
 
 use derive_more::{Add, Into, Sub};
@@ -49,7 +56,7 @@ pub(crate) enum CmdQStatus {
     Panic = 4,
 }
 
-#[enum_dispatch(CommMem, CommRdma, CommShutdown, CommInfo, CommProgress)]
+#[enum_dispatch(CommMem, CommShutdown, CommInfo, CommProgress)]
 #[derive(Debug)]
 pub(crate) enum Comm {
     #[cfg(feature = "rofi-c")]
@@ -60,6 +67,8 @@ pub(crate) enum Comm {
     RofiRustAsync(RofiRustAsyncComm),
     #[cfg(feature = "enable-libfabric")]
     Libfabric(LibfabricComm),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(UcxComm),
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsync(LibfabricAsyncComm),
     Shmem(ShmemComm),
@@ -77,52 +86,70 @@ impl Comm {
     }
 }
 
-impl CommAtomic for Comm {
-    fn atomic_avail<T: 'static>(&self) -> bool {
-        match self {
-            #[cfg(feature = "rofi-c")]
-            Comm::RofiC(comm) => comm.atomic_avail::<T>(),
-            Comm::Shmem(comm) => comm.atomic_avail::<T>(),
-            Comm::Local(comm) => comm.atomic_avail::<T>(),
-            #[cfg(feature = "enable-libfabric")]
-            Comm::Libfabric(comm) => comm.atomic_avail::<T>(),
-        }
-    }
-    fn atomic_op<T>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _remote_addr: CommAllocAddr,
-    ) -> AtomicOpHandle<T> {
-        match self {
-            #[cfg(feature = "rofi-c")]
-            Comm::RofiC(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
-            Comm::Shmem(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
-            Comm::Local(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
-            #[cfg(feature = "enable-libfabric")]
-            Comm::Libfabric(comm) => comm.atomic_op(scheduler, counters, _op, _pe, _remote_addr),
-        }
-    }
-    fn atomic_fetch_op<T>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        op: AtomicOp<T>,
-        pe: usize,
-        remote_addr: CommAllocAddr,
-    ) -> AtomicFetchOpHandle<T> {
-        match self {
-            #[cfg(feature = "rofi-c")]
-            Comm::RofiC(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
-            Comm::Shmem(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
-            Comm::Local(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
-            #[cfg(feature = "enable-libfabric")]
-            Comm::Libfabric(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
-        }
-    }
-}
+// impl CommAtomic for Comm {
+//     fn atomic_avail<T: 'static>(&self) -> bool {
+//         match self {
+//             #[cfg(feature = "rofi-c")]
+//             Comm::RofiC(comm) => comm.atomic_avail::<T>(),
+//             Comm::Shmem(comm) => comm.atomic_avail::<T>(),
+//             Comm::Local(comm) => comm.atomic_avail::<T>(),
+//             #[cfg(feature = "enable-libfabric")]
+//             Comm::Libfabric(comm) => comm.atomic_avail::<T>(),
+//             #[cfg(feature = "enable-ucx")]
+//             Comm::Ucx(comm) => comm.atomic_avail::<T>(),
+//         }
+//     }
+//     fn atomic_op<T: Copy>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         op: AtomicOp<T>,
+//         pe: usize,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> AtomicOpHandle<T> {
+//         match self {
+//             #[cfg(feature = "rofi-c")]
+//             Comm::RofiC(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc),
+//             Comm::Shmem(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset),
+//             Comm::Local(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset),
+//             #[cfg(feature = "enable-libfabric")]
+//             Comm::Libfabric(comm) => {
+//                 comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset)
+//             }
+//             #[cfg(feature = "enable-ucx")]
+//             Comm::Ucx(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset),
+//         }
+//     }
+//     fn atomic_fetch_op<T: Copy>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         op: AtomicOp<T>,
+//         pe: usize,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> AtomicFetchOpHandle<T> {
+//         match self {
+//             #[cfg(feature = "rofi-c")]
+//             Comm::RofiC(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
+//             Comm::Shmem(comm) => {
+//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
+//             }
+//             Comm::Local(comm) => {
+//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
+//             }
+//             #[cfg(feature = "enable-libfabric")]
+//             Comm::Libfabric(comm) => {
+//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
+//             }
+//             #[cfg(feature = "enable-ucx")]
+//             Comm::Ucx(comm) => {
+//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
+//             }
+//         }
+//     }
+// }
 
 #[enum_dispatch]
 pub(crate) trait CommShutdown {
@@ -130,37 +157,64 @@ pub(crate) trait CommShutdown {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) enum CommAllocInfo {
+pub(crate) enum CommAllocInner {
     Raw(usize, usize), //address, size
+    LocalAlloc(Arc<LocalAlloc>),
+    ShmemAlloc(Arc<ShmemAlloc>),
     #[cfg(feature = "enable-libfabric")]
-    AllocInfo(Arc<AllocInfo>),
+    LibfabricAlloc(Arc<LibfabricAlloc>),
     #[cfg(feature = "enable-ucx")]
     UcxAlloc(Arc<UcxAlloc>),
 }
 
-impl CommAllocInfo {
+impl CommAllocInner {
     pub(crate) fn addr(&self) -> CommAllocAddr {
         match self {
-            CommAllocInfo::Raw(addr, _) => CommAllocAddr(*addr),
+            CommAllocInner::Raw(addr, _) => CommAllocAddr(*addr),
+            CommAllocInner::LocalAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
+            CommAllocInner::ShmemAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
             #[cfg(feature = "enable-libfabric")]
-            CommAllocInfo::AllocInfo(info) => CommAllocAddr(info.start()),
+            CommAllocInner::LibfabricAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => CommAllocAddr(inner_alloc.start()),
         }
     }
     pub(crate) fn size(&self) -> usize {
         match self {
-            CommAllocInfo::Raw(_, size) => *size,
+            CommAllocInner::Raw(_, size) => *size,
+            CommAllocInner::LocalAlloc(inner_alloc) => inner_alloc.num_bytes(),
+            CommAllocInner::ShmemAlloc(inner_alloc) => inner_alloc.num_bytes(),
             #[cfg(feature = "enable-libfabric")]
-            CommAllocInfo::AllocInfo(info) => info.num_bytes(),
+            CommAllocInner::LibfabricAlloc(inner_alloc) => inner_alloc.num_bytes(),
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => inner_alloc.num_bytes(),
         }
     }
-    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAllocInfo {
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAllocInner {
         trace!("sub_alloc offset: {} size: {}", offset, size);
         debug_assert!(offset + size <= self.size());
         match self {
-            CommAllocInfo::Raw(addr, _) => CommAllocInfo::Raw(*addr + offset, size),
+            CommAllocInner::Raw(addr, _) => CommAllocInner::Raw(*addr + offset, size),
+            CommAllocInner::LocalAlloc(inner_alloc) => CommAllocInner::LocalAlloc(
+                inner_alloc
+                    .sub_alloc(offset, size)
+                    .expect("Invalid sub allocation"),
+            ),
+            CommAllocInner::ShmemAlloc(inner_alloc) => CommAllocInner::ShmemAlloc(
+                inner_alloc
+                    .sub_alloc(offset, size)
+                    .expect("Invalid sub allocation"),
+            ),
             #[cfg(feature = "enable-libfabric")]
-            CommAllocInfo::AllocInfo(info) => CommAllocInfo::AllocInfo(
-                info.sub_alloc(offset, size)
+            CommAllocInner::LibfabricAlloc(inner_alloc) => CommAllocInner::LibfabricAlloc(
+                inner_alloc
+                    .sub_alloc(offset, size)
+                    .expect("Invalid sub allocation"),
+            ),
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => CommAllocInner::UcxAlloc(
+                inner_alloc
+                    .sub_alloc(offset, size)
                     .expect("Invalid sub allocation"),
             ),
         }
@@ -171,33 +225,254 @@ impl CommAllocInfo {
     }
 }
 
-// impl Into<CommAllocAddr> for &CommAllocInfo {
+impl CommAllocRdma for CommAllocInner {
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<T>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put(inner_alloc, scheduler, counters, src, pe, offset)
+            }
+        }
+    }
+    fn put_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInput<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_unmanaged(inner_alloc, src, pe, offset)
+            }
+        }
+    }
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
+        }
+    }
+
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: CommSlice<T>,
+    ) -> RdmaHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::get(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
+        }
+    }
+
+    fn at<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaAtHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::at(inner_alloc, scheduler, counters, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::at(inner_alloc, scheduler, counters, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::at(inner_alloc, scheduler, counters, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::at(inner_alloc, scheduler, counters, pe, offset)
+            }
+        }
+    }
+}
+
+impl CommAllocAtomic for CommAllocInner {
+    fn atomic_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_op(scheduler, counters, op, pe, offset)
+            }
+        }
+    }
+    fn atomic_op_unmanaged<T: Copy>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+        }
+    }
+    fn atomic_fetch_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicFetchOpHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
+        }
+    }
+}
+
+// impl Into<CommAllocAddr> for &CommAllocInner {
 //     fn into(self) -> CommAllocAddr {
 //         match self {
-//             CommAllocInfo::Raw(addr) => CommAllocAddr(*addr),
+//             CommAllocInner::Raw(addr) => CommAllocAddr(*addr),
 //             #[cfg(feature = "enable-libfabric")]
-//             CommAllocInfo::AllocInfo(info) => CommAllocAddr(info.addr),
+//             CommAllocInner::LibfabricAlloc(info) => CommAllocAddr(info.addr),
 //         }
 //     }
 // }
 
-// impl Into<CommAllocAddr> for CommAllocInfo {
+// impl Into<CommAllocAddr> for CommAllocInner {
 //     fn into(self) -> CommAllocAddr {
 //         match self {
-//             CommAllocInfo::Raw(addr) => CommAllocAddr(addr),
+//             CommAllocInner::Raw(addr) => CommAllocAddr(addr),
 //             #[cfg(feature = "enable-libfabric")]
-//             CommAllocInfo::AllocInfo(info) => CommAllocAddr(info.addr),
+//             CommAllocInner::LibfabricAlloc(info) => CommAllocAddr(info.addr),
 //         }
 //     }
 // }
 
-// impl std::ops::Deref for CommAllocInfo {
+// impl std::ops::Deref for CommAllocInner {
 //     type Target = usize;
 //     fn deref(&self) -> &Self::Target {
 //         match self {
-//             CommAllocInfo::Raw(addr) => addr,
+//             CommAllocInner::Raw(addr) => addr,
 //             #[cfg(feature = "enable-libfabric")]
-//             CommAllocInfo::AllocInfo(info) => &info.addr,
+//             CommAllocInner::LibfabricAlloc(info) => &info.addr,
 //         }
 //     }
 // }
@@ -206,7 +481,7 @@ impl CommAllocInfo {
 pub(crate) struct CommAlloc {
     // pub(crate) addr: usize,
     // pub(crate) size: usize,
-    pub(crate) info: CommAllocInfo,
+    pub(crate) inner_alloc: CommAllocInner,
     pub(crate) alloc_type: CommAllocType,
 }
 impl std::fmt::Debug for CommAlloc {
@@ -214,7 +489,7 @@ impl std::fmt::Debug for CommAlloc {
         write!(
             f,
             "CommAlloc {{ addr: {:x}, size: {:?}, alloc_type: {:?} }}",
-            self.info.addr(),
+            self.inner_alloc.addr(),
             self.num_bytes(),
             self.alloc_type
         )
@@ -227,12 +502,12 @@ impl std::fmt::Debug for CommAlloc {
 impl CommAlloc {
     pub(crate) fn byte_add(&self, offset: usize) -> CommAllocAddr {
         debug_assert!(offset < self.num_bytes());
-        self.info.addr() + offset
+        self.inner_alloc.addr() + offset
     }
     #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn as_comm_slice<T>(&self) -> CommSlice<T> {
         CommSlice {
-            info: self.info.clone(),
+            inner_alloc: self.inner_alloc.clone(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -254,18 +529,18 @@ impl CommAlloc {
                 && offset + num_elems * std::mem::size_of::<T>() <= self.num_bytes()
         );
         CommSlice {
-            info: self
-                .info
+            inner_alloc: self
+                .inner_alloc
                 .sub_alloc(offset, num_elems * std::mem::size_of::<T>()),
             _phantom: std::marker::PhantomData,
         }
     }
 
     pub(crate) unsafe fn as_ptr<T>(&self) -> *const T {
-        self.info.addr().as_ptr::<T>()
+        self.inner_alloc.addr().as_ptr::<T>()
     }
     pub(crate) unsafe fn as_mut_ptr<T>(&self) -> *mut T {
-        self.info.addr().as_mut_ptr::<T>()
+        self.inner_alloc.addr().as_mut_ptr::<T>()
     }
     pub(crate) unsafe fn as_ref<T>(&self) -> Option<&T> {
         self.as_ptr::<T>().as_ref()
@@ -275,13 +550,65 @@ impl CommAlloc {
     //     self.as_mut_ptr::<T>().as_mut()
     // }
     pub(crate) fn comm_addr(&self) -> CommAllocAddr {
-        self.info.addr()
+        self.inner_alloc.addr()
     }
     pub(crate) fn num_bytes(&self) -> usize {
-        self.info.size()
+        self.inner_alloc.size()
     }
     pub(crate) fn contains(&self, addr: &usize) -> bool {
-        self.info.contains(addr)
+        self.inner_alloc.contains(addr)
+    }
+    pub(crate) fn calc_offset(&self, addr: &usize) -> CommAllocAddr {
+        CommAllocAddr(*addr - *self.inner_alloc.addr())
+    }
+}
+
+impl CommAllocRdma for CommAlloc {
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<T>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.inner_alloc.put(scheduler, counters, src, pe, offset)
+    }
+    fn put_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInput<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        self.inner_alloc.put_unmanaged(src, pe, offset)
+    }
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.inner_alloc.put_all(scheduler, counters, src, offset)
+    }
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: CommSlice<T>,
+    ) -> RdmaHandle<T> {
+        self.inner_alloc.get(scheduler, counters, pe, offset, dst)
+    }
+    fn at<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaAtHandle<T> {
+        self.inner_alloc.at(scheduler, counters, pe, offset)
     }
 }
 
@@ -393,7 +720,7 @@ impl std::convert::AsRef<usize> for CommAllocAddr {
 
 #[derive(Debug, Clone)]
 pub(crate) struct CommSlice<T> {
-    pub(crate) info: CommAllocInfo,
+    pub(crate) inner_alloc: CommAllocInner,
     _phantom: std::marker::PhantomData<T>,
 }
 
@@ -439,7 +766,7 @@ impl<T> CommSlice<T> {
             (end - start) * std::mem::size_of::<T>()
         );
         CommSlice {
-            info: self.info.sub_alloc(
+            inner_alloc: self.inner_alloc.sub_alloc(
                 start * std::mem::size_of::<T>(),
                 (end - start) * std::mem::size_of::<T>(),
             ),
@@ -447,26 +774,26 @@ impl<T> CommSlice<T> {
         }
     }
     pub(crate) fn as_mut_ptr(&self) -> *mut T {
-        unsafe { self.info.addr().as_mut_ptr() }
+        unsafe { self.inner_alloc.addr().as_mut_ptr() }
     }
     pub(crate) fn as_ptr(&self) -> *const T {
-        unsafe { self.info.addr().as_ptr() }
+        unsafe { self.inner_alloc.addr().as_ptr() }
     }
     pub(crate) fn len(&self) -> usize {
-        self.info.size() / std::mem::size_of::<T>()
+        self.inner_alloc.size() / std::mem::size_of::<T>()
     }
     pub(crate) fn usize_addr(&self) -> usize {
-        self.info.addr().into()
+        self.inner_alloc.addr().into()
     }
 
     pub(crate) fn index_addr(&self, index: usize) -> CommAllocAddr {
-        debug_assert!(index < self.info.size());
-        self.info.addr() + index * std::mem::size_of::<T>()
+        debug_assert!(index < self.inner_alloc.size());
+        self.inner_alloc.addr() + index * std::mem::size_of::<T>()
     }
 
     pub(crate) unsafe fn from_raw_parts(data: *const T, len: usize) -> Self {
         CommSlice {
-            info: CommAllocInfo::Raw(data as usize, len * std::mem::size_of::<T>()),
+            inner_alloc: CommAllocInner::Raw(data as usize, len * std::mem::size_of::<T>()),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -476,12 +803,77 @@ impl<T> CommSlice<T> {
     }
 
     pub(crate) fn contains(&self, addr: &usize) -> bool {
-        self.info.contains(&addr)
+        self.inner_alloc.contains(&addr)
     }
 
     // pub(crate) fn num_bytes(&self) -> usize {
     //     self.info.size() * std::mem::size_of::<T>()
     // }
+}
+
+impl<T> CommAllocRdma for CommSlice<T> {
+    fn put<U: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<U>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<U> {
+        self.inner_alloc.put(
+            scheduler,
+            counters,
+            src,
+            pe,
+            offset * std::mem::size_of::<U>(),
+        )
+    }
+    fn put_unmanaged<U: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInput<U>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        self.inner_alloc
+            .put_unmanaged(src, pe, offset * std::mem::size_of::<U>())
+    }
+
+    fn put_all<U: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<U>>,
+        offset: usize,
+    ) -> RdmaHandle<U> {
+        self.inner_alloc
+            .put_all(scheduler, counters, src, offset * std::mem::size_of::<U>())
+    }
+    fn get<U: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: CommSlice<U>,
+    ) -> RdmaHandle<U> {
+        self.inner_alloc.get(
+            scheduler,
+            counters,
+            pe,
+            offset * std::mem::size_of::<U>(),
+            dst,
+        )
+    }
+    fn at<U: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaAtHandle<U> {
+        self.inner_alloc
+            .at(scheduler, counters, pe, offset * std::mem::size_of::<U>())
+    }
 }
 
 impl<T> std::ops::Deref for CommSlice<T> {
@@ -518,6 +910,12 @@ pub(crate) trait CommMem {
     fn print_pools(&self);
     // this translates a remote address to a local address
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr;
+    // this translates a remote address to its local allocation + offset within that allocation
+    fn local_alloc_and_offset_from_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+    ) -> (CommAlloc, usize);
     // this translates a local address to a remote address
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> CommAllocAddr;
     // this checks for an allocation at the given address
@@ -536,6 +934,9 @@ pub(crate) trait CommInfo {
     fn my_pe(&self) -> usize;
     fn num_pes(&self) -> usize;
     fn backend(&self) -> Backend;
+    fn atomic_avail<T: 'static>(&self) -> bool
+    where
+        Self: Sized;
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
 }

@@ -20,6 +20,8 @@ match_cfg::match_cfg! {
 
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabric_lamellae;
+#[cfg(feature = "enable-ucx")]
+pub(crate) mod ucx_lamellae;
 // #[cfg(feature = "enable-libfabric")]
 // pub(crate) mod libfabasync_lamellae;
 // #[cfg(feature = "rofi-c")]
@@ -42,6 +44,12 @@ pub(crate) mod libfabric_lamellae;
 #[cfg(feature = "enable-libfabric")]
 use {
     libfabric_lamellae::{Libfabric, LibfabricBuilder},
+    // libfabasync_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
+};
+
+#[cfg(feature = "enable-ucx")]
+use {
+    ucx_lamellae::{Ucx, UcxBuilder},
     // libfabasync_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
 };
 
@@ -72,6 +80,8 @@ pub enum Backend {
     // RofiRustAsync,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
+    #[cfg(feature = "enable-ucx")]
+    Ucx,
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsync,
     /// The Local backend -- intended for single process environments
@@ -115,6 +125,12 @@ impl Default for Backend {
                 return Backend::Libfabric;
                 #[cfg(not(feature = "enable-libfabric"))]
                 panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
+            }
+            "ucx" => {
+                #[cfg(feature = "enable-ucx")]
+                return Backend::Ucx;
+                #[cfg(not(feature = "enable-ucx"))]
+                panic!("unable to set libfabric backend, recompile with 'enable-ucx' feature")
             }
             // "libfabasync" => {
             //     #[cfg(feature = "enable-libfabric")]
@@ -229,7 +245,7 @@ impl SerializedData {
         if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
             trace!("freeing serialized data from addr {:x} ", alloc_addr);
             comm.rt_free(CommAlloc {
-                info: CommAllocInfo::Raw(alloc_addr, *alloc_size),
+                inner_alloc: CommAllocInner::Raw(alloc_addr, *alloc_size),
                 alloc_type: CommAllocType::RtHeap,
             });
         }
@@ -507,6 +523,8 @@ pub(crate) enum LamellaeBuilder {
     RofiRustAsyncBuilder,
     #[cfg(feature = "enable-libfabric")]
     LibfabricBuilder,
+    #[cfg(feature = "enable-ucx")]
+    UcxBuilder,
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsyncBuilder,
     ShmemBuilder,
@@ -548,6 +566,8 @@ pub(crate) enum Lamellae {
     RofiRustAsync,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
+    #[cfg(feature = "enable-ucx")]
+    Ucx,
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsync,
     Shmem,
@@ -565,6 +585,8 @@ impl Lamellae {
             Lamellae::RofiRustAsync => self.comm(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.comm(),
+            #[cfg(feature = "enable-ucx")]
+            Lamellae::Ucx(ucx) => ucx.comm(),
             // #[cfg(feature = "enable-libfabric")]
             // Lamellae::LibfabricAsync => self.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
@@ -611,6 +633,10 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain))
+        }
+        #[cfg(feature = "enable-ucx")]
+        Backend::Ucx => {
+            LamellaeBuilder::UcxBuilder(UcxBuilder::new())
         }
         // #[cfg(feature = "enable-libfabric")]
         // Backend::LibfabricAsync => {

@@ -368,7 +368,7 @@ impl LamellarAM for MemRegionDropWaitAm {
 /// let world_mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region::<usize>(1000);
 /// ```
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct OneSidedMemoryRegion<T: Dist> {
+pub struct OneSidedMemoryRegion<T: Remote> {
     mr: MemRegionHandle,
     pe: usize, // the original pe
     sub_region_offset: usize,
@@ -376,7 +376,7 @@ pub struct OneSidedMemoryRegion<T: Dist> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist> LamellarEnv for OneSidedMemoryRegion<T> {
+impl<T: Remote> LamellarEnv for OneSidedMemoryRegion<T> {
     fn my_pe(&self) -> usize {
         self.mr.inner.team.my_pe()
     }
@@ -394,7 +394,7 @@ impl<T: Dist> LamellarEnv for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> OneSidedMemoryRegion<T> {
+impl<T: Remote> OneSidedMemoryRegion<T> {
     pub(crate) fn try_new(
         size: usize,
         team: &std::pin::Pin<Arc<LamellarTeamRT>>,
@@ -493,11 +493,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///     }      
     /// }
     ///```
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        index: usize,
-        data: U,
-    ) -> RdmaHandle<T> {
+    pub unsafe fn put(&self, index: usize, data: MemregionRdmaInput<T>) -> RdmaHandle<T> {
         MemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
@@ -613,6 +609,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         data: U,
     ) -> RdmaHandle<T> {
         MemoryRegionRDMA::<T>::get(self, self.pe, index, data)
+    }
+
+    unsafe fn at(&self, pe: usize, index: usize) -> RdmaAtHandle<T> {
+        MemoryRegionRDMA::<T>::at(self, pe, index)
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -880,7 +880,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
 }
 
 // This could be useful for if we want to transfer the actual data instead of the pointer
-// impl<T: Dist + serde::Serialize> OneSidedMemoryRegion<T> {
+// impl<T: Remote + serde::Serialize> OneSidedMemoryRegion<T> {
 //     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
 //     where
 //         S: serde::Serializer,
@@ -889,7 +889,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
 //     }
 // }
 
-impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
+impl<T: Remote> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
@@ -974,13 +974,13 @@ impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> MemRegionId for OneSidedMemoryRegion<T> {
+impl<T: Remote> MemRegionId for OneSidedMemoryRegion<T> {
     fn id(&self) -> usize {
         self.mr.inner.mr.id()
     }
 }
 
-impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
+impl<T: Remote> SubRegion<T> for OneSidedMemoryRegion<T> {
     type Region = OneSidedMemoryRegion<T>;
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
         let start = match range.start_bound() {
@@ -1013,7 +1013,7 @@ impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
+impl<T: Remote> AsBase for OneSidedMemoryRegion<T> {
     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
@@ -1028,12 +1028,12 @@ impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(
+impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
+    unsafe fn put(
         &self,
         pe: usize,
         index: usize,
-        data: U,
+        data: impl Into<MemregionRdmaInput<T>>,
     ) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
@@ -1048,30 +1048,29 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    // unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: U,
-    // ) {
-    //     if self.pe == pe {
-    //         self.mr
-    //             .inner
-    //             .mr
-    //             .blocking_put(pe, self.sub_region_offset + index, data);
-    //     // self.mr.iput(pe, index, data);
-    //     } else {
-    //         panic!(
-    //             "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
-    //             pe, self.pe
-    //         );
-    //         // Err(MemNotLocalError {})
-    //     }
-    // }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn put_unmanaged(
+        &self,
+        pe: usize,
+        index: usize,
+        data: impl Into<MemregionRdmaInput<T>>,
+    ) {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .put_unmanaged(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn put_all(
         &self,
         index: usize,
-        data: U,
+        data: impl Into<MemregionRdmaInput<T>>,
     ) -> RdmaHandle<T> {
         self.mr
             .inner
@@ -1097,28 +1096,21 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    // unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: U,
-    // ) {
-    //     if self.pe == pe {
-    //         self.mr
-    //             .inner
-    //             .mr
-    //             .blocking_get(pe, self.sub_region_offset + index, data);
-    //     } else {
-    //         panic!(
-    //             "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
-    //             pe, self.pe
-    //         );
-    //         // Err(MemNotLocalError {})
-    //     }
-    // }
+
+    unsafe fn at(&self, pe: usize, index: usize) -> RdmaAtHandle<T> {
+        if self.pe == pe {
+            self.mr.inner.mr.at(pe, self.sub_region_offset + index)
+        } else {
+            panic!(
+                "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
 }
 
-impl<T: Dist> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
+impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
     unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
@@ -1149,7 +1141,7 @@ impl<T: Dist> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> std::fmt::Debug for OneSidedMemoryRegion<T> {
+impl<T: Remote> std::fmt::Debug for OneSidedMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -1159,12 +1151,12 @@ impl<T: Dist> std::fmt::Debug for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> LamellarWrite for OneSidedMemoryRegion<T> {}
-impl<T: Dist> LamellarWrite for &OneSidedMemoryRegion<T> {}
-impl<T: Dist> LamellarRead for OneSidedMemoryRegion<T> {}
-impl<T: Dist> LamellarRead for &OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarWrite for OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarWrite for &OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarRead for OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarRead for &OneSidedMemoryRegion<T> {}
 
-impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarMemoryRegion<T> {
+impl<T: Remote> From<&OneSidedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     fn from(smr: &OneSidedMemoryRegion<T>) -> Self {
         LamellarMemoryRegion::Local(smr.clone())
     }
@@ -1242,6 +1234,6 @@ impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T
     }
 }
 
-// pub(crate) struct OneSidedMemoryRegionIter<'a,T: Dist>{
+// pub(crate) struct OneSidedMemoryRegionIter<'a,T: Remote>{
 //     inner:
 // }

@@ -7,7 +7,6 @@ use std::{
     task::{Context, Poll, Waker},
 };
 
-use bytemuck::from_bytes_mut;
 use futures_util::{ready, stream::FuturesUnordered, Future, Stream};
 
 use pin_project::{pin_project, pinned_drop};
@@ -485,7 +484,7 @@ impl<T: Dist> ArrayAtHandle<T> {
     ///
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion and retrieve the result. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
-    pub fn spawn(mut self) -> LamellarTask<T> {
+    pub fn spawn(self) -> LamellarTask<T> {
         match self.state {
             ArrayAtHandleState::LocalAm(req) => req.spawn(),
             ArrayAtHandleState::Am(req) => {
@@ -510,7 +509,7 @@ impl<T: Dist> ArrayAtHandle<T> {
     }
 
     /// This method will block the calling thread until the associated Array RDMA at Operation completes
-    pub fn block(mut self) -> T {
+    pub fn block(self) -> T {
         RuntimeWarning::BlockingCall("ArrayAtHandle::block", "<handle>.spawn() or <handle>.await")
             .print();
         match self.state {
@@ -536,7 +535,7 @@ impl<T: Dist> ArrayAtHandle<T> {
 
 impl<T: Dist> Future for ArrayAtHandle<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.state.project() {
             ArrayAtHandleStateProj::LocalAm(req) => req.poll(cx),

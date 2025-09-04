@@ -9,7 +9,6 @@ use super::{
 };
 use super::{ArrayOps, AtomicArray};
 
-use crate::lamellae::NetworkAtomic;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Dist, LamellarTeamRT};

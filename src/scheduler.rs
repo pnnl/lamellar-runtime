@@ -103,8 +103,8 @@ pub enum ExecutorType {
 #[pin_project]
 pub struct LamellarTask<T> {
     #[pin]
-    task: LamellarTaskInner<T>,
-    executor: Arc<Executor>,
+    pub(crate) task: LamellarTaskInner<T>,
+    pub(crate) executor: Arc<Executor>,
 }
 
 unsafe impl<T: Send> Send for LamellarTask<T> {}
@@ -126,6 +126,7 @@ impl<T> Future for LamellarTask<T> {
 
 #[derive(Debug)]
 pub(crate) enum LamellarTaskInner<T> {
+    // Finished(Option<T>),
     LamellarTask(Option<async_task::Task<T, usize>>),
     AsyncStdTask(async_std::task::JoinHandle<T>),
     #[cfg(feature = "tokio-executor")]
@@ -141,6 +142,7 @@ impl<T> Drop for LamellarTaskInner<T> {
 
         // std::mem::swap(&mut dropped, self);
         match self {
+            // LamellarTaskInner::Finished(_) => {}
             LamellarTaskInner::LamellarTask(task) => {
                 task.take().expect("task already taken").detach();
             }
@@ -156,6 +158,7 @@ impl<T> Future for LamellarTaskInner<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         unsafe {
             match self.get_unchecked_mut() {
+                // LamellarTaskInner::Finished(val) => Poll::Ready(val.take().unwrap()),
                 LamellarTaskInner::LamellarTask(task) => {
                     if let Some(task) = task {
                         Pin::new_unchecked(task).poll(cx)
@@ -229,7 +232,7 @@ pub(crate) enum Executor {
 
 #[derive(Debug)]
 pub(crate) struct Scheduler {
-    executor: Arc<Executor>,
+    pub(crate) executor: Arc<Executor>,
     active_message_engine: RegisteredActiveMessages, //we can eventually abstract this around the ActiveMessageEngine trait but no need currently
     num_ams: Arc<AtomicUsize>,
     max_ams: Arc<AtomicUsize>,

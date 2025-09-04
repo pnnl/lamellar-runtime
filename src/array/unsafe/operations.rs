@@ -1,7 +1,7 @@
 use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::handle::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{operations::*, LamellarArrayRdmaInput};
+use crate::array::{operations::*, LamellarArrayRdmaInput, TeamFrom};
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
 use crate::lamellae::{comm::CommProgress, AtomicOp};
@@ -1163,20 +1163,10 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
             //     self.array.team_rt().alloc_one_sided_mem_region(1);
             unsafe {
                 // buf.as_mut_slice()[0] = val;
-                let handle = self.inner.data.mem_region.put_test(
-                    pe,
-                    offset,
-                    LamellarArrayRdmaInput::Owned(val),
-                );
-                let team = self.team();
+                let handle = self.inner.data.mem_region.put(pe, offset, val);
                 ArrayBatchOpHandle {
                     array: self.clone().into(),
-                    state: BatchOpState::Launched(VecDeque::from(vec![(
-                        self.team().spawn(async move {
-                            team.team.lamellae.comm().wait();
-                        }),
-                        Vec::new(),
-                    )])),
+                    state: BatchOpState::Rdma(handle),
                 }
             }
         } else {

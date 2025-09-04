@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::SharedMemoryRegion;
+use crate::lamellae::Remote;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Dist, LamellarTeamRT};
@@ -28,7 +29,7 @@ use pin_project::{pin_project, pinned_drop};
 ///
 /// let memregion: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
 /// ```
-pub struct FallibleSharedMemoryRegionHandle<T: Dist> {
+pub struct FallibleSharedMemoryRegionHandle<T: Remote> {
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) launched: bool,
     #[pin]
@@ -37,7 +38,7 @@ pub struct FallibleSharedMemoryRegionHandle<T: Dist> {
 }
 
 #[pinned_drop]
-impl<T: Dist> PinnedDrop for FallibleSharedMemoryRegionHandle<T> {
+impl<T: Remote> PinnedDrop for FallibleSharedMemoryRegionHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.launched {
             RuntimeWarning::DroppedHandle("a FallibleSharedMemoryRegionHandle").print();
@@ -45,7 +46,7 @@ impl<T: Dist> PinnedDrop for FallibleSharedMemoryRegionHandle<T> {
     }
 }
 
-impl<T: Dist> FallibleSharedMemoryRegionHandle<T> {
+impl<T: Remote> FallibleSharedMemoryRegionHandle<T> {
     /// Used to drive creation of a new SharedMemoryRegion
     /// # Examples
     ///
@@ -83,7 +84,7 @@ impl<T: Dist> FallibleSharedMemoryRegionHandle<T> {
     }
 }
 
-impl<T: Dist> Future for FallibleSharedMemoryRegionHandle<T> {
+impl<T: Remote> Future for FallibleSharedMemoryRegionHandle<T> {
     type Output = Result<SharedMemoryRegion<T>, anyhow::Error>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.launched = true;
@@ -110,7 +111,7 @@ impl<T: Dist> Future for FallibleSharedMemoryRegionHandle<T> {
 ///
 /// let memregion: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
 /// ```
-pub struct SharedMemoryRegionHandle<T: Dist> {
+pub struct SharedMemoryRegionHandle<T: Remote> {
     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
     pub(crate) launched: bool,
     #[pin]
@@ -118,7 +119,7 @@ pub struct SharedMemoryRegionHandle<T: Dist> {
 }
 
 #[pinned_drop]
-impl<T: Dist> PinnedDrop for SharedMemoryRegionHandle<T> {
+impl<T: Remote> PinnedDrop for SharedMemoryRegionHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.launched {
             RuntimeWarning::DroppedHandle("a SharedMemoryRegionHandle").print();
@@ -126,7 +127,7 @@ impl<T: Dist> PinnedDrop for SharedMemoryRegionHandle<T> {
     }
 }
 
-impl<T: Dist> SharedMemoryRegionHandle<T> {
+impl<T: Remote> SharedMemoryRegionHandle<T> {
     /// Used to drive creation of a new SharedMemoryRegion
     /// # Examples
     ///
@@ -164,7 +165,7 @@ impl<T: Dist> SharedMemoryRegionHandle<T> {
     }
 }
 
-impl<T: Dist> Future for SharedMemoryRegionHandle<T> {
+impl<T: Remote> Future for SharedMemoryRegionHandle<T> {
     type Output = SharedMemoryRegion<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.launched = true;

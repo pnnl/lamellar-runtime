@@ -35,6 +35,7 @@ pub use crate::array::{
     LamellarWriteArray,
     SubArray,
 };
+pub use crate::lamellae::comm::Remote;
 pub use crate::lamellar_arch::*;
 pub use crate::lamellar_team::LamellarTeam;
 pub use crate::lamellar_world::LamellarWorld;

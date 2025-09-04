@@ -18,7 +18,7 @@ impl CommAtomic for RofiCComm {
     fn atomic_avail<T: 'static>(&self) -> bool {
         false
     }
-    fn atomic_op<T>(
+    fn atomic_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -35,7 +35,7 @@ impl CommAtomic for RofiCComm {
         }
         .into()
     }
-    fn atomic_fetch_op<T>(
+    fn atomic_fetch_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,

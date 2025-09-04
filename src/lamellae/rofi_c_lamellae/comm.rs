@@ -2,7 +2,8 @@ use crate::{
     config,
     lamellae::{
         comm::{
-            CommAlloc, CommAllocAddr, CommAllocType, CommInfo, CommMem, CommProgress, CommShutdown, CommAllocInfo
+            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommInfo, CommMem,
+            CommProgress, CommShutdown,
         },
         AllocationType,
     },
@@ -66,7 +67,7 @@ impl RofiCComm {
         rofi_c.fabric_allocs.write().insert(
             addr,
             CommAlloc {
-                info: CommAllocInfo::Raw(addr, mem_per_pe),
+                inner_alloc: CommAllocInner::Raw(addr, mem_per_pe),
                 alloc_type: CommAllocType::Fabric,
             },
         );

@@ -6,7 +6,7 @@ use crate::{
     lamellae::{
         comm::{
             error::{AllocError, AllocResult},
-            CommAlloc, CommAllocAddr, CommAllocType, CommMem, CommAllocInfo
+            CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
         },
         AllocationType,
     },
@@ -29,7 +29,7 @@ impl CommMem for RofiCComm {
         // rofi_c allocs are aligned on page boundaries so no need to pass in alignment constraint
         let addr = rofi_c_alloc(size, alloc_type)? as usize;
         let comm_alloc = CommAlloc {
-            info: CommAllocInfo::Raw(addr, size),
+            inner_alloc: CommAllocInner::Raw(addr, size),
             alloc_type: CommAllocType::Fabric,
         };
         self.fabric_allocs.write().insert(addr, comm_alloc.clone());
@@ -52,7 +52,7 @@ impl CommMem for RofiCComm {
             if let Some(addr) = alloc.try_malloc(size, align) {
                 trace!("new rt alloc: {:x} {}", addr, size);
                 return Ok(CommAlloc {
-                    info: CommAllocInfo::Raw(addr, size),
+                    inner_alloc: CommAllocInner::Raw(addr, size),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -75,17 +75,16 @@ impl CommMem for RofiCComm {
     fn rt_free(&self, alloc: CommAlloc) {
         trace!("freeing rt alloc: {:x}", alloc.comm_addr());
         debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
-        if let   CommAllocInfo::Raw(addr, _) = alloc.info {
-                trace!("freeing raw alloc: {:x}", addr);
-                let allocs = self.runtime_allocs.read();
-                for alloc in allocs.iter() {
-                    if let Ok(_) = alloc.free(addr) {
-                        return;
-                    }
+        if let CommAllocInner::Raw(addr, _) = alloc.info {
+            trace!("freeing raw alloc: {:x}", addr);
+            let allocs = self.runtime_allocs.read();
+            for alloc in allocs.iter() {
+                if let Ok(_) = alloc.free(addr) {
+                    return;
                 }
-                panic!("Error invalid free! {:?}", addr);
             }
-        else{
+            panic!("Error invalid free! {:?}", addr);
+        } else {
             unreachable!("rt_free should only be called with Raw allocs, not AllocInfo");
         }
     }
@@ -108,12 +107,11 @@ impl CommMem for RofiCComm {
         );
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
-            if let CommAllocInfo::Raw(addr,_)= alloc.info{
-            let mut new_alloc = BTreeAlloc::new("rofi_c_mem".to_string());
-            new_alloc.init(addr, size);
-            self.runtime_allocs.write().push(new_alloc);
-            }
-            else{
+            if let CommAllocInner::Raw(addr, _) = alloc.info {
+                let mut new_alloc = BTreeAlloc::new("rofi_c_mem".to_string());
+                new_alloc.init(addr, size);
+                self.runtime_allocs.write().push(new_alloc);
+            } else {
                 panic!("rofi_c alloc_pool should only be called with Raw allocs, not AllocInfo");
             }
         } else {
@@ -142,8 +140,6 @@ impl CommMem for RofiCComm {
         }
     }
 
-
-
     #[tracing::instrument(skip(self), level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         rofi_c_local_addr(remote_pe, remote_addr)
@@ -169,7 +165,7 @@ impl CommMem for RofiCComm {
         for alloc in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    info: CommAllocInfo::Raw(addr.0, size),
+                    inner_alloc: CommAllocInner::Raw(addr.0, size),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }

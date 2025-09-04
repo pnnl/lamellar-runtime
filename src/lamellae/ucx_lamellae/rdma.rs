@@ -16,16 +16,18 @@ use crate::{
         comm::rdma::{RdmaAtFuture, RdmaAtHandle, RdmaFuture, RdmaHandle, Remote},
         CommAllocAddr, CommAllocInner, CommAllocRdma, CommSlice,
     },
+    memregion::MemregionRdmaInput,
     warnings::RuntimeWarning,
     Dist, LamellarTask,
 };
 
 use super::{
-    comm::LibfabricComm,
-    fabric::{LibfabricAlloc, Ofi},
+    comm::UcxComm,
+    fabric::{UcxAlloc, UcxRequest, UcxWorld},
     Scheduler,
 };
 
+// #[derive(Clone)]
 // pub(super) enum Op<T> {
 //     Put(usize, CommSlice<T>, CommAllocAddr),
 //     Put2(usize, T, CommAllocAddr),
@@ -36,17 +38,18 @@ use super::{
 // }
 
 // #[pin_project(PinnedDrop)]
-// pub(crate) struct LibfabricFuture<T> {
+// pub(crate) struct UcxFuture<T> {
 //     pub(crate) my_pe: usize,
-//     pub(crate) ofi: Arc<Ofi>,
+//     pub(crate) ucx: Arc<UcxWorld>,
 //     pub(super) op: Op<T>,
 //     pub(crate) scheduler: Arc<Scheduler>,
 //     pub(crate) counters: Vec<Arc<AMCounters>>,
 //     pub(crate) spawned: bool,
+//     pub(crate) request: Option<UcxRequest>,
 // }
 
-// impl<T: Remote> LibfabricFuture<T> {
-//     fn inner_put(&self, pe: usize, src: &CommSlice<T>, dst: &CommAllocAddr) {
+// impl<T: Remote> UcxFuture<T> {
+//     fn inner_put(&mut self, pe: usize, src: &CommSlice<T>, dst: &CommAllocAddr) {
 //         trace!(
 //             "putting src: {:?} dst: {:?} len: {} num bytes {}",
 //             src.usize_addr(),
@@ -55,7 +58,7 @@ use super::{
 //             src.len() * std::mem::size_of::<T>()
 //         );
 //         if pe != self.my_pe {
-//             unsafe { self.ofi.put(pe, src, dst, false).unwrap() };
+//             self.request = Some(unsafe { self.ucx.put(pe, src, dst, false) });
 //         } else {
 //             if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
 //                 unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
@@ -66,41 +69,18 @@ use super::{
 //             }
 //         }
 //     }
-//     fn alloc_put(&self, pe: usize, src: &CommSlice<T>, alloc: &LibfabricAlloc, offset: usize) {
-//         trace!(
-//             "putting src: {:?} dst: {:?} len: {} num bytes {}",
-//             src.usize_addr(),
-//             alloc.start() + offset,
-//             src.len(),
-//             src.len() * std::mem::size_of::<T>()
-//         );
-//         if pe != self.my_pe {
-//             unsafe { alloc.put(pe, offset, src, false) };
-//         } else {
-//             let dst = alloc.start() + offset;
-//             if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
-//                 unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
-//             } else {
-//                 unsafe {
-//                     std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-//                 }
-//             }
-//         }
-//     }
-//     fn inner_put2(&self, pe: usize, src: &T, dst: &CommAllocAddr) {
-//         unsafe {
-//             self.ofi
+//     fn inner_put2(&mut self, pe: usize, src: &T, dst: &CommAllocAddr) {
+//         self.request = Some(unsafe {
+//             self.ucx
 //                 .inner_put(pe, std::slice::from_ref(src), *(&dst as &usize), false)
-//                 .unwrap()
-//         };
+//         });
 //     }
-//     fn inner_put_test(&self, pe: usize, src: &T, dst: &CommAllocAddr) {
+//     fn inner_put_test(&mut self, pe: usize, src: &T, dst: &CommAllocAddr) {
 //         if pe != self.my_pe {
-//             unsafe {
-//                 self.ofi
+//             self.request = Some(unsafe {
+//                 self.ucx
 //                     .inner_put(pe, std::slice::from_ref(src), *(dst as &usize), false)
-//                     .unwrap()
-//             };
+//             });
 //         } else {
 //             unsafe {
 //                 dst.as_mut_ptr::<T>().write(*src);
@@ -108,7 +88,7 @@ use super::{
 //         }
 //     }
 //     #[tracing::instrument(skip_all, level = "debug")]
-//     fn inner_put_all(&self, src: &CommSlice<T>, dst: &CommAllocAddr, pes: &Vec<usize>) {
+//     fn inner_put_all(&mut self, src: &CommSlice<T>, dst: &CommAllocAddr, pes: &Vec<usize>) {
 //         trace!(
 //             "put all src: {:?} dsts: {:?} len: {}",
 //             src.usize_addr(),
@@ -120,7 +100,7 @@ use super::{
 //         }
 //     }
 //     #[tracing::instrument(skip_all, level = "debug")]
-//     fn inner_get(&self, pe: usize, src: &CommAllocAddr, mut dst: CommSlice<T>) {
+//     fn inner_get(&mut self, pe: usize, src: &CommAllocAddr, mut dst: CommSlice<T>) {
 //         trace!(
 //             "getting src: {:?} dst: {:?} len: {}",
 //             src,
@@ -128,8 +108,8 @@ use super::{
 //             dst.len()
 //         );
 //         if pe != self.my_pe {
-//             unsafe { self.ofi.get(pe, src, &mut dst, false).unwrap() };
-//             // unsafe{rofi_c_get(src.into(),  dst.as_mut_slice(), pe).expect("rofi_c_get failed")};
+//             self.request = Some(unsafe { self.ucx.get(pe, src, &mut dst, false) });
+//             // unsafe{rucx_c_get(src.into(),  dst.as_mut_slice(), pe).expect("rucx_c_get failed")};
 //         } else {
 //             if !(dst.contains(src) || dst.contains(&(src + dst.len()))) {
 //                 unsafe {
@@ -143,53 +123,33 @@ use super::{
 //         }
 //     }
 
-//     fn alloc_get(&self, pe: usize, mut dst: CommSlice<T>, alloc: &LibfabricAlloc, offset: usize) {
-//         trace!(
-//             "getting src: {:?} dst: {:?} len: {}",
-//             alloc.start() + offset,
-//             dst.usize_addr(),
-//             dst.len()
-//         );
-//         if pe != self.my_pe {
-//             unsafe { alloc.get(pe, offset, &mut dst, false) };
-//             // unsafe{rofi_c_get(src.into(),  dst.as_mut_slice(), pe).expect("rofi_c_get failed")};
-//         } else {
-//             let src = alloc.start() + offset;
-//             if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
-//                 unsafe {
-//                     std::ptr::copy_nonoverlapping(src as *const T, dst.as_mut_ptr(), dst.len());
-//                 }
-//             } else {
-//                 unsafe {
-//                     std::ptr::copy(src as *const T, dst.as_mut_ptr(), dst.len());
-//                 }
-//             }
-//         }
-//     }
-
-//     fn exec_op(&self) {
-//         match &self.op {
+//     fn exec_op(&mut self) {
+//         match self.op.clone() {
 //             Op::Put(pe, src, dst) => {
-//                 self.inner_put(*pe, src, dst);
+//                 self.inner_put(pe, &src, &dst);
 //             }
 //             Op::Put2(pe, src, dst) => {
-//                 self.inner_put2(*pe, src, dst);
+//                 self.inner_put2(pe, &src, &dst);
 //             }
 //             Op::PutTest(pe, src, dst) => {
-//                 self.inner_put_test(*pe, src, dst);
+//                 self.inner_put_test(pe, &src, &dst);
 //             }
 //             Op::PutAll(src, dst, pes) => {
-//                 self.inner_put_all(src, dst, pes);
+//                 self.inner_put_all(&src, &dst, &pes);
 //             }
 //             Op::Get(pe, src, dst) => {
-//                 self.inner_get(*pe, src, dst.clone());
+//                 self.inner_get(pe, &src, dst.clone());
 //             }
 //         }
 //     }
 //     pub(crate) fn block(mut self) {
 //         self.exec_op();
-//         // rofi_c_wait();
-//         self.ofi.wait_all().unwrap();
+//         // rucx_c_wait();
+//         if let Some(request) = self.request.take() {
+//             request.wait();
+//         } else {
+//             self.ucx.wait_all();
+//         }
 //         self.spawned = true;
 //         // Ok(())
 //     }
@@ -198,14 +158,22 @@ use super::{
 //         self.spawned = true;
 //         let mut counters = Vec::new();
 //         std::mem::swap(&mut counters, &mut self.counters);
-//         let ofi = self.ofi.clone();
-//         self.scheduler
-//             .spawn_task(async move { ofi.wait_all().unwrap() }, counters)
+
+//         self.scheduler.clone().spawn_task(
+//             async move {
+//                 if let Some(request) = self.request.take() {
+//                     request.wait();
+//                 } else {
+//                     self.ucx.wait_all();
+//                 }
+//             },
+//             counters,
+//         )
 //     }
 // }
 
 // #[pinned_drop]
-// impl<T> PinnedDrop for LibfabricFuture<T> {
+// impl<T> PinnedDrop for UcxFuture<T> {
 //     fn drop(self: Pin<&mut Self>) {
 //         if !self.spawned {
 //             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -213,59 +181,64 @@ use super::{
 //     }
 // }
 
-// impl<T: Remote> From<LibfabricFuture<T>> for RdmaHandle<T> {
-//     fn from(f: LibfabricFuture<T>) -> RdmaHandle<T> {
+// impl<T: Remote> From<UcxFuture<T>> for RdmaHandle<T> {
+//     fn from(f: UcxFuture<T>) -> RdmaHandle<T> {
 //         RdmaHandle {
-//             future: RdmaFuture::Libfabric(f),
+//             future: RdmaFuture::Ucx(f),
 //         }
 //     }
 // }
 
-// impl<T: Remote> Future for LibfabricFuture<T> {
+// impl<T: Remote> Future for UcxFuture<T> {
 //     type Output = ();
-//     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+//     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
 //         if !self.spawned {
 //             self.exec_op();
-//             self.ofi.wait_all().unwrap();
-//             *self.project().spawned = true;
-//         } else {
-//             self.ofi.wait_all().unwrap();
 //         }
-//         // rofi_c_wait();
+//         let this = self.project();
+//         *this.spawned = true;
+//         if let Some(request) = this.request.take() {
+//             request.wait();
+//         } else {
+//             this.ucx.wait_all();
+//         }
 
 //         Poll::Ready(())
 //     }
 // }
 
 // #[pin_project(PinnedDrop)]
-// pub(crate) struct LibfabricAtFuture<T> {
+// pub(crate) struct UcxAtFuture<T> {
 //     pub(crate) pe: usize,
-//     pub(crate) ofi: Arc<Ofi>,
+//     pub(crate) ucx: Arc<UcxWorld>,
 //     pub(super) src: CommAllocAddr,
 //     pub(crate) scheduler: Arc<Scheduler>,
 //     pub(crate) counters: Vec<Arc<AMCounters>>,
 //     pub(crate) spawned: bool,
 //     pub(crate) result: MaybeUninit<T>,
+//     pub(crate) request: Option<UcxRequest>,
 // }
 
-// impl<T: Remote> LibfabricAtFuture<T> {
+// impl<T: Remote> UcxAtFuture<T> {
 //     #[tracing::instrument(skip_all, level = "debug")]
 //     fn exec_at(&mut self) {
 //         trace!("getting src: {:?} ", self.src);
-//         unsafe {
-//             self.ofi.inner_get(
+//         self.request = Some(unsafe {
+//             self.ucx.inner_get(
 //                 self.pe,
 //                 *(&self.src as &usize),
 //                 std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
 //                 false,
 //             )
-//         };
+//         });
 //     }
 
 //     pub(crate) fn block(mut self) -> T {
 //         self.exec_at();
 //         self.spawned = true;
-//         self.ofi.wait_all().unwrap();
+//         if let Some(request) = self.request.take() {
+//             request.wait();
+//         }
 //         unsafe { self.result.assume_init() }
 //     }
 //     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
@@ -275,7 +248,9 @@ use super::{
 //         std::mem::swap(&mut counters, &mut self.counters);
 //         self.scheduler.clone().spawn_task(
 //             async move {
-//                 self.ofi.wait_all().unwrap();
+//                 if let Some(request) = self.request.take() {
+//                     request.wait();
+//                 }
 //                 unsafe { self.result.assume_init() }
 //             },
 //             counters,
@@ -284,7 +259,7 @@ use super::{
 // }
 
 // #[pinned_drop]
-// impl<T> PinnedDrop for LibfabricAtFuture<T> {
+// impl<T> PinnedDrop for UcxAtFuture<T> {
 //     fn drop(self: Pin<&mut Self>) {
 //         if !self.spawned {
 //             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -292,15 +267,15 @@ use super::{
 //     }
 // }
 
-// impl<T: Remote> From<LibfabricAtFuture<T>> for RdmaAtHandle<T> {
-//     fn from(f: LibfabricAtFuture<T>) -> RdmaAtHandle<T> {
+// impl<T: Remote> From<UcxAtFuture<T>> for RdmaAtHandle<T> {
+//     fn from(f: UcxAtFuture<T>) -> RdmaAtHandle<T> {
 //         RdmaAtHandle {
-//             future: RdmaAtFuture::Libfabric(f),
+//             future: RdmaAtFuture::Ucx(f),
 //         }
 //     }
 // }
 
-// impl<T: Remote> Future for LibfabricAtFuture<T> {
+// impl<T: Remote> Future for UcxAtFuture<T> {
 //     type Output = T;
 //     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
 //         if !self.spawned {
@@ -308,7 +283,9 @@ use super::{
 //         }
 //         let this = self.project();
 //         *this.spawned = true;
-//         this.ofi.wait_all().unwrap();
+//         if let Some(request) = this.request.take() {
+//             request.wait();
+//         }
 
 //         Poll::Ready(unsafe {
 //             let mut res = MaybeUninit::uninit();
@@ -318,7 +295,7 @@ use super::{
 //     }
 // }
 
-// impl CommRdma for LibfabricComm {
+// impl CommRdma for UcxComm {
 //     fn put<T: Remote>(
 //         &self,
 //         scheduler: &Arc<Scheduler>,
@@ -330,13 +307,14 @@ use super::{
 //     ) -> RdmaHandle<T> {
 //         self.put_amt
 //             .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-//         LibfabricFuture {
+//         UcxFuture {
 //             my_pe: self.my_pe,
-//             ofi: self.ofi.clone(),
+//             ucx: self.ucx.clone(),
 //             op: Op::Put(pe, src, remote_alloc.addr() + offset),
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
+//             request: None,
 //         }
 //         .into()
 //     }
@@ -351,13 +329,14 @@ use super::{
 //     ) -> RdmaHandle<T> {
 //         // self.put_amt
 //         //     .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
-//         LibfabricFuture {
+//         UcxFuture {
 //             my_pe: self.my_pe,
-//             ofi: self.ofi.clone(),
+//             ucx: self.ucx.clone(),
 //             op: Op::Put2(pe, src, remote_alloc.addr() + offset),
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
+//             request: None,
 //         }
 //         .into()
 //     }
@@ -373,9 +352,8 @@ use super::{
 //         // if pe != self.my_pe {
 //         let remote_addr = remote_alloc.addr() + offset;
 //         unsafe {
-//             self.ofi
+//             self.ucx
 //                 .inner_put(pe, src.as_slice(), *(&remote_addr as &usize), false)
-//                 .unwrap()
 //         };
 
 //         // } else {
@@ -397,13 +375,14 @@ use super::{
 //             Ordering::SeqCst,
 //         );
 //         let pes = (0..self.num_pes).collect();
-//         LibfabricFuture {
+//         UcxFuture {
 //             my_pe: self.my_pe,
-//             ofi: self.ofi.clone(),
+//             ucx: self.ucx.clone(),
 //             op: Op::PutAll(src, remote_alloc.addr() + offset, pes),
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
+//             request: None,
 //         }
 //         .into()
 //     }
@@ -418,13 +397,14 @@ use super::{
 //     ) -> RdmaHandle<T> {
 //         self.get_amt
 //             .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-//         LibfabricFuture {
+//         UcxFuture {
 //             my_pe: self.my_pe,
-//             ofi: self.ofi.clone(),
+//             ucx: self.ucx.clone(),
 //             op: Op::Get(pe, src.addr() + offset, dst),
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
+//             request: None,
 //         }
 //         .into()
 //     }
@@ -441,15 +421,14 @@ use super::{
 //         let src_addr = src.addr() + offset;
 //         // if pe != self.my_pe {
 //         unsafe {
-//             self.ofi
-//                 .inner_get(
-//                     pe,
-//                     *(&src_addr as &usize),
-//                     std::slice::from_mut(&mut *dst.as_mut_ptr()),
-//                     true,
-//                 )
-//                 .unwrap()
-//         };
+//             self.ucx.inner_get(
+//                 pe,
+//                 *(&src_addr as &usize),
+//                 std::slice::from_mut(&mut *dst.as_mut_ptr()),
+//                 true,
+//             )
+//         }
+//         .wait();
 //         unsafe { dst.assume_init() }
 //         // } else {
 //         //     unsafe {
@@ -467,19 +446,21 @@ use super::{
 //     ) -> RdmaAtHandle<T> {
 //         self.get_amt
 //             .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
-//         LibfabricAtFuture {
+//         UcxAtFuture {
 //             pe,
-//             ofi: self.ofi.clone(),
+//             ucx: self.ucx.clone(),
 //             src: src.addr() + offset,
 //             spawned: false,
 //             scheduler: scheduler.clone(),
 //             counters,
 //             result: MaybeUninit::uninit(),
+//             request: None,
 //         }
 //         .into()
 //     }
 // }
 
+#[derive(Clone)]
 pub(super) enum AllocOp<T: Remote> {
     Put(usize, MemregionRdmaInput<T>),
     PutAll(Vec<usize>, MemregionRdmaInput<T>),
@@ -487,28 +468,30 @@ pub(super) enum AllocOp<T: Remote> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAllocFuture<T: Remote> {
+pub(crate) struct UcxAllocFuture<T: Remote> {
     my_pe: usize,
-    pub(crate) alloc: Arc<LibfabricAlloc>,
+    pub(crate) alloc: Arc<UcxAlloc>,
     pub(crate) offset: usize,
     pub(super) op: AllocOp<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
+    pub(crate) request: Option<UcxRequest>,
 }
 
-impl<T: Remote> LibfabricAllocFuture<T> {
-    fn inner_put(&self, pe: usize, src: &MemregionRdmaInput<T>) {
-        let src = src.as_slice();
+impl<T: Remote> UcxAllocFuture<T> {
+    fn inner_put(&mut self, pe: usize, src: &MemregionRdmaInput<T>) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
-            src.usize_addr(),
+            src.as_ptr(),
             self.alloc.start() + self.offset,
             src.len(),
             src.len() * std::mem::size_of::<T>()
         );
         if pe != self.my_pe {
-            unsafe { LibfabricAlloc::put(&self.alloc, pe, self.offset, src, false) };
+            self.request = Some(unsafe {
+                UcxAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), true)
+            });
         } else {
             let dst = self.alloc.start() + self.offset;
             if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
@@ -522,7 +505,7 @@ impl<T: Remote> LibfabricAllocFuture<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_all(&self, pes: &Vec<usize>, src: &MemregionRdmaInput<T>) {
+    fn inner_put_all(&mut self, pes: &Vec<usize>, src: &MemregionRdmaInput<T>) {
         // trace!(
         //     "put all src: {:?} dsts: {:?} len: {}",
         //     src.usize_addr(),
@@ -533,7 +516,7 @@ impl<T: Remote> LibfabricAllocFuture<T> {
             self.inner_put(*pe, src);
         }
     }
-    fn inner_get(&self, pe: usize, mut dst: CommSlice<T>) {
+    fn inner_get(&mut self, pe: usize, mut dst: CommSlice<T>) {
         trace!(
             "getting src: {:?} dst: {:?} len: {}",
             self.alloc.start() + self.offset,
@@ -541,7 +524,8 @@ impl<T: Remote> LibfabricAllocFuture<T> {
             dst.len()
         );
         if pe != self.my_pe {
-            unsafe { LibfabricAlloc::get(&self.alloc, pe, self.offset, &mut dst, false) };
+            self.request =
+                Some(unsafe { UcxAlloc::get(&self.alloc, pe, self.offset, &mut dst, false) });
         } else {
             let src = self.alloc.start() + self.offset;
             if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
@@ -556,22 +540,26 @@ impl<T: Remote> LibfabricAllocFuture<T> {
         }
     }
 
-    fn exec_op(&self) {
-        match &self.op {
+    fn exec_op(&mut self) {
+        match self.op.clone() {
             AllocOp::Put(pe, src) => {
-                self.inner_put(*pe, src);
+                self.inner_put(pe, &src);
             }
             AllocOp::PutAll(pes, src) => {
-                self.inner_put_all(pes, src);
+                self.inner_put_all(&pes, &src);
             }
             AllocOp::Get(pe, dst) => {
-                self.inner_get(*pe, dst.clone());
+                self.inner_get(pe, dst);
             }
         }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.alloc.ofi.wait_all().unwrap();
+        if let Some(request) = self.request.take() {
+            request.wait();
+        } else {
+            self.alloc.wait_all();
+        }
         self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -579,15 +567,21 @@ impl<T: Remote> LibfabricAllocFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        // let ofi = self.alloc.ofi.clone();
-        self.scheduler
-            .clone()
-            .spawn_task(async move { self.ofi.wait_all().unwrap() }, counters)
+        self.scheduler.clone().spawn_task(
+            async move {
+                if let Some(request) = self.request.take() {
+                    request.wait();
+                } else {
+                    self.alloc.wait_all();
+                }
+            },
+            counters,
+        )
     }
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LibfabricAllocFuture<T> {
+impl<T: Remote> PinnedDrop for UcxAllocFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -595,57 +589,66 @@ impl<T> PinnedDrop for LibfabricAllocFuture<T> {
     }
 }
 
-impl<T: Remote> From<LibfabricAllocFuture<T>> for RdmaHandle<T> {
-    fn from(f: LibfabricAllocFuture<T>) -> RdmaHandle<T> {
+impl<T: Remote> From<UcxAllocFuture<T>> for RdmaHandle<T> {
+    fn from(f: UcxAllocFuture<T>) -> RdmaHandle<T> {
         RdmaHandle {
-            future: RdmaFuture::LibfabricAlloc(f),
+            future: RdmaFuture::UcxAlloc(f),
         }
     }
 }
 
-impl<T: Remote> Future for LibfabricAllocFuture<T> {
+impl<T: Remote> Future for UcxAllocFuture<T> {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            self.alloc.ofi.wait_all().unwrap();
-            *self.project().spawned = true;
-        } else {
-            self.alloc.ofi.wait_all().unwrap();
         }
+        let this = self.project();
+        *this.spawned = true;
+        if let Some(request) = this.request.take() {
+            request.wait();
+        } else {
+            this.alloc.wait_all();
+        }
+
         Poll::Ready(())
     }
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAllocAtFuture<T> {
-    pub(crate) alloc: Arc<LibfabricAlloc>,
+pub(crate) struct UcxAllocAtFuture<T> {
+    pub(crate) alloc: Arc<UcxAlloc>,
     pub(crate) pe: usize,
     pub(crate) offset: usize,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
     pub(crate) result: MaybeUninit<T>,
+    pub(crate) request: Option<UcxRequest>,
 }
 
-impl<T: Remote> LibfabricAllocAtFuture<T> {
+impl<T: Remote> UcxAllocAtFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
-        unsafe {
+        self.request = Some(unsafe {
             self.alloc.inner_get(
                 self.pe,
                 self.offset,
                 std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
                 false,
             )
-        };
+        });
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
         self.spawned = true;
-        self.alloc.ofi.wait_all().unwrap();
+        if let Some(request) = self.request.take() {
+            request.wait();
+        } else {
+            self.alloc.wait_all();
+        }
         unsafe { self.result.assume_init() }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
@@ -655,7 +658,11 @@ impl<T: Remote> LibfabricAllocAtFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                self.alloc.ofi.wait_all().unwrap();
+                if let Some(request) = self.request.take() {
+                    request.wait();
+                } else {
+                    self.alloc.wait_all();
+                }
                 unsafe { self.result.assume_init() }
             },
             counters,
@@ -664,7 +671,7 @@ impl<T: Remote> LibfabricAllocAtFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LibfabricAllocAtFuture<T> {
+impl<T> PinnedDrop for UcxAllocAtFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -672,15 +679,15 @@ impl<T> PinnedDrop for LibfabricAllocAtFuture<T> {
     }
 }
 
-impl<T: Remote> From<LibfabricAllocAtFuture<T>> for RdmaAtHandle<T> {
-    fn from(f: LibfabricAllocAtFuture<T>) -> RdmaAtHandle<T> {
+impl<T: Remote> From<UcxAllocAtFuture<T>> for RdmaAtHandle<T> {
+    fn from(f: UcxAllocAtFuture<T>) -> RdmaAtHandle<T> {
         RdmaAtHandle {
-            future: RdmaAtFuture::LibfabricAlloc(f),
+            future: RdmaAtFuture::UcxAlloc(f),
         }
     }
 }
 
-impl<T: Remote> Future for LibfabricAllocAtFuture<T> {
+impl<T: Remote> Future for UcxAllocAtFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -688,7 +695,11 @@ impl<T: Remote> Future for LibfabricAllocAtFuture<T> {
         }
         let this = self.project();
         *this.spawned = true;
-        this.alloc.ofi.wait_all().unwrap();
+        if let Some(request) = this.request.take() {
+            request.wait();
+        } else {
+            this.alloc.wait_all();
+        }
 
         Poll::Ready(unsafe {
             let mut res = MaybeUninit::uninit();
@@ -698,7 +709,7 @@ impl<T: Remote> Future for LibfabricAllocAtFuture<T> {
     }
 }
 
-impl CommAllocRdma for Arc<LibfabricAlloc> {
+impl CommAllocRdma for Arc<UcxAlloc> {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -710,16 +721,46 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         //  self.put_amt
         //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
 
-        LibfabricAllocFuture {
-            my_pe: self.ofi.my_pe,
+        UcxAllocFuture {
+            my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
             op: AllocOp::Put(pe, src.into()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            request: None,
         }
         .into()
+    }
+    fn put_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInput<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        let src = src.into();
+        trace!(
+            "putting src: {:?} dst: {:?} len: {} num bytes {}",
+            src.as_ptr(),
+            self.start() + offset,
+            src.len(),
+            src.len() * std::mem::size_of::<T>()
+        );
+        if pe != self.my_pe {
+            // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
+            // not that the operation has completed on the remote side
+            unsafe { UcxAlloc::put_inner(&self, pe, offset, src.as_slice(), false) };
+        } else {
+            let dst = self.start() + offset;
+            if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
+            } else {
+                unsafe {
+                    std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
+                }
+            }
+        }
     }
     fn put_all<T: Remote>(
         &self,
@@ -728,15 +769,16 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         src: impl Into<MemregionRdmaInput<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
-        let pes = (0..self.num_pes()).collect();
-        LibfabricAllocFuture {
-            my_pe: self.ofi.my_pe,
+        let pes = (0..self.num_pes).collect();
+        UcxAllocFuture {
+            my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
             op: AllocOp::PutAll(pes, src.into()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            request: None,
         }
         .into()
     }
@@ -749,14 +791,15 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         offset: usize,
         dst: CommSlice<T>,
     ) -> RdmaHandle<T> {
-        LibfabricAllocFuture {
-            my_pe: self.ofi.my_pe,
+        UcxAllocFuture {
+            my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
             op: AllocOp::Get(pe, dst),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
+            request: None,
         }
         .into()
     }
@@ -767,7 +810,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         pe: usize,
         offset: usize,
     ) -> RdmaAtHandle<T> {
-        LibfabricAllocAtFuture {
+        UcxAllocAtFuture {
             alloc: self.clone(),
             pe,
             offset,
@@ -775,6 +818,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
             scheduler: scheduler.clone(),
             counters,
             result: MaybeUninit::uninit(),
+            request: None,
         }
         .into()
     }

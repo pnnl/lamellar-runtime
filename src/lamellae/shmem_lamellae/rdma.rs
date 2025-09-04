@@ -1,7 +1,7 @@
 use std::{
     mem::MaybeUninit,
     pin::Pin,
-    sync::{atomic::Ordering, Arc},
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -11,26 +11,27 @@ use tracing::trace;
 
 use crate::{
     active_messaging::AMCounters,
-    array::LamellarArrayRdmaInput,
     lamellae::{
-        comm::rdma::{CommRdma, RdmaFuture, RdmaHandle, Remote},
-        CommAllocAddr, CommSlice, RdmaAtFuture, RdmaAtHandle,
+        comm::rdma::{RdmaFuture, RdmaHandle, Remote},
+        shmem_lamellae::fabric::ShmemAlloc,
+        CommAllocAddr, CommAllocRdma, CommSlice, RdmaAtFuture, RdmaAtHandle,
     },
+    memregion::MemregionRdmaInput,
     warnings::RuntimeWarning,
-    Dist, LamellarTask,
+    LamellarTask,
 };
 
-use super::{comm::ShmemComm, Scheduler};
+use super::Scheduler;
 
-pub(super) enum Op<T> {
-    Put(CommSlice<T>, CommAllocAddr),
-    PutAll(CommSlice<T>, Vec<CommAllocAddr>),
+pub(super) enum Op<T: Remote> {
+    Put(MemregionRdmaInput<T>, CommAllocAddr),
+    PutAll(MemregionRdmaInput<T>, Vec<CommAllocAddr>),
     Get(CommAllocAddr, CommSlice<T>),
     Atomic,
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct ShmemFuture<T> {
+pub(crate) struct ShmemFuture<T: Remote> {
     pub(super) op: Op<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -39,10 +40,10 @@ pub(crate) struct ShmemFuture<T> {
 
 impl<T: Remote> ShmemFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put(&self, src: &CommSlice<T>, dst: &CommAllocAddr) {
+    fn inner_put(&self, src: &MemregionRdmaInput<T>, dst: &CommAllocAddr) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
-            src.usize_addr(),
+            src.as_ptr(),
             dst,
             src.len(),
             src.len() * std::mem::size_of::<T>()
@@ -56,10 +57,10 @@ impl<T: Remote> ShmemFuture<T> {
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_all(&self, src: &CommSlice<T>, dsts: &Vec<CommAllocAddr>) {
+    fn inner_put_all(&self, src: &MemregionRdmaInput<T>, dsts: &Vec<CommAllocAddr>) {
         trace!(
             "put all src: {:?} dsts: {:?} len: {}",
-            src.usize_addr(),
+            src.as_ptr(),
             dsts,
             src.len()
         );
@@ -114,7 +115,7 @@ impl<T: Remote> ShmemFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for ShmemFuture<T> {
+impl<T: Remote> PinnedDrop for ShmemFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -223,165 +224,250 @@ impl<T: Remote> Future for ShmemAtFuture<T> {
     }
 }
 
-impl CommRdma for ShmemComm {
+// impl CommRdma for ShmemComm {
+//     fn put<T: Remote>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         pe: usize,
+//         src: CommSlice<T>,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> RdmaHandle<T> {
+//         self.put_amt
+//             .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+//         if let CommAllocInner::ShmemAlloc(alloc) = remote_alloc {
+//             let remote_dst_base = alloc.pe_base_offset(pe);
+//             let remote_dst_addr = remote_dst_base + offset;
+//             ShmemFuture {
+//                 op: Op::Put(src, CommAllocAddr(remote_dst_addr)),
+//                 spawned: false,
+//                 scheduler: scheduler.clone(),
+//                 counters,
+//             }
+//             .into()
+//         } else {
+//             panic!("invalid remote alloc for shmem put");
+//         }
+//     }
+//     fn put2<T: Remote>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         pe: usize,
+//         src: T,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> RdmaHandle<T> {
+//         return ShmemFuture {
+//             op: Op::Atomic,
+//             spawned: false,
+//             scheduler: scheduler.clone(),
+//             counters,
+//         }
+//         .into();
+//     }
+//     fn put_test<T: Dist>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         pe: usize,
+//         src: LamellarArrayRdmaInput<T>,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) {
+//         //-> RdmaHandle<T> {
+//         if let CommAllocInner::ShmemAlloc(alloc) = remote_alloc {
+//             let remote_dst_base = alloc.pe_base_offset(pe);
+//             let remote_dst_addr = CommAllocAddr(remote_dst_base + offset);
+//             let src_slice = src.as_slice();
+//             unsafe {
+//                 std::ptr::copy_nonoverlapping(
+//                     src_slice.as_ptr(),
+//                     remote_dst_addr.as_mut_ptr(),
+//                     src_slice.len(),
+//                 );
+//             }
+//         } else {
+//             panic!("invalid remote alloc for shmem put");
+//         }
+//     }
+//     fn put_all<T: Remote>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         src: CommSlice<T>,
+//         remote_alloc: CommAllocInner,
+//         offset: usize,
+//     ) -> RdmaHandle<T> {
+//         self.put_amt.fetch_add(
+//             src.len() * std::mem::size_of::<T>() * self.num_pes,
+//             Ordering::SeqCst,
+//         );
+//         if let CommAllocInner::ShmemAlloc(alloc) = remote_alloc {
+//             let pe_addrs = (0..self.num_pes)
+//                 .map(|pe| {
+//                     let real_dst_base = alloc.pe_base_offset(pe);
+//                     let real_dst_addr = real_dst_base + offset;
+//                     CommAllocAddr(real_dst_addr)
+//                 })
+//                 .collect::<Vec<_>>();
+//             ShmemFuture {
+//                 op: Op::PutAll(src, pe_addrs),
+//                 spawned: false,
+//                 scheduler: scheduler.clone(),
+//                 counters,
+//             }
+//             .into()
+//         } else {
+//             panic!("invalid remote alloc for shmem put");
+//         }
+//     }
+//     fn get<T: Remote>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         pe: usize,
+//         src: CommAllocInner,
+//         offset: usize,
+//         dst: CommSlice<T>,
+//     ) -> RdmaHandle<T> {
+//         self.get_amt
+//             .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+//         if let CommAllocInner::ShmemAlloc(alloc) = src {
+//             let remote_src_base = alloc.pe_base_offset(pe);
+//             let remote_src_addr = remote_src_base + offset;
+//             ShmemFuture {
+//                 op: Op::Get(CommAllocAddr(remote_src_addr), dst),
+//                 spawned: false,
+//                 scheduler: scheduler.clone(),
+//                 counters,
+//             }
+//             .into()
+//         } else {
+//             panic!("invalid remote alloc for shmem get");
+//         }
+//     }
+//     fn get_test<T: Remote>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         pe: usize,
+//         src: CommAllocInner,
+//         offset: usize,
+//     ) -> T {
+//         if let CommAllocInner::ShmemAlloc(alloc) = src {
+//             let src_addr = CommAllocAddr(alloc.pe_base_offset(pe) + offset);
+//             unsafe { src_addr.as_ptr::<T>().read() }
+//         } else {
+//             panic!("invalid remote alloc for shmem get");
+//         }
+//     }
+//     fn at<T: Remote>(
+//         &self,
+//         scheduler: &Arc<Scheduler>,
+//         counters: Vec<Arc<AMCounters>>,
+//         pe: usize,
+//         src: CommAllocInner,
+//         offset: usize,
+//     ) -> RdmaAtHandle<T> {
+//         self.get_amt
+//             .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
+//         if let CommAllocInner::ShmemAlloc(alloc) = src {
+//             let remote_src_base = alloc.pe_base_offset(pe);
+//             let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+//             ShmemAtFuture {
+//                 src: remote_src_addr,
+//                 spawned: false,
+//                 scheduler: scheduler.clone(),
+//                 counters,
+//                 result: MaybeUninit::uninit(),
+//             }
+//             .into()
+//         } else {
+//             panic!("invalid remote alloc for shmem at");
+//         }
+//     }
+// }
+
+impl CommAllocRdma for Arc<ShmemAlloc> {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<T>>,
         pe: usize,
-        src: CommSlice<T>,
-        remote_addr: CommAllocAddr,
+        offset: usize,
     ) -> RdmaHandle<T> {
-        self.put_amt
-            .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        let alloc = self.alloc_lock.read();
-        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(remote_addr.0) {
-                let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
-                return ShmemFuture {
-                    op: Op::Put(src, real_dst_addr),
-                    spawned: false,
-                    scheduler: scheduler.clone(),
-                    counters,
-                }
-                .into();
-            }
-        }
-        panic!("shmem segment invalid for put");
-    }
-    fn put2<T: Remote>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        pe: usize,
-        src: T,
-        remote_addr: CommAllocAddr,
-    ) -> RdmaHandle<T> {
-        return ShmemFuture {
-            op: Op::Atomic,
+        ShmemFuture {
+            op: Op::Put(src.into(), CommAllocAddr(self.pe_base_offset(pe) + offset)),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
         }
-        .into();
+        .into()
     }
-    fn put_test<T: Dist>(
+    fn put_unmanaged<T: Remote>(
         &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInput<T>>,
         pe: usize,
-        src: LamellarArrayRdmaInput<T>,
-        remote_addr: CommAllocAddr,
+        offset: usize,
     ) {
-        //-> RdmaHandle<T> {
-        let alloc = self.alloc_lock.read();
-        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(remote_addr.0) {
-                let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
-                let src_slice = src.as_slice();
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        src_slice.as_ptr(),
-                        real_dst_addr.as_mut_ptr(),
-                        src_slice.len(),
-                    );
-                }
-            }
-        }
     }
     fn put_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: CommSlice<T>,
-        remote_addr: CommAllocAddr,
+        src: impl Into<MemregionRdmaInput<T>>,
+        offset: usize,
     ) -> RdmaHandle<T> {
-        self.put_amt.fetch_add(
-            src.len() * std::mem::size_of::<T>() * self.num_pes,
-            Ordering::SeqCst,
-        );
-        let alloc = self.alloc_lock.read();
-        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(remote_addr.0) {
-                let pe_addrs = (0..self.num_pes)
-                    .map(|pe| {
-                        let real_dst_base = shmem.base_addr() + size * addrs[&pe].1;
-                        let real_dst_addr = real_dst_base + (remote_addr.0 - addr);
-                        real_dst_addr
-                    })
-                    .collect::<Vec<_>>();
-                return ShmemFuture {
-                    op: Op::PutAll(src, pe_addrs),
-                    spawned: false,
-                    scheduler: scheduler.clone(),
-                    counters,
-                }
-                .into();
-            }
+        let pe_addrs = (0..self.num_pes())
+            .map(|pe| {
+                let real_dst_base = self.pe_base_offset(pe);
+                let real_dst_addr = real_dst_base + offset;
+                CommAllocAddr(real_dst_addr)
+            })
+            .collect::<Vec<_>>();
+        ShmemFuture {
+            op: Op::PutAll(src.into(), pe_addrs),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
         }
-        panic!("shmem segment invalid for put all");
+        .into()
     }
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
-        src_addr: CommAllocAddr,
+        offset: usize,
         dst: CommSlice<T>,
     ) -> RdmaHandle<T> {
-        self.get_amt
-            .fetch_add(dst.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        let alloc = self.alloc_lock.read();
-        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(src_addr.into()) {
-                let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_src_addr = real_src_base + (src_addr - *addr);
-                return ShmemFuture {
-                    op: Op::Get(real_src_addr, dst),
-                    spawned: false,
-                    scheduler: scheduler.clone(),
-                    counters,
-                }
-                .into();
-            }
+        ShmemFuture {
+            op: Op::Get(CommAllocAddr(self.pe_base_offset(pe) + offset), dst),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
         }
-        panic!("shmem segment invalid for get");
-    }
-    fn get_test<T: Remote>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        pe: usize,
-        src: CommAllocAddr,
-    ) -> T {
-        unsafe { src.as_ptr::<T>().read() }
+        .into()
     }
     fn at<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
-        src: CommAllocAddr,
+        offset: usize,
     ) -> RdmaAtHandle<T> {
-        self.get_amt
-            .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
-        let alloc = self.alloc_lock.read();
-        for (addr, (shmem, size, addrs)) in alloc.0.iter() {
-            if shmem.contains(src.into()) {
-                let real_src_base = shmem.base_addr() + size * addrs[&pe].1;
-                let real_src_addr = real_src_base + (src - *addr);
-                return ShmemAtFuture {
-                    src: real_src_addr,
-                    spawned: false,
-                    scheduler: scheduler.clone(),
-                    counters,
-                    result: MaybeUninit::uninit(),
-                }
-                .into();
-            }
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemAtFuture {
+            src: remote_src_addr,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
         }
-        panic!("shmem segment invalid for at");
+        .into()
     }
 }

@@ -3,16 +3,18 @@ use crate::{
     barrier::{Barrier, BarrierHandle},
     env_var::config,
     lamellae::{
-        AllocationType, CommAlloc, CommInfo, CommMem, CommProgress, Lamellae, LamellaeShutdown,
+        AllocationType, CommAlloc, CommAllocInner, CommAllocType, CommInfo, CommMem, CommProgress,
+        Lamellae, LamellaeShutdown, Remote,
     },
     lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT},
     lamellar_env::LamellarEnv,
     lamellar_request::*,
     lamellar_world::LamellarWorld,
-    memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
     memregion::{
-        one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
-        MemoryRegion, RemoteMemoryRegion,
+        handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
+        one_sided::OneSidedMemoryRegion,
+        shared::SharedMemoryRegion,
+        Dist, LamellarMemoryRegion, MemoryRegion, RemoteMemoryRegion,
     },
     scheduler::{LamellarTask, ReqId, Scheduler},
     warnings::RuntimeWarning,
@@ -592,7 +594,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
 
 impl RemoteMemoryRegion for Arc<LamellarTeam> {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn try_alloc_shared_mem_region<T: Dist>(
+    fn try_alloc_shared_mem_region<T: Remote>(
         &self,
         size: usize,
     ) -> FallibleSharedMemoryRegionHandle<T> {
@@ -613,7 +615,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
+    fn alloc_shared_mem_region<T: Remote>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         // self.team.barrier.barrier();
@@ -631,7 +633,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn try_alloc_one_sided_mem_region<T: Dist>(
+    fn try_alloc_one_sided_mem_region<T: Remote>(
         &self,
         size: usize,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
@@ -641,7 +643,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+    fn alloc_one_sided_mem_region<T: Remote>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         assert!(self.panic.load(Ordering::SeqCst) == 0);
 
         let mut lmr = OneSidedMemoryRegion::try_new(size, &self.team);
@@ -923,6 +925,7 @@ impl LamellarTeamRT {
                 std::mem::align_of::<*const LamellarTeamRT>(),
             )
             .expect("unable to allocate remote_ptr_alloc");
+        // println!("remote_ptr_alloc created {:?}", remote_ptr_alloc);
 
         let team = LamellarTeamRT {
             world: None,
@@ -1084,13 +1087,21 @@ impl LamellarTeamRT {
         //     self.team_counters.send_req_cnt.load(Ordering::SeqCst),
         //     self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
         // );
-        let team_ptr: *const LamellarTeamRT = unsafe { *self.remote_ptr_alloc.as_ptr() };
-        trace!("dropping team_ptr: {:?}", team_ptr);
         unsafe {
+            let team_ptr: *mut LamellarTeamRT = *self.remote_ptr_alloc.as_ptr();
+            self.lamellae.comm().free(self.remote_ptr_alloc.clone());
+            (team_ptr).as_mut().unwrap().remote_ptr_alloc = CommAlloc {
+                inner_alloc: CommAllocInner::Raw(0, 0),
+                alloc_type: CommAllocType::Fabric,
+            };
+            trace!("dropping team_ptr: {:?}", team_ptr);
+
             let arc_team = Arc::from_raw(team_ptr);
+
             // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
             Pin::new_unchecked(arc_team); //allows us to get rid of the extra reference created in new
         }
+
         // println!("team destroyed")
     }
     #[allow(dead_code)]
@@ -2395,7 +2406,7 @@ impl Drop for LamellarTeamRT {
         //     Arc::strong_count(&self.world_counters)
         // );
         // println!("removing {:?} ", self.team_hash);
-        self.lamellae.comm().free(self.remote_ptr_alloc.clone());
+        // self.lamellae.comm().free(self.remote_ptr_alloc.clone());
         // println!("Lamellae Cnt: {:?}", Arc::strong_count(&self.lamellae));
         // println!("scheduler Cnt: {:?}", Arc::strong_count(&self.scheduler));
         // println!("LamellarTeamRT dropped {:?}", self.team_hash);
@@ -2410,6 +2421,7 @@ impl Drop for LamellarTeamRT {
         //         println!("Deserialize: {:?}", duration.load(Ordering::SeqCst));
         //     }
         // }
+        // println!("LamellarTeamRT dropped");
     }
 }
 

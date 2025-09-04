@@ -1,8 +1,12 @@
 use super::{
-    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommRdma, CommSlice},
+    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
     Comm, Lamellae, RemoteSerializedData, SerializedData,
 };
-use crate::{env_var::config, lamellae::Des, scheduler::Scheduler};
+use crate::{
+    env_var::config,
+    lamellae::{CommAllocRdma, Des},
+    scheduler::Scheduler,
+};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::num::Wrapping;
@@ -653,14 +657,23 @@ impl InnerCQ {
                 if send_buf[dst].dsize > 0 {
                     let recv_buffer = self.recv_buffer.lock();
                     trace! {"sending data to dst {:?} {:?} {:?} {:?}, sending cmd {:?} {:?} {:?}",recv_buffer.index_addr(self.my_pe),send_buf[dst],send_buf[dst].as_bytes(),send_buf, send_buf[dst],send_buf.sub_slice(dst..=dst),send_buf.sub_slice(dst..=dst)[0]};
-                    let _ = self
-                        .comm
+                    // let _ = self
+                    //     .comm
+                    //     .put(
+                    //         &self.scheduler,
+                    //         vec![],
+                    //         dst,
+                    //         send_buf.sub_slice(dst..=dst),
+                    //         recv_buffer.index_addr(self.my_pe),
+                    //     )
+                    //     .spawn();
+                    let _ = recv_buffer
                         .put(
                             &self.scheduler,
                             vec![],
-                            dst,
                             send_buf.sub_slice(dst..=dst),
-                            recv_buffer.index_addr(self.my_pe),
+                            dst,
+                            self.my_pe,
                         )
                         .spawn();
                     self.put_amt
@@ -814,14 +827,23 @@ impl InnerCQ {
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
                         // println!("putting alloc cmd to pe {:?}", pe);
-                        let _ = self
-                            .comm
+                        // let _ = self
+                        //     .comm
+                        //     .put(
+                        //         &self.scheduler,
+                        //         vec![],
+                        //         pe,
+                        //         alloc_buf.sub_slice(self.my_pe..=self.my_pe),
+                        //         alloc_buf.index_addr(self.my_pe),
+                        //     )
+                        //     .spawn();
+                        let _ = alloc_buf
                             .put(
                                 &self.scheduler,
                                 vec![],
-                                pe,
                                 alloc_buf.sub_slice(self.my_pe..=self.my_pe),
-                                alloc_buf.index_addr(self.my_pe),
+                                pe,
+                                self.my_pe,
                             )
                             .spawn();
                     }
@@ -852,14 +874,23 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting clear cmd to pe {:?}", pe);
-                    let _ = self
-                        .comm
+                    // let _ = self
+                    //     .comm
+                    //     .put(
+                    //         &self.scheduler,
+                    //         vec![],
+                    //         pe,
+                    //         alloc_buf.sub_slice(self.my_pe..=self.my_pe),
+                    //         alloc_buf.index_addr(self.my_pe),
+                    //     )
+                    //     .spawn();
+                    let _ = alloc_buf
                         .put(
                             &self.scheduler,
                             vec![],
-                            pe,
                             alloc_buf.sub_slice(self.my_pe..=self.my_pe),
-                            alloc_buf.index_addr(self.my_pe),
+                            pe,
+                            self.my_pe,
                         )
                         .spawn();
                 }
@@ -893,14 +924,23 @@ impl InnerCQ {
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
                     // println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    let _ = self
-                        .comm
+                    // let _ = self
+                    //     .comm
+                    //     .put(
+                    //         &self.scheduler,
+                    //         vec![],
+                    //         pe,
+                    //         panic_buf.sub_slice(self.my_pe..=self.my_pe),
+                    //         panic_buf.index_addr(self.my_pe),
+                    //     )
+                    //     .spawn();
+                    let _ = panic_buf
                         .put(
                             &self.scheduler,
                             vec![],
-                            pe,
                             panic_buf.sub_slice(self.my_pe..=self.my_pe),
-                            panic_buf.index_addr(self.my_pe),
+                            pe,
+                            self.my_pe,
                         )
                         .spawn();
                 }
@@ -922,15 +962,26 @@ impl InnerCQ {
             self.release_cmd.as_addr(),
             cmd.daddr + offset_of!(CmdMsg, cmd)
         );
-        let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-        let _ = self
-            .comm
+        // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
+        let (local_daddr_alloc, offset) =
+            self.comm.local_alloc_and_offset_from_addr(dst, cmd.daddr);
+        // let _ = self
+        //     .comm
+        //     .put(
+        //         &self.scheduler,
+        //         vec![],
+        //         dst,
+        //         self.release_cmd.cmd_as_comm_slice(),
+        //         local_daddr + offset_of!(CmdMsg, cmd),
+        //     )
+        //     .spawn();
+        let _ = local_daddr_alloc
             .put(
                 &self.scheduler,
                 vec![],
-                dst,
                 self.release_cmd.cmd_as_comm_slice(),
-                local_daddr + offset_of!(CmdMsg, cmd),
+                dst,
+                offset + offset_of!(CmdMsg, cmd),
             )
             .spawn();
     }
@@ -946,15 +997,26 @@ impl InnerCQ {
             self.release_cmd.as_addr(),
             cmd.daddr + offset_of!(CmdMsg, cmd)
         );
-        let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-        let _ = self
-            .comm
+        // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
+        let (local_daddr_alloc, offset) =
+            self.comm.local_alloc_and_offset_from_addr(dst, cmd.daddr);
+        // let _ = self
+        //     .comm
+        //     .put(
+        //         &self.scheduler,
+        //         vec![],
+        //         dst,
+        //         self.free_cmd.cmd_as_comm_slice(),
+        //         local_daddr + offset_of!(CmdMsg, cmd),
+        //     )
+        //     .spawn();
+        let _ = local_daddr_alloc
             .put(
                 &self.scheduler,
                 vec![],
-                dst,
                 self.free_cmd.cmd_as_comm_slice(),
-                local_daddr + offset_of!(CmdMsg, cmd),
+                dst,
+                offset + offset_of!(CmdMsg, cmd),
             )
             .spawn();
     }
@@ -974,13 +1036,22 @@ impl InnerCQ {
                     let recv_buffer = self.recv_buffer.lock();
                     // trace!("sending cmd {:?}", send_buf);
                     trace!("sending print to {dst}");
-                    self.comm
+                    // self.comm
+                    //     .put(
+                    //         &self.scheduler,
+                    //         vec![],
+                    //         dst,
+                    //         send_buf.sub_slice(dst..=dst),
+                    //         recv_buffer.index_addr(dst),
+                    //     )
+                    //     .await;
+                    recv_buffer
                         .put(
                             &self.scheduler,
                             vec![],
-                            dst,
                             send_buf.sub_slice(dst..=dst),
-                            recv_buffer.index_addr(dst),
+                            dst,
+                            dst,
                         )
                         .await;
                     break;
@@ -1017,16 +1088,22 @@ impl InnerCQ {
     //update cmdbuffers to include a hash the wait on that here
     #[tracing::instrument(skip(self), level = "debug")]
     async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: CommSlice<u8>) {
-        let local_daddr = self.comm.local_addr(src, cmd.daddr);
+        // let local_daddr = self.comm.local_addr(src, cmd.daddr);
+        // let local_daddr_alloc = self.comm.get_alloc(local_daddr).expect("invalid daddr");
+        let (local_daddr_alloc, offset) =
+            self.comm.local_alloc_and_offset_from_addr(src, cmd.daddr);
         trace!("command queue getting data from {src}, {:?}", cmd.daddr);
-        self.comm
-            .get(
-                &self.scheduler,
-                vec![],
-                src,
-                local_daddr,
-                data_slice.clone(),
-            )
+        // self.comm
+        //     .get(
+        //         &self.scheduler,
+        //         vec![],
+        //         src,
+        //         local_daddr,
+        //         data_slice.clone(),
+        //     )
+        //     .await;
+        local_daddr_alloc
+            .get(&self.scheduler, vec![], src, offset, data_slice.clone())
             .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
@@ -1056,16 +1133,22 @@ impl InnerCQ {
         let len = ser_data.len();
         let data_slice = ser_data.header_and_data_as_bytes_mut();
         trace!("get_serialized_data {:?} {:?} {:x}", src, cmd, cmd.daddr);
-        let local_daddr = self.comm.local_addr(src, cmd.daddr);
+        // let local_daddr = self.comm.local_addr(src, cmd.daddr);
+        // let local_daddr_alloc = self.comm.get_alloc(local_daddr).expect("invalid daddr");
+        let (local_daddr_alloc, offset) =
+            self.comm.local_alloc_and_offset_from_addr(src, cmd.daddr);
         // println!("command queue getting serialized data from {src}");
-        self.comm
-            .get(
-                &self.scheduler,
-                vec![],
-                src,
-                local_daddr,
-                data_slice.clone(),
-            )
+        // self.comm
+        //     .get(
+        //         &self.scheduler,
+        //         vec![],
+        //         src,
+        //         local_daddr,
+        //         data_slice.clone(),
+        //     )
+        //     .await;
+        local_daddr_alloc
+            .get(&self.scheduler, vec![], src, offset, data_slice.clone())
             .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
@@ -1074,7 +1157,7 @@ impl InnerCQ {
             calc_hash(data_slice.as_ptr() as usize, len),
             cmd.msg_hash
         );
-        
+
         while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {

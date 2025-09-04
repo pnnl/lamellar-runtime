@@ -1,13 +1,17 @@
 use crate::{
+    active_messaging::*,
     barrier::BarrierHandle,
-    lamellae::{create_lamellae, Backend, CommInfo, CommProgress, Lamellae, LamellaeInit},
+    config,
+    lamellae::{create_lamellae, Backend, CommInfo, CommProgress, Lamellae, LamellaeInit, Remote},
     lamellar_arch::LamellarArch,
     lamellar_env::LamellarEnv,
     lamellar_team::{LamellarTeam, LamellarTeamRT},
-    memregion::handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
-    memregion::{one_sided::OneSidedMemoryRegion, Dist, RemoteMemoryRegion},
+    memregion::{
+        handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
+        one_sided::OneSidedMemoryRegion,
+        Dist, RemoteMemoryRegion,
+    },
     scheduler::{create_scheduler, ExecutorType, LamellarTask},
-    {active_messaging::*, config},
 };
 // use log::trace;
 
@@ -139,7 +143,7 @@ impl ActiveMessaging for LamellarWorld {
 
 impl RemoteMemoryRegion for LamellarWorld {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn try_alloc_shared_mem_region<T: Dist>(
+    fn try_alloc_shared_mem_region<T: Remote>(
         &self,
         size: usize,
     ) -> FallibleSharedMemoryRegionHandle<T> {
@@ -147,12 +151,12 @@ impl RemoteMemoryRegion for LamellarWorld {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
+    fn alloc_shared_mem_region<T: Remote>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
         self.team.alloc_shared_mem_region::<T>(size)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn try_alloc_one_sided_mem_region<T: Dist>(
+    fn try_alloc_one_sided_mem_region<T: Remote>(
         &self,
         size: usize,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
@@ -160,7 +164,7 @@ impl RemoteMemoryRegion for LamellarWorld {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn alloc_one_sided_mem_region<T: Dist>(&self, size: usize) -> OneSidedMemoryRegion<T> {
+    fn alloc_one_sided_mem_region<T: Remote>(&self, size: usize) -> OneSidedMemoryRegion<T> {
         self.team.alloc_one_sided_mem_region::<T>(size)
     }
 }

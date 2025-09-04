@@ -2090,6 +2090,7 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {
             impl Dist for #typeident {}
+            // impl Remote for #typeident {}
             // impl Dist for Option< #typeident > {}
             impl crate::array::operations::ArrayOps for #typeident {}
             // impl crate::array::operations::ArrayOps for Option< #typeident > {}
@@ -2144,6 +2145,7 @@ pub(crate) fn __generate_ops_for_bool_rt() -> TokenStream {
     let the_type = syn::parse_str::<syn::Type>("bool").unwrap();
     output.extend(quote! {
         impl Dist for bool {}
+        // impl Remote for bool {}
         impl crate::array::operations::ArrayOps for bool {}
         impl ElementBitWiseOps for bool {}
         impl ElementCompareEqOps for bool {}

@@ -1,14 +1,15 @@
+use core::panic;
+use std::sync::Arc;
+
 use tracing::trace;
 
 use crate::lamellae::{
     comm::{error::AllocResult, CommMem},
-    AllocError, CommAlloc, CommAllocAddr, CommAllocInfo, CommAllocType,
+    local_lamellae::comm::LocalAlloc,
+    AllocError, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
 };
 
-use super::{
-    comm::{LocalComm, MyPtr},
-    AllocationType,
-};
+use super::{comm::LocalComm, AllocationType};
 
 impl CommMem for LocalComm {
     #[tracing::instrument(skip_all, level = "debug")]
@@ -21,17 +22,15 @@ impl CommMem for LocalComm {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         let data_addr = data_ptr as usize;
+        let alloc = Arc::new(LocalAlloc {
+            ptr: data_ptr as *mut u8,
+            layout: layout,
+        });
         let mut allocs = self.allocs.lock();
-        allocs.insert(
-            data_addr,
-            MyPtr {
-                ptr: data_ptr as *mut u8,
-                layout: layout,
-            },
-        );
-        trace!("new alloc: {:x} {}", data_addr, size);
+        allocs.insert(data_addr, alloc.clone());
+        trace!("new alloc: {:?} {}", alloc.ptr, alloc.layout.size());
         Ok(CommAlloc {
-            info: CommAllocInfo::Raw(data_addr, size),
+            inner_alloc: CommAllocInner::LocalAlloc(alloc),
             alloc_type: CommAllocType::Fabric,
         })
     }
@@ -53,17 +52,15 @@ impl CommMem for LocalComm {
         let layout = std::alloc::Layout::from_size_align(size, align).unwrap();
         let data_ptr = unsafe { std::alloc::alloc(layout) };
         let data_addr = data_ptr as usize;
+        let alloc = Arc::new(LocalAlloc {
+            ptr: data_ptr,
+            layout,
+        });
         let mut allocs = self.heap_allocs.lock();
-        allocs.insert(
-            data_addr,
-            MyPtr {
-                ptr: data_ptr,
-                layout,
-            },
-        );
+        allocs.insert(data_addr, alloc.clone());
         trace!("new rt alloc: {:x} {}", data_addr, size);
         Ok(CommAlloc {
-            info: CommAllocInfo::Raw(data_addr, size),
+            inner_alloc: CommAllocInner::LocalAlloc(alloc),
             alloc_type: CommAllocType::RtHeap,
         })
     }
@@ -77,11 +74,10 @@ impl CommMem for LocalComm {
         debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
         let mut allocs = self.heap_allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
+            trace!("freeing alloc: {:x}", alloc.comm_addr());
             unsafe {
-                trace!("freeing rt alloc: {:x}", alloc.comm_addr());
                 std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
-                // let _ = Box::from_raw(data_ptr.ptr);
-            }; //it will free when dropping from scope
+            };
         }
     }
 
@@ -108,26 +104,45 @@ impl CommMem for LocalComm {
     fn local_addr(&self, _remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
         CommAllocAddr(remote_addr)
     }
+
+    fn local_alloc_and_offset_from_addr(
+        &self,
+        _remote_pe: usize,
+        remote_addr: usize,
+    ) -> (CommAlloc, usize) {
+        let allocs = self.allocs.lock();
+        for (_addr, alloc) in allocs.iter() {
+            if alloc.start() <= remote_addr && remote_addr < alloc.start() + alloc.num_bytes() {
+                return (alloc.clone().into(), remote_addr - alloc.start());
+            }
+        }
+        let allocs = self.heap_allocs.lock();
+        for (_addr, alloc) in allocs.iter() {
+            if alloc.start() <= remote_addr && remote_addr < alloc.start() + alloc.num_bytes() {
+                return (alloc.clone().into(), remote_addr - alloc.start());
+            }
+        }
+        panic!(
+            "failed to find local alloc for remote addr: {}",
+            remote_addr
+        );
+    }
     fn remote_addr(&self, _pe: usize, local_addr: usize) -> CommAllocAddr {
         CommAllocAddr(local_addr)
     }
 
     fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        let allocs: parking_lot::lock_api::MutexGuard<
-            '_,
-            parking_lot::RawMutex,
-            std::collections::HashMap<usize, MyPtr>,
-        > = self.allocs.lock();
+        let allocs = self.allocs.lock();
         if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {
-                info: CommAllocInfo::Raw(addr.0, alloc.layout.size()),
+                inner_alloc: CommAllocInner::LocalAlloc(alloc.clone()),
                 alloc_type: CommAllocType::Fabric,
             });
         }
         let allocs = self.heap_allocs.lock();
         if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {
-                info: CommAllocInfo::Raw(addr.0, alloc.layout.size()),
+                inner_alloc: CommAllocInner::LocalAlloc(alloc.clone()),
                 alloc_type: CommAllocType::RtHeap,
             });
         }

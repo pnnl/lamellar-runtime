@@ -4,7 +4,6 @@ use crate::array::native_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::LamellarWrite;
 use crate::array::*;
-use crate::lamellae::comm::CommAtomic;
 use crate::lamellae::CommSlice;
 use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
 
