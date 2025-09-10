@@ -3,7 +3,7 @@ use lamellar::darc::prelude::*;
 use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 
 // const ARRAY_LEN: usize = 1 * 1024 * 1024 * 1024;
 
@@ -18,8 +18,8 @@ struct DataAM {
 #[lamellar::am]
 impl LamellarAM for DataAM {
     async fn exec() {
-        let mut rng = rand::thread_rng();
-        let pes = Uniform::from(0..lamellar::team.num_pes());
+        let mut rng = rand::rng();
+        let pes = Uniform::try_from(0..lamellar::team.num_pes()).unwrap();
         // println!("depth {:?} {:?}",self.depth, self.path);
         let mut path = self.path.clone();
         path.push(lamellar::current_pe);
@@ -48,8 +48,8 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
 
-    let mut rng = rand::thread_rng();
-    let pes = Uniform::from(0..num_pes);
+    let mut rng = rand::rng();
+    let pes = Uniform::try_from(0..num_pes).unwrap();
     let darc = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
     let width = 10;
     let s = Instant::now();

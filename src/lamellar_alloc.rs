@@ -624,17 +624,17 @@ mod tests {
         for _i in 0..10 {
             let alloc_clone = alloc.clone();
             let t = std::thread::spawn(move || {
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 let mut addrs: Vec<usize> = Vec::new();
                 let mut i = 0;
                 while i < 100000 {
-                    if rng.gen_range(0..2) == 0 || addrs.len() == 0 {
+                    if rng.random_range(0..2) == 0 || addrs.is_empty() {
                         if let Some(addr) = alloc_clone.try_malloc(1, 1) {
                             addrs.push(addr);
                             i += 1;
                         }
                     } else {
-                        let index = rng.gen_range(0..addrs.len());
+                        let index = rng.random_range(0..addrs.len());
                         let addr = addrs.remove(index);
                         alloc_clone
                             .free(addr)

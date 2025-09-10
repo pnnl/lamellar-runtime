@@ -222,6 +222,8 @@ extern crate lazy_static;
 extern crate memoffset;
 //#[doc(hidden)]
 pub extern crate serde;
+
+use std::io::Cursor;
 //#[doc(hidden)]
 pub use serde::*;
 
@@ -303,7 +305,6 @@ pub use inventory;
 
 //#[doc(hidden)]
 pub use bincode;
-use bincode::Options;
 
 // #[macro_use]
 // pub extern crate custom_derive;
@@ -316,9 +317,9 @@ pub use custom_derive;
 pub use newtype_derive;
 
 lazy_static! {
-    pub(crate) static ref BINCODE: bincode::config::WithOtherTrailing<bincode::DefaultOptions, bincode::config::AllowTrailing> =
-        bincode::DefaultOptions::new().allow_trailing_bytes();
+    pub(crate) static ref BINCODE: bincode::config::Configuration<bincode::config::LittleEndian, bincode::config::Fixint, bincode::config::NoLimit> = bincode::config::legacy();
 }
+
 // use std::sync::atomic::AtomicUsize;
 // use std::sync::atomic::Ordering::SeqCst;
 // use std::sync::Arc;
@@ -339,9 +340,9 @@ where
     // let start = std::time::Instant::now();
     let res = if var {
         // Ok(BINCODE.serialize(obj)?)
-        Ok(bincode::serialize(obj)?)
+        Ok(bincode::serde::encode_to_vec(obj, *BINCODE)?)
     } else {
-        Ok(bincode::serialize(obj)?)
+        Ok(bincode::serde::encode_to_vec(obj, *BINCODE)?)
     };
     // unsafe {
     //     SERIALIZE_TIMER
@@ -359,9 +360,9 @@ where
     // let start = std::time::Instant::now();
     let res = if var {
         // BINCODE.serialized_size(obj).unwrap() as usize
-        bincode::serialized_size(obj).unwrap() as usize
+        bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
     } else {
-        bincode::serialized_size(obj).unwrap() as usize
+        bincode::serde::encode_to_vec(obj, *BINCODE).unwrap().len()
     };
     // unsafe {
     //     SERIALIZE_SIZE_TIMER
@@ -377,11 +378,12 @@ where
     T: serde::Serialize,
 {
     // let start = std::time::Instant::now();
+    let mut cursor = Cursor::new(buf);
     if var {
         // BINCODE.serialize_into(buf, obj)?;
-        bincode::serialize_into(buf, obj)?;
+        bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
     } else {
-        bincode::serialize_into(buf, obj)?;
+        bincode::serde::encode_into_std_write(obj, &mut cursor, *BINCODE)?;
     }
     // unsafe {
     //     SERIALIZE_TIMER
@@ -399,9 +401,9 @@ where
     // let start = std::time::Instant::now();
     let res = if var {
         // Ok(BINCODE.deserialize(bytes)?)
-        Ok(bincode::deserialize(bytes)?)
+        Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
     } else {
-        Ok(bincode::deserialize(bytes)?)
+        Ok(bincode::serde::borrow_decode_from_slice(bytes, *BINCODE)?.0)
     };
     // unsafe {
     //     DESERIALIZE_TIMER
