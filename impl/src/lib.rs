@@ -37,13 +37,10 @@ fn type_name(ty: &syn::Type) -> Option<String> {
 #[allow(dead_code)]
 fn get_impl_associated_type(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Type> {
     for ty in tys {
-        match ty {
-            syn::ImplItem::Type(ref item) => {
-                if item.ident.to_string() == name {
-                    return Some(item.ty.clone());
-                }
+        if let syn::ImplItem::Type(ref item) = ty {
+            if item.ident == name {
+                return Some(item.ty.clone());
             }
-            _ => (),
         }
     }
     None
@@ -51,24 +48,17 @@ fn get_impl_associated_type(name: String, tys: &Vec<syn::ImplItem>) -> Option<sy
 
 fn get_return_of_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Type> {
     for ty in tys {
-        match ty {
-            syn::ImplItem::Fn(ref item) => {
-                if item.sig.asyncness.is_some() {
-                    if item.sig.ident.to_string() == name {
-                        match item.sig.output.clone() {
-                            syn::ReturnType::Default => {
-                                return None;
-                            }
-                            syn::ReturnType::Type(_, item) => {
-                                return Some(*item);
-                            }
-                        }
-                    }
-                } else {
-                    abort!(item.sig.fn_token.span(),"implementing lamellar::am expects the exec function to be async (e.g. 'async fn exec(...)')")
+        if let syn::ImplItem::Fn(ref item) = ty {
+            if item.sig.asyncness.is_some() {
+                if item.sig.ident == name {
+                    return match item.sig.output.clone() {
+                        syn::ReturnType::Default => None,
+                        syn::ReturnType::Type(_, item) => Some(*item),
+                    };
                 }
+            } else {
+                abort!(item.sig.fn_token.span(),"implementing lamellar::am expects the exec function to be async (e.g. 'async fn exec(...)')")
             }
-            _ => (),
         }
     }
     None
@@ -76,13 +66,10 @@ fn get_return_of_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::T
 
 fn get_impl_method(name: String, tys: &Vec<syn::ImplItem>) -> Option<syn::Block> {
     for ty in tys {
-        match ty {
-            syn::ImplItem::Fn(ref item) => {
-                if item.sig.ident.to_string() == name {
-                    return Some(item.block.clone());
-                }
+        if let syn::ImplItem::Fn(ref item) = ty {
+            if item.sig.ident == name {
+                return Some(item.block.clone());
             }
-            _ => (),
         }
     }
     None
@@ -132,7 +119,7 @@ fn get_return_am_return_type(
                 .trim_matches(&['=', ' ', '"'][..])
                 .to_string();
             let mut return_type = "".to_string();
-            if the_am.find("->") != None {
+            if the_am.contains("->") {
                 let temp = the_am.split("->").collect::<Vec<&str>>();
                 return_type = temp
                     .last()
@@ -142,7 +129,7 @@ fn get_return_am_return_type(
                 the_am = temp[0].trim_matches(&[' ', '"'][..]).to_string();
             }
             let ret_am_type: syn::Type = syn::parse_str(&the_am).expect("invalid type");
-            if return_type.len() > 0 {
+            if !return_type.is_empty() {
                 // let ident = syn::Ident::new(&return_type, Span::call_site());
                 let ret_type: syn::Type = syn::parse_str(&return_type).expect("invalid type");
                 return Some((
@@ -157,18 +144,16 @@ fn get_return_am_return_type(
     None
 }
 
-fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
+fn check_for_am_group(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
     for arg in args.iter() {
         let t = arg.to_token_stream().to_string();
-        if t.contains("AmGroup") {
-            if t.contains("(") {
-                let attrs = &t[t.find("(").unwrap()
-                    ..t.find(")")
-                        .expect("missing \")\" in when declaring ArrayOp macro")
-                        + 1];
-                if attrs.contains("false") {
-                    return false;
-                }
+        if t.contains("AmGroup") && t.contains("(") {
+            let attrs = &t[t.find("(").unwrap()
+                ..t.find(")")
+                    .expect("missing \")\" in when declaring ArrayOp macro")
+                    + 1];
+            if attrs.contains("false") {
+                return false;
             }
         }
     }
@@ -179,12 +164,12 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
-/// use lamellar::darc::prelude*;
+/// use lamellar::darc::prelude::*;
 ///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
-///    originial_pe: usize,
-///    #[AmData(static)]
+///    original_pe: usize,
+///    #[AmGroup(static)]
 ///    msg: Darc<String>,
 /// }
 ///
@@ -192,12 +177,12 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 /// impl LamellarAM for HelloWorld {
 ///     async fn exec(self) {
 ///         println!(
-///             "{:?}}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             "{:?}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
 ///             self.msg,
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe.lock(),
+///             self.original_pe,
 ///         );
 ///     }
 /// }
@@ -205,10 +190,10 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, syn::Token![,]>) -> bool {
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     world.barrier();
-///     let msg = Darc::<String>::new(&world, "Hello World".to_string());
+///     let msg = Darc::<String>::new(&world, "Hello World".to_string()).block().unwrap();
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
-///         originial_pe: my_pe,
+///         original_pe: my_pe,
 ///         msg: msg,
 ///     });
 ///
@@ -227,6 +212,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 
 ///```
 /// use lamellar::active_messaging::prelude::*;
+/// use std::sync::{Arc, Mutex};
 ///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
@@ -330,12 +316,10 @@ fn parse_am(
         } else {
             quote! {#[lamellar_impl::AmLocalDataRT]}
         }
+    } else if !local {
+        quote! {#[#lamellar::AmData]}
     } else {
-        if !local {
-            quote! {#[#lamellar::AmData]}
-        } else {
-            quote! {#[#lamellar::AmLocalData]}
-        }
+        quote! {#[#lamellar::AmLocalData]}
     };
 
     let am_group_data_header = quote! {#[#lamellar::AmGroupData]};
@@ -438,7 +422,7 @@ fn parse_am(
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
 ///    originial_pe: usize,
-///    #[AmData(static)]
+///    #[AmGroup(static)]
 ///    msg: Darc<String>,
 /// }
 ///
@@ -446,12 +430,12 @@ fn parse_am(
 /// impl LamellarAM for HelloWorld {
 ///     async fn exec(self) {
 ///         println!(
-///             "{:?}}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             "{:?}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
 ///             self.msg,
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe.lock(),
+///             self.originial_pe,
 ///         );
 ///     }
 /// }
@@ -459,7 +443,7 @@ fn parse_am(
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     world.barrier();
-///     let msg = Darc::<String>::new(&world, "Hello World".to_string());
+///     let msg = Darc::<String>::new(&world, "Hello World".to_string()).block().unwrap();
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
 ///         originial_pe: my_pe,
@@ -487,6 +471,8 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
+///
+/// use std::sync::{Arc, Mutex};
 ///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
@@ -621,13 +607,12 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 /// // this import includes everything we need
 /// use lamellar::array::prelude::*;
 ///
-///
 /// #[lamellar::AmData(
 ///     // Lamellar traits
 ///     ArrayOps(Arithmetic,CompExEps,Shift), // needed to derive various LamellarArray Op traits (provided as a list)
 ///     Default,       // needed to be able to initialize a LamellarArray
 ///     //  Notice we use `lamellar::AmData` instead of `derive`
-///     //  for common traits, e.g. Debug, Clone.    
+///     //  for common traits, e.g. Debug, Clone.
 ///     PartialEq,     // needed for CompareExchangeEpsilonOps
 ///     PartialOrd,    // needed for CompareExchangeEpsilonOps
 ///     Debug,         // any addition traits you want derived
@@ -686,24 +671,30 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///     }
 /// }
 /// impl std::ops::ShlAssign for Custom {
-///     fn shl_assign(&mut self,other: Custom){
+///     fn shl_assign(&mut self, other: Self){
 ///         self.int <<= other.int;
 ///     }
 /// }
 ///
 /// impl std::ops::ShrAssign for Custom {
-///     fn shr_assign(&mut self,other: Custom){
+///     fn shr_assign(&mut self, other: Self){
 ///         self.int >>= other.int;
 ///     }
+/// }
+///
+/// impl std::ops::RemAssign for Custom {
+///     fn rem_assign(&mut self, other: Self) {
+///        self.int %= other.int;
+///    }
 /// }
 ///
 /// fn main(){
 ///
 ///     // initialize
 ///     // -----------
-///     
+///
 ///     let world = LamellarWorldBuilder::new().build(); // the world
-///     
+///
 ///     let array =  // the atomic distributed array
 ///         AtomicArray::<Custom>::new(&world,3,Distribution::Block).block();
 ///
@@ -713,7 +704,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///         .enumerate()
 ///         .for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
 ///     array.wait_all();
-///     
+///
 ///     // call various operations on the array!
 ///     // -------------------------------------
 ///
@@ -727,23 +718,23 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///         array.wait_all();
 ///
 ///         println!();
-///         println!("batch compare/exchange:");    
+///         println!("batch compare/exchange:");
 ///         let indices = vec![0,1,2,];
 ///         let current = val;
 ///         let new = Custom{int: 1, float: 0.0};
 ///         let epsilon = Custom{int: 0, float: 0.01};
 ///         let _results = array.batch_compare_exchange_epsilon(indices,current,new,epsilon).await;
 ///         println!();
-///         println!("(1) the updatd array");
+///         println!("(1) the updated array");
 ///         array.dist_iter().enumerate().for_each(|(i,entry)| println!("entry {:?}: {:?}", i, entry ) );
 ///         array.wait_all();
 ///         println!();
-///         println!("(2) the return values");        
+///         println!("(2) the return values");
 ///         for (i, entry) in _results.iter().enumerate() { println!("entry {:?}: {:?}", i, entry ) }
 ///     });
 ///
 ///     // inspect the results
-///     // -------------------------------------    
+///     // -------------------------------------
 ///     // NB:  because thewe're working with multithreaded async
 ///     //      environments, entries may be printed out of order
 ///     //
@@ -769,7 +760,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///     // (2) the return values
 ///     // entry 0: Ok(Custom { int: 1, float: 0.01 })
 ///     // entry 1: Err(Custom { int: 0, float: 0.0 })
-///     // entry 2: Err(Custom { int: 0, float: 0.0 })   
+///     // entry 2: Err(Custom { int: 0, float: 0.0 })
 /// }
 /// ```
 #[proc_macro_error]
@@ -789,7 +780,7 @@ impl Parse for AmGroups {
         let am = if let Ok(syn::Type::Path(ty)) = input.parse() {
             ty.clone()
         } else {
-            abort!(input.span(),"typed_am_group expects the first argument to be Struct name if your active message e.g. 
+            abort!(input.span(),"typed_am_group expects the first argument to be Struct name if your active message e.g.
             #[AmData]
             Struct MyAmStruct {}
             ...
@@ -797,10 +788,10 @@ impl Parse for AmGroups {
         };
         // println!("am: {:?}",am);
         input.parse::<Token![,]>()?;
-        let team_error_msg = "typed_am_group expects a LamellarWorld or LamellarTeam instance as it's only argument e.g. 
-        'typed_am_group!(...,&world)', 
+        let team_error_msg = "typed_am_group expects a LamellarWorld or LamellarTeam instance as it's only argument e.g.
+        'typed_am_group!(...,&world)',
         'typed_am_group!(...,world.clone())'
-        'typed_am_group!(...,&team)', 
+        'typed_am_group!(...,&team)',
         'typed_am_group!(...,team.clone())'";
         let team = if let Ok(expr) = input.parse::<syn::Expr>() {
             match expr {
@@ -824,25 +815,27 @@ impl Parse for AmGroups {
 /// use lamellar::active_messaging::prelude::*;
 /// use lamellar::darc::prelude::*;
 /// use std::sync::atomic::AtomicUsize;
+///
 /// #[AmData(Debug,Clone)]
 /// struct ExampleAm {
 ///    cnt: Darc<AtomicUsize>,
 /// }
+///
 /// #[lamellar::am]
-/// impl LamellarAm for ExampleAm{
-///     async fn exec(self) -> usize{
-///         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+/// impl LamellarAm for ExampleAm {
+///     async fn exec(self) -> usize {
+///         self.cnt.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
 ///     }
 /// }
 ///
-/// fn main(){
+/// fn main() {
 ///     let world = lamellar::LamellarWorldBuilder::new().build();
 ///     let my_pe = world.my_pe();
 ///     let num_pes = world.num_pes();
 ///
 ///     if my_pe == 0 { // we only want to run this on PE0 for sake of illustration
-///         let am_group = typed_am_group!{ExampleAm,&world};
-///         let am = ExampleAm{cnt: 0};
+///         let mut am_group = typed_am_group!{ExampleAm,&world};
+///         let am = ExampleAm{cnt: Darc::new(&world, AtomicUsize::new(0)).block().unwrap()};
 ///         // add the AMs to the group
 ///         // we can specify individual PEs to execute on or all PEs
 ///         am_group.add_am_pe(0,am.clone());
@@ -853,15 +846,15 @@ impl Parse for AmGroups {
 ///         //execute and await the completion of all AMs in the group
 ///         let results = world.block_on(am_group.exec()); // we want to process the returned data
 ///         //we can index into the results
-///         if let AmGroupResult::Pe((pe,val)) = results.at(2){
+///         if let AmGroupResult::Pe(pe,val) = results.at(2) {
 ///             assert_eq!(pe, 1); //the third add_am_* call in the group was to execute on PE1
-///             assert_eq!(val, 1); // this was the second am to execute on PE1 so the fetched value is 1
+///             assert_eq!(*val, 1); // this was the second am to execute on PE1 so the fetched value is 1
 ///         }
 ///         //or we can iterate over the results
-///         for res in results{
-///             match res{
-///                 AmGroupResult::Pe((pe,val)) => { println!("{} from PE{}",val,pe)},
-///                 AmGroupResult::All(val) => { println!("{} on all PEs",val)},
+///         for res in results.iter() {
+///             match res {
+///                 AmGroupResult::Pe(pe,val) => { println!("{:?} from PE{:?}",val,pe)},
+///                 AmGroupResult::All(val) => { println!("{:?} on all PEs",val)},
 ///             }
 ///         }
 ///     }
@@ -875,7 +868,7 @@ impl Parse for AmGroups {
 /// [2,2] on all PEs
 /// ```
 /// ### Static Members
-/// In the above code, the `ExampleAm` stuct contains a member that is a `Darc` (Distributed Arc).
+/// In the above code, the `ExampleAm` struct contains a member that is a `Darc` (Distributed Arc).
 /// In order to properly calculate distributed reference counts Darcs implements specialized Serialize and Deserialize operations.
 /// While, the cost to any single serialization/deserialization operation is small, doing this for every active message containing
 /// a Darc can become expensive.
@@ -888,10 +881,12 @@ impl Parse for AmGroups {
 /// ```
 /// use lamellar::active_messaging::prelude::*;
 /// use lamellar::darc::prelude::*;
+/// use std::sync::Arc;
 /// use std::sync::atomic::AtomicUsize;
-/// #[AmData(Debug,Clone)]
+///
+/// #[AmData(Debug, Clone)]
 /// struct ExampleAm {
-///    #[AmData(static)]
+///    #[AmGroup(static)]
 ///    cnt: Darc<AtomicUsize>,
 /// }
 ///```
