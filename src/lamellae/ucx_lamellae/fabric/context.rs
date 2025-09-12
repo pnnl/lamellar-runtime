@@ -74,7 +74,7 @@ impl Context {
                 | ucp_params_field::UCP_PARAM_FIELD_MT_WORKERS_SHARED)
                 .0 as u64,
             features: features.0 as u64,
-            estimated_num_eps: pmi.ranks().len() as u64,
+            estimated_num_eps: pmi.ranks().len() as usize,
             mt_workers_shared: 0,
             estimated_num_ppn: 0,
             request_size: 0,

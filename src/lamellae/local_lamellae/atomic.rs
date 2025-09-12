@@ -354,12 +354,8 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn atomic_op_unmanaged<T: Copy>(
-        &self,
-        op: AtomicOp<T>,
-        _pe: usize,
-        offset: usize,
-    ) {
+    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) {
+        net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
     }
     fn atomic_fetch_op<T: Copy>(
         &self,

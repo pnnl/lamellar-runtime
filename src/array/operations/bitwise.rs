@@ -110,12 +110,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::And,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
@@ -259,12 +255,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Or,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
@@ -408,12 +400,8 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Xor,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,
@@ -621,12 +609,8 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::And,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
@@ -770,12 +754,8 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Or,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
@@ -919,12 +899,8 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Xor,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,

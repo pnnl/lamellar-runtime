@@ -1,8 +1,8 @@
 use crate::active_messaging::RemotePtr;
-use crate::array::{LamellarRead, LamellarWrite, TeamInto, TeamTryFrom};
+use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
 use crate::lamellae::AllocationType;
-use crate::{memregion::*, LamellarArray, LamellarEnv, LamellarTeam};
+use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
@@ -327,6 +327,8 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
     }
     pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
+        //we need to do the offsetting here since we are going directly through the inner alloc
+
         self.mr.alloc.inner_alloc.atomic_op_unmanaged(
             AtomicOp::Write(val),
             pe,
@@ -460,21 +462,34 @@ impl<T: Remote> AsBase for SharedMemoryRegion<T> {
 }
 
 impl<T: Remote> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
-    unsafe fn put(
+    unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+        self.mr.put(pe, self.sub_region_offset + index, data)
+    }
+    unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+        //we need to do the offsetting here since we are going directly through the inner alloc
+
+        self.mr.alloc.inner_alloc.put_unmanaged(
+            data,
+            pe,
+            (self.sub_region_offset + index) * std::mem::size_of::<T>(),
+        );
+    }
+    unsafe fn put_buffer(
         &self,
         pe: usize,
         index: usize,
         data: impl Into<MemregionRdmaInput<T>>,
     ) -> RdmaHandle<T> {
-        self.mr.put(pe, self.sub_region_offset + index, data)
+        self.mr.put_buffer(pe, self.sub_region_offset + index, data)
     }
-    unsafe fn put_unmanaged(
+    unsafe fn put_buffer_unmanaged(
         &self,
         pe: usize,
         index: usize,
         data: impl Into<MemregionRdmaInput<T>>,
     ) {
-        self.mr.alloc.inner_alloc.put_unmanaged(
+        //we need to do the offsetting here since we are going directly through the inner alloc
+        self.mr.alloc.inner_alloc.put_buffer_unmanaged(
             data,
             pe,
             (self.sub_region_offset + index) * std::mem::size_of::<T>(),
@@ -487,16 +502,16 @@ impl<T: Remote> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     ) -> RdmaHandle<T> {
         self.mr.put_all(self.sub_region_offset + index, data)
     }
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
+        self.mr.get(pe, self.sub_region_offset + index)
+    }
+    unsafe fn get_buffer<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
     ) -> RdmaHandle<T> {
-        self.mr.get(pe, self.sub_region_offset + index, data)
-    }
-    unsafe fn at(&self, pe: usize, index: usize) -> RdmaAtHandle<T> {
-        self.mr.at(pe, self.sub_region_offset + index)
+        self.mr.get_buffer(pe, self.sub_region_offset + index, data)
     }
 }
 

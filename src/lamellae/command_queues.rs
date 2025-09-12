@@ -649,7 +649,7 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn try_sending_buffer(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) -> bool {
+    async fn try_sending_buffer(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) -> bool {
         if self.pending_cmds.load(Ordering::SeqCst) == 0 || cmd_buffer.full_bufs.len() > 0 {
             let mut send_buf = self.send_buffer.lock();
             if send_buf[dst].hash() == self.clear_cmd.hash() {
@@ -667,15 +667,13 @@ impl InnerCQ {
                     //         recv_buffer.index_addr(self.my_pe),
                     //     )
                     //     .spawn();
-                    let _ = recv_buffer
-                        .put(
-                            &self.scheduler,
-                            vec![],
-                            send_buf.sub_slice(dst..=dst),
-                            dst,
-                            self.my_pe,
-                        )
-                        .spawn();
+                    recv_buffer.put_unmanaged(
+                        // &self.scheduler,
+                        // vec![],
+                        send_buf[dst], //send_buf.sub_slice(dst..=dst),
+                        dst,
+                        self.my_pe,
+                    ); //.await;
                     self.put_amt
                         .fetch_add(send_buf[dst].as_bytes().len(), Ordering::Relaxed);
                 }
@@ -724,7 +722,7 @@ impl InnerCQ {
                 // let _guard1 = span1.enter();
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
-                self.try_sending_buffer(dst, &mut cmd_buffer);
+                self.try_sending_buffer(dst, &mut cmd_buffer).await;
                 // if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                 //     let send_buf = self.send_buffer.lock();
                 //     println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
@@ -749,7 +747,7 @@ impl InnerCQ {
                 if !cmd_buffer.empty() {
                     //data to send
                     self.progress_transfers(dst, &mut cmd_buffer);
-                    if self.try_sending_buffer(dst, &mut cmd_buffer) {
+                    if self.try_sending_buffer(dst, &mut cmd_buffer).await {
                         self.send_waiting[dst].store(false, Ordering::SeqCst);
                         break;
                     }
@@ -837,15 +835,11 @@ impl InnerCQ {
                         //         alloc_buf.index_addr(self.my_pe),
                         //     )
                         //     .spawn();
-                        let _ = alloc_buf
-                            .put(
-                                &self.scheduler,
-                                vec![],
-                                alloc_buf.sub_slice(self.my_pe..=self.my_pe),
-                                pe,
-                                self.my_pe,
-                            )
-                            .spawn();
+                        alloc_buf.put_unmanaged(
+                            alloc_buf[self.my_pe], //alloc_buf.sub_slice(self.my_pe..=self.my_pe),
+                            pe,
+                            self.my_pe,
+                        )
                     }
                 }
             }
@@ -884,15 +878,11 @@ impl InnerCQ {
                     //         alloc_buf.index_addr(self.my_pe),
                     //     )
                     //     .spawn();
-                    let _ = alloc_buf
-                        .put(
-                            &self.scheduler,
-                            vec![],
-                            alloc_buf.sub_slice(self.my_pe..=self.my_pe),
-                            pe,
-                            self.my_pe,
-                        )
-                        .spawn();
+                    alloc_buf.put_unmanaged(
+                        alloc_buf[self.my_pe], // alloc_buf.sub_slice(self.my_pe..=self.my_pe),
+                        pe,
+                        self.my_pe,
+                    );
                 }
             }
             self.comm.wait();
@@ -934,15 +924,11 @@ impl InnerCQ {
                     //         panic_buf.index_addr(self.my_pe),
                     //     )
                     //     .spawn();
-                    let _ = panic_buf
-                        .put(
-                            &self.scheduler,
-                            vec![],
-                            panic_buf.sub_slice(self.my_pe..=self.my_pe),
-                            pe,
-                            self.my_pe,
-                        )
-                        .spawn();
+                    panic_buf.put_unmanaged(
+                        panic_buf[self.my_pe], //panic_buf.sub_slice(self.my_pe..=self.my_pe),
+                        pe,
+                        self.my_pe,
+                    );
                 }
             }
             self.comm.wait();
@@ -975,15 +961,11 @@ impl InnerCQ {
         //         local_daddr + offset_of!(CmdMsg, cmd),
         //     )
         //     .spawn();
-        let _ = local_daddr_alloc
-            .put(
-                &self.scheduler,
-                vec![],
-                self.release_cmd.cmd_as_comm_slice(),
-                dst,
-                offset + offset_of!(CmdMsg, cmd),
-            )
-            .spawn();
+        local_daddr_alloc.put_unmanaged(
+            self.release_cmd.cmd, //self.release_cmd.cmd_as_comm_slice(),
+            dst,
+            offset + offset_of!(CmdMsg, cmd),
+        );
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1010,15 +992,11 @@ impl InnerCQ {
         //         local_daddr + offset_of!(CmdMsg, cmd),
         //     )
         //     .spawn();
-        let _ = local_daddr_alloc
-            .put(
-                &self.scheduler,
-                vec![],
-                self.free_cmd.cmd_as_comm_slice(),
-                dst,
-                offset + offset_of!(CmdMsg, cmd),
-            )
-            .spawn();
+        local_daddr_alloc.put_unmanaged(
+            self.free_cmd.cmd, //self.free_cmd.cmd_as_comm_slice(),
+            dst,
+            offset + offset_of!(CmdMsg, cmd),
+        );
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1045,15 +1023,14 @@ impl InnerCQ {
                     //         recv_buffer.index_addr(dst),
                     //     )
                     //     .await;
-                    recv_buffer
-                        .put(
-                            &self.scheduler,
-                            vec![],
-                            send_buf.sub_slice(dst..=dst),
-                            dst,
-                            dst,
-                        )
-                        .await;
+                    recv_buffer.put_unmanaged(
+                        // &self.scheduler,
+                        // vec![],
+                        send_buf[dst], // send_buf.sub_slice(dst..=dst),
+                        dst,
+                        dst,
+                    );
+                    // .await;
                     break;
                 }
                 if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
@@ -1103,7 +1080,7 @@ impl InnerCQ {
         //     )
         //     .await;
         local_daddr_alloc
-            .get(&self.scheduler, vec![], src, offset, data_slice.clone())
+            .get_buffer(&self.scheduler, vec![], src, offset, data_slice.clone())
             .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
@@ -1148,7 +1125,7 @@ impl InnerCQ {
         //     )
         //     .await;
         local_daddr_alloc
-            .get(&self.scheduler, vec![], src, offset, data_slice.clone())
+            .get_buffer(&self.scheduler, vec![], src, offset, data_slice.clone())
             .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();

@@ -1,19 +1,15 @@
+use parking_lot::Mutex;
 use std::{mem::MaybeUninit, sync::Arc};
-
 use ucx1_sys::*;
 
-use super::{
-    context::Context,
-    endpoint,
-    error::Error,
-    memory_region::{MemoryHandle, RKey},
-};
+use super::{context::Context, error::Error};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 #[derive(Debug)]
 pub(crate) struct Worker {
     context: Arc<Context>,
+    // pub(crate) lock: Mutex<()>,
     pub(crate) handle: ucp_worker_h,
 }
 
@@ -35,6 +31,7 @@ impl Worker {
 
         Ok(Arc::new(Worker {
             context,
+            // lock: Mutex::new(()),
             handle: unsafe { handle.assume_init() },
         }))
     }
@@ -48,10 +45,21 @@ impl Worker {
     }
 
     pub fn progress(&self) -> u32 {
-        unsafe { ucp_worker_progress(self.handle) }
+        // let handle = self.handle.try_lock()?;
+        // let lock_handle = self.lock.lock();
+        // println!("forcing progress");
+        let res = unsafe { ucp_worker_progress(self.handle) };
+        // println!("[{:?}] progressed {:?}", std::thread::current().id(), res);
+        res
     }
     /// This routine flushes all outstanding AMO and RMA communications on the worker.
     pub fn wait_all(&self) -> Result<(), Error> {
+        // if let Some(handle) = self.handle.try_lock() {
+        // let lock_handle = self.lock.lock();
+        // println!(
+        //     "[{:?}] in wait_all got worker lock!",
+        //     std::thread::current().id()
+        // );
         // let status = unsafe { ucp_worker_flush(self.handle) };
         // assert_eq!(status, ucs_status_t::UCS_OK);
         let params = ucp_request_param_t {
@@ -66,33 +74,66 @@ impl Worker {
             recv_info: ucp_request_param_t__bindgen_ty_2 {
                 length: std::ptr::null_mut(),
             },
+            memh: std::ptr::null_mut(),
         };
         let request = unsafe { ucp_worker_flush_nbx(self.handle, &params) };
         if request.is_null() {
-            // println!("flush return null");
+            // println!("[{:?}] flush return null", std::thread::current().id());
             Ok(())
         } else if UCS_PTR_IS_PTR(request) {
+            // println!(
+            //     "[{:?}] flush request in not null",
+            //     std::thread::current().id()
+            // );
             loop {
-                let _ = self.progress();
+                let res = unsafe { ucp_worker_progress(self.handle) };
+                // println!(
+                //     "[{:?}] flush still in progress {:?}",
+                //     std::thread::current().id(),
+                //     res
+                // );
                 if UCS_PTR_IS_PTR(request) {
-                    // println!("flush request in progress");
                     if unsafe { ucp_request_check_status(request as _) }
                         != ucs_status_t::UCS_INPROGRESS
                     {
-                        // println!("flush request completed");
+                        // println!(
+                        //     "[{:?}] flush request completed",
+                        //     std::thread::current().id()
+                        // );
                         break;
                     }
                 }
+                // println!(
+                //     "[{:?}] flush progressing handle addr {:?}",
+                //     std::thread::current().id(),
+                //     self.handle
+                // );
+                // let res = unsafe { ucp_worker_progress(self.handle) };
+                // println!(
+                //     "[{:?}] flush still in progress {:?}",
+                //     std::thread::current().id(),
+                //     res
+                // );
+                // std::thread::yield_now();
             }
+            // println!("[{:?}] flush free ", std::thread::current().id());
             unsafe { ucp_request_free(request as _) };
             Ok(())
         } else {
-            // println!("flush error");
+            // println!("[{:?}] flush error", std::thread::current().id());
             Error::from_ptr(request)
         }
+        // } else {
+        //     // println!(
+        //     //     "[{:?}] could not lock worker handle",
+        //     //     std::thread::current().id()
+        //     // );
+        //     Ok(false)
+        // }
     }
 
     pub fn print_to_stderr(&self) {
+        // let _lock_handle = self.lock.lock();
         unsafe { ucp_worker_print_info(self.handle, stderr) };
     }
 
@@ -103,6 +144,7 @@ impl Worker {
     pub fn address(&self) -> Result<WorkerAddress<'_>, Error> {
         let mut handle = MaybeUninit::uninit();
         let mut length = MaybeUninit::uninit();
+        // let _lock_handle = self.lock.lock();
         let status = unsafe {
             ucp_worker_get_address(self.handle, handle.as_mut_ptr(), length.as_mut_ptr())
         };
@@ -144,6 +186,8 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
+        // let _lock_handle = self.lock.lock();
+        println!("dropping worker");
         unsafe { ucp_worker_destroy(self.handle) }
     }
 }
@@ -168,6 +212,8 @@ impl<'a> AsRef<[u8]> for WorkerAddress<'a> {
 
 impl<'a> Drop for WorkerAddress<'a> {
     fn drop(&mut self) {
+        // let handle = self.worker.handle.lock();
+        // let lock_handle = self.worker.lock.lock();
         unsafe { ucp_worker_release_address(self.worker.handle, self.handle) }
     }
 }

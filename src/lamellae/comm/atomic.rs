@@ -321,31 +321,6 @@ impl<T> AtomicOp<T> {
     }
 }
 
-// pub(crate) trait CommAtomic {
-//     fn atomic_avail<T: 'static>(&self) -> bool
-//     where
-//         Self: Sized;
-
-//     fn atomic_op<T: Copy>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         op: AtomicOp<T>,
-//         pe: usize,
-//         remote_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> AtomicOpHandle<T>;
-//     fn atomic_fetch_op<T: Copy>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         op: AtomicOp<T>,
-//         pe: usize,
-//         remote_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> AtomicFetchOpHandle<T>;
-// }
-
 pub(crate) trait CommAllocAtomic {
     fn atomic_op<T: Copy>(
         &self,
@@ -355,7 +330,7 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T>;
-    fn atomic_op_unmanaged<T: Copy>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
+    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
     fn atomic_fetch_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,

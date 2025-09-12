@@ -6,7 +6,7 @@ use super::SharedMemoryRegion;
 use crate::lamellae::Remote;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::{Dist, LamellarTeamRT};
+use crate::LamellarTeamRT;
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};

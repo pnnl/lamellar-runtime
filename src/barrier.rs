@@ -8,7 +8,7 @@ use crate::{
     warnings::RuntimeWarning,
 };
 
-use futures_util::Future;
+use futures_util::{future::join_all, Future};
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
 use std::sync::{
@@ -64,7 +64,10 @@ impl Barrier {
                 trace!("creating barrier {:?}", alloc);
                 let mut buffs = vec![];
                 for r in 0..n {
-                    trace!("[r: {r}] creating barrier buff {:?}, num_rounds: {num_rounds}", alloc);
+                    trace!(
+                        "[r: {r}] creating barrier buff {:?}, num_rounds: {num_rounds}",
+                        alloc
+                    );
                     buffs.push(MemoryRegion::new(
                         num_rounds,
                         &scheduler,
@@ -180,7 +183,7 @@ impl Barrier {
 
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
                     send_buf_slice[0] = barrier_id;
-                    let barrier_slice = &[barrier_id];
+                    // let barrier_slice = &[barrier_id];
                     trace!(
                         "[{:?}] barrier_id = {:?} buf_slice len{}",
                         std::thread::current().id(),
@@ -195,6 +198,7 @@ impl Barrier {
                     }
 
                     for round in 0..self.num_rounds {
+                        // let mut reqs = vec![];
                         for i in 1..=self.n {
                             let team_send_pe =
                                 (my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
@@ -218,17 +222,26 @@ impl Barrier {
                                 // );
                                 // println!("barrier put_slice 1");
                                 unsafe {
-                                    let _ = self.barrier_buf[i - 1]
-                                        .put_comm_slice(
-                                            send_pe,
-                                            round,
-                                            CommSlice::from_slice(barrier_slice),
-                                        )
-                                        .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
-                                                  //safe as we are the only ones writing to our index
+                                    // reqs.push(
+                                    self.barrier_buf[i - 1]
+                                        .put_unmanaged(send_pe, round, barrier_id);
+                                    // );
+                                    // let _ = self.barrier_buf[i - 1]
+                                    //     .put_comm_slice(
+                                    //         send_pe,
+                                    //         round,
+                                    //         CommSlice::from_slice(barrier_slice),
+                                    //     )
+                                    //     .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
+                                    //safe as we are the only ones writing to our index
                                 }
                             }
                         }
+                        // join_all(reqs).await;
+                        // for req in reqs.into_iter() {
+                        //     req.block();
+                        // }
+                        self.barrier_buf[0].wait_all();
                         for i in 1..=self.n {
                             let team_recv_pe = ((my_index as isize
                                 - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
@@ -245,10 +258,7 @@ impl Barrier {
                                     recv_pe,
                                     team_recv_pe,
                                     send_buf_slice,
-                                    unsafe {
-                                        self.barrier_buf[i - 1]
-                                            .as_mut_slice()
-                                    }
+                                    unsafe { self.barrier_buf[i - 1].as_mut_slice() }
                                 );
                                 unsafe {
                                     //safe as  each pe is only capable of writing to its own index
@@ -401,19 +411,24 @@ enum State {
 impl BarrierHandle {
     fn do_send_round(&self, round: usize) {
         // trace!("do send round {:?}", round);
-        let barrier_slice = &[self.barrier_id];
+        // let barrier_slice = &[self.barrier_id];
+        // let mut reqs = vec![];
         for i in 1..=self.n {
             let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
                 unsafe {
-                    let _ = self.barrier_buf[i - 1]
-                        .put_comm_slice(send_pe, round, CommSlice::from_slice(barrier_slice))
-                        .spawn();
+                    self.barrier_buf[i - 1].put_unmanaged(send_pe, round, self.barrier_id);
+
+                    // .spawn();
                     //safe as we are the only ones writing to our index
                 }
             }
         }
+        // for req in reqs.into_iter() {
+        //     req.block();
+        // }
+        self.barrier_buf[0].wait_all();
     }
 
     fn do_recv_round(&self, round: usize, recv_pe_index: usize) -> Option<usize> {

@@ -6,15 +6,15 @@ use std::{
 // use ucx1_sys::*;
 
 use ucx1_sys::{
-    ucp_atomic_fetch_nb, ucp_atomic_fetch_op_t, ucp_atomic_op_nbx, ucp_atomic_op_t,
-    ucp_dt_make_contig, ucp_ep_close_mode, ucp_ep_close_nbx, ucp_ep_create, ucp_ep_flush_nbx,
-    ucp_ep_h, ucp_ep_params, ucp_ep_params_field, ucp_err_handler, ucp_err_handling_mode_t,
-    ucp_get_nbx, ucp_op_attr_t, ucp_put_nbx, ucp_request_check_status, ucp_request_free,
-    ucp_request_param_t, ucp_request_param_t__bindgen_ty_1, ucp_request_param_t__bindgen_ty_2,
-    ucs_memory_type, ucs_sock_addr, ucs_status_ptr_t, ucs_status_t, UCS_PTR_IS_PTR,
+    ucp_atomic_op_nbx, ucp_atomic_op_t, ucp_dt_make_contig, ucp_ep_close_nbx, ucp_ep_create,
+    ucp_ep_flush_nbx, ucp_ep_h, ucp_ep_params, ucp_ep_params_field, ucp_err_handler,
+    ucp_err_handling_mode_t, ucp_get_nbx, ucp_op_attr_t, ucp_put_nbx, ucp_request_check_status,
+    ucp_request_free, ucp_request_param_t, ucp_request_param_t__bindgen_ty_1,
+    ucp_request_param_t__bindgen_ty_2, ucs_memory_type, ucs_sock_addr, ucs_status_ptr_t,
+    ucs_status_t, UCS_PTR_IS_PTR,
 };
 
-use super::{context::Context, error::Error, memory_region::RKey, worker::Worker};
+use super::{error::Error, memory_region::RKey, worker::Worker};
 
 pub(crate) struct UcxRequest {
     pub(crate) request: ucs_status_ptr_t,
@@ -62,6 +62,57 @@ impl UcxRequest {
         }
     }
 }
+//     pub(crate) fn wait(
+//         mut self,
+//         delete_on_wait_failure: bool,
+//     ) -> Result<Option<UcxRequest>, Error> {
+//         if self.managed_put {
+//             println!(
+//                 "[{:?}] waiting for managed put",
+//                 std::thread::current().id()
+//             );
+//             if !self.worker.wait_all().expect("Wait all failed") {
+//                 return Ok(Some(self));
+//             }
+//             return Ok(None);
+//         } else {
+//             if self.request.is_null() {
+//                 println!("[{:?}] UCX Request is null", std::thread::current().id());
+//                 return Ok(None);
+//             }
+//             if UCS_PTR_IS_PTR(self.request) {
+//                 println!(
+//                     "[{:?}] UCX Request is not null",
+//                     std::thread::current().id()
+//                 );
+//                 loop {
+//                     if unsafe { ucp_request_check_status(self.request as _) }
+//                         != ucs_status_t::UCS_INPROGRESS
+//                     {
+//                         break;
+//                     }
+//                     if self.worker.progress().is_none() {
+//                         if delete_on_wait_failure {
+//                             unsafe { ucp_request_free(self.request as _) };
+//                             self.request = std::ptr::null_mut();
+//                         }
+//                         return Ok(Some(self));
+//                     }
+//                     std::thread::yield_now();
+//                 }
+//                 unsafe { ucp_request_free(self.request as _) };
+//                 self.request = std::ptr::null_mut();
+//                 Ok(None)
+//             } else {
+//                 // println!(
+//                 //     "[{:?}] UCX Request is not valid",
+//                 //     std::thread::current().id()
+//                 // );
+//                 Error::from_ptr(self.request).map(|_| None)
+//             }
+//         }
+//     }
+// }
 
 impl Drop for UcxRequest {
     fn drop(&mut self) {
@@ -102,11 +153,18 @@ impl Endpoint {
                 addr: std::ptr::null_mut(),
                 addrlen: 0,
             },
+            local_sockaddr: ucs_sock_addr {
+                addr: std::ptr::null_mut(),
+                addrlen: 0,
+            },
         };
         let mut handle = MaybeUninit::uninit();
+        // let lock_handle = worker.lock.lock();
         let status = unsafe { ucp_ep_create(worker.handle, &params, handle.as_mut_ptr()) };
         Error::from_status(status)?;
         let request_size = worker.request_size();
+        // drop(lock_handle);
+
         Ok(Arc::new(Endpoint {
             worker,
             request_size,
@@ -114,7 +172,7 @@ impl Endpoint {
         }))
     }
 
-    pub fn wait_all(&self) -> Result<(), Error> {
+    pub fn ep_wait_all(&self) -> Result<(), Error> {
         let params = ucp_request_param_t {
             op_attr_mask: 0,
             flags: 0,
@@ -127,6 +185,7 @@ impl Endpoint {
             recv_info: ucp_request_param_t__bindgen_ty_2 {
                 length: std::ptr::null_mut(),
             },
+            memh: std::ptr::null_mut(),
         };
         let request = unsafe { ucp_ep_flush_nbx(self.handle, &params) };
         UcxRequest::new(request, self.worker.clone(), false).wait()
@@ -142,11 +201,12 @@ impl Endpoint {
         remote_addr: usize,
         rkey: &RKey,
         managed: bool,
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
         //     let request = &mut *(request as *mut Request);
         //     request.waker.wake();
         // }
+
         let request = unsafe {
             ucp_put_nbx(
                 self.handle,
@@ -166,12 +226,23 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
+                    memh: std::ptr::null_mut(),
                 } as _,
             )
         };
         // println!("after inner put");
+        UcxRequest::new(request, self.worker.clone(), false).wait(); //ensures local buffer can be reused
+        if managed {
+            Some(UcxRequest::new(
+                std::ptr::null_mut(),
+                self.worker.clone(),
+                true,
+            ))
+        } else {
+            None
+        }
 
-        UcxRequest::new(request, self.worker.clone(), managed)
+        // UcxRequest::new(request, self.worker.clone(), managed)
     }
 
     pub fn get(&self, buf: *const u8, size: usize, remote_addr: usize, rkey: &RKey) -> UcxRequest {
@@ -198,15 +269,23 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
+                    memh: std::ptr::null_mut(),
                 } as _,
             )
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
 
-    pub fn atomic_put<T>(&self, value: T, remote_addr: usize, rkey: &RKey) -> UcxRequest {
+    pub fn atomic_put<T>(
+        &self,
+        value: T,
+        remote_addr: usize,
+        rkey: &RKey,
+        managed: bool,
+    ) -> Option<UcxRequest> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
+
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -228,10 +307,47 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
-        UcxRequest::new(request, self.worker.clone(), false)
+        let req = UcxRequest::new(request, self.worker.clone(), false);
+        if managed {
+            Some(req)
+        } else {
+            None
+        }
+        // } else {
+        //     let mut result: u64 = 0;
+        //     let value: u64 = 0;
+        //     let request = unsafe {
+        //         ucp_atomic_op_nbx(
+        //             self.handle,
+        //             ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP,
+        //             &value as *const u64 as _,
+        //             1 as _,
+        //             remote_addr as _,
+        //             rkey.handle,
+        //             &ucp_request_param_t {
+        //                 op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
+        //                     | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32,
+        //                 flags: 0,
+        //                 request: std::ptr::null_mut(),
+        //                 cb: ucp_request_param_t__bindgen_ty_1 { send: None },
+        //                 datatype: ucp_dt_make_contig(std::mem::size_of::<u64>() as _),
+        //                 user_data: std::ptr::null_mut(),
+        //                 reply_buffer: &result as *const _ as *mut _,
+        //                 memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+        //                 recv_info: ucp_request_param_t__bindgen_ty_2 {
+        //                     length: std::ptr::null_mut(),
+        //                 },
+        //                 memh: std::ptr::null_mut(),
+        //             },
+        //         )
+        //     };
+        //     UcxRequest::new(request, self.worker.clone(), false).wait();
+        //     None
+        // }
     }
 
     pub fn atomic_get<T>(&self, reply_buf: *mut T, remote_addr: usize, rkey: &RKey) -> UcxRequest {
@@ -259,6 +375,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
@@ -297,6 +414,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
@@ -322,6 +440,7 @@ impl Drop for Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
+                    memh: std::ptr::null_mut(),
                 },
             );
             if request.is_null() {

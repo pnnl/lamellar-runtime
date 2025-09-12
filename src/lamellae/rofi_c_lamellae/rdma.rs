@@ -154,7 +154,7 @@ impl<T: Remote> Future for RofiCFuture<T> {
 }
 
 impl CommRdma for RofiCComm {
-    fn put<T: Remote>(
+    fn put_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -196,7 +196,7 @@ impl CommRdma for RofiCComm {
         }
         .into()
     }
-    fn get<T: Remote>(
+    fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,

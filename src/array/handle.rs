@@ -14,7 +14,7 @@ use pin_project::{pin_project, pinned_drop};
 use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
     array::{LamellarByteArray, NetworkAtomicArray},
-    lamellae::{CommProgress, Lamellae, RdmaAtHandle, RdmaHandle},
+    lamellae::{CommProgress, Lamellae, RdmaGetHandle, RdmaHandle},
     lamellar_request::LamellarRequest,
     scheduler::{LamellarTask, Scheduler},
     warnings::RuntimeWarning,
@@ -453,7 +453,7 @@ pub(crate) enum ArrayAtHandleState<T: Dist> {
     LocalAm(#[pin] LocalAmHandle<T>),
     Am(#[pin] AmHandle<Vec<u8>>),
     NetworkAtomic(#[pin] AtomicFetchOpHandle<T>),
-    Rdma(#[pin] RdmaAtHandle<T>),
+    Rdma(#[pin] RdmaGetHandle<T>),
     Launched(#[pin] LamellarTask<T>),
 }
 

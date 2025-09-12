@@ -77,6 +77,23 @@ impl<T: Dist> LamellarArrayPut<T> for AtomicArray<T> {
     }
 }
 
+impl<T: Dist> LamellarRdmaPut<T> for AtomicArray<T> {
+    unsafe fn new_put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.new_put(index, data),
+            AtomicArray::GenericAtomicArray(array) => array.new_put(index, data),
+            AtomicArray::NetworkAtomicArray(array) => array.new_put(index, data),
+        }
+    }
+    unsafe fn new_put_unmanaged(&self, index: usize, data: T) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.new_put_unmanaged(index, data),
+            AtomicArray::GenericAtomicArray(array) => array.new_put_unmanaged(index, data),
+            AtomicArray::NetworkAtomicArray(array) => array.new_put_unmanaged(index, data),
+        }
+    }
+}
+
 // impl<T: Dist> AtomicArray<T> {
 //     pub fn atomic_get(&self, index: usize) -> impl Future<Output = T> {
 //         match self {

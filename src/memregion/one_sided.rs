@@ -493,8 +493,8 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///     }      
     /// }
     ///```
-    pub unsafe fn put(&self, index: usize, data: MemregionRdmaInput<T>) -> RdmaHandle<T> {
-        MemoryRegionRDMA::<T>::put(self, self.pe, index, data)
+    pub unsafe fn put_buffer(&self, index: usize, data: MemregionRdmaInput<T>) -> RdmaHandle<T> {
+        MemoryRegionRDMA::<T>::put_buffer(self, self.pe, index, data)
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -603,16 +603,16 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///
     /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     ///```
-    pub unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
+    pub unsafe fn get_buffer<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         index: usize,
         data: U,
     ) -> RdmaHandle<T> {
-        MemoryRegionRDMA::<T>::get(self, self.pe, index, data)
+        MemoryRegionRDMA::<T>::get_buffer(self, self.pe, index, data)
     }
 
-    unsafe fn at(&self, pe: usize, index: usize) -> RdmaAtHandle<T> {
-        MemoryRegionRDMA::<T>::at(self, pe, index)
+    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
+        MemoryRegionRDMA::<T>::get(self, pe, index)
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -1029,12 +1029,7 @@ impl<T: Remote> AsBase for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put(
-        &self,
-        pe: usize,
-        index: usize,
-        data: impl Into<MemregionRdmaInput<T>>,
-    ) -> RdmaHandle<T> {
+    unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner
@@ -1048,7 +1043,40 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn put_unmanaged(
+    unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .put_unmanaged(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn put_buffer(
+        &self,
+        pe: usize,
+        index: usize,
+        data: impl Into<MemregionRdmaInput<T>>,
+    ) -> RdmaHandle<T> {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .put_buffer(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn put_buffer_unmanaged(
         &self,
         pe: usize,
         index: usize,
@@ -1058,7 +1086,7 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             self.mr
                 .inner
                 .mr
-                .put_unmanaged(pe, self.sub_region_offset + index, data)
+                .put_buffer_unmanaged(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
@@ -1077,17 +1105,10 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             .mr
             .put_all(self.sub_region_offset + index, data)
     }
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) -> RdmaHandle<T> {
+
+    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
         if self.pe == pe {
-            self.mr
-                .inner
-                .mr
-                .get(pe, self.sub_region_offset + index, data)
+            self.mr.inner.mr.get(pe, self.sub_region_offset + index)
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -1097,9 +1118,17 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         }
     }
 
-    unsafe fn at(&self, pe: usize, index: usize) -> RdmaAtHandle<T> {
+    unsafe fn get_buffer<U: Into<LamellarMemoryRegion<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
         if self.pe == pe {
-            self.mr.inner.mr.at(pe, self.sub_region_offset + index)
+            self.mr
+                .inner
+                .mr
+                .get_buffer(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",

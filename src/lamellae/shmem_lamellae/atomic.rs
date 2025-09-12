@@ -6,13 +6,13 @@ use crate::{
         },
         net_atomic_fetch_op, net_atomic_op,
         shmem_lamellae::fabric::ShmemAlloc,
-        CommAllocAddr, CommAllocAtomic, CommAllocInner,
+        CommAllocAddr, CommAllocAtomic,
     },
     warnings::RuntimeWarning,
     LamellarTask,
 };
 
-use super::{comm::ShmemComm, Scheduler};
+use super::Scheduler;
 
 use pin_project::{pin_project, pinned_drop};
 use std::{
@@ -154,85 +154,6 @@ impl<T: Send + 'static> Future for ShmemAtomicFetchFuture<T> {
     }
 }
 
-// impl CommAtomic for ShmemComm {
-//     fn atomic_avail<T: 'static>(&self) -> bool {
-//         let id = std::any::TypeId::of::<T>();
-
-//         if id == std::any::TypeId::of::<u8>() {
-//             true
-//         } else if id == std::any::TypeId::of::<u16>() {
-//             true
-//         } else if id == std::any::TypeId::of::<u32>() {
-//             true
-//         } else if id == std::any::TypeId::of::<u64>() {
-//             true
-//         } else if id == std::any::TypeId::of::<i8>() {
-//             true
-//         } else if id == std::any::TypeId::of::<i16>() {
-//             true
-//         } else if id == std::any::TypeId::of::<i32>() {
-//             true
-//         } else if id == std::any::TypeId::of::<i64>() {
-//             true
-//         } else if id == std::any::TypeId::of::<usize>() {
-//             true
-//         } else if id == std::any::TypeId::of::<isize>() {
-//             true
-//         } else {
-//             false
-//         }
-//     }
-//     fn atomic_op<T: Copy>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         op: AtomicOp<T>,
-//         pe: usize,
-//         remote_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> AtomicOpHandle<T> {
-//         if let CommAllocInner::ShmemAlloc(alloc) = remote_alloc {
-//             let remote_dst_base = alloc.pe_base_offset(pe);
-//             let remote_dst_addr = remote_dst_base + offset;
-//             ShmemAtomicFuture {
-//                 op: op,
-//                 dst: CommAllocAddr(remote_dst_addr),
-//                 spawned: false,
-//                 scheduler: scheduler.clone(),
-//                 counters,
-//             }
-//             .into()
-//         } else {
-//             panic!("invalid remote alloc for shmem atomic_op");
-//         }
-//     }
-//     fn atomic_fetch_op<T: Copy>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         op: AtomicOp<T>,
-//         pe: usize,
-//         remote_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> AtomicFetchOpHandle<T> {
-//         if let CommAllocInner::ShmemAlloc(alloc) = remote_alloc {
-//             let remote_dst_base = alloc.pe_base_offset(pe);
-//             let remote_dst_addr = remote_dst_base + offset;
-//             return ShmemAtomicFetchFuture {
-//                 op,
-//                 dst: CommAllocAddr(remote_dst_addr),
-//                 result: MaybeUninit::uninit(),
-//                 spawned: false,
-//                 scheduler: scheduler.clone(),
-//                 counters,
-//             }
-//             .into();
-//         } else {
-//             panic!("invalid remote alloc for shmem fetch atomic_op");
-//         }
-//     }
-// }
-
 impl CommAllocAtomic for Arc<ShmemAlloc> {
     fn atomic_op<T: Copy>(
         &self,
@@ -253,12 +174,10 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         }
         .into()
     }
-    fn atomic_op_unmanaged<T: Copy>(
-        &self,
-        op: AtomicOp<T>,
-        _pe: usize,
-        offset: usize,
-    ) {
+    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
     }
     fn atomic_fetch_op<T: Copy>(
         &self,

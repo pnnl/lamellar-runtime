@@ -1062,7 +1062,8 @@ impl LamellarTeamRT {
         }
         self.mem_regions.write().clear();
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
-
+        self.lamellae.comm().wait();
+        self.lamellae.comm().barrier();
         if self.panic.load(Ordering::SeqCst) == 0 {
             // what does it mean if we drop a parent team while a sub_team is valid?
             if let None = &self.parent {
@@ -1520,10 +1521,11 @@ impl LamellarTeamRT {
                 }; //mmight as well do useful work while we wait }
                 if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
-                        "in team wait_all mype: {:?} cnt: {:?} {:?}",
+                        "in team wait_all mype: {:?} cnt: {:?} {:?} {:?}",
                         self.world_pe,
                         self.team_counters.send_req_cnt.load(Ordering::SeqCst),
                         self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
+                        self.team_counters.launched_req_cnt.load(Ordering::SeqCst)
                     );
                     temp_now = Instant::now();
                 }

@@ -64,7 +64,6 @@
 //! let vec = array.local_data().to_vec();
 //! ```
 use crate::barrier::BarrierHandle;
-use crate::lamellae::comm::Remote;
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
@@ -168,6 +167,9 @@ pub use operations::*;
 
 pub(crate) mod handle;
 pub use handle::*;
+
+pub(crate) mod rdma;
+pub use rdma::*;
 
 pub(crate) type ReduceGen = fn(LamellarByteArray, usize) -> LamellarArcAm;
 

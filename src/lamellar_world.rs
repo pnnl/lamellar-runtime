@@ -9,7 +9,7 @@ use crate::{
     memregion::{
         handle::{FallibleSharedMemoryRegionHandle, SharedMemoryRegionHandle},
         one_sided::OneSidedMemoryRegion,
-        Dist, RemoteMemoryRegion,
+        RemoteMemoryRegion,
     },
     scheduler::{create_scheduler, ExecutorType, LamellarTask},
 };
@@ -373,6 +373,7 @@ impl Drop for LamellarWorld {
                 // println!("team_rt {:?}",Arc::strong_count(&team_rt));
                 // println!("wait for everyone else to finish");
                 self.barrier();
+
                 // println!(
                 //     "in team destroy mype: {:?} cnt: {:?} {:?}",
                 //     self.my_pe,

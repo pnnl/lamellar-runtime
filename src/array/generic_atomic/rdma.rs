@@ -104,6 +104,15 @@ impl<T: Dist> LamellarArrayPut<T> for GenericAtomicArray<T> {
     }
 }
 
+impl<T: Dist> LamellarRdmaPut<T> for GenericAtomicArray<T> {
+    unsafe fn new_put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+        unimplemented!("new_put not implemented for GenericAtomicArray");
+    }
+    unsafe fn new_put_unmanaged(&self, index: usize, data: T) {
+        unimplemented!("new_put_unmanaged not implemented for GenericAtomicArray");
+    }
+}
+
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicAtAm {
     array: GenericAtomicByteArray, //inner of the indices we need to place data into

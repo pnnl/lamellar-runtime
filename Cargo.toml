@@ -30,7 +30,7 @@ libfabric = { path = "../rofi-junction/libfabric", features = [
 pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
     "with-pmix",
 ], optional = true }
-ucx1-sys = { version =  "0.1.0",  optional = true }
+ucx1-sys = { path = "/scratch/frie869/async-ucx/ucx1-sys", version = "0.1.0", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 rofisys = { version = "0.4", optional = true }

@@ -26,11 +26,11 @@ use libfabric::{
 use crate::lamellae::{
     comm::error::{AllocError, AllocResult, FabricError, FabricResult},
     AllocationType, AtomicOp as LamellarAtomicOp, CommAlloc, CommAllocAddr, CommAllocInner,
-    CommAllocType, CommSlice
+    CommAllocType, CommSlice,
 };
 
 use parking_lot::RwLock;
-use pmi::{pmix::PmiX,pmi::Pmi};
+use pmi::{pmi::Pmi, pmix::PmiX};
 use std::{
     collections::HashMap,
     sync::{
@@ -1359,7 +1359,7 @@ impl LibfabricAlloc {
             remote_allocs,
         })
     }
-    pub(crate) fn num_pes(&self) -> usize{
+    pub(crate) fn num_pes(&self) -> usize {
         self.remote_allocs.len()
     }
     pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<Arc<Self>> {
@@ -1432,7 +1432,7 @@ impl LibfabricAlloc {
         self.inner_put(pe, offset, src_addr.as_ref(), sync)
     }
 
-    unsafe fn inner_put<T: Copy>(
+    pub(crate) unsafe fn inner_put<T: Copy>(
         &self,
         pe: usize,
         offset: usize,

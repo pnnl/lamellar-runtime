@@ -86,6 +86,7 @@ impl MemoryHandleInner {
             flags: UCP_MEM_MAP_ALLOCATE as _,
             prot: 0,
             memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+            exported_memh_buffer: std::ptr::null_mut(),
         };
         let mut handle = MaybeUninit::uninit();
         let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
@@ -124,6 +125,7 @@ impl MemoryHandleInner {
             flags: 0 as _,
             prot: 0 as _,
             memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+            exported_memh_buffer: std::ptr::null_mut(),
         };
         let mut handle = MaybeUninit::uninit();
         let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
@@ -190,6 +192,7 @@ impl MemoryHandleInner {
 
 impl Drop for MemoryHandleInner {
     fn drop(&mut self) {
+        // println!("dropping MemoryHandleInner {:x}", self.addr);
         unsafe { ucp_mem_unmap(self.context.handle, self.handle) };
     }
 }
@@ -198,7 +201,7 @@ impl Drop for MemoryHandleInner {
 #[derive(Debug)]
 pub struct RKeyBuffer {
     buf: *mut c_void,
-    len: u64,
+    len: usize,
 }
 
 impl AsRef<[u8]> for RKeyBuffer {

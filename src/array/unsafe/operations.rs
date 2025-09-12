@@ -1,11 +1,11 @@
 use crate::active_messaging::LamellarArcAm;
 use crate::array::operations::handle::*;
+use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
-use crate::array::{operations::*, LamellarArrayRdmaInput, TeamFrom};
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
-use crate::lamellae::{comm::CommProgress, AtomicOp};
-use crate::{ActiveMessaging, AmHandle};
+use crate::lamellae::AtomicOp;
+use crate::AmHandle;
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
@@ -349,6 +349,24 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) fn initiate_op<'a>(
+        &self,
+        val: T,
+        index: usize,
+        op: ArrayOpCmd<T>,
+        byte_array: LamellarByteArray,
+    ) -> ArrayOpHandle<T> {
+        let (am, _) = self
+            .initiate_batch_op_inner(val, index, op, byte_array.clone())
+            .pop_front()
+            .unwrap();
+        ArrayOpHandle {
+            array: byte_array,
+            state: OpState::Am(am),
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -356,6 +374,21 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
     ) -> ArrayBatchOpHandle<T> {
+        let res = self.initiate_batch_op_inner(val, index, op, byte_array.clone());
+        ArrayBatchOpHandle {
+            array: byte_array,
+            state: BatchOpState::Reqs(res),
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn initiate_batch_op_inner<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd<T>,
+        byte_array: LamellarByteArray,
+    ) -> VecDeque<(AmHandle<()>, Vec<usize>)> {
         let (indices, i_len) = index.as_op_input();
         let (vals, v_len) = val.as_op_input();
 
@@ -408,10 +441,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             //no vals no indices
             VecDeque::new()
         };
-        ArrayBatchOpHandle {
-            array: byte_array,
-            state: BatchOpState::Reqs(res),
-        }
+        res
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1137,7 +1167,7 @@ impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             unsafe {
-                let handle = self.inner.data.mem_region.at(pe, offset);
+                let handle = self.inner.data.mem_region.get(pe, offset);
                 ArrayFetchOpHandle {
                     array: self.clone().into(),
                     state: FetchOpState::Rdma(handle),
@@ -1163,14 +1193,14 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
             //     self.array.team_rt().alloc_one_sided_mem_region(1);
             unsafe {
                 // buf.as_mut_slice()[0] = val;
-                let handle = self.inner.data.mem_region.put(pe, offset, val);
-                ArrayBatchOpHandle {
+                let handle = self.inner.data.mem_region.put::<T>(pe, offset, val);
+                ArrayOpHandle {
                     array: self.clone().into(),
-                    state: BatchOpState::Rdma(handle),
+                    state: OpState::Rdma(handle),
                 }
             }
         } else {
-            self.initiate_batch_op(val, index, ArrayOpCmd::Store, self.clone().into())
+            self.initiate_op(val, index, ArrayOpCmd::Store, self.clone().into())
                 .into()
         }
     }

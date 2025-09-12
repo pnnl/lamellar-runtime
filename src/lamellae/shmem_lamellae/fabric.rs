@@ -54,7 +54,7 @@ unsafe impl Sync for ShmemAlloc {}
 unsafe impl Send for ShmemAlloc {}
 
 impl ShmemAlloc {
-    pub(crate) fn num_pes(&self) -> usize{
+    pub(crate) fn num_pes(&self) -> usize {
         self.pe_map.len()
     }
     pub(crate) fn start(&self) -> usize {
@@ -107,7 +107,7 @@ impl From<Arc<ShmemAlloc>> for CommAlloc {
 
 #[tracing::instrument(skip_all, level = "debug")]
 fn attach_to_shmem(
-    num_pes: usize,
+    _num_pes: usize,
     job_id: usize,
     size: usize,
     align: usize,
@@ -261,7 +261,7 @@ impl ShmemAllocator {
         let size = std::mem::size_of::<AtomicUsize>()
             + std::mem::size_of::<usize>()
             + std::mem::size_of::<usize>() * num_pes * 2;
-        let mut shmem = attach_to_shmem(
+        let shmem = attach_to_shmem(
             num_pes,
             job_id,
             size,

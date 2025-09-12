@@ -112,6 +112,38 @@ impl<T: Dist> LamellarArrayPut<T> for NetworkAtomicArray<T> {
     }
 }
 
+impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
+    unsafe fn new_put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let req = self
+                .array
+                .inner
+                .data
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Write(data));
+            ArrayRdmaHandle2 {
+                array: self.as_lamellar_byte_array(),
+                state: ArrayRdmaState::AtomicPut(req),
+                spawned: false,
+            }
+        } else {
+            panic!("index out of bounds in LamellarArray put");
+        }
+    }
+    unsafe fn new_put_unmanaged(&self, index: usize, data: T) {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let req =
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .atomic_op_unmanaged(pe, offset, AtomicOp::Write(data));
+        } else {
+            panic!("index out of bounds in LamellarArray put");
+        }
+    }
+}
+
 #[lamellar_impl::AmLocalDataRT(Debug)]
 struct InitGetAm<T: Dist> {
     array: NetworkAtomicArray<T>, //inner of the indices we need to place data into

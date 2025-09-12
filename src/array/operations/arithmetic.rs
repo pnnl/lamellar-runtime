@@ -123,12 +123,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn add(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Add,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
@@ -272,12 +268,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Sub,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
@@ -421,12 +413,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Mul,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
@@ -570,12 +558,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Div,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
@@ -719,12 +703,8 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Rem,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,
@@ -934,12 +914,8 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn add(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Add,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
@@ -1083,12 +1059,8 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Sub,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
@@ -1232,12 +1204,8 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Mul,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
@@ -1381,12 +1349,8 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Div,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
@@ -1530,12 +1494,8 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Rem,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,

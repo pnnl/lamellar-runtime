@@ -18,12 +18,8 @@ use crate::lamellae::{
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 use std::{
-    collections::{HashMap, HashSet},
-    hash::{Hash, Hasher},
-    mem::MaybeUninit,
+    hash::Hasher,
     sync::{Arc, Mutex},
-    time::Instant,
-    vec,
 };
 
 pub(crate) struct UcxWorld {
@@ -284,7 +280,7 @@ impl UcxWorld {
         src_addr: &CommSlice<T>,
         dst_addr: &CommAllocAddr,
         managed: bool,
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         self.inner_put(pe, src_addr.as_ref(), *(dst_addr as &usize), managed)
     }
     pub(crate) unsafe fn inner_put<T>(
@@ -293,7 +289,7 @@ impl UcxWorld {
         src_addr: &[T],
         dst_addr: usize,
         managed: bool,
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         // println!("ucx put: remote_pe: {pe} dst_addr: {dst_addr:x}");
         let allocs = self.remote_keys.lock().unwrap();
         for (alloc, remote_addrs) in allocs.iter() {
@@ -352,7 +348,7 @@ impl UcxWorld {
         pe: usize,
         op: &AtomicOp<T>,
         dst_addr: &CommAllocAddr,
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         let dst_addr = *(dst_addr as &usize);
         match op {
             AtomicOp::Write(val) => {
@@ -361,7 +357,7 @@ impl UcxWorld {
                     if alloc.contains(dst_addr) {
                         let (remote_addr, rkey) = &remote_addrs[pe];
                         let remote_dst_addr = remote_addr + (dst_addr - alloc.start());
-                        return self.endpoints[pe].atomic_put(*val, remote_dst_addr, &rkey);
+                        return self.endpoints[pe].atomic_put(*val, remote_dst_addr, &rkey, true);
                     }
                 }
             }
@@ -499,7 +495,7 @@ impl UcxAlloc {
         offset: usize,
         src_addr: &CommSlice<T>,
         managed: bool,
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         self.put_inner(pe, offset, src_addr.as_ref(), managed)
     }
     pub(crate) unsafe fn put_inner<T>(
@@ -508,7 +504,7 @@ impl UcxAlloc {
         offset: usize,
         src_addr: &[T],
         managed: bool,
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         let (remote_addr, rkey) = &self.remote_keys[pe];
         self.endpoints[pe].put(
             src_addr.as_ptr() as _,
@@ -545,11 +541,17 @@ impl UcxAlloc {
         )
     }
 
-    pub fn atomic_op<T: Copy>(&self, pe: usize, offset: usize, op: &AtomicOp<T>) -> UcxRequest {
+    pub fn atomic_op<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &AtomicOp<T>,
+        managed: bool,
+    ) -> Option<UcxRequest> {
         match op {
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe].atomic_put(*val, remote_addr + offset, &rkey)
+                self.endpoints[pe].atomic_put(*val, remote_addr + offset, &rkey, managed)
             }
             _ => panic!("Unsupported atomic operation"),
         }
@@ -585,7 +587,7 @@ impl UcxAlloc {
     }
 
     pub fn wait_all(&self) {
-        self.worker.wait_all().unwrap();
+        self.worker.wait_all();
     }
 
     pub fn contains(&self, addr: usize) -> bool {
@@ -593,10 +595,10 @@ impl UcxAlloc {
     }
 }
 
-// impl Drop for UcxAlloc {
-//     fn drop(&mut self) {
-//         // println!("Dropping UcxArray");
-//         self.mem_handles.lock().unwrap().remove(&self.mem.inner);
-//         self.remote_keys.lock().unwrap().remove(&self.mem.inner);
-//     }
-// }
+impl Drop for UcxAlloc {
+    fn drop(&mut self) {
+        // println!("Dropping UcxArray");
+        // self.mem_handles.lock().unwrap().remove(&self.mem.inner);
+        // self.remote_keys.lock().unwrap().remove(&self.mem.inner);
+    }
+}

@@ -77,12 +77,8 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn shl(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Shl,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Shl, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
@@ -226,12 +222,8 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Shr,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Shr, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
@@ -412,12 +404,8 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn shl(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Shl,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Shl, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
@@ -561,12 +549,8 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     ///```
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
-        self.inner_array().initiate_batch_op(
-            val,
-            index,
-            ArrayOpCmd::Shr,
-            self.as_lamellar_byte_array(),
-        )
+        self.inner_array()
+            .initiate_op(val, index, ArrayOpCmd::Shr, self.as_lamellar_byte_array())
     }
 
     /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,

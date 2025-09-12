@@ -1,5 +1,5 @@
 use crate::array::network_atomic::*;
-use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
+use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState, OpState};
 use crate::array::operations::read_only::LocalReadOnlyOps;
 // use crate::array::Network_atomic::rdma::atomic_store;
 // use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
@@ -44,9 +44,9 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
                         .data
                         .mem_region
                         .atomic_op(pe, offset, AtomicOp::Write(val));
-                ArrayBatchOpHandle {
+                ArrayOpHandle {
                     array: self.clone().into(),
-                    state: BatchOpState::Network(handle),
+                    state: OpState::Network(handle),
                 }
             }
         } else {

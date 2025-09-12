@@ -83,6 +83,9 @@ impl CommProgress for UcxComm {
     }
     fn wait(&self) {
         self.ucx.wait_all();
+        // while !self.ucx.wait_all() {
+        //     std::thread::yield_now();
+        // }
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {

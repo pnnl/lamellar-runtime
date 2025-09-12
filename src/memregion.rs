@@ -9,16 +9,16 @@ use crate::{
     active_messaging::{AMCounters, AmDist, RemotePtr},
     array::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
-        TeamInto, TeamTryFrom,
+        TeamTryFrom,
     },
     lamellae::{
-        AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, Comm, CommAlloc,
+        AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc,
         CommAllocAddr, CommAllocAtomic, CommAllocInner, CommAllocRdma, CommAllocType, CommInfo,
-        CommMem, CommProgress, CommSlice, Lamellae, RdmaAtHandle, RdmaHandle, Remote,
+        CommMem, CommProgress, CommSlice, Lamellae, RdmaGetHandle, RdmaHandle, Remote,
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
-    LamellarArray, LamellarEnv,
+    LamellarEnv,
 };
 use core::marker::PhantomData;
 use std::{
@@ -112,7 +112,7 @@ impl<T: Remote> MemregionRdmaInput<T> {
         match self {
             MemregionRdmaInput::Slice(s) => s.contains(addr),
             MemregionRdmaInput::Owned(v) => v as *const T as usize == *addr,
-            MemregionRdmaInput::ArcVec((v, r)) => unsafe { r.contains(addr) },
+            MemregionRdmaInput::ArcVec((_v, r)) => r.contains(addr),
         }
     }
 
@@ -120,7 +120,7 @@ impl<T: Remote> MemregionRdmaInput<T> {
         match self {
             MemregionRdmaInput::Slice(s) => s.len(),
             MemregionRdmaInput::Owned(_) => 1,
-            MemregionRdmaInput::ArcVec((v, r)) => r.len(),
+            MemregionRdmaInput::ArcVec((_v, r)) => r.len(),
         }
     }
 
@@ -627,6 +627,12 @@ pub(crate) trait AsBase {
 #[enum_dispatch]
 pub trait MemoryRegionRDMA<T: Remote> {
     #[doc(alias("One-sided", "onesided"))]
+    unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T>;
+
+    #[doc(alias("One-sided", "onesided"))]
+    unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T);
+
+    #[doc(alias("One-sided", "onesided"))]
     /// "Puts" (copies) data from a local memory location into a remote memory location on the specified PE
     ///
     /// The data buffer may not be safe to upon return from this call, a handle is returned that can be used to check for completion,
@@ -665,7 +671,7 @@ pub trait MemoryRegionRDMA<T: Remote> {
     ///     }      
     /// }
     ///```
-    unsafe fn put(
+    unsafe fn put_buffer(
         &self,
         pe: usize,
         index: usize,
@@ -703,7 +709,12 @@ pub trait MemoryRegionRDMA<T: Remote> {
     /// }
     /// dst_mem_region.wait_all();
     ///```
-    unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: impl Into<MemregionRdmaInput<T>>);
+    unsafe fn put_buffer_unmanaged(
+        &self,
+        pe: usize,
+        index: usize,
+        data: impl Into<MemregionRdmaInput<T>>,
+    );
     // #[doc(alias("One-sided", "onesided"))]
     // /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
     // ///
@@ -788,6 +799,33 @@ pub trait MemoryRegionRDMA<T: Remote> {
         -> RdmaHandle<T>;
 
     #[doc(alias("One-sided", "onesided"))]
+    /// "At" (copies) data from remote memory location on the specified PE and returns it.
+    /// After calling this function, a handle is returned that the user can use to retrieve the result.
+    ///
+    /// # Safety
+    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
+    ///
+    /// # One-sided Operation
+    /// the calling PE initaites the remote transfer
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
+    ///
+    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
+    ///
+    /// let result = src_mem_region.at(1,5).block();
+    ///```
+    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T>;
+
+    #[doc(alias("One-sided", "onesided"))]
     /// "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
     /// After calling this function, the data may or may not have actually arrived into the data buffer.
     /// The user is responsible for transmission termination detection
@@ -830,39 +868,12 @@ pub trait MemoryRegionRDMA<T: Remote> {
     ///     }      
     /// }
     ///```
-    unsafe fn get<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn get_buffer<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         pe: usize,
         index: usize,
         data: U,
     ) -> RdmaHandle<T>;
-
-    #[doc(alias("One-sided", "onesided"))]
-    /// "At" (copies) data from remote memory location on the specified PE and returns it.
-    /// After calling this function, a handle is returned that the user can use to retrieve the result.
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    ///
-    /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    ///
-    /// let result = src_mem_region.at(1,5).block();
-    ///```
-    unsafe fn at(&self, pe: usize, index: usize) -> RdmaAtHandle<T>;
 
     // #[doc(alias("One-sided", "onesided"))]
     // /// Blocking "Gets" (copies) data from remote memory location on the specified PE into the provided data buffer.
@@ -1074,7 +1085,44 @@ impl<T: Remote> MemoryRegion<T> {
         std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
 
-    // }
+    pub(crate) unsafe fn put<R: Remote>(&self, pe: usize, index: usize, data: R) -> RdmaHandle<R> {
+        trace!("put memregion {:?} index: {:?}", self.alloc, index);
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.alloc.inner_alloc.put(
+                &self.scheduler,
+                self.counters.clone(),
+                data,
+                pe,
+                index * std::mem::size_of::<R>(),
+            )
+        } else {
+            println!(
+                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
+                self.alloc.num_bytes(),
+                std::mem::size_of::<T>(),
+                self.num_elems
+            );
+            panic!("index out of bounds");
+        }
+    }
+
+    pub(crate) unsafe fn put_unmanaged<R: Remote>(&self, pe: usize, index: usize, data: R) {
+        trace!("put memregion {:?} index: {:?}", self.alloc, index);
+        // println!("put unmanaged memregion data addr {:?} pe addr {:?}", &data as *const R, &pe as *const usize);
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.alloc
+                .inner_alloc
+                .put_unmanaged(data, pe, index * std::mem::size_of::<R>())
+        } else {
+            println!(
+                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
+                self.alloc.num_bytes(),
+                std::mem::size_of::<T>(),
+                self.num_elems
+            );
+            panic!("index out of bounds");
+        }
+    }
 
     // impl<T: AmDist+ 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
     /// copy data from local memory location into a remote memory location
@@ -1087,7 +1135,7 @@ impl<T: Remote> MemoryRegion<T> {
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
     #[tracing::instrument(skip(self, data), level = "debug")]
-    pub(crate) unsafe fn put<R: Remote>(
+    pub(crate) unsafe fn put_buffer<R: Remote>(
         &self,
         pe: usize,
         index: usize,
@@ -1099,7 +1147,7 @@ impl<T: Remote> MemoryRegion<T> {
             && data.len() > 0
         {
             // if let Ok(data_slice) = data.as_comm_slice() {
-            self.alloc.inner_alloc.put(
+            self.alloc.inner_alloc.put_buffer(
                 &self.scheduler,
                 self.counters.clone(),
                 data,
@@ -1127,7 +1175,7 @@ impl<T: Remote> MemoryRegion<T> {
         }
     }
 
-    pub(crate) unsafe fn put_unmanaged<R: Remote>(
+    pub(crate) unsafe fn put_buffer_unmanaged<R: Remote>(
         &self,
         pe: usize,
         index: usize,
@@ -1140,7 +1188,7 @@ impl<T: Remote> MemoryRegion<T> {
         {
             self.alloc
                 .inner_alloc
-                .put_unmanaged(data, pe, index * std::mem::size_of::<R>())
+                .put_buffer_unmanaged(data, pe, index * std::mem::size_of::<R>())
         } else {
             println!(
                 "mem region bytes: {:?} sizeof elem {:?} len {:?}",
@@ -1158,98 +1206,6 @@ impl<T: Remote> MemoryRegion<T> {
             panic!("index out of bounds");
         }
     }
-
-    // pub(crate) unsafe fn put2<R: Remote>(&self, pe: usize, index: usize, data: R) -> RdmaHandle<R> {
-    //     trace!("put memregion {:?} index: {:?}", self.alloc, index);
-    //     if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-    //         // if let Ok(data_slice) = data.as_comm_slice() {
-    //         self.rdma.comm().put2(
-    //             &self.scheduler,
-    //             self.counters.clone(),
-    //             pe,
-    //             data,
-    //             self.alloc.inner_alloc.clone(),
-    //             index * std::mem::size_of::<R>(),
-    //         )
-    //         // } else {
-    //         //     panic!("ERROR: put data src is not local");
-    //         // }
-    //     } else {
-    //         // println!(
-    //         //     "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-    //         //     self.alloc.num_bytes(),
-    //         //     std::mem::size_of::<T>(),
-    //         //     self.num_elems
-    //         // );
-    //         // println!(
-    //         //     "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
-    //         //     data.len() * std::mem::size_of::<R>(),
-    //         //     std::mem::size_of::<R>(),
-    //         //     data.len(),
-    //         //     index
-    //         // );
-    //         panic!("index out of bounds");
-    //     }
-    // }
-
-    // pub(crate) unsafe fn put_test<R: Remote>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     val: LamellarArrayRdmaInput<R>,
-    //     // ) -> RdmaHandle<R> {
-    // ) {
-    //     self.rdma.comm().put_test(
-    //         &self.scheduler,
-    //         self.counters.clone(),
-    //         pe,
-    //         val,
-    //         self.alloc.inner_alloc.clone(),
-    //         index * std::mem::size_of::<R>(),
-    //     )
-    // }
-
-    // pub(crate) unsafe fn get_test<R: Remote>(&self, pe: usize, index: usize) -> R {
-    //     self.rdma.comm().get_test(
-    //         &self.scheduler,
-    //         self.counters.clone(),
-    //         pe,
-    //         self.alloc.inner_alloc.clone(),
-    //         index * std::mem::size_of::<R>(),
-    //     )
-    // }
-
-    // /// copy data from local memory location into a remote memory localtion
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `pe` - id of remote PE to grab data from
-    // /// * `index` - offset into the remote memory window
-    // /// * `data` - address (which is "registered" with network device) of local input buffer that will be put into the remote memory
-    // /// the data buffer is free to be reused upon return of this function.
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) unsafe fn blocking_put<R: Remote, U: Into<LamellarMemoryRegion<R>>>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: U,
-    // ) {
-    //     //todo make return a result?
-    //     let data = data.into();
-    //     if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-    //         let num_bytes = data.len() * std::mem::size_of::<R>();
-    //         if let Ok(ptr) = data.as_ptr() {
-    //             let bytes = std::slice::from_raw_parts(ptr as *const u8, num_bytes);
-    //             self.rdma
-    //                 .comm().iput(pe, bytes, self.addr + index * std::mem::size_of::<R>())
-    //         } else {
-    //             panic!("ERROR: put data src is not local");
-    //         }
-    //     } else {
-    //         println!("{:?} {:?} {:?}", self.size, index, data.len());
-    //         panic!("index out of bounds");
-    //     }
-    // }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all<R: Remote>(
@@ -1276,6 +1232,22 @@ impl<T: Remote> MemoryRegion<T> {
         }
     }
 
+    pub(crate) unsafe fn get<R: Remote>(&self, pe: usize, index: usize) -> RdmaGetHandle<R> {
+        trace!("at memregion {:?} index: {:?}", self.alloc, index);
+
+        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.alloc.inner_alloc.get(
+                &self.scheduler,
+                self.counters.clone(),
+                pe,
+                index * std::mem::size_of::<R>(),
+            )
+        } else {
+            println!("{:?} {:?}", self.alloc.num_bytes(), index);
+            panic!("index out of bounds");
+        }
+    }
+
     //TODO: once we have a reliable asynchronos get wait mechanism, we return a request handle,
     //data probably needs to be referenced count or lifespan controlled so we know it exists when the get trys to complete
     //in the handle drop method we will wait until the request completes before dropping...  ensuring the data has a place to go
@@ -1287,7 +1259,7 @@ impl<T: Remote> MemoryRegion<T> {
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
     #[tracing::instrument(skip(self, data), level = "debug")]
-    pub(crate) unsafe fn get<R: Remote, U: Into<LamellarMemoryRegion<R>>>(
+    pub(crate) unsafe fn get_buffer<R: Remote, U: Into<LamellarMemoryRegion<R>>>(
         &self,
         pe: usize,
         index: usize,
@@ -1299,7 +1271,7 @@ impl<T: Remote> MemoryRegion<T> {
             && data.len() > 0
         {
             if let Ok(data_slice) = data.as_comm_slice() {
-                self.alloc.inner_alloc.get(
+                self.alloc.inner_alloc.get_buffer(
                     &self.scheduler,
                     self.counters.clone(),
                     pe,
@@ -1311,22 +1283,6 @@ impl<T: Remote> MemoryRegion<T> {
             }
         } else {
             println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, data.len(),);
-            panic!("index out of bounds");
-        }
-    }
-
-    pub(crate) unsafe fn at<R: Remote>(&self, pe: usize, index: usize) -> RdmaAtHandle<R> {
-        trace!("at memregion {:?} index: {:?}", self.alloc, index);
-
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.at(
-                &self.scheduler,
-                self.counters.clone(),
-                pe,
-                index * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!("{:?} {:?}", self.alloc.num_bytes(), index);
             panic!("index out of bounds");
         }
     }
@@ -1405,7 +1361,7 @@ impl<T: Remote> MemoryRegion<T> {
             //     self.addr + index * std::mem::size_of::<T>(),
             //     pe,
             // );
-            self.alloc.inner_alloc.put(
+            self.alloc.inner_alloc.put_buffer(
                 &self.scheduler,
                 self.counters.clone(),
                 data,
@@ -1446,7 +1402,7 @@ impl<T: Remote> MemoryRegion<T> {
             // let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes);
             // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
 
-            self.alloc.inner_alloc.get(
+            self.alloc.inner_alloc.get_buffer(
                 &self.scheduler,
                 self.counters.clone(),
                 pe,

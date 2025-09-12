@@ -2,7 +2,6 @@
 use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
 use crate::{
     active_messaging::AMCounters,
-    array::LamellarArrayRdmaInput,
     lamellae::{
         local_lamellae::rdma::{LocalAllocAtFuture, LocalAllocFuture},
         shmem_lamellae::rdma::{ShmemAtFuture, ShmemFuture},
@@ -118,9 +117,9 @@ impl<T: Remote> Future for RdmaHandle<T> {
     }
 }
 
-#[must_use = " RdmaAtHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[must_use = " RdmaGetHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
-pub struct RdmaAtHandle<T> {
+pub struct RdmaGetHandle<T> {
     #[pin]
     pub(crate) future: RdmaAtFuture<T>,
 }
@@ -141,7 +140,7 @@ pub(crate) enum RdmaAtFuture<T> {
     LocalAlloc(#[pin] LocalAllocAtFuture<T>),
 }
 
-impl<T: Remote> RdmaAtHandle<T> {
+impl<T: Remote> RdmaGetHandle<T> {
     /// This method will block the calling thread until the associated Array RDMA Operation completes
     pub fn block(self) -> T {
         match self.future {
@@ -183,7 +182,7 @@ impl<T: Remote> RdmaAtHandle<T> {
     }
 }
 
-impl<T: Remote> Future for RdmaAtHandle<T> {
+impl<T: Remote> Future for RdmaGetHandle<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -211,11 +210,20 @@ pub(crate) trait CommAllocRdma {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T>;
+    fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize);
+    fn put_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         src: impl Into<MemregionRdmaInput<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T>;
-    fn put_unmanaged<T: Remote>(
+    fn put_buffer_unmanaged<T: Remote>(
         &self,
         src: impl Into<MemregionRdmaInput<T>>,
         pe: usize,
@@ -234,80 +242,13 @@ pub(crate) trait CommAllocRdma {
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
         offset: usize,
-        dst: CommSlice<T>,
-    ) -> RdmaHandle<T>;
-    fn at<T: Remote>(
+    ) -> RdmaGetHandle<T>;
+    fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
         offset: usize,
-    ) -> RdmaAtHandle<T>;
+        dst: CommSlice<T>,
+    ) -> RdmaHandle<T>;
 }
-
-// #[enum_dispatch]
-// pub(crate) trait CommRdma {
-//     fn put<T: Remote>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         pe: usize,
-//         src: CommSlice<T>,
-//         dst_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> RdmaHandle<T>;
-//     fn put2<T: Remote>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         pe: usize,
-//         src: T,
-//         dst_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> RdmaHandle<T>;
-//     fn put_test<T: Dist>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         pe: usize,
-//         src: LamellarArrayRdmaInput<T>,
-//         dst_alloc: CommAllocInner,
-//         offset: usize,
-//     ); //-> RdmaHandle<T>;
-//     fn put_all<T: Remote>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         src: CommSlice<T>,
-//         dst_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> RdmaHandle<T>;
-//     fn get<T: Remote>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         pe: usize,
-//         src: CommAllocInner,
-//         offset: usize,
-//         dst: CommSlice<T>,
-//     ) -> RdmaHandle<T>;
-//     fn get_test<T: Remote>(
-//         &self,
-//         _scheduler: &Arc<Scheduler>,
-//         _counters: Vec<Arc<AMCounters>>,
-//         _pe: usize,
-//         _src: CommAllocInner,
-//         _offset: usize,
-//     ) -> T {
-//         let data: std::mem::MaybeUninit<T> = std::mem::MaybeUninit::uninit();
-//         unsafe { data.assume_init() }
-//     }
-//     fn at<T: Remote>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         pe: usize,
-//         src: CommAllocInner,
-//         offset: usize,
-//     ) -> RdmaAtHandle<T>;
-// }

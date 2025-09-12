@@ -50,7 +50,7 @@ impl<T: Dist> UnsafeArray<T> {
             let len = std::cmp::min(full_num_elems_on_pe - offset, buf.len() - buf_index);
             if len > 0 {
                 unsafe {
-                    transfer_requests.add_rdma(self.inner.data.mem_region.put(
+                    transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
                         pe,
                         offset,
                         buf.sub_region(buf_index..(buf_index + len)),
@@ -96,14 +96,14 @@ impl<T: Dist> UnsafeArray<T> {
             if len > 0 {
                 match op {
                     ArrayRdmaCmd::Put => unsafe {
-                        transfer_requests.add_rdma(self.inner.data.mem_region.put(
+                        transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
                             pe,
                             offset,
                             buf.sub_region(buf_index..(buf_index + len)),
                         ));
                     },
                     ArrayRdmaCmd::Get(_immediate) => unsafe {
-                        transfer_requests.add_rdma(self.inner.data.mem_region.get(
+                        transfer_requests.add_rdma(self.inner.data.mem_region.get_buffer(
                             pe,
                             offset,
                             buf.sub_region(buf_index..(buf_index + len)),
@@ -166,7 +166,7 @@ impl<T: Dist> UnsafeArray<T> {
     ) -> InnerRdmaHandle<T> {
         let global_index = index + self.inner.offset;
         let buf = buf.into();
-        let my_pe = self.inner.data.my_pe;
+        let _my_pe = self.inner.data.my_pe;
         let num_pes = self.inner.data.team.num_pes();
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
@@ -184,7 +184,7 @@ impl<T: Dist> UnsafeArray<T> {
                     temp_memreg.as_mut_slice()[k] = buf.as_slice()[j];
                     k += 1;
                 }
-                transfer_requests.add_rdma(self.inner.data.mem_region.put(
+                transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
                     pe,
                     offset,
                     temp_memreg.sub_region(0..k),
@@ -227,7 +227,7 @@ impl<T: Dist> UnsafeArray<T> {
                             temp_memreg.as_mut_slice()[k] = buf.as_slice()[j];
                             k += 1;
                         }
-                        transfer_requests.add_rdma(self.inner.data.mem_region.put(
+                        transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
                             pe,
                             offset,
                             temp_memreg.sub_region(0..k),
@@ -298,7 +298,7 @@ impl<T: Dist> UnsafeArray<T> {
                             self.inner
                                 .data
                                 .mem_region
-                                .get(pe, offset, temp_memreg.clone()),
+                                .get_buffer(pe, offset, temp_memreg.clone()),
                             temp_memreg,
                             buf.clone(),
                             (i..buf.len()).step_by(num_pes).enumerate(),
@@ -534,7 +534,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
+    pub unsafe fn get_buffered<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
         &self,
         index: usize,
         buf: U,
@@ -714,7 +714,7 @@ impl<T: Dist> UnsafeArray<T> {
             .expect("index out of bounds in LamellarArray at");
         ArrayAtHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayAtHandleState::Rdma(self.inner.data.mem_region.at(pe, offset)),
+            state: ArrayAtHandleState::Rdma(self.inner.data.mem_region.get(pe, offset)),
         }
     }
 
@@ -765,31 +765,7 @@ impl<T: Dist> UnsafeArray<T> {
     pub unsafe fn at(&self, index: usize) -> ArrayAtHandle<T> {
         self.internal_at(index)
     }
-
-    // pub unsafe fn get_test(&self, index: usize) -> T {
-    //     if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-    //         self.inner.data.mem_region.get_test(pe, offset)
-
-    //     } else {
-    //         panic!("index out of bounds");
-    //     }
-    // }
 }
-
-/// We dont implement this because "at" is actually same for all but UnsafeArray so we just implement those directly
-// impl<T: Dist > LamellarArrayGet<T> for UnsafeArray<T> {
-//     fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
-//         &self,
-//         index: usize,
-//         dst: U,
-//     ) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-//         self.internal_get(index, dst)
-//     }
-
-//     fn at(&self, index: usize) -> Pin<Box<dyn Future<Output = T> + Send>> {
-//         self.internal_at(index)
-//     }
-// }
 
 impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
     unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
@@ -866,6 +842,28 @@ impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
                 reqs: InnerRdmaHandle::Am(VecDeque::new()),
                 spawned: false,
             },
+        }
+    }
+}
+
+impl<T: Dist> LamellarRdmaPut<T> for UnsafeArray<T> {
+    unsafe fn new_put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let req = self.inner.data.mem_region.put(pe, offset, data);
+            ArrayRdmaHandle2 {
+                array: self.as_lamellar_byte_array(),
+                state: ArrayRdmaState::RdmaPut(req),
+                spawned: false,
+            }
+        } else {
+            panic!("index out of bounds in LamellarArray put");
+        }
+    }
+    unsafe fn new_put_unmanaged(&self, index: usize, data: T) {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.inner.data.mem_region.put_unmanaged(pe, offset, data);
+        } else {
+            panic!("index out of bounds in LamellarArray put");
         }
     }
 }
@@ -1122,7 +1120,7 @@ impl LamellarAm for UnsafeBlockGetAm {
                 .inner
                 .data
                 .mem_region
-                .get(
+                .get_buffer(
                     self.pe,
                     self.offset * self.array.inner.elem_size,
                     self.data.clone(),
@@ -1152,7 +1150,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
                 .inner
                 .data
                 .mem_region
-                .get(
+                .get_buffer(
                     self.pe,
                     self.offset * self.array.inner.elem_size,
                     self.temp_data.clone(),
@@ -1173,7 +1171,7 @@ impl LamellarAm for UnsafeCyclicGetAm {
             unsafe {
                 let _ = self
                     .data
-                    .put(
+                    .put_buffer(
                         self.my_pe,
                         j,
                         self.temp_data
@@ -1309,19 +1307,6 @@ impl LamellarAm for UnsafePutAm {
                 .inner
                 .comm_slice_for_range(self.start_index, self.len);
             self.data.get_comm_slice(self.pe, 0, comm_slice).await;
-            // println!("unsafe put am: pe {:?} si {:?} len {:?}",self.pe,self.start_index,self.len);
-            // match self
-            //     .array
-            //     .inner
-            //     .comm_slice(self.start_index, self.len)
-            // {
-
-            //     Some((elems, _)) => {
-            //         let comm_slice = CommSlice::from_slice(elems);
-            //          //alright to do this conversion because we spawn the get immediately, ensuring elems stays in scope until the RDMA is finished
-            //     }
-            //     None => {}
-            // }
         };
     }
 }
@@ -1355,82 +1340,3 @@ impl LamellarAm for UnsafeSmallPutAm {
         };
     }
 }
-
-// impl<T: Dist> UnsafeArray<T> {
-//     pub(crate) fn network_atomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-//             unsafe { self.inner.data.mem_region.atomic_swap(pe, offset, val, val) }
-//         } else {
-//             panic!("invalid index");
-//         }
-//     }
-
-//     pub(crate) fn network_iatomic_swap(&self, index: usize, val: &OneSidedMemoryRegion<T>) {
-//         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-//             unsafe {
-//                 self.inner
-//                     .data
-//                     .mem_region
-//                     .iatomic_swap(pe, offset, val, val)
-//             }
-//         } else {
-//             panic!("invalid index");
-//         }
-//     }
-
-//     pub fn rdma_get(&self, index: usize) -> impl Future<Output = T> {
-//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-//         unsafe { self.get_unchecked(index, &buf) };
-//         let team = self.team_rt();
-//         async move {
-//             team.lamellae.comm().wait();
-//             unsafe { buf.as_slice()[0] }
-//         }
-//     }
-
-//     pub fn blocking_rdma_get(&self, index: usize) -> T {
-//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-//         unsafe {
-//             self.blocking_get(index, &buf);
-//             buf.as_slice()[0]
-//         }
-//     }
-
-//     pub fn rdma_put(&self, index: usize, val: T) -> impl Future<Output = ()> {
-//         let buf = self.team_rt().alloc_one_sided_mem_region(1);
-//         unsafe { buf.as_mut_slice()[0] = val };
-//         unsafe { self.put_unchecked(index, &buf) };
-//         let team = self.team_rt();
-//         async move {
-//             team.lamellae.comm().wait();
-//         }
-//     }
-
-//     pub fn blocking_rdma_put(&self, index: usize, val: T) {
-//         let buf = self.team_rt().alloc_one_sided_mem_region(1);
-//         unsafe { buf.as_mut_slice()[0] = val };
-//         unsafe { self.put_unchecked(index, buf) };
-//     }
-
-//     pub fn atomic_swap(&self, index: usize, val: T) -> impl Future<Output = T> {
-//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-//         unsafe {
-//             buf.as_mut_slice()[0] = val;
-//         }
-//         self.network_atomic_swap(index, &buf);
-//         let team = self.team_rt();
-//         async move {
-//             team.lamellae.comm().wait();
-//             unsafe { buf.as_slice()[0] }
-//         }
-//     }
-
-//     pub fn blocking_atomic_swap(&self, index: usize, val: T) -> T {
-//         let buf: OneSidedMemoryRegion<T> = self.team_rt().alloc_one_sided_mem_region(1);
-//         unsafe {
-//             buf.as_mut_slice()[0] = val;
-//         }
-//         self.network_iatomic_swap(index, &buf);
-//         unsafe { buf.as_slice()[0] }
-//     }
-// }

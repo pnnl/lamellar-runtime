@@ -96,7 +96,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
-            .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
+            .initiate_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
             .into()
     }
 
@@ -300,7 +300,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
-            .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
+            .initiate_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
             .into()
     }
 

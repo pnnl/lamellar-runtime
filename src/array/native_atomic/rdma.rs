@@ -105,6 +105,15 @@ impl<T: Dist> LamellarArrayPut<T> for NativeAtomicArray<T> {
     }
 }
 
+impl<T: Dist> LamellarRdmaPut<T> for NativeAtomicArray<T> {
+    unsafe fn new_put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+        unimplemented!("new_put not implemented for NativeAtomicArray");
+    }
+    unsafe fn new_put_unmanaged(&self, index: usize, data: T) {
+        unimplemented!("new_put_unmanaged not implemented for NativeAtomicArray");
+    }
+}
+
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicAtAm {
     array: NativeAtomicByteArray, //inner of the indices we need to place data into
