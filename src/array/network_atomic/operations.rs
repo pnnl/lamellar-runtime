@@ -1,5 +1,5 @@
 use crate::array::network_atomic::*;
-use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState, OpState};
+use crate::array::operations::handle::{ArrayFetchOpHandle, FetchOpState, OpState};
 use crate::array::operations::read_only::LocalReadOnlyOps;
 // use crate::array::Network_atomic::rdma::atomic_store;
 // use crate::array::operations::handle::{ArrayFetchOpHandle, BatchOpState, FetchOpState};
@@ -11,17 +11,15 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
     fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                let handle =
-                    self.array
-                        .inner
-                        .data
-                        .mem_region
-                        .atomic_fetch_op(pe, offset, AtomicOp::Read);
-                ArrayFetchOpHandle {
-                    array: self.clone().into(),
-                    state: FetchOpState::Network(handle),
-                }
+            let handle =
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .atomic_fetch_op(pe, offset, AtomicOp::Read);
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
             }
         } else {
             panic!("invalid index");
@@ -34,20 +32,15 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            // let mut buf: OneSidedMemoryRegion<T> =
-            //     self.array.team_rt().alloc_one_sided_mem_region(1);
-            unsafe {
-                // buf.as_mut_slice()[0] = val;
-                let handle =
-                    self.array
-                        .inner
-                        .data
-                        .mem_region
-                        .atomic_op(pe, offset, AtomicOp::Write(val));
-                ArrayOpHandle {
-                    array: self.clone().into(),
-                    state: OpState::Network(handle),
-                }
+            let handle =
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .atomic_op(pe, offset, AtomicOp::Write(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
             }
         } else {
             panic!("invalid index");
@@ -56,16 +49,15 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                let handle = self.array.inner.data.mem_region.atomic_fetch_op(
-                    pe,
-                    offset,
-                    AtomicOp::Write(val),
-                );
-                ArrayFetchOpHandle {
-                    array: self.clone().into(),
-                    state: FetchOpState::Network(handle),
-                }
+            let handle =
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
             }
         } else {
             panic!("invalid index");

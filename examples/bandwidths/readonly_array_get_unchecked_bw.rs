@@ -62,7 +62,7 @@ fn main() {
                 let sub_reg = data.sub_region(j..(j + num_bytes as usize));
                 unsafe {
                     array
-                        .get_unchecked(ARRAY_LEN * (num_pes - 1), &sub_reg)
+                        .get_buffer(ARRAY_LEN * (num_pes - 1), &sub_reg)
                         .spawn()
                 };
                 sub_time += sub_timer.elapsed().as_secs_f64();

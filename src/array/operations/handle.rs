@@ -18,7 +18,7 @@ use futures_util::{ready, Future};
 use pin_project::{pin_project, pinned_drop};
 
 // /// a task handle for a single array operation that doesnt return any values
-// pub type ArrayOpHandle<T> = ArrayBatchOpHandle<T>;
+// pub type ArrayOpHandle<T> = ArrayBatchOpHandle;
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 #[pin_project(PinnedDrop)]
 pub struct ArrayOpHandle<T: Remote> {
@@ -32,13 +32,18 @@ pub(crate) enum OpState<T: Remote> {
     Am(#[pin] AmHandle<()>),
     Network(#[pin] AtomicOpHandle<T>),
     Rdma(#[pin] RdmaHandle<T>),
-    Completed,
+    Spawned,
 }
 
 #[pinned_drop]
 impl<T: Remote> PinnedDrop for ArrayOpHandle<T> {
     fn drop(mut self: Pin<&mut Self>) {
-        RuntimeWarning::DroppedHandle("an ArrayOpHandle").print();
+        match self.state {
+            OpState::Am(_) | OpState::Network(_) | OpState::Rdma(_) => {
+                RuntimeWarning::DroppedHandle("an ArrayOpHandle").print();
+            }
+            _ => {}
+        }
     }
 }
 
@@ -49,7 +54,7 @@ impl<T: Dist> ArrayOpHandle<T> {
     /// This function returns a handle that can be used to wait for the operation to complete
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(mut self) -> LamellarTask<()> {
-        let old_state = std::mem::replace(&mut self.state, OpState::Completed);
+        let old_state = std::mem::replace(&mut self.state, OpState::Spawned);
         match old_state {
             OpState::Am(am_handle) => am_handle.spawn(),
             OpState::Rdma(op_handle) => op_handle.spawn(),
@@ -64,7 +69,7 @@ impl<T: Dist> ArrayOpHandle<T> {
             "<handle>.spawn() or <handle>.await",
         )
         .print();
-        let old_state = std::mem::replace(&mut self.state, OpState::Completed);
+        let old_state = std::mem::replace(&mut self.state, OpState::Spawned);
         match old_state {
             OpState::Am(am_handle) => {
                 am_handle.block();
@@ -75,7 +80,7 @@ impl<T: Dist> ArrayOpHandle<T> {
             OpState::Network(op_handle) => {
                 op_handle.block();
             }
-            OpState::Completed => {
+            OpState::Spawned => {
                 // already completed
             }
         }
@@ -85,42 +90,40 @@ impl<T: Dist> ArrayOpHandle<T> {
 impl<T: Dist> Future for ArrayOpHandle<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match this.state.project() {
-            OpStateProj::Am(op_handle) => {
-                return op_handle.poll(cx);
-            }
-            OpStateProj::Network(op_handle) => {
-                return op_handle.poll(cx);
-            }
-            OpStateProj::Rdma(op_handle) => {
-                return op_handle.poll(cx);
-            }
+        let mut this = self.as_mut().project();
+        let res = match this.state.project() {
+            OpStateProj::Am(op_handle) => op_handle.poll(cx),
+            OpStateProj::Network(op_handle) => return op_handle.poll(cx),
+            OpStateProj::Rdma(op_handle) => return op_handle.poll(cx),
             _ => Poll::Ready(()),
+        };
+        if res.is_ready() {
+            self.state = OpState::Spawned;
         }
+        res
     }
 }
 
 /// a task handle for a batched array operation that doesnt return any values
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 #[pin_project(PinnedDrop)]
-pub struct ArrayBatchOpHandle<T: Remote> {
+pub struct ArrayBatchOpHandle {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     #[pin]
-    pub(crate) state: BatchOpState<T>,
+    pub(crate) state: BatchOpState,
 }
 
 #[pin_project(project = BatchOpStateProj)]
-pub(crate) enum BatchOpState<T: Remote> {
+pub(crate) enum BatchOpState {
     Reqs(#[pin] VecDeque<(AmHandle<()>, Vec<usize>)>),
-    Network(#[pin] AtomicOpHandle<T>),
-    Rdma(#[pin] RdmaHandle<T>),
+    // Network(#[pin] AtomicOpHandle<T>),
+    // Rdma(#[pin] RdmaHandle<T>),
     Launched(#[pin] VecDeque<(LamellarTask<()>, Vec<usize>)>),
     Completed,
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for ArrayBatchOpHandle<T> {
+impl PinnedDrop for ArrayBatchOpHandle {
     fn drop(mut self: Pin<&mut Self>) {
         if let BatchOpState::Reqs(reqs) = &mut self.state {
             RuntimeWarning::disable_warnings();
@@ -131,7 +134,7 @@ impl<T: Remote> PinnedDrop for ArrayBatchOpHandle<T> {
     }
 }
 
-impl<T: Dist> ArrayBatchOpHandle<T> {
+impl ArrayBatchOpHandle {
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -148,8 +151,8 @@ impl<T: Dist> ArrayBatchOpHandle<T> {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().spawn(self)
             }
-            BatchOpState::Rdma(op_handle) => op_handle.spawn(),
-            BatchOpState::Network(op_handle) => op_handle.spawn(),
+            // BatchOpState::Rdma(op_handle) => op_handle.spawn(),
+            // BatchOpState::Network(op_handle) => op_handle.spawn(),
             _ => panic!("ArrayBatchOpHandle should already have been spawned"),
         }
     }
@@ -170,12 +173,12 @@ impl<T: Dist> ArrayBatchOpHandle<T> {
                 self.state = BatchOpState::Launched(launched);
                 self.array.team().block_on(self)
             }
-            BatchOpState::Rdma(op_handle) => {
-                op_handle.block();
-            }
-            BatchOpState::Network(op_handle) => {
-                op_handle.block();
-            }
+            // BatchOpState::Rdma(op_handle) => {
+            //     op_handle.block();
+            // }
+            // BatchOpState::Network(op_handle) => {
+            //     op_handle.block();
+            // }
             BatchOpState::Launched(_reqs) => self.array.team().block_on(self),
             BatchOpState::Completed => {
                 // already completed
@@ -184,7 +187,7 @@ impl<T: Dist> ArrayBatchOpHandle<T> {
     }
 }
 
-impl<T: Dist> Future for ArrayBatchOpHandle<T> {
+impl Future for ArrayBatchOpHandle {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let BatchOpState::Reqs(reqs) = &mut self.state {
@@ -205,16 +208,17 @@ impl<T: Dist> Future for ArrayBatchOpHandle<T> {
             }
             return Poll::Ready(());
         }
-        let this = self.project();
-        match this.state.project() {
-            BatchOpStateProj::Network(op_handle) => {
-                return op_handle.poll(cx);
-            }
-            BatchOpStateProj::Rdma(op_handle) => {
-                return op_handle.poll(cx);
-            }
-            _ => Poll::Ready(()),
-        }
+        Poll::Ready(())
+        // let this = self.project();
+        // match this.state.project() {
+        //     BatchOpStateProj::Network(op_handle) => {
+        //         return op_handle.poll(cx);
+        //     }
+        //     BatchOpStateProj::Rdma(op_handle) => {
+        //         return op_handle.poll(cx);
+        //     }
+        //     _ => Poll::Ready(()),
+        // }
     }
 }
 

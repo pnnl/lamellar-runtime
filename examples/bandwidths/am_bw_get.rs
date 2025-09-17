@@ -30,7 +30,7 @@ impl LamellarAM for DataAM {
             let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
             let local_slice = local.as_mut_slice();
             local_slice[self.length - 1] = 255u8;
-            self.array.get_unchecked(self.index, local.clone()).await;
+            self.array.get_buffer(self.index, local.clone()).await;
 
             if local_slice[self.length - 1] == 255u8 {
                 println!("Failure");
@@ -66,7 +66,7 @@ fn main() {
             *i = my_pe as u8;
         }
     }
-    unsafe { array.put(0, data.clone()).block() };
+    unsafe { array.put_buffer(0, data.clone()).block() };
     world.barrier();
     let s = Instant::now();
     world.barrier();

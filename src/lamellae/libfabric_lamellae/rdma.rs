@@ -15,7 +15,7 @@ use crate::{
         comm::rdma::{RdmaAtFuture, RdmaFuture, RdmaGetHandle, RdmaHandle, Remote},
         CommAllocAddr, CommAllocRdma, CommSlice,
     },
-    memregion::MemregionRdmaInput,
+    memregion::MemregionRdmaInputInner,
     warnings::RuntimeWarning,
     LamellarTask,
 };
@@ -24,8 +24,9 @@ use super::{fabric::LibfabricAlloc, Scheduler};
 
 pub(super) enum AllocOp<T: Remote> {
     Put(usize, T),
-    PutBuf(usize, MemregionRdmaInput<T>),
-    PutAll(Vec<usize>, MemregionRdmaInput<T>),
+    PutBuf(usize, MemregionRdmaInputInner<T>),
+    PutAll(Vec<usize>, T),
+    PutAllBuf(Vec<usize>, MemregionRdmaInputInner<T>),
     Get(usize, CommSlice<T>),
 }
 
@@ -64,7 +65,7 @@ impl<T: Remote> LibfabricAllocFuture<T> {
             unsafe { dst.as_mut_ptr::<T>().write(*src) };
         }
     }
-    fn inner_put_buf(&self, pe: usize, src: &MemregionRdmaInput<T>) {
+    fn inner_put_buf(&self, pe: usize, src: &MemregionRdmaInputInner<T>) {
         if pe != self.my_pe {
             unsafe {
                 LibfabricAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice(), false)
@@ -82,13 +83,14 @@ impl<T: Remote> LibfabricAllocFuture<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_all(&self, pes: &Vec<usize>, src: &MemregionRdmaInput<T>) {
-        // trace!(
-        //     "put all src: {:?} dsts: {:?} len: {}",
-        //     src.usize_addr(),
-        //     dst,
-        //     src.len()
-        // );
+    fn inner_put_all(&self, pes: &Vec<usize>, src: &T) {
+        for pe in pes {
+            self.inner_put(*pe, src);
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn inner_put_all_buf(&self, pes: &Vec<usize>, src: &MemregionRdmaInputInner<T>) {
         for pe in pes {
             self.inner_put_buf(*pe, src);
         }
@@ -126,6 +128,9 @@ impl<T: Remote> LibfabricAllocFuture<T> {
             }
             AllocOp::PutAll(pes, src) => {
                 self.inner_put_all(pes, src);
+            }
+            AllocOp::PutAllBuf(pes, src) => {
+                self.inner_put_all_buf(pes, src);
             }
             AllocOp::Get(pe, dst) => {
                 self.inner_get(*pe, dst.clone());
@@ -299,7 +304,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -319,7 +324,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
     }
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) {
@@ -343,7 +348,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
         let pes = (0..self.num_pes()).collect();
@@ -357,6 +362,61 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
             counters,
         }
         .into()
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        for pe in 0..self.num_pes() {
+            if pe != self.ofi.my_pe {
+                unsafe {
+                    LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
+                };
+            } else {
+                let dst = CommAllocAddr(self.start() + offset);
+                unsafe { dst.as_mut_ptr::<T>().write(src) };
+            }
+        }
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let pes = (0..self.num_pes()).collect();
+        LibfabricAllocFuture {
+            my_pe: self.ofi.my_pe,
+            alloc: self.clone(),
+            offset,
+            op: AllocOp::PutAllBuf(pes, src.into()),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        let src = src.into();
+        for pe in 0..self.num_pes() {
+            if pe != self.ofi.my_pe {
+                unsafe { LibfabricAlloc::inner_put(&self, pe, offset, src.as_slice(), false) };
+            } else {
+                let dst = self.start() + offset;
+
+                if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len())
+                    };
+                } else {
+                    unsafe {
+                        std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
+                    }
+                }
+            }
+        }
     }
 
     fn get_buffer<T: Remote>(

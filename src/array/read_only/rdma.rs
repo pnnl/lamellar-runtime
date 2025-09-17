@@ -61,12 +61,12 @@ impl<T: Dist> ReadOnlyArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,0,0,0,0,0,0,0,0,0,0,0] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_buffered<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    pub unsafe fn get_buffer<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
         &self,
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle<T> {
-        self.array.get_buffered(index, buf)
+        self.array.get_buffer(index, buf)
     }
 
     // /// Performs a blocking (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
@@ -145,7 +145,7 @@ impl<T: Dist + 'static> LamellarArrayGet<T> for ReadOnlyArray<T> {
         index: usize,
         buf: U,
     ) -> ArrayRdmaHandle<T> {
-        self.array.get_buffered(index, buf)
+        self.array.get_buffer(index, buf)
     }
     fn at(&self, index: usize) -> ArrayAtHandle<T> {
         unsafe { self.array.at(index) }

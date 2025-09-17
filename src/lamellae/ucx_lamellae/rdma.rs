@@ -15,7 +15,7 @@ use crate::{
         comm::rdma::{RdmaAtFuture, RdmaFuture, RdmaGetHandle, RdmaHandle, Remote},
         CommAllocRdma, CommSlice,
     },
-    memregion::MemregionRdmaInput,
+    memregion::MemregionRdmaInputInner,
     warnings::RuntimeWarning,
     LamellarTask,
 };
@@ -28,8 +28,9 @@ use super::{
 #[derive(Clone)]
 pub(super) enum AllocOp<T: Remote> {
     Put(usize, T),
-    PutBuf(usize, MemregionRdmaInput<T>),
-    PutAll(Vec<usize>, MemregionRdmaInput<T>),
+    PutBuf(usize, MemregionRdmaInputInner<T>),
+    PutAll(Vec<usize>, T),
+    PutAllBuf(Vec<usize>, MemregionRdmaInputInner<T>),
     Get(usize, CommSlice<T>),
 }
 
@@ -62,7 +63,7 @@ impl<T: Remote> UcxAllocFuture<T> {
             unsafe { dst.write(src) };
         }
     }
-    fn inner_put_buf(&mut self, pe: usize, src: &MemregionRdmaInput<T>) {
+    fn inner_put_buf(&mut self, pe: usize, src: &MemregionRdmaInputInner<T>) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
             src.as_ptr(),
@@ -86,13 +87,14 @@ impl<T: Remote> UcxAllocFuture<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_all(&mut self, pes: &Vec<usize>, src: &MemregionRdmaInput<T>) {
-        // trace!(
-        //     "put all src: {:?} dsts: {:?} len: {}",
-        //     src.usize_addr(),
-        //     dst,
-        //     src.len()
-        // );
+    fn inner_put_all(&mut self, pes: &Vec<usize>, src: T) {
+        for pe in pes {
+            self.inner_put(*pe, src);
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn inner_put_all_buf(&mut self, pes: &Vec<usize>, src: &MemregionRdmaInputInner<T>) {
         for pe in pes {
             self.inner_put_buf(*pe, src);
         }
@@ -105,8 +107,7 @@ impl<T: Remote> UcxAllocFuture<T> {
             dst.len()
         );
         if pe != self.my_pe {
-            self.request =
-                Some(unsafe { UcxAlloc::get(&self.alloc, pe, self.offset, &mut dst, false) });
+            self.request = Some(unsafe { UcxAlloc::get(&self.alloc, pe, self.offset, &mut dst) });
         } else {
             let src = self.alloc.start() + self.offset;
             if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
@@ -130,7 +131,10 @@ impl<T: Remote> UcxAllocFuture<T> {
                 self.inner_put_buf(pe, &src);
             }
             AllocOp::PutAll(pes, src) => {
-                self.inner_put_all(&pes, &src);
+                self.inner_put_all(&pes, src);
+            }
+            AllocOp::PutAllBuf(pes, src) => {
+                self.inner_put_all_buf(&pes, &src);
             }
             AllocOp::Get(pe, dst) => {
                 self.inner_get(pe, dst);
@@ -144,16 +148,6 @@ impl<T: Remote> UcxAllocFuture<T> {
         } else {
             self.alloc.wait_all();
         }
-        // if let Some(mut request) = self.request.take() {
-        //     while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //         request = request2;
-        //         std::thread::yield_now();
-        //     }
-        // } else {
-        //     while !self.alloc.wait_all() {
-        //         std::thread::yield_now();
-        //     }
-        // }
         self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -171,35 +165,6 @@ impl<T: Remote> UcxAllocFuture<T> {
             },
             counters,
         )
-        // self.scheduler.clone().spawn_task(
-        //     async move {
-        //         // println!(
-        //         //     "[{:?}] in spawn rdma {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     self.alloc,
-        //         //     self.offset,
-        //         //     self.request.is_some()
-        //         // );
-        //         if let Some(mut request) = self.request.take() {
-        //             while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //                 request = request2;
-        //                 async_std::task::yield_now().await;
-        //             }
-        //         } else {
-        //             while !self.alloc.wait_all() {
-        //                 async_std::task::yield_now().await;
-        //             }
-        //         }
-        //         // println!(
-        //         //     "[{:?}] out spawn rdma {:?} {:?} {:?}",
-        //         //     std::thread::current().id(),
-        //         //     self.alloc,
-        //         //     self.offset,
-        //         //     self.request.is_some()
-        //         // );
-        //     },
-        //     counters,
-        // )
     }
 }
 
@@ -237,32 +202,6 @@ impl<T: Remote> Future for UcxAllocFuture<T> {
         Poll::Ready(())
     }
 }
-// impl<T: Remote> Future for UcxAllocFuture<T> {
-//     type Output = ();
-//     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         if !self.spawned {
-//             // println!("[{:?}] in poll rdma", std::thread::current().id());
-//             self.exec_op();
-//         }
-//         let this = self.project();
-//         *this.spawned = true;
-//         if let Some(request) = this.request.take() {
-//             if let Some(request) = request.wait(false).expect("Wait failed") {
-//                 *this.request = Some(request);
-//                 cx.waker().wake_by_ref();
-//                 return Poll::Pending;
-//             }
-//         } else {
-//             if !this.alloc.wait_all() {
-//                 cx.waker().wake_by_ref();
-//                 return Poll::Pending;
-//             }
-//         }
-
-//         // println!("[{:?}] out poll rdma", std::thread::current().id());
-//         Poll::Ready(())
-//     }
-// }
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxAllocAtFuture<T> {
@@ -285,7 +224,6 @@ impl<T: Remote> UcxAllocAtFuture<T> {
                 self.pe,
                 self.offset,
                 std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
-                false,
             )
         });
     }
@@ -293,16 +231,6 @@ impl<T: Remote> UcxAllocAtFuture<T> {
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
         self.spawned = true;
-        // if let Some(mut request) = self.request.take() {
-        //     while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //         request = request2;
-        //         std::thread::yield_now();
-        //     }
-        // } else {
-        //     while !self.alloc.wait_all() {
-        //         std::thread::yield_now();
-        //     }
-        // }
         if let Some(request) = self.request.take() {
             request.wait();
         } else {
@@ -315,24 +243,6 @@ impl<T: Remote> UcxAllocAtFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        // self.scheduler.clone().spawn_task(
-        //     async move {
-        //         // println!("in spawn at");
-        //         if let Some(mut request) = self.request.take() {
-        //             while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //                 request = request2;
-        //                 async_std::task::yield_now().await;
-        //             }
-        //         } else {
-        //             while !self.alloc.wait_all() {
-        //                 async_std::task::yield_now().await;
-        //             }
-        //         }
-        //         // println!("out spawn at");
-        //         unsafe { self.result.assume_init() }
-        //     },
-        //     counters,
-        // )
         self.scheduler.clone().spawn_task(
             async move {
                 if let Some(request) = self.request.take() {
@@ -386,36 +296,6 @@ impl<T: Remote> Future for UcxAllocAtFuture<T> {
     }
 }
 
-// impl<T: Remote> Future for UcxAllocAtFuture<T> {
-//     type Output = T;
-//     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         if !self.spawned {
-//             // println!("(in poll at");
-//             self.exec_at();
-//         }
-//         let this = self.project();
-//         *this.spawned = true;
-//         if let Some(request) = this.request.take() {
-//             if let Some(request) = request.wait(false).expect("Wait failed") {
-//                 *this.request = Some(request);
-//                 cx.waker().wake_by_ref();
-//                 return Poll::Pending;
-//             }
-//         } else {
-//             if !this.alloc.wait_all() {
-//                 cx.waker().wake_by_ref();
-//                 return Poll::Pending;
-//             }
-//         }
-//         // println!("out poll at");
-//         Poll::Ready(unsafe {
-//             let mut res = MaybeUninit::uninit();
-//             std::mem::swap(this.result, &mut res);
-//             res.assume_init()
-//         })
-//     }
-// }
-
 impl CommAllocRdma for Arc<UcxAlloc> {
     fn put<T: Remote>(
         &self,
@@ -454,7 +334,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -475,7 +355,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
     }
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) {
@@ -506,7 +386,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
         let pes = (0..self.num_pes).collect();
@@ -514,13 +394,81 @@ impl CommAllocRdma for Arc<UcxAlloc> {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
-            op: AllocOp::PutAll(pes, src.into()),
+            op: AllocOp::PutAll(pes, src),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
             request: None,
         }
         .into()
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        let pes = (0..self.num_pes).collect::<Vec<usize>>();
+        for pe in pes {
+            if pe != self.my_pe {
+                // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
+                // not that the operation has completed on the remote side
+                unsafe {
+                    UcxAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false)
+                };
+            } else {
+                let dst = (self.start() + offset) as *mut T;
+                unsafe { dst.write(src) };
+            }
+        }
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let pes = (0..self.num_pes).collect();
+        UcxAllocFuture {
+            my_pe: self.my_pe,
+            alloc: self.clone(),
+            offset,
+            op: AllocOp::PutAllBuf(pes, src.into()),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        let src = src.into();
+        let pes = (0..self.num_pes).collect::<Vec<usize>>();
+        for pe in pes {
+            trace!(
+                "putting src: {:?} dst: {:?} len: {} num bytes {}",
+                src.as_ptr(),
+                self.start() + offset,
+                src.len(),
+                src.len() * std::mem::size_of::<T>()
+            );
+            if pe != self.my_pe {
+                // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
+                // not that the operation has completed on the remote side
+                unsafe { UcxAlloc::put_inner(&self, pe, offset, src.as_slice(), false) };
+            } else {
+                let dst = self.start() + offset;
+                if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len())
+                    };
+                } else {
+                    unsafe {
+                        std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
+                    }
+                }
+            }
+        }
     }
 
     fn get_buffer<T: Remote>(

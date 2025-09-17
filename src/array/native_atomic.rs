@@ -3,7 +3,7 @@ pub(crate) use handle::NativeAtomicArrayHandle;
 
 pub(crate) mod iteration;
 pub(crate) mod operations;
-mod rdma;
+pub(crate) mod rdma;
 use crate::array::atomic::AtomicElement;
 
 // use crate::array::private::LamellarArrayPrivate;

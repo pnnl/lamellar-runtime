@@ -29,7 +29,7 @@ pub use crate::array::{
     //LamellarArrayArithmeticReduce,
     //LamellarArrayCompareReduce,
     LamellarArrayGet,
-    LamellarArrayPut,
+    // LamellarArrayPut,
     //LamellarArrayReduce,
     LamellarReadArray,
     LamellarWriteArray,

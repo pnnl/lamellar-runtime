@@ -373,7 +373,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         index: impl OpInput<'a, usize>,
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         let res = self.initiate_batch_op_inner(val, index, op, byte_array.clone());
         ArrayBatchOpHandle {
             array: byte_array,
@@ -1208,16 +1208,14 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
         // println!("in Network atomic swap");
         //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                let handle =
-                    self.inner
-                        .data
-                        .mem_region
-                        .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
-                ArrayFetchOpHandle {
-                    array: self.clone().into(),
-                    state: FetchOpState::Network(handle),
-                }
+            let handle =
+                self.inner
+                    .data
+                    .mem_region
+                    .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
             }
         } else {
             self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())

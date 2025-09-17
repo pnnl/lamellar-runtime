@@ -701,10 +701,14 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for LocalLockArra
 impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("locallock from unsafe");
+        // let mut timer = std::time::Instant::now();
         array.await_on_outstanding(DarcMode::LocalLockArray).await;
+        // println!("await on outstanding {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         let lock = LocalRwDarc::new(array.team_rt(), ())
             .await
             .expect("PE in team");
+        // println!("lock creation {:?}", timer.elapsed());
 
         LocalLockArray {
             lock: lock,

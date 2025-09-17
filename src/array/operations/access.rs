@@ -130,7 +130,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -334,7 +334,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,

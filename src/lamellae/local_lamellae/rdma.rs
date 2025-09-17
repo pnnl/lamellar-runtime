@@ -19,7 +19,7 @@ use crate::{
         local_lamellae::comm::LocalAlloc,
         CommAllocRdma, RdmaAtFuture, RdmaGetHandle,
     },
-    memregion::MemregionRdmaInput,
+    memregion::MemregionRdmaInputInner,
     warnings::RuntimeWarning,
     LamellarTask,
 };
@@ -28,7 +28,7 @@ use super::Scheduler;
 
 pub(super) enum AllocOp<T: Remote> {
     Put(T),
-    PutBuf(MemregionRdmaInput<T>), //for local lamellae put_all is equivalent to put
+    PutBuf(MemregionRdmaInputInner<T>), //for local lamellae put_all is equivalent to put
     Get(CommSlice<T>),
 }
 
@@ -44,7 +44,7 @@ pub(crate) struct LocalAllocFuture<T: Remote> {
 
 impl<T: Remote> LocalAllocFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_buf(&self, src: &MemregionRdmaInput<T>) {
+    fn inner_put_buf(&self, src: &MemregionRdmaInputInner<T>) {
         let dst = unsafe { self.alloc.as_mut_ptr::<T>().add(self.offset) };
         // let src = src.as_slice();
         trace!(
@@ -253,7 +253,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         _pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -271,7 +271,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     }
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         _pe: usize,
         offset: usize,
     ) {
@@ -289,7 +289,34 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        // self.put_amt.fetch_add(
+        //     src.len() * std::mem::size_of::<T>() * self.num_pes,
+        //     Ordering::SeqCst,
+        // );
+        LocalAllocFuture {
+            alloc: self.clone(),
+            offset,
+            op: AllocOp::Put(src),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
+        unsafe {
+            dst.write(src);
+        }
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
         // self.put_amt.fetch_add(
@@ -305,6 +332,21 @@ impl CommAllocRdma for Arc<LocalAlloc> {
             counters,
         }
         .into()
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
+        let src = src.into();
+        if !(src.contains(&dst.addr()) || src.contains(&(dst.addr() + src.len()))) {
+            unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len()) };
+        } else {
+            unsafe {
+                std::ptr::copy(src.as_ptr(), dst, src.len());
+            }
+        }
     }
     fn get_buffer<T: Remote>(
         &self,

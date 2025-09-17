@@ -1,6 +1,6 @@
 use crate::{
     env_var::config,
-    lamellae::{AllocationType, CommProgress, CommSlice, Lamellae},
+    lamellae::{AllocationType, CommProgress, Lamellae},
     lamellar_arch::LamellarArchRT,
     lamellar_request::LamellarRequest,
     memregion::MemoryRegion,
@@ -8,7 +8,7 @@ use crate::{
     warnings::RuntimeWarning,
 };
 
-use futures_util::{future::join_all, Future};
+use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
 use std::sync::{

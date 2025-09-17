@@ -59,7 +59,7 @@ impl LamellarAM for RdmaAM {
         //update an element on the original node
         local_slice[0] = lamellar::current_pe as u8;
         unsafe {
-            self.array.put(my_index, &local.sub_region(0..=0)).await;
+            self.array.put_buffer(my_index, &local.sub_region(0..=0)).await;
         }
     }
 }
@@ -91,7 +91,7 @@ fn main() {
                 *i = 255_u8;
             }
         }
-        unsafe { array.put(0, &local_mem_region).block() };
+        unsafe { array.put_buffer(0, &local_mem_region).block() };
     }
 
     array.print();

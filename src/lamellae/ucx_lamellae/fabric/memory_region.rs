@@ -9,7 +9,7 @@ use std::{
 
 use ucx1_sys::*;
 
-use super::{context::Context, endpoint::Endpoint, error::Error};
+use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc};
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 pub struct MemoryHandle {
@@ -158,7 +158,7 @@ impl MemoryHandleInner {
 
     //TODO create an exchange that uses a single registered memory region
 
-    pub(crate) fn exchange_key(
+    pub(crate) fn exchange_key_pmi(
         &self,
         endpoints: &[Arc<Endpoint>],
         pmi: &Arc<PmiX>,
@@ -173,6 +173,7 @@ impl MemoryHandleInner {
             "mem_region_address_{}",
             MEMREGION_CNT.fetch_add(1, Ordering::SeqCst)
         );
+        // println!("[exchange_key_pmi] len: {}", address_and_key.len());
         pmi.put(&id, &address_and_key).unwrap();
         pmi.exchange().unwrap();
 
@@ -186,6 +187,52 @@ impl MemoryHandleInner {
             // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
             all_rkeys.push((remote_address, Arc::new(remote_rkey)));
         }
+        Ok(all_rkeys)
+    }
+
+    pub(crate) fn exchange_key_alloc(
+        &self,
+        endpoints: &[Arc<Endpoint>],
+        pmi: &Arc<PmiX>,
+        exchange_buffer: &Arc<UcxAlloc>,
+    ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
+        let rkey = self.pack();
+        let mut address_and_key = self.addr.to_ne_bytes().to_vec();
+        address_and_key.extend_from_slice(rkey.as_ref());
+        // let id = format!(
+        //     "mem_region_address_{}",
+        //     MEMREGION_CNT.fetch_add(1, Ordering::SeqCst)
+        // );
+        // println!("[exchange_key_alloc] len: {}", address_and_key.len());
+
+        pmi.barrier(false);
+        for pe in 0..exchange_buffer.num_pes {
+            unsafe {
+                exchange_buffer.put_inner(
+                    pe,
+                    exchange_buffer.my_pe * address_and_key.len(),
+                    &address_and_key,
+                    false,
+                )
+            };
+        }
+
+        exchange_buffer.wait_all();
+        pmi.barrier(false);
+        let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
+        // println!("[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
+        let mut all_rkeys = Vec::new();
+        for pe in 0..exchange_buffer.num_pes {
+            let res = ex_buff_slice[pe * address_and_key.len()..(pe + 1) * address_and_key.len()]
+                .to_vec();
+            // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
+            let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
+            // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
+            let remote_rkey = RKey::unpack(&endpoints[pe], &res[8..]);
+            // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
+            all_rkeys.push((remote_address, Arc::new(remote_rkey)));
+        }
+        ex_buff_slice.fill(0);
         Ok(all_rkeys)
     }
 }

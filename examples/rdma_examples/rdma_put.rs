@@ -33,7 +33,7 @@ fn main() {
 
         // we can use the local_array to initialize our local portion a shared memory region
         unsafe {
-            array.put(my_pe, 0, data.clone()).block();
+            array.put_buffer(my_pe, 0, data.clone()).block();
         };
 
         //we can "put" from our segment of a shared mem region into another nodes shared mem region
@@ -44,7 +44,7 @@ fn main() {
             );
             world.barrier();
             unsafe {
-                array.put(num_pes - 1, 0, array.clone()).block();
+                array.put_buffer(num_pes - 1, 0, array.clone()).block();
             }
         } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
@@ -53,7 +53,7 @@ fn main() {
                 std::thread::yield_now();
             } // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
-            unsafe { array.put(my_pe, 0, data.clone()).block() };
+            unsafe { array.put_buffer(my_pe, 0, data.clone()).block() };
             println!(
                 "-------------------------------------------------------------------------------"
             );
@@ -69,7 +69,7 @@ fn main() {
             );
             world.barrier();
             unsafe {
-                array.put(num_pes - 1, 0, data.clone()).block();
+                array.put_buffer(num_pes - 1, 0, data.clone()).block();
             }
         } else if my_pe == num_pes - 1 {
             println!("[{:?}] Before {:?}", my_pe, array_slice);
@@ -78,7 +78,7 @@ fn main() {
                 std::thread::yield_now();
             } // wait for put to show up
             println!("[{:?}] After {:?}", my_pe, array_slice);
-            unsafe { array.put(my_pe, 0, data.clone()).block() };
+            unsafe { array.put_buffer(my_pe, 0, data.clone()).block() };
             println!(
                 "-------------------------------------------------------------------------------"
             );

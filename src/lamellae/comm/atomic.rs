@@ -331,6 +331,14 @@ pub(crate) trait CommAllocAtomic {
         offset: usize,
     ) -> AtomicOpHandle<T>;
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T>;
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize);
     fn atomic_fetch_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,

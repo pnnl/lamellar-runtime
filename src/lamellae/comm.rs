@@ -36,7 +36,7 @@ use crate::{
         shmem_lamellae::{comm::ShmemComm, fabric::ShmemAlloc},
         AllocationType, SerializedData,
     },
-    memregion::MemregionRdmaInput,
+    memregion::MemregionRdmaInputInner,
     scheduler::Scheduler,
     Deserialize, Serialize,
 };
@@ -279,7 +279,7 @@ impl CommAllocRdma for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -305,7 +305,7 @@ impl CommAllocRdma for CommAllocInner {
     }
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) {
@@ -333,7 +333,7 @@ impl CommAllocRdma for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
         match self {
@@ -353,6 +353,79 @@ impl CommAllocRdma for CommAllocInner {
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 CommAllocRdma::put_all(inner_alloc, scheduler, counters, src, offset)
+            }
+        }
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_unmanaged(inner_alloc, src, offset)
+            }
+        }
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer(inner_alloc, scheduler, counters, src, offset)
+            }
+        }
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_all_buffer_unmanaged(inner_alloc, src, offset)
             }
         }
     }
@@ -462,6 +535,54 @@ impl CommAllocAtomic for CommAllocInner {
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_op_unmanaged(op, pe, offset)
+            }
+        }
+    }
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all(scheduler, counters, op, offset)
+            }
+        }
+    }
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_all_unmanaged(op, offset)
             }
         }
     }
@@ -604,12 +725,12 @@ impl CommAlloc {
     pub(crate) fn num_bytes(&self) -> usize {
         self.inner_alloc.size()
     }
-    pub(crate) fn contains(&self, addr: &usize) -> bool {
-        self.inner_alloc.contains(addr)
-    }
-    pub(crate) fn calc_offset(&self, addr: &usize) -> CommAllocAddr {
-        CommAllocAddr(*addr - *self.inner_alloc.addr())
-    }
+    // pub(crate) fn contains(&self, addr: &usize) -> bool {
+    //     self.inner_alloc.contains(addr)
+    // }
+    // pub(crate) fn calc_offset(&self, addr: &usize) -> CommAllocAddr {
+    //     CommAllocAddr(*addr - *self.inner_alloc.addr())
+    // }
 }
 
 impl CommAllocRdma for CommAlloc {
@@ -630,7 +751,7 @@ impl CommAllocRdma for CommAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -639,7 +760,7 @@ impl CommAllocRdma for CommAlloc {
     }
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) {
@@ -649,10 +770,30 @@ impl CommAllocRdma for CommAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
         self.inner_alloc.put_all(scheduler, counters, src, offset)
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        self.inner_alloc.put_all_unmanaged(src, offset)
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.inner_alloc
+            .put_all_buffer(scheduler, counters, src, offset)
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        self.inner_alloc.put_all_buffer_unmanaged(src, offset)
     }
     fn get_buffer<T: Remote>(
         &self,
@@ -900,7 +1041,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<U>>,
+        src: impl Into<MemregionRdmaInputInner<U>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<U> {
@@ -914,7 +1055,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
     }
     fn put_buffer_unmanaged<U: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<U>>,
+        src: impl Into<MemregionRdmaInputInner<U>>,
         pe: usize,
         offset: usize,
     ) {
@@ -926,11 +1067,33 @@ impl<T> CommAllocRdma for CommSlice<T> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<U>>,
+        src: U,
         offset: usize,
     ) -> RdmaHandle<U> {
         self.inner_alloc
             .put_all(scheduler, counters, src, offset * std::mem::size_of::<U>())
+    }
+    fn put_all_unmanaged<U: Remote>(&self, src: U, offset: usize) {
+        self.inner_alloc
+            .put_all_unmanaged(src, offset * std::mem::size_of::<U>())
+    }
+    fn put_all_buffer<U: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<U>>,
+        offset: usize,
+    ) -> RdmaHandle<U> {
+        self.inner_alloc
+            .put_all_buffer(scheduler, counters, src, offset * std::mem::size_of::<U>())
+    }
+    fn put_all_buffer_unmanaged<U: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<U>>,
+        offset: usize,
+    ) {
+        self.inner_alloc
+            .put_all_buffer_unmanaged(src, offset * std::mem::size_of::<U>())
     }
     fn get<U: Remote>(
         &self,

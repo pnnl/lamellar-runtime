@@ -438,6 +438,14 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         })
     }
 
+    pub unsafe fn put(&self, index: usize, data: T) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put(self, self.pe, index, data)
+    }
+
+    pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_unmanaged(self, self.pe, index, data)
+    }
+
     #[doc(alias("One-sided", "onesided"))]
     /// "Puts" (copies) data from a local memory location `data` into this memory region
     ///
@@ -493,8 +501,20 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///     }      
     /// }
     ///```
-    pub unsafe fn put_buffer(&self, index: usize, data: MemregionRdmaInput<T>) -> RdmaHandle<T> {
-        MemoryRegionRDMA::<T>::put_buffer(self, self.pe, index, data)
+    pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put_buffer(self, self.pe, index, data.into())
+    }
+
+    pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) {
+        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self, self.pe, index, data.into())
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -608,11 +628,11 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         index: usize,
         data: U,
     ) -> RdmaHandle<T> {
-        MemoryRegionRDMA::<T>::get_buffer(self, self.pe, index, data)
+        RTMemoryRegionRDMA::<T>::get_buffer(self, self.pe, index, data)
     }
 
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
-        MemoryRegionRDMA::<T>::get(self, pe, index)
+        RTMemoryRegionRDMA::<T>::get(self, pe, index)
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -981,8 +1001,7 @@ impl<T: Remote> MemRegionId for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Remote> SubRegion<T> for OneSidedMemoryRegion<T> {
-    type Region = OneSidedMemoryRegion<T>;
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         let start = match range.start_bound() {
             //inclusive
             Bound::Included(idx) => *idx,
@@ -1028,7 +1047,7 @@ impl<T: Remote> AsBase for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
+impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
     unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
@@ -1061,7 +1080,7 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInput<T>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr
@@ -1080,7 +1099,7 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInput<T>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
         if self.pe == pe {
             self.mr
@@ -1095,15 +1114,27 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn put_all(
+    unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put(self,self.pe, index, data)
+    }
+
+    unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_unmanaged(self,self.pe, index, data)
+    }
+
+    unsafe fn put_all_buffer(
         &self,
         index: usize,
-        data: impl Into<MemregionRdmaInput<T>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
-        self.mr
-            .inner
-            .mr
-            .put_all(self.sub_region_offset + index, data)
+        RTMemoryRegionRDMA::<T>::put_buffer(self,self.pe, index, data)
+    }
+    unsafe fn put_all_buffer_unmanaged(
+        &self,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) {
+        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self,self.pe, index, data)
     }
 
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
@@ -1137,9 +1168,6 @@ impl<T: Remote> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-}
-
-impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
     unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
         if self.pe == pe {
             self.mr

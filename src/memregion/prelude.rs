@@ -1,5 +1,5 @@
 pub use crate::memregion::{
-    Dist, LamellarMemoryRegion, MemoryRegionRDMA, OneSidedMemoryRegion, RemoteMemoryRegion,
+    Dist, LamellarMemoryRegion, OneSidedMemoryRegion, RemoteMemoryRegion,
     SharedMemoryRegion, SubRegion,
 };
 

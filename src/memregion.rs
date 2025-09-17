@@ -86,70 +86,33 @@ pub trait Dist:
 
 #[derive(Clone)]
 pub enum MemregionRdmaInput<T: Remote> {
+    LamellarMemRegion(LamellarMemoryRegion<T>),
+    SharedMemRegion(SharedMemoryRegion<T>),
+    LocalMemRegion(OneSidedMemoryRegion<T>),
+    Owned(T),
+    ArcVec((Arc<Vec<T>>, Range<usize>)),
+}
+
+#[derive(Clone)]
+pub(crate) enum MemregionRdmaInputInner<T: Remote> {
+    LamellarMemRegion(LamellarMemoryRegion<T>),
+    SharedMemRegion(SharedMemoryRegion<T>),
+    LocalMemRegion(OneSidedMemoryRegion<T>),
     Slice(CommSlice<T>),
     Owned(T),
     ArcVec((Arc<Vec<T>>, Range<usize>)),
 }
 
-impl<T: Remote> MemregionRdmaInput<T> {
-    pub(crate) fn as_slice(&self) -> &[T] {
-        match self {
-            MemregionRdmaInput::Slice(s) => s.as_slice(),
-            MemregionRdmaInput::Owned(v) => std::slice::from_ref(v),
-            MemregionRdmaInput::ArcVec((v, r)) => &v[r.clone()],
-        }
-    }
-
-    pub(crate) fn as_ptr(&self) -> *const T {
-        match self {
-            MemregionRdmaInput::Slice(s) => s.as_ptr(),
-            MemregionRdmaInput::Owned(v) => v as *const T,
-            MemregionRdmaInput::ArcVec((v, r)) => v[r.clone()].as_ptr(),
-        }
-    }
-
-    pub(crate) fn contains(&self, addr: &usize) -> bool {
-        match self {
-            MemregionRdmaInput::Slice(s) => s.contains(addr),
-            MemregionRdmaInput::Owned(v) => v as *const T as usize == *addr,
-            MemregionRdmaInput::ArcVec((_v, r)) => r.contains(addr),
-        }
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        match self {
-            MemregionRdmaInput::Slice(s) => s.len(),
-            MemregionRdmaInput::Owned(_) => 1,
-            MemregionRdmaInput::ArcVec((_v, r)) => r.len(),
-        }
-    }
-
-    pub(crate) fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
-        match self {
-            MemregionRdmaInput::Slice(s) => MemregionRdmaInput::Slice(s.sub_slice(range)),
-            MemregionRdmaInput::Owned(v) => {
-                if range.start_bound() == std::ops::Bound::Included(&0)
-                    && (range.end_bound() == std::ops::Bound::Included(&0)
-                        || range.end_bound() == std::ops::Bound::Excluded(&1))
-                {
-                    MemregionRdmaInput::Owned(*v)
-                } else {
-                    panic!("range out of bounds")
-                }
+impl<T: Remote> From<MemregionRdmaInput<T>> for MemregionRdmaInputInner<T> {
+    fn from(input: MemregionRdmaInput<T>) -> Self {
+        match input {
+            MemregionRdmaInput::LamellarMemRegion(mr) => {
+                MemregionRdmaInputInner::LamellarMemRegion(mr)
             }
-            MemregionRdmaInput::ArcVec((v, _r)) => {
-                let start = match range.start_bound() {
-                    std::ops::Bound::Included(b) => *b,
-                    std::ops::Bound::Excluded(b) => *b + 1,
-                    std::ops::Bound::Unbounded => 0,
-                };
-                let end = match range.end_bound() {
-                    std::ops::Bound::Included(b) => *b + 1,
-                    std::ops::Bound::Excluded(b) => *b,
-                    std::ops::Bound::Unbounded => v.len(),
-                };
-                MemregionRdmaInput::ArcVec((v.clone(), start..end))
-            }
+            MemregionRdmaInput::SharedMemRegion(mr) => MemregionRdmaInputInner::SharedMemRegion(mr),
+            MemregionRdmaInput::LocalMemRegion(mr) => MemregionRdmaInputInner::LocalMemRegion(mr),
+            MemregionRdmaInput::Owned(v) => MemregionRdmaInputInner::Owned(v),
+            MemregionRdmaInput::ArcVec((v, r)) => MemregionRdmaInputInner::ArcVec((v, r)),
         }
     }
 }
@@ -158,14 +121,10 @@ impl<T: Dist> From<LamellarArrayRdmaInput<T>> for MemregionRdmaInput<T> {
     fn from(input: LamellarArrayRdmaInput<T>) -> Self {
         match input {
             LamellarArrayRdmaInput::LamellarMemRegion(mr) => {
-                MemregionRdmaInput::Slice(unsafe { mr.as_comm_slice() }.unwrap())
+                MemregionRdmaInput::LamellarMemRegion(mr)
             }
-            LamellarArrayRdmaInput::SharedMemRegion(mr) => {
-                MemregionRdmaInput::Slice(unsafe { mr.as_comm_slice() }.unwrap())
-            }
-            LamellarArrayRdmaInput::LocalMemRegion(mr) => {
-                MemregionRdmaInput::Slice(unsafe { mr.as_comm_slice() }.unwrap())
-            }
+            LamellarArrayRdmaInput::SharedMemRegion(mr) => MemregionRdmaInput::SharedMemRegion(mr),
+            LamellarArrayRdmaInput::LocalMemRegion(mr) => MemregionRdmaInput::LocalMemRegion(mr),
             LamellarArrayRdmaInput::Owned(v) => MemregionRdmaInput::Owned(v),
             LamellarArrayRdmaInput::OwnedVec(v) => {
                 let len = v.len();
@@ -177,31 +136,36 @@ impl<T: Dist> From<LamellarArrayRdmaInput<T>> for MemregionRdmaInput<T> {
 
 impl<T: Remote> From<LamellarMemoryRegion<T>> for MemregionRdmaInput<T> {
     fn from(mem_region: LamellarMemoryRegion<T>) -> Self {
-        MemregionRdmaInput::Slice(unsafe { mem_region.as_comm_slice() }.unwrap())
+        MemregionRdmaInput::LamellarMemRegion(mem_region)
     }
 }
 
 impl<T: Remote> From<&LamellarMemoryRegion<T>> for MemregionRdmaInput<T> {
     fn from(mem_region: &LamellarMemoryRegion<T>) -> Self {
-        MemregionRdmaInput::Slice(unsafe { mem_region.as_comm_slice() }.unwrap())
+        MemregionRdmaInput::LamellarMemRegion(mem_region.clone())
     }
 }
 
 impl<T: Remote> From<OneSidedMemoryRegion<T>> for MemregionRdmaInput<T> {
     fn from(mem_region: OneSidedMemoryRegion<T>) -> Self {
-        MemregionRdmaInput::Slice(unsafe { mem_region.as_comm_slice() }.unwrap())
+        MemregionRdmaInput::LocalMemRegion(mem_region)
+    }
+}
+impl<T: Remote> From<&OneSidedMemoryRegion<T>> for MemregionRdmaInput<T> {
+    fn from(mem_region: &OneSidedMemoryRegion<T>) -> Self {
+        MemregionRdmaInput::LocalMemRegion(mem_region.clone())
     }
 }
 
 impl<T: Remote> From<SharedMemoryRegion<T>> for MemregionRdmaInput<T> {
     fn from(mem_region: SharedMemoryRegion<T>) -> Self {
-        MemregionRdmaInput::Slice(unsafe { mem_region.as_comm_slice() }.unwrap())
+        MemregionRdmaInput::SharedMemRegion(mem_region)
     }
 }
 
-impl<T: Remote> From<CommSlice<T>> for MemregionRdmaInput<T> {
-    fn from(slice: CommSlice<T>) -> Self {
-        MemregionRdmaInput::Slice(slice)
+impl<T: Remote> From<&SharedMemoryRegion<T>> for MemregionRdmaInput<T> {
+    fn from(mem_region: &SharedMemoryRegion<T>) -> Self {
+        MemregionRdmaInput::SharedMemRegion(mem_region.clone())
     }
 }
 
@@ -232,6 +196,235 @@ impl<T: Remote> From<T> for MemregionRdmaInput<T> {
         MemregionRdmaInput::Owned(val)
     }
 }
+
+impl<T: Remote> MemregionRdmaInputInner<T> {
+    pub(crate) fn as_slice(&self) -> &[T] {
+        match self {
+            MemregionRdmaInputInner::LamellarMemRegion(m) => unsafe { m.as_slice() },
+            MemregionRdmaInputInner::SharedMemRegion(m) => unsafe { m.as_slice() },
+            MemregionRdmaInputInner::LocalMemRegion(m) => unsafe { m.as_slice() },
+            MemregionRdmaInputInner::Slice(s) => s.as_slice(),
+            MemregionRdmaInputInner::Owned(v) => std::slice::from_ref(v),
+            MemregionRdmaInputInner::ArcVec((v, r)) => &v[r.clone()],
+        }
+    }
+
+    pub(crate) fn to_bytes(&self) -> Vec<u8> {
+        let byte_len = self.len() * std::mem::size_of::<T>();
+        let mut bytes = Vec::with_capacity(byte_len);
+        unsafe {
+            bytes.set_len(byte_len);
+            std::ptr::copy_nonoverlapping(self.as_ptr() as *const u8, bytes.as_mut_ptr(), byte_len);
+        }
+        bytes
+    }
+
+    pub(crate) fn as_ptr(&self) -> *const T {
+        match self {
+            MemregionRdmaInputInner::LamellarMemRegion(m) => unsafe { m.as_ptr().unwrap() },
+            MemregionRdmaInputInner::SharedMemRegion(m) => unsafe { m.as_ptr().unwrap() },
+            MemregionRdmaInputInner::LocalMemRegion(m) => unsafe { m.as_ptr().unwrap() },
+            MemregionRdmaInputInner::Slice(s) => s.as_ptr(),
+            MemregionRdmaInputInner::Owned(v) => v as *const T,
+            MemregionRdmaInputInner::ArcVec((v, r)) => v[r.clone()].as_ptr(),
+        }
+    }
+
+    pub(crate) fn contains(&self, addr: &usize) -> bool {
+        match self {
+            MemregionRdmaInputInner::LamellarMemRegion(m) => {
+                let start = unsafe { m.as_ptr().unwrap() as usize };
+                let end = start + m.len() * std::mem::size_of::<T>();
+                (*addr >= start) && (*addr < end)
+            }
+            MemregionRdmaInputInner::SharedMemRegion(m) => {
+                let start = unsafe { m.as_ptr().unwrap() as usize };
+                let end = start + m.len() * std::mem::size_of::<T>();
+                (*addr >= start) && (*addr < end)
+            }
+            MemregionRdmaInputInner::LocalMemRegion(m) => {
+                let start = unsafe { m.as_ptr().unwrap() as usize };
+                let end = start + m.len() * std::mem::size_of::<T>();
+                (*addr >= start) && (*addr < end)
+            }
+            MemregionRdmaInputInner::Slice(s) => s.contains(addr),
+            MemregionRdmaInputInner::Owned(v) => v as *const T as usize == *addr,
+            MemregionRdmaInputInner::ArcVec((_v, r)) => r.contains(addr),
+        }
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            MemregionRdmaInputInner::LamellarMemRegion(m) => m.len(),
+            MemregionRdmaInputInner::SharedMemRegion(m) => m.len(),
+            MemregionRdmaInputInner::LocalMemRegion(m) => m.len(),
+            MemregionRdmaInputInner::Slice(s) => s.len(),
+            MemregionRdmaInputInner::Owned(_) => 1,
+            MemregionRdmaInputInner::ArcVec((_v, r)) => r.len(),
+        }
+    }
+
+    pub(crate) fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
+        match self {
+            MemregionRdmaInputInner::LamellarMemRegion(m) => {
+                MemregionRdmaInputInner::LamellarMemRegion(m.sub_region(range))
+            }
+            MemregionRdmaInputInner::SharedMemRegion(m) => {
+                MemregionRdmaInputInner::SharedMemRegion(m.sub_region(range))
+            }
+            MemregionRdmaInputInner::LocalMemRegion(m) => {
+                MemregionRdmaInputInner::LocalMemRegion(m.sub_region(range))
+            }
+            MemregionRdmaInputInner::Slice(s) => MemregionRdmaInputInner::Slice(s.sub_slice(range)),
+            MemregionRdmaInputInner::Owned(v) => {
+                if range.start_bound() == std::ops::Bound::Included(&0)
+                    && (range.end_bound() == std::ops::Bound::Included(&0)
+                        || range.end_bound() == std::ops::Bound::Excluded(&1))
+                {
+                    MemregionRdmaInputInner::Owned(*v)
+                } else {
+                    panic!("range out of bounds")
+                }
+            }
+            MemregionRdmaInputInner::ArcVec((v, _r)) => {
+                let start = match range.start_bound() {
+                    std::ops::Bound::Included(b) => *b,
+                    std::ops::Bound::Excluded(b) => *b + 1,
+                    std::ops::Bound::Unbounded => 0,
+                };
+                let end = match range.end_bound() {
+                    std::ops::Bound::Included(b) => *b + 1,
+                    std::ops::Bound::Excluded(b) => *b,
+                    std::ops::Bound::Unbounded => v.len(),
+                };
+                MemregionRdmaInputInner::ArcVec((v.clone(), start..end))
+            }
+        }
+    }
+}
+
+impl<T: Dist> From<LamellarArrayRdmaInput<T>> for MemregionRdmaInputInner<T> {
+    fn from(input: LamellarArrayRdmaInput<T>) -> Self {
+        match input {
+            LamellarArrayRdmaInput::LamellarMemRegion(mr) => {
+                MemregionRdmaInputInner::LamellarMemRegion(mr)
+            }
+            LamellarArrayRdmaInput::SharedMemRegion(mr) => {
+                MemregionRdmaInputInner::SharedMemRegion(mr)
+            }
+            LamellarArrayRdmaInput::LocalMemRegion(mr) => {
+                MemregionRdmaInputInner::LocalMemRegion(mr)
+            }
+            LamellarArrayRdmaInput::Owned(v) => MemregionRdmaInputInner::Owned(v),
+            LamellarArrayRdmaInput::OwnedVec(v) => {
+                let len = v.len();
+                MemregionRdmaInputInner::ArcVec((Arc::new(v), 0..len))
+            }
+        }
+    }
+}
+
+impl<T: Remote> From<LamellarMemoryRegion<T>> for MemregionRdmaInputInner<T> {
+    fn from(mem_region: LamellarMemoryRegion<T>) -> Self {
+        MemregionRdmaInputInner::LamellarMemRegion(mem_region)
+    }
+}
+
+impl<T: Remote> From<&LamellarMemoryRegion<T>> for MemregionRdmaInputInner<T> {
+    fn from(mem_region: &LamellarMemoryRegion<T>) -> Self {
+        MemregionRdmaInputInner::LamellarMemRegion(mem_region.clone())
+    }
+}
+
+impl<T: Remote> From<OneSidedMemoryRegion<T>> for MemregionRdmaInputInner<T> {
+    fn from(mem_region: OneSidedMemoryRegion<T>) -> Self {
+        MemregionRdmaInputInner::LocalMemRegion(mem_region)
+    }
+}
+
+impl<T: Remote> From<SharedMemoryRegion<T>> for MemregionRdmaInputInner<T> {
+    fn from(mem_region: SharedMemoryRegion<T>) -> Self {
+        MemregionRdmaInputInner::SharedMemRegion(mem_region)
+    }
+}
+
+impl<T: Remote> From<CommSlice<T>> for MemregionRdmaInputInner<T> {
+    fn from(slice: CommSlice<T>) -> Self {
+        MemregionRdmaInputInner::Slice(slice)
+    }
+}
+
+impl<T: Remote> From<&[T]> for MemregionRdmaInputInner<T> {
+    fn from(slice: &[T]) -> Self {
+        MemregionRdmaInputInner::ArcVec((Arc::new(slice.to_vec()), 0..slice.len()))
+    }
+}
+impl<T: Remote> From<&Vec<T>> for MemregionRdmaInputInner<T> {
+    fn from(slice: &Vec<T>) -> Self {
+        MemregionRdmaInputInner::ArcVec((Arc::new(slice.clone()), 0..slice.len()))
+    }
+}
+impl<T: Remote> From<Vec<T>> for MemregionRdmaInputInner<T> {
+    fn from(slice: Vec<T>) -> Self {
+        let len = slice.len();
+        MemregionRdmaInputInner::ArcVec((Arc::new(slice), 0..len))
+    }
+}
+
+impl<T: Remote> From<&T> for MemregionRdmaInputInner<T> {
+    fn from(slice: &T) -> Self {
+        MemregionRdmaInputInner::Owned(*slice)
+    }
+}
+impl<T: Remote> From<T> for MemregionRdmaInputInner<T> {
+    fn from(val: T) -> Self {
+        MemregionRdmaInputInner::Owned(val)
+    }
+}
+
+impl<T: Remote> TeamFrom<MemregionRdmaInputInner<T>> for LamellarMemoryRegion<T> {
+    fn team_from(input: MemregionRdmaInputInner<T>, team: &Arc<LamellarTeam>) -> Self {
+        match input {
+            MemregionRdmaInputInner::LamellarMemRegion(mr) => mr,
+            MemregionRdmaInputInner::SharedMemRegion(mr) => LamellarMemoryRegion::Shared(mr),
+            MemregionRdmaInputInner::LocalMemRegion(mr) => LamellarMemoryRegion::Local(mr),
+            MemregionRdmaInputInner::Slice(s) => {
+                let mem_region = team.alloc_one_sided_mem_region(s.len());
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        s.as_ptr(),
+                        mem_region.as_mut_ptr().unwrap(),
+                        s.len(),
+                    )
+                };
+                mem_region.into()
+            }
+            MemregionRdmaInputInner::Owned(v) => {
+                let mem_region = team.alloc_one_sided_mem_region(std::mem::size_of::<T>());
+                unsafe { mem_region.as_mut_slice()[0] = v };
+                mem_region.into()
+            }
+            MemregionRdmaInputInner::ArcVec((v, r)) => {
+                let len = r.len();
+                let mem_region = team.alloc_one_sided_mem_region(len);
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        v[r].as_ptr(),
+                        mem_region.as_mut_ptr().unwrap(),
+                        len,
+                    )
+                };
+                mem_region.into()
+            }
+        }
+    }
+}
+
+// pub struct LamellarRdmaOutput{
+//     buffer: MemregionRdmaOutputInner,
+//     byte_alloc:
+// }
+// pub(crate) enum MemregionRdmaOutputInner {}
 
 //#[doc(hidden)]
 /// Enum used to expose common methods for all registered memory regions
@@ -320,8 +513,7 @@ impl<T: Remote> LamellarMemoryRegion<T> {
     // }
 }
 impl<T: Remote> SubRegion<T> for LamellarMemoryRegion<T> {
-    type Region = LamellarMemoryRegion<T>;
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         match self {
             LamellarMemoryRegion::Shared(memregion) => memregion.sub_region(range).into(),
             LamellarMemoryRegion::Local(memregion) => memregion.sub_region(range).into(),
@@ -593,8 +785,6 @@ pub(crate) trait MemRegionId {
 
 /// Trait for creating subregions of a memory region
 pub trait SubRegion<T: Remote> {
-    #[doc(hidden)]
-    type Region: MemoryRegionRDMA<T>;
     #[doc(alias("One-sided", "onesided"))]
     /// Create a sub region of this RegisteredMemoryRegion using the provided range
     ///
@@ -615,7 +805,7 @@ pub trait SubRegion<T: Remote> {
     ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region;
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self;
 }
 
 #[enum_dispatch]
@@ -623,9 +813,15 @@ pub(crate) trait AsBase {
     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B>;
 }
 
+// #[enum_dispatch]
+// pub trait MemoryRegionRDMA<T: Remote> {
+
+// }
+
 /// The Inteface for exposing RDMA operations on a memory region. These provide the actual mechanism for performing a transfer.
+
 #[enum_dispatch]
-pub trait MemoryRegionRDMA<T: Remote> {
+pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     #[doc(alias("One-sided", "onesided"))]
     unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T>;
 
@@ -675,7 +871,7 @@ pub trait MemoryRegionRDMA<T: Remote> {
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInput<T>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T>;
 
     #[doc(alias("One-sided", "onesided"))]
@@ -713,52 +909,12 @@ pub trait MemoryRegionRDMA<T: Remote> {
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInput<T>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     );
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
-    // ///
-    // /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
-    // ///
-    // /// # Safety
-    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    // ///
-    // /// # One-sided Operation
-    // /// the calling PE initaites the remote transfer
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::memregion::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let num_pes = world.num_pes();
-    // ///
-    // /// let dst_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(num_pes*10).block();
-    // /// let src_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(10).block();
-    // /// unsafe{ for elem in dst_mem_region.as_mut_slice().expect("PE in world team") {*elem = num_pes;}}
-    // /// unsafe{ for elem in src_mem_region.as_mut_slice().expect("PE in world team") {*elem = my_pe;}}
-    // ///
-    // /// for pe in 0..num_pes{
-    // ///    unsafe{dst_mem_region.blocking_put(pe,my_pe*src_mem_region.len(),&src_mem_region)};
-    // /// }
-    // /// unsafe {
-    // ///     let dst_slice = dst_mem_region.as_slice().expect("PE in world team");
-    // ///     for (i,elem) in dst_slice.iter().enumerate(){
-    // ///         let pe = i / &src_mem_region.len();
-    // ///         while *elem == num_pes{
-    // ///             std::thread::yield_now();
-    // ///         }
-    // ///         assert_eq!(pe,*elem);
-    // ///     }
-    // /// }
-    // ///```
-    // unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: U,
-    // );
+
+    unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T>;
+
+    unsafe fn put_all_unmanaged(&self, index: usize, data: T);
 
     /// "Puts" (copies) data from a local memory location into a remote memory location on all PEs containing the memory region
     ///
@@ -795,8 +951,17 @@ pub trait MemoryRegionRDMA<T: Remote> {
     ///     }      
     /// }
     ///```
-    unsafe fn put_all(&self, index: usize, data: impl Into<MemregionRdmaInput<T>>)
-        -> RdmaHandle<T>;
+    unsafe fn put_all_buffer(
+        &self,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T>;
+
+    unsafe fn put_all_buffer_unmanaged(
+        &self,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    );
 
     #[doc(alias("One-sided", "onesided"))]
     /// "At" (copies) data from remote memory location on the specified PE and returns it.
@@ -919,10 +1084,6 @@ pub trait MemoryRegionRDMA<T: Remote> {
     //     index: usize,
     //     data: U,
     // );
-}
-
-#[enum_dispatch]
-pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T>;
     unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T>;
 }
@@ -1087,7 +1248,7 @@ impl<T: Remote> MemoryRegion<T> {
 
     pub(crate) unsafe fn put<R: Remote>(&self, pe: usize, index: usize, data: R) -> RdmaHandle<R> {
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+        if (index + 1) * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
             self.alloc.inner_alloc.put(
                 &self.scheduler,
                 self.counters.clone(),
@@ -1109,7 +1270,7 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) unsafe fn put_unmanaged<R: Remote>(&self, pe: usize, index: usize, data: R) {
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
         // println!("put unmanaged memregion data addr {:?} pe addr {:?}", &data as *const R, &pe as *const usize);
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+        if (index + 1) * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
             self.alloc
                 .inner_alloc
                 .put_unmanaged(data, pe, index * std::mem::size_of::<R>())
@@ -1139,7 +1300,7 @@ impl<T: Remote> MemoryRegion<T> {
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInput<R>>,
+        data: impl Into<MemregionRdmaInputInner<R>>,
     ) -> RdmaHandle<R> {
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
@@ -1179,7 +1340,7 @@ impl<T: Remote> MemoryRegion<T> {
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInput<R>>,
+        data: impl Into<MemregionRdmaInputInner<R>>,
     ) {
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
@@ -1208,27 +1369,66 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all<R: Remote>(
-        &self,
-        index: usize,
-        data: impl Into<MemregionRdmaInput<R>>,
-    ) -> RdmaHandle<R> {
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            // if let Ok(data_slice) = data.as_comm_slice() {
+    pub(crate) unsafe fn put_all<R: Remote>(&self, offset: usize, data: R) -> RdmaHandle<R> {
+        if (offset + 1) * std::mem::size_of::<R>() < self.alloc.num_bytes() {
             self.alloc.inner_alloc.put_all(
                 &self.scheduler,
                 self.counters.clone(),
                 data,
-                index * std::mem::size_of::<R>(),
+                offset * std::mem::size_of::<R>(),
             )
-            // } else {
-            //     panic!("ERROR: put data src is not local");
-            // }
         } else {
-            panic!("index out of bounds");
+            panic!("offset out of bounds");
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) unsafe fn put_all_unmanaged<R: Remote>(&self, offset: usize, data: R) {
+        if (offset + 1) * std::mem::size_of::<R>() < self.alloc.num_bytes() {
+            self.alloc
+                .inner_alloc
+                .put_all_unmanaged(data, offset * std::mem::size_of::<R>());
+        } else {
+            panic!("offset out of bounds");
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) unsafe fn put_all_buffer<R: Remote>(
+        &self,
+        offset: usize,
+        data: impl Into<MemregionRdmaInputInner<R>>,
+    ) -> RdmaHandle<R> {
+        let data = data.into();
+        if (offset + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
+            self.alloc.inner_alloc.put_all_buffer(
+                &self.scheduler,
+                self.counters.clone(),
+                data,
+                offset * std::mem::size_of::<R>(),
+            )
+        } else {
+            panic!("offset out of bounds");
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) unsafe fn put_all_buffer_unmanaged<R: Remote>(
+        &self,
+        offset: usize,
+        data: impl Into<MemregionRdmaInputInner<R>>,
+    ) {
+        let data = data.into();
+        if (offset + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
+            && data.len() > 0
+        {
+            self.alloc
+                .inner_alloc
+                .put_all_buffer_unmanaged(data, offset * std::mem::size_of::<R>());
+        } else {
+            panic!("offset out of bounds");
         }
     }
 
@@ -1417,7 +1617,7 @@ impl<T: Remote> MemoryRegion<T> {
         }
     }
 
-    pub(crate) unsafe fn atomic_op<R: Remote>(
+    pub(crate) fn atomic_op<R: Remote>(
         &self,
         pe: usize,
         index: usize,
@@ -1436,12 +1636,7 @@ impl<T: Remote> MemoryRegion<T> {
             panic!("index out of bounds");
         }
     }
-    pub(crate) unsafe fn atomic_op_unmanaged<R: Remote>(
-        &self,
-        pe: usize,
-        index: usize,
-        op: AtomicOp<R>,
-    ) {
+    pub(crate) fn atomic_op_unmanaged<R: Remote>(&self, pe: usize, index: usize, op: AtomicOp<R>) {
         if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
             self.alloc
                 .inner_alloc
@@ -1452,7 +1647,35 @@ impl<T: Remote> MemoryRegion<T> {
         }
     }
 
-    pub(crate) unsafe fn atomic_fetch_op<R: Remote>(
+    pub(crate) fn atomic_op_all<R: Remote>(
+        &self,
+        offset: usize,
+        op: AtomicOp<R>,
+    ) -> AtomicOpHandle<R> {
+        if offset * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.alloc.inner_alloc.atomic_op_all(
+                &self.scheduler,
+                self.counters.clone(),
+                op,
+                offset * std::mem::size_of::<R>(),
+            )
+        } else {
+            println!("{:?} {:?} ", self.alloc.num_bytes(), offset,);
+            panic!("offset out of bounds");
+        }
+    }
+    pub(crate) fn atomic_op_all_unmanaged<R: Remote>(&self, offset: usize, op: AtomicOp<R>) {
+        if offset * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
+            self.alloc
+                .inner_alloc
+                .atomic_op_all_unmanaged(op, offset * std::mem::size_of::<R>())
+        } else {
+            println!("{:?} {:?} ", self.alloc.num_bytes(), offset,);
+            panic!("offset out of bounds");
+        }
+    }
+
+    pub(crate) fn atomic_fetch_op<R: Remote>(
         &self,
         pe: usize,
         index: usize,

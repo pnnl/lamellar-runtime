@@ -5,12 +5,10 @@ pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::atomic::AtomicElement;
-
-// use crate::array::private::LamellarArrayPrivate;
+use crate::array::native_atomic::NativeAtomicType;
+use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::*;
-// use crate::darc::Darc;
-use crate::array::private::ArrayExecAm;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -1150,6 +1148,15 @@ impl<T: Dist> From<LamellarByteArray> for NetworkAtomicArray<T> {
     }
 }
 
+impl From<NetworkAtomicByteArray> for NativeAtomicByteArray {
+    fn from(array: NetworkAtomicByteArray) -> Self {
+        NativeAtomicByteArray {
+            array: array.array,
+            orig_t: array.orig_t.into(),
+        }
+    }
+}
+
 //#[doc(hidden)]
 impl<T: Dist> From<NetworkAtomicArray<T>> for AtomicByteArray {
     fn from(array: NetworkAtomicArray<T>) -> Self {
@@ -1508,60 +1515,77 @@ impl NetworkAtomicType {
         }
     }
 
-    fn store(&self, src_addr: *const u8, dst_addr: *mut u8) {
-        unsafe {
-            match self {
-                NetworkAtomicType::I8 => {
-                    let dst = &*(dst_addr as *mut i8 as *mut AtomicI8);
-                    let src = *(src_addr as *mut i8);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::I16 => {
-                    let dst = &*(dst_addr as *mut i16 as *mut AtomicI16);
-                    let src = *(src_addr as *mut i16);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::I32 => {
-                    let dst = &*(dst_addr as *mut i32 as *mut AtomicI32);
-                    let src = *(src_addr as *mut i32);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::I64 => {
-                    let dst = &*(dst_addr as *mut i64 as *mut AtomicI64);
-                    let src = *(src_addr as *mut i64);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::Isize => {
-                    let dst = &*(dst_addr as *mut isize as *mut AtomicIsize);
-                    let src = *(src_addr as *mut isize);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::U8 => {
-                    let dst = &*(dst_addr as *mut u8 as *mut AtomicU8);
-                    let src = *(src_addr as *mut u8);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::U16 => {
-                    let dst = &*(dst_addr as *mut u16 as *mut AtomicU16);
-                    let src = *(src_addr as *mut u16);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::U32 => {
-                    let dst = &*(dst_addr as *mut u32 as *mut AtomicU32);
-                    let src = *(src_addr as *mut u32);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::U64 => {
-                    let dst = &*(dst_addr as *mut u64 as *mut AtomicU64);
-                    let src = *(src_addr as *mut u64);
-                    dst.store(src, Ordering::SeqCst);
-                }
-                NetworkAtomicType::Usize => {
-                    let dst = &*(dst_addr as *mut usize as *mut AtomicUsize);
-                    let src = *(src_addr as *mut usize);
-                    dst.store(src, Ordering::SeqCst);
-                }
-            }
+    // fn store(&self, src_addr: *const u8, dst_addr: *mut u8) {
+    //     unsafe {
+    //         match self {
+    //             NetworkAtomicType::I8 => {
+    //                 let dst = &*(dst_addr as *mut i8 as *mut AtomicI8);
+    //                 let src = *(src_addr as *mut i8);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::I16 => {
+    //                 let dst = &*(dst_addr as *mut i16 as *mut AtomicI16);
+    //                 let src = *(src_addr as *mut i16);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::I32 => {
+    //                 let dst = &*(dst_addr as *mut i32 as *mut AtomicI32);
+    //                 let src = *(src_addr as *mut i32);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::I64 => {
+    //                 let dst = &*(dst_addr as *mut i64 as *mut AtomicI64);
+    //                 let src = *(src_addr as *mut i64);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::Isize => {
+    //                 let dst = &*(dst_addr as *mut isize as *mut AtomicIsize);
+    //                 let src = *(src_addr as *mut isize);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::U8 => {
+    //                 let dst = &*(dst_addr as *mut u8 as *mut AtomicU8);
+    //                 let src = *(src_addr as *mut u8);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::U16 => {
+    //                 let dst = &*(dst_addr as *mut u16 as *mut AtomicU16);
+    //                 let src = *(src_addr as *mut u16);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::U32 => {
+    //                 let dst = &*(dst_addr as *mut u32 as *mut AtomicU32);
+    //                 let src = *(src_addr as *mut u32);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::U64 => {
+    //                 let dst = &*(dst_addr as *mut u64 as *mut AtomicU64);
+    //                 let src = *(src_addr as *mut u64);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //             NetworkAtomicType::Usize => {
+    //                 let dst = &*(dst_addr as *mut usize as *mut AtomicUsize);
+    //                 let src = *(src_addr as *mut usize);
+    //                 dst.store(src, Ordering::SeqCst);
+    //             }
+    //         }
+    //     }
+    // }
+}
+
+impl From<NetworkAtomicType> for NativeAtomicType {
+    fn from(t: NetworkAtomicType) -> Self {
+        match t {
+            NetworkAtomicType::I8 => NativeAtomicType::I8,
+            NetworkAtomicType::I16 => NativeAtomicType::I16,
+            NetworkAtomicType::I32 => NativeAtomicType::I32,
+            NetworkAtomicType::I64 => NativeAtomicType::I64,
+            NetworkAtomicType::Isize => NativeAtomicType::Isize,
+            NetworkAtomicType::U8 => NativeAtomicType::U8,
+            NetworkAtomicType::U16 => NativeAtomicType::U16,
+            NetworkAtomicType::U32 => NativeAtomicType::U32,
+            NetworkAtomicType::U64 => NativeAtomicType::U64,
+            NetworkAtomicType::Usize => NativeAtomicType::Usize,
         }
     }
 }

@@ -82,7 +82,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
         let offset = (row + start_row) * mat.cols + (start_col);
         let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
         DATA_CNT.fetch_add(data.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
-        unsafe { mat.mat.get_unchecked(mat.pe, offset, data.clone()).await };
+        unsafe { mat.mat.get_buffer(mat.pe, offset, data.clone()).await };
     }
 
     // while sub_mat_slice[sub_mat.len() - 1].is_nan() {

@@ -147,7 +147,7 @@ fn create_reduction(
         const _: () = {
             extern crate lamellar as __lamellar;
             use __lamellar::active_messaging::prelude::*;
-            use __lamellar::array::{LamellarArrayPut};
+            // use __lamellar::array::{LamellarArrayPut};
             #expanded
         };
     };

@@ -13,7 +13,7 @@ use pin_project::{pin_project, pinned_drop};
 
 use crate::{
     active_messaging::{AmHandle, LocalAmHandle},
-    array::{LamellarByteArray, NetworkAtomicArray},
+    array::{LamellarByteArray},
     lamellae::{CommProgress, Lamellae, RdmaGetHandle, RdmaHandle},
     lamellar_request::LamellarRequest,
     scheduler::{LamellarTask, Scheduler},
@@ -21,9 +21,8 @@ use crate::{
     AtomicFetchOpHandle, Dist, LamellarMemoryRegion, LamellarTeamRT, OneSidedMemoryRegion,
 };
 
-use super::{
-    private::ArrayExecAm, AMCounters, ArrayRdmaCmd, AtomicArray, GlobalLockArray, LocalLockArray,
-    NativeAtomicArray, ReadOnlyArray, UnsafeArray,
+use super::{ AMCounters, ArrayRdmaCmd, AtomicArray, GlobalLockArray, LocalLockArray,
+     ReadOnlyArray, UnsafeArray,
 };
 
 #[pin_project(project = InnerRdmaHandleProj)]
@@ -345,51 +344,51 @@ impl<T: Dist> Future for ArrayRdmaHandle<T> {
     }
 }
 
-pub(crate) struct ArrayRdmaAtomicLoadHandle<T: Dist> {
-    pub(crate) array: NativeAtomicArray<T>,
-    pub(crate) index: usize,
-}
+// pub(crate) struct ArrayRdmaAtomicLoadHandle<T: Dist> {
+//     pub(crate) array: NativeAtomicArray<T>,
+//     pub(crate) index: usize,
+// }
 
-impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
-    fn spawn(&self, _buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
-        // self.array.network_atomic_load(self.index, &buf);
-        let team = self.array.team_rt();
-        team.clone().spawn(async move {
-            team.lamellae.comm().wait();
-        })
-    }
+// impl<T: Dist> ArrayRdmaAtomicLoadHandle<T> {
+//     fn spawn(&self, _buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+//         // self.array.network_atomic_load(self.index, &buf);
+//         let team = self.array.team_rt();
+//         team.clone().spawn(async move {
+//             team.lamellae.comm().wait();
+//         })
+//     }
 
-    fn block(&self, _buf: OneSidedMemoryRegion<T>) {
-        // self.array.network_iatomic_load(self.index, &buf);
-        // let team = self.array.team_rt().lamellae().wait;
-        // team.clone().spawn(async move {
-        //     team.lamellae.comm().wait();
-        // })
-    }
-}
+//     fn block(&self, _buf: OneSidedMemoryRegion<T>) {
+//         // self.array.network_iatomic_load(self.index, &buf);
+//         // let team = self.array.team_rt().lamellae().wait;
+//         // team.clone().spawn(async move {
+//         //     team.lamellae.comm().wait();
+//         // })
+//     }
+// }
 
-pub(crate) struct ArrayRdmaNetworkAtomicLoadHandle<T: Dist> {
-    pub(crate) array: NetworkAtomicArray<T>,
-    pub(crate) index: usize,
-}
+// pub(crate) struct ArrayRdmaNetworkAtomicLoadHandle<T: Dist> {
+//     pub(crate) array: NetworkAtomicArray<T>,
+//     pub(crate) index: usize,
+// }
 
-impl<T: Dist> ArrayRdmaNetworkAtomicLoadHandle<T> {
-    fn spawn(&self, _buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
-        // self.array.network_atomic_load(self.index, &buf);
-        let team = self.array.team_rt();
-        team.clone().spawn(async move {
-            team.lamellae.comm().wait();
-        })
-    }
+// impl<T: Dist> ArrayRdmaNetworkAtomicLoadHandle<T> {
+//     fn spawn(&self, _buf: OneSidedMemoryRegion<T>) -> LamellarTask<()> {
+//         // self.array.network_atomic_load(self.index, &buf);
+//         let team = self.array.team_rt();
+//         team.clone().spawn(async move {
+//             team.lamellae.comm().wait();
+//         })
+//     }
 
-    fn block(&self, _buf: OneSidedMemoryRegion<T>) {
-        // self.array.network_iatomic_load(self.index, &buf);
-        // let team = self.array.team_rt().lamellae().wait;
-        // team.clone().spawn(async move {
-        //     team.lamellae.comm().wait();
-        // })
-    }
-}
+//     fn block(&self, _buf: OneSidedMemoryRegion<T>) {
+//         // self.array.network_iatomic_load(self.index, &buf);
+//         // let team = self.array.team_rt().lamellae().wait;
+//         // team.clone().spawn(async move {
+//         //     team.lamellae.comm().wait();
+//         // })
+//     }
+// }
 
 // pub(crate) struct ArrayRdmaAtomicStoreHandle<T: Dist> {
 //     pub(crate) array: NativeAtomicArray<T>,

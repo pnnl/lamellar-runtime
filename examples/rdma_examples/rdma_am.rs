@@ -56,7 +56,7 @@ impl LamellarAM for RdmaAM {
         if my_index < ARRAY_LEN {
             unsafe {
                 self.array
-                    .put(self.orig_pe, my_index, local.sub_region(0..=0))
+                    .put(self.orig_pe, my_index, local_slice[0])
                     .await;
             }
         }
@@ -99,7 +99,7 @@ impl LamellarAM for RdmaLocalMRAM {
         local_slice[0] = lamellar::current_pe as u8;
         if my_index < ARRAY_LEN {
             unsafe {
-                self.array.put(my_index, local.sub_region(0..=0)).await;
+                self.array.put(my_index, local_slice[0]).await;
             }
         }
     }

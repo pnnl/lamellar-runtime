@@ -1,4 +1,3 @@
-use parking_lot::Mutex;
 use std::{mem::MaybeUninit, sync::Arc};
 use ucx1_sys::*;
 
@@ -86,7 +85,7 @@ impl Worker {
             //     std::thread::current().id()
             // );
             loop {
-                let res = unsafe { ucp_worker_progress(self.handle) };
+                let _res = unsafe { ucp_worker_progress(self.handle) };
                 // println!(
                 //     "[{:?}] flush still in progress {:?}",
                 //     std::thread::current().id(),

@@ -27,7 +27,7 @@ use tracing::trace;
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxAllocAtomicFuture<T> {
     pub(crate) alloc: Arc<UcxAlloc>,
-    pub(super) remote_pe: usize,
+    pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -43,17 +43,14 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFuture<T> {
             self.op,
             self.offset
         );
-        self.request = unsafe {
-            UcxAlloc::atomic_op(&self.alloc, self.remote_pe, self.offset, &self.op, true)
-        };
+        for pe in &self.remote_pes {
+            unsafe {
+                UcxAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op, true);
+            }
+        }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        // let mut request = self.request.take().expect("ucx request doesnt exist");
-        // while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //     request = request2;
-        //     std::thread::yield_now();
-        // }
         let request = self.request.take().expect("ucx request doesnt exist");
         request.wait();
         self.spawned = true;
@@ -63,16 +60,6 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        // let mut request = self.request.take().expect("ucx request doesnt exist");
-        // self.scheduler.clone().spawn_task(
-        //     async move {
-        //         while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //             request = request2;
-        //             async_std::task::yield_now().await;
-        //         }
-        //     },
-        //     counters,
-        // )
         let request = self.request.take().expect("ucx request doesnt exist");
         self.scheduler.clone().spawn_task(
             async move {
@@ -110,13 +97,6 @@ impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFuture<T> {
         let request = self.request.take().expect("ucx request doesnt exist");
         request.wait();
         Poll::Ready(())
-        // if let Some(request) = request.wait(false).expect("Wait failed") {
-        //     self.request = Some(request);
-        //     cx.waker().wake_by_ref();
-        //     Poll::Pending
-        // } else {
-        //     Poll::Ready(())
-        // }
     }
 }
 
@@ -152,11 +132,6 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFetchFuture<T> {
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
-        // let mut request = self.request.take().expect("ucx request doesnt exist");
-        // while let Some(request2) = request.wait(false).expect("Wait failed") {
-        //     request = request2;
-        //     std::thread::yield_now();
-        // }
         let request = self.request.take().expect("ucx request doesnt exist");
         request.wait();
         self.spawned = true;
@@ -174,11 +149,6 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFetchFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                // let mut request = self.request.take().expect("ucx request doesnt exist");
-                // while let Some(request2) = request.wait(false).expect("Wait failed") {
-                //     request = request2;
-                //     async_std::task::yield_now().await;
-                // }
                 let request = self.request.take().expect("ucx request doesnt exist");
                 request.wait();
                 unsafe {
@@ -211,23 +181,11 @@ impl<T> From<UcxAllocAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
 
 impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFetchFuture<T> {
     type Output = T;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
             self.spawned = true;
         }
-        // let mut request = self.request.take().expect("ucx request doesnt exist");
-        // if let Some(request) = request.wait(false).expect("Wait failed") {
-        //     self.request = Some(request);
-        //     cx.waker().wake_by_ref();
-        //     Poll::Pending
-        // } else {
-        //     Poll::Ready(unsafe {
-        //         let mut res = MaybeUninit::uninit();
-        //         std::mem::swap(&mut self.result, &mut res);
-        //         res.assume_init()
-        //     })
-        // }
         let request = self.request.take().expect("ucx request doesnt exist");
         request.wait();
         Poll::Ready(unsafe {
@@ -249,7 +207,7 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
     ) -> AtomicOpHandle<T> {
         UcxAllocAtomicFuture {
             alloc: self.clone(),
-            remote_pe: pe,
+            remote_pes: vec![pe],
             offset,
             op,
             spawned: false,
@@ -260,8 +218,34 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
         .into()
     }
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        unsafe { UcxAlloc::atomic_op(self, pe, offset, &op, false) };
+        UcxAlloc::atomic_op(self, pe, offset, &op, false);
     }
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        let pes = (0..self.num_pes).collect();
+        UcxAllocAtomicFuture {
+            alloc: self.clone(),
+            remote_pes: pes,
+            offset,
+            op,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        for pe in 0..self.num_pes {
+            UcxAlloc::atomic_op(self, pe, offset, &op, false);
+        }
+    }
+
     fn atomic_fetch_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,

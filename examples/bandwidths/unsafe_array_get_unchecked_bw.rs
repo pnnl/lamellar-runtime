@@ -57,7 +57,7 @@ fn main() {
 
                 unsafe {
                     array
-                        .get_unchecked(ARRAY_LEN * (num_pes - 1), &sub_reg)
+                        .get_buffer(ARRAY_LEN * (num_pes - 1), &sub_reg)
                         .spawn()
                 };
                 sub_time += sub_timer.elapsed().as_secs_f64();

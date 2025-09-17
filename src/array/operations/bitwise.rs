@@ -144,7 +144,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
         self.inner_array().initiate_batch_op(
             val,
@@ -289,7 +289,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
         self.inner_array().initiate_batch_op(
             val,
@@ -434,7 +434,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
         self.inner_array().initiate_batch_op(
             val,
@@ -643,7 +643,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::And)
         self.inner_array().initiate_batch_op(
             val,
@@ -788,7 +788,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Or)
         self.inner_array().initiate_batch_op(
             val,
@@ -933,7 +933,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Xor)
         self.inner_array().initiate_batch_op(
             val,

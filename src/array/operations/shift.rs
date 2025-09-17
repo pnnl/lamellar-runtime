@@ -111,7 +111,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shl)
         self.inner_array().initiate_batch_op(
             val,
@@ -256,7 +256,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shr)
         self.inner_array().initiate_batch_op(
             val,
@@ -438,7 +438,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shl)
         self.inner_array().initiate_batch_op(
             val,
@@ -583,7 +583,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_batch_op(val, index, ArrayOpCmd::Shr)
         self.inner_array().initiate_batch_op(
             val,

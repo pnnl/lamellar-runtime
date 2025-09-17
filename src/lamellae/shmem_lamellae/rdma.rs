@@ -16,7 +16,7 @@ use crate::{
         shmem_lamellae::fabric::ShmemAlloc,
         CommAllocAddr, CommAllocRdma, CommSlice, RdmaAtFuture, RdmaGetHandle,
     },
-    memregion::MemregionRdmaInput,
+    memregion::MemregionRdmaInputInner,
     warnings::RuntimeWarning,
     LamellarTask,
 };
@@ -25,8 +25,9 @@ use super::Scheduler;
 
 pub(super) enum Op<T: Remote> {
     Put(T, CommAllocAddr),
-    PutBuf(MemregionRdmaInput<T>, CommAllocAddr),
-    PutAll(MemregionRdmaInput<T>, Vec<CommAllocAddr>),
+    PutBuf(MemregionRdmaInputInner<T>, CommAllocAddr),
+    PutAll(T, Vec<CommAllocAddr>),
+    PutAllBuf(MemregionRdmaInputInner<T>, Vec<CommAllocAddr>),
     Get(CommAllocAddr, CommSlice<T>),
 }
 
@@ -40,7 +41,7 @@ pub(crate) struct ShmemFuture<T: Remote> {
 
 impl<T: Remote> ShmemFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_buf(&self, src: &MemregionRdmaInput<T>, dst: &CommAllocAddr) {
+    fn inner_put_buf(&self, src: &MemregionRdmaInputInner<T>, dst: &CommAllocAddr) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
             src.as_ptr(),
@@ -54,18 +55,6 @@ impl<T: Remote> ShmemFuture<T> {
             unsafe {
                 std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
             }
-        }
-    }
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_all(&self, src: &MemregionRdmaInput<T>, dsts: &Vec<CommAllocAddr>) {
-        trace!(
-            "put all src: {:?} dsts: {:?} len: {}",
-            src.as_ptr(),
-            dsts,
-            src.len()
-        );
-        for dst in dsts {
-            self.inner_put_buf(&src, dst);
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -94,8 +83,15 @@ impl<T: Remote> ShmemFuture<T> {
             Op::PutBuf(src, dst) => {
                 self.inner_put_buf(src, dst);
             }
-            Op::PutAll(src, dst) => {
-                self.inner_put_all(src, dst);
+            Op::PutAll(src, dsts) => {
+                for dst in dsts {
+                    unsafe { dst.as_mut_ptr::<T>().write(*src) };
+                }
+            }
+            Op::PutAllBuf(src, dsts) => {
+                for dst in dsts {
+                    self.inner_put_buf(src, dst);
+                }
             }
             Op::Get(src, dst) => {
                 self.inner_get(src, dst);
@@ -253,7 +249,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
@@ -267,7 +263,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
     }
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) {
@@ -285,7 +281,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
         let pe_addrs = (0..self.num_pes())
@@ -296,12 +292,63 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
             })
             .collect::<Vec<_>>();
         ShmemFuture {
-            op: Op::PutAll(src.into(), pe_addrs),
+            op: Op::PutAll(src, pe_addrs),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
         }
         .into()
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        for pe in 0..self.num_pes() {
+            let real_dst_base = self.pe_base_offset(pe);
+            let real_dst_addr = real_dst_base + offset;
+            let dst = CommAllocAddr(real_dst_addr);
+            unsafe {
+                dst.as_mut_ptr::<T>().write(src);
+            }
+        }
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        let pe_addrs = (0..self.num_pes())
+            .map(|pe| {
+                let real_dst_base = self.pe_base_offset(pe);
+                let real_dst_addr = real_dst_base + offset;
+                CommAllocAddr(real_dst_addr)
+            })
+            .collect::<Vec<_>>();
+        ShmemFuture {
+            op: Op::PutAllBuf(src.into(), pe_addrs),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        let src = src.into();
+        for pe in 0..self.num_pes() {
+            let real_dst_base = self.pe_base_offset(pe);
+            let real_dst_addr = real_dst_base + offset;
+            let dst = CommAllocAddr(real_dst_addr);
+            if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
+            } else {
+                unsafe {
+                    std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
+                }
+            }
+        }
     }
     fn get_buffer<T: Remote>(
         &self,

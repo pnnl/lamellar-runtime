@@ -392,7 +392,6 @@ impl Endpoint {
     ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
-        let zero = 0usize;
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -450,15 +449,13 @@ impl Drop for Endpoint {
                     let _ = self.worker.progress();
                     if UCS_PTR_IS_PTR(request) {
                         // println!("Close request in progress");
-                        if unsafe { ucp_request_check_status(request as _) }
-                            != ucs_status_t::UCS_INPROGRESS
-                        {
+                        if ucp_request_check_status(request as _) != ucs_status_t::UCS_INPROGRESS {
                             // println!("Close request completed");
                             break;
                         }
                     }
                 }
-                unsafe { ucp_request_free(request as _) };
+                ucp_request_free(request as _);
                 // println!("Close request freed");
             } else {
                 // println!("Close error");
@@ -468,7 +465,7 @@ impl Drop for Endpoint {
     }
 }
 
-unsafe extern "C" fn cb(request: *mut std::ffi::c_void, status: ucs_status_t) {
+unsafe extern "C" fn cb(request: *mut std::ffi::c_void, _status: ucs_status_t) {
     // This is a placeholder for the callback function.
     // In practice, you would implement the logic to handle the completion of the request.
     // For example, you might wake up a thread or signal an event.

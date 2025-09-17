@@ -51,8 +51,7 @@ fn main() {
                 let sub_timer = Instant::now();
                 unsafe {
                     let _ = array
-                        .put(num_pes - 1, j, data.sub_region(..num_bytes as usize))
-                        .spawn();
+                        .put_buffer_unmanaged(num_pes - 1, j, data.sub_region(..num_bytes as usize));
                 }
 
                 // println!("j: {:?}",j);
@@ -62,17 +61,17 @@ fn main() {
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed());
-            world.wait_all();
+            array.wait_all();
         }
-        if my_pe == num_pes - 1 {
-            let array_slice = unsafe { array.as_slice() };
-            // TODO: Not Needed
-            for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
-                    std::thread::yield_now()
-                }
-            }
-        }
+        // if my_pe == num_pes - 1 {
+        //     let array_slice = unsafe { array.as_slice() };
+        //     // TODO: Not Needed
+        //     for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+        //         while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
+        //             std::thread::yield_now()
+        //         }
+        //     }
+        // }
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();

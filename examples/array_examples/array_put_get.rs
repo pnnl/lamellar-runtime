@@ -48,7 +48,7 @@ fn main() {
             world.async_barrier().await;
             let start = std::time::Instant::now();
             if my_pe == 0 {
-                block_array.put(0, &shared_mem_region).await
+                block_array.put_buffer(0, &shared_mem_region).await
             }; //uses the local data of the shared memregion
             world.async_barrier().await;
             block_array.print();
@@ -58,7 +58,7 @@ fn main() {
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                block_array.put(0, &local_mem_region).await
+                block_array.put_buffer(0, &local_mem_region).await
             };
             world.async_barrier().await;
             block_array.print();
@@ -68,7 +68,7 @@ fn main() {
             cyclic_array.print();
             world.async_barrier().await;
             if my_pe == 0 {
-                cyclic_array.put(0, &shared_mem_region).await
+                cyclic_array.put_buffer(0, &shared_mem_region).await
             };
             world.async_barrier().await;
             cyclic_array.print();
@@ -78,7 +78,7 @@ fn main() {
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                cyclic_array.put(0, &local_mem_region).await
+                cyclic_array.put_buffer(0, &local_mem_region).await
             };
             world.async_barrier().await;
             cyclic_array.print();
@@ -100,14 +100,14 @@ fn main() {
             world.async_barrier().await;
             if my_pe == 0 {
                 block_array
-                    .get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2))
+                    .get_buffer(0, shared_mem_region.sub_region(0..total_len / 2))
                     .await
             }; //uses local data of the shared memregion
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
                 block_array
-                    .get_unchecked(0, local_mem_region.sub_region(0..total_len / 2))
+                    .get_buffer(0, local_mem_region.sub_region(0..total_len / 2))
                     .await
             };
             world.async_barrier().await;
@@ -120,10 +120,10 @@ fn main() {
 
         unsafe {
             cyclic_array
-                .get(0, shared_mem_region.sub_region(0..total_len / 2))
+                .get_buffer(0, shared_mem_region.sub_region(0..total_len / 2))
                 .await;
             cyclic_array
-                .get(0, local_mem_region.sub_region(0..total_len / 2))
+                .get_buffer(0, local_mem_region.sub_region(0..total_len / 2))
                 .await;
         }
 
@@ -131,8 +131,8 @@ fn main() {
         world.async_barrier().await;
         // puts/gets using single values
         unsafe {
-            block_array.put(total_len - 1, &12345).await;
-            cyclic_array.put(total_len - 1, &12345).await;
+            block_array.put(total_len - 1, 12345).await;
+            cyclic_array.put(total_len - 1, 12345).await;
         }
         world.async_barrier().await;
     });

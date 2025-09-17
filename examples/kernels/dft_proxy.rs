@@ -659,17 +659,13 @@ fn main() {
                 .block();
             full_signal_array.barrier();
 
-            let _ = partial_spectrum
-                .put(my_pe, 0, full_spectrum.sub_region(0..array_len))
-                .spawn();
-            let _ = partial_sum.put(my_pe, 0, magic.clone()).spawn();
-            let _ = partial_signal
-                .put(
-                    my_pe,
-                    0,
-                    full_signal.sub_region(my_pe * array_len..my_pe * array_len + array_len),
-                )
-                .spawn();
+            partial_spectrum.put_buffer_unmanaged(my_pe, 0, full_spectrum.sub_region(0..array_len));
+            partial_sum.put_buffer_unmanaged(my_pe, 0, magic.clone());
+            partial_signal.put_buffer_unmanaged(
+                my_pe,
+                0,
+                full_signal.sub_region(my_pe * array_len..my_pe * array_len + array_len),
+            );
 
             for i in magic.as_mut_slice() {
                 *i = MAGIC;

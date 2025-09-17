@@ -157,7 +157,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
         self.inner_array().initiate_batch_op(
             val,
@@ -302,7 +302,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
         self.inner_array().initiate_batch_op(
             val,
@@ -447,7 +447,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
         self.inner_array().initiate_batch_op(
             val,
@@ -592,7 +592,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
         self.inner_array().initiate_batch_op(
             val,
@@ -737,7 +737,7 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
         self.inner_array().initiate_batch_op(
             val,
@@ -948,7 +948,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Add)
         self.inner_array().initiate_batch_op(
             val,
@@ -1093,7 +1093,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Sub)
         self.inner_array().initiate_batch_op(
             val,
@@ -1238,7 +1238,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Mul)
         self.inner_array().initiate_batch_op(
             val,
@@ -1383,7 +1383,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Div)
         self.inner_array().initiate_batch_op(
             val,
@@ -1528,7 +1528,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
         &self,
         index: impl OpInput<'a, usize>,
         val: impl OpInput<'a, T>,
-    ) -> ArrayBatchOpHandle<T> {
+    ) -> ArrayBatchOpHandle {
         // self.inner_array().initiate_op(val, index, ArrayOpCmd::Rem)
         self.inner_array().initiate_batch_op(
             val,

@@ -1,19 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
-
-fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
-    memregion: &LamellarMemoryRegion<T>,
-    init_val: T,
-    inc_val: T,
-) {
-    unsafe {
-        let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice() {
-            *elem = i;
-            i += inc_val;
-        }
-    }
-}
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -64,112 +49,28 @@ macro_rules! put_test{
             let mut success = true;
             let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
             //initialize array
-            let init_val = my_pe as $t;
+            let init_val = 0 as $t;
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            initialize_mem_region(&shared_mem_region,0 as $t,1 as $t);
             // world.barrier();
 
-            for tx_size in 1..=mem_seg_len{
-                let num_txs = mem_seg_len/tx_size;
-                for tx in (my_pe..num_txs).step_by(num_pes){
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                    #[allow(unused_unsafe)]
-                    unsafe {let _ = array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).spawn();}
-                }
-                array.wait_all();
-                array.barrier();
+            for idx in (my_pe..array_total_len).step_by(num_pes){
                 #[allow(unused_unsafe)]
-                for (i,elem) in unsafe { onesided_iter!($array,array).into_iter().enumerate().take( num_txs * tx_size) }{
-                    if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                        success = false;
-                    }
-                }
-                array.barrier();
-                // array.print();
-                initialize_array!($array, array, init_val);
-                array.wait_all();
-                array.barrier();
+                unsafe { let _ = array.put(idx, my_pe as $t).spawn(); }
             }
+            array.wait_all();
             array.barrier();
-            world.wait_all();
-            world.barrier();
-
-
-
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
-            let sub_array = array.sub_array(start_i..end_i);
-            world.barrier();
-            // sub_array.print();
-            for tx_size in 1..=half_len{
-                let num_txs = half_len/tx_size;
-                for tx in (my_pe..num_txs).step_by(num_pes){
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    #[allow(unused_unsafe)]
-                    unsafe {let _ = sub_array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).spawn();}
+            #[allow(unused_unsafe)]
+            for (i,elem) in unsafe {onesided_iter!($array,array).into_iter().enumerate()} {
+                if (((i%num_pes) as $t - *elem) as f32).abs() > 0.0001 {
+                    eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                    success = false;
                 }
-                array.wait_all();
-                sub_array.barrier();
-                #[allow(unused_unsafe)]
-                for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate().take( num_txs * tx_size)}{
-                    if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                        success = false;
-                    }
-                }
-                sub_array.barrier();
-                // sub_array.print();
-                initialize_array!($array, array, init_val);
-                sub_array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
             }
-            array.barrier();
-            world.wait_all();
-            world.barrier();
 
-            let pe_len = array_total_len/num_pes;
 
-            for pe in 0..num_pes{
-                let len = pe_len/2;
-                let start_i = (pe*pe_len)+ len/2;
-
-                let end_i = start_i+len;
-                let sub_array = array.sub_array(start_i..end_i);
-                world.barrier();
-
-                for tx_size in 1..len{
-                    let num_txs = len/tx_size;
-                    for tx in (my_pe..num_txs).step_by(num_pes){
-                        // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                        #[allow(unused_unsafe)]
-                        unsafe {let _ = sub_array.put(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).spawn();}
-                    }
-                    array.wait_all();
-                    sub_array.barrier();
-                    #[allow(unused_unsafe)]
-                    for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate().take( num_txs * tx_size)}{
-                        if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                            success = false;
-                        }
-                    }
-                    sub_array.barrier();
-                    // sub_array.print();
-                    initialize_array!($array, array, init_val);
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                }
-                array.barrier();
-                world.wait_all();
-                world.barrier();
-            }
 
             if !success{
                 eprintln!("failed");

@@ -26,7 +26,7 @@ use std::{
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemAtomicFuture<T> {
     pub(super) op: AtomicOp<T>,
-    pub(super) dst: CommAllocAddr,
+    pub(super) dst: Vec<CommAllocAddr>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -34,11 +34,15 @@ pub(crate) struct ShmemAtomicFuture<T> {
 
 impl<T: 'static> ShmemAtomicFuture<T> {
     pub(crate) fn block(mut self) {
-        net_atomic_op(&self.op, &self.dst);
+        for dst in &self.dst {
+            net_atomic_op(&self.op, dst);
+        }
         self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        net_atomic_op(&self.op, &self.dst);
+        for dst in &self.dst {
+            net_atomic_op(&self.op, dst);
+        }
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
@@ -67,7 +71,9 @@ impl<T: 'static> Future for ShmemAtomicFuture<T> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
-            net_atomic_op(&self.op, &self.dst);
+            for dst in &self.dst {
+                net_atomic_op(&self.op, dst);
+            }
             *self.project().spawned = true;
         } else {
         }
@@ -86,7 +92,6 @@ pub(crate) struct ShmemAtomicFetchFuture<T> {
 }
 
 impl<T: Send + 'static> ShmemAtomicFetchFuture<T> {
-    fn exec_op(&self) {}
     pub(crate) fn block(mut self) -> T {
         net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut_ptr());
         self.spawned = true;
@@ -167,7 +172,7 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         let remote_dst_addr = remote_dst_base + offset;
         ShmemAtomicFuture {
             op: op,
-            dst: CommAllocAddr(remote_dst_addr),
+            dst: vec![CommAllocAddr(remote_dst_addr)],
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -178,6 +183,35 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         let remote_dst_base = self.pe_base_offset(pe);
         let remote_dst_addr = remote_dst_base + offset;
         net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+    }
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        let remote_dst_addrs: Vec<CommAllocAddr> = (0..self.num_pes())
+            .map(|pe| {
+                let remote_dst_base = self.pe_base_offset(pe);
+                CommAllocAddr(remote_dst_base + offset)
+            })
+            .collect();
+        ShmemAtomicFuture {
+            op: op,
+            dst: remote_dst_addrs,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        for pe in 0..self.num_pes() {
+            let remote_dst_base = self.pe_base_offset(pe);
+            let remote_dst_addr = remote_dst_base + offset;
+            net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+        }
     }
     fn atomic_fetch_op<T: Copy>(
         &self,

@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use rand::seq::index;
 use tracing::trace;
 
 use crate::{
@@ -10,19 +11,21 @@ use crate::{
     },
     lamellae::{comm::CommProgress, CommSlice},
     memregion::{
-        AsBase, Dist, MemoryRegionRDMA, MemregionRdmaInput, RTMemoryRegionRDMA,
+        AsBase, Dist, MemregionRdmaInput, MemregionRdmaInputInner, RTMemoryRegionRDMA,
         RegisteredMemoryRegion, SubRegion,
     },
+    RdmaHandle,
 };
 
 // //use tracing::*;
 
 impl<T: Dist> UnsafeArray<T> {
-    fn rdma_block_put<U: Into<MemregionRdmaInput<T>>>(
+    fn rdma_block_put2<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
         index: usize, //relative to inner
         buf: U,
-    ) -> InnerRdmaHandle<T> {
+        unmanaged: bool,
+    ) -> Vec<RdmaHandle<T>> {
         let global_index = index + self.inner.offset;
         let buf = buf.into();
         let start_pe = match self.inner.pe_for_dist_index(index) {
@@ -39,7 +42,7 @@ impl<T: Dist> UnsafeArray<T> {
         };
         let mut dist_index = global_index;
         let mut buf_index = 0;
-        let mut transfer_requests = InnerRdmaHandle::Rdma(VecDeque::new());
+        let mut rdma_requests = Vec::new();
         for pe in start_pe..=end_pe {
             let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
             if pe < self.inner.orig_remaining_elems {
@@ -50,18 +53,70 @@ impl<T: Dist> UnsafeArray<T> {
             let len = std::cmp::min(full_num_elems_on_pe - offset, buf.len() - buf_index);
             if len > 0 {
                 unsafe {
-                    transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
-                        pe,
-                        offset,
-                        buf.sub_region(buf_index..(buf_index + len)),
-                    ))
+                    if unmanaged {
+                        self.inner.data.mem_region.put_buffer_unmanaged(
+                            pe,
+                            offset,
+                            buf.sub_region(buf_index..(buf_index + len)),
+                        );
+                    } else {
+                        rdma_requests.push(self.inner.data.mem_region.put_buffer(
+                            pe,
+                            offset,
+                            buf.sub_region(buf_index..(buf_index + len)),
+                        ))
+                    }
                 };
                 buf_index += len;
                 dist_index += len;
             }
         }
-        transfer_requests
+        rdma_requests
     }
+    // fn rdma_block_put<U: Into<MemregionRdmaInputInner<T>>>(
+    //     &self,
+    //     index: usize, //relative to inner
+    //     buf: U,
+    // ) -> InnerRdmaHandle<T> {
+    //     let global_index = index + self.inner.offset;
+    //     let buf = buf.into();
+    //     let start_pe = match self.inner.pe_for_dist_index(index) {
+    //         Some(pe) => pe,
+    //         None => panic!("index out of bounds {:?} len {:?}", index, self.len()),
+    //     };
+    //     let end_pe = match self.inner.pe_for_dist_index(index + buf.len() - 1) {
+    //         Some(pe) => pe,
+    //         None => panic!(
+    //             "index out of bounds {:?} len {:?}",
+    //             index + buf.len() - 1,
+    //             self.len()
+    //         ),
+    //     };
+    //     let mut dist_index = global_index;
+    //     let mut buf_index = 0;
+    //     let mut transfer_requests = InnerRdmaHandle::Rdma(VecDeque::new());
+    //     for pe in start_pe..=end_pe {
+    //         let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
+    //         if pe < self.inner.orig_remaining_elems {
+    //             full_num_elems_on_pe += 1;
+    //         }
+    //         let pe_full_start_index = self.inner.global_start_index_for_pe(pe);
+    //         let offset = dist_index - pe_full_start_index;
+    //         let len = std::cmp::min(full_num_elems_on_pe - offset, buf.len() - buf_index);
+    //         if len > 0 {
+    //             unsafe {
+    //                 transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
+    //                     pe,
+    //                     offset,
+    //                     buf.sub_region(buf_index..(buf_index + len)),
+    //                 ))
+    //             };
+    //             buf_index += len;
+    //             dist_index += len;
+    //         }
+    //     }
+    //     transfer_requests
+    // }
     fn block_op<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         op: ArrayRdmaCmd,
@@ -159,11 +214,12 @@ impl<T: Dist> UnsafeArray<T> {
         transfer_requests
     }
 
-    fn rdma_cyclic_put<U: Into<MemregionRdmaInput<T>>>(
+    fn rdma_cyclic_put2<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
         index: usize, //global_index
         buf: U,
-    ) -> InnerRdmaHandle<T> {
+        unmanaged: bool,
+    ) -> Vec<RdmaHandle<T>> {
         let global_index = index + self.inner.offset;
         let buf = buf.into();
         let _my_pe = self.inner.data.my_pe;
@@ -171,7 +227,7 @@ impl<T: Dist> UnsafeArray<T> {
         let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
         let mut overflow = 0;
         let start_pe = global_index % num_pes;
-        let mut transfer_requests = InnerRdmaHandle::Rdma(VecDeque::new());
+        let mut rdma_requests = Vec::new();
         let team_rt = self.inner.data.team();
 
         let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems_pe);
@@ -184,18 +240,63 @@ impl<T: Dist> UnsafeArray<T> {
                     temp_memreg.as_mut_slice()[k] = buf.as_slice()[j];
                     k += 1;
                 }
-                transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
-                    pe,
-                    offset,
-                    temp_memreg.sub_region(0..k),
-                ));
+                if unmanaged {
+                    self.inner.data.mem_region.put_buffer_unmanaged(
+                        pe,
+                        offset,
+                        temp_memreg.sub_region(0..k),
+                    );
+                } else {
+                    rdma_requests.push(self.inner.data.mem_region.put_buffer(
+                        pe,
+                        offset,
+                        temp_memreg.sub_region(0..k),
+                    ));
+                }
                 if pe + 1 == num_pes {
                     overflow += 1;
                 }
             }
         }
-        transfer_requests
+        rdma_requests
     }
+    // fn rdma_cyclic_put<U: Into<MemregionRdmaInputInner<T>>>(
+    //     &self,
+    //     index: usize, //global_index
+    //     buf: U,
+    // ) -> InnerRdmaHandle<T> {
+    //     let global_index = index + self.inner.offset;
+    //     let buf = buf.into();
+    //     let _my_pe = self.inner.data.my_pe;
+    //     let num_pes = self.inner.data.team.num_pes();
+    //     let num_elems_pe = buf.len() / num_pes + 1; //we add plus one to ensure we allocate enough space
+    //     let mut overflow = 0;
+    //     let start_pe = global_index % num_pes;
+    //     let mut transfer_requests = InnerRdmaHandle::Rdma(VecDeque::new());
+    //     let team_rt = self.inner.data.team();
+
+    //     let temp_memreg = team_rt.alloc_one_sided_mem_region::<T>(num_elems_pe);
+    //     unsafe {
+    //         for i in 0..std::cmp::min(buf.len(), num_pes) {
+    //             let mut k = 0;
+    //             let pe = (start_pe + i) % num_pes;
+    //             let offset = global_index / num_pes + overflow;
+    //             for j in (i..buf.len()).step_by(num_pes) {
+    //                 temp_memreg.as_mut_slice()[k] = buf.as_slice()[j];
+    //                 k += 1;
+    //             }
+    //             transfer_requests.add_rdma(self.inner.data.mem_region.put_buffer(
+    //                 pe,
+    //                 offset,
+    //                 temp_memreg.sub_region(0..k),
+    //             ));
+    //             if pe + 1 == num_pes {
+    //                 overflow += 1;
+    //             }
+    //         }
+    //     }
+    //     transfer_requests
+    // }
     fn cyclic_op<U: Into<LamellarMemoryRegion<T>>>(
         &self,
         op: ArrayRdmaCmd,
@@ -534,7 +635,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
     ///```
-    pub unsafe fn get_buffered<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
+    pub unsafe fn get_buffer<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
         &self,
         index: usize,
         buf: U,
@@ -558,84 +659,6 @@ impl<T: Dist> UnsafeArray<T> {
             },
         }
     }
-
-    // pub unsafe fn put_test<U: TeamInto<LamellarArrayRdmaInput<T>>>(&self, index: usize, val: U) {
-    //     //-> crate::lamellae::RdmaHandle<T> {
-    //     if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-    //         self.inner
-    //             .data
-    //             .mem_region
-    //             .put_test(pe, offset, val.team_into(&self.team()));
-    //     } else {
-    //         panic!();
-    //     }
-    // }
-
-    // #[doc(alias("One-sided", "onesided"))]
-    // /// Performs a blocking "Get" of the data in this array starting at the provided index into the specified buffer
-    // ///
-    // /// The length of the Get is dictated by the length of the buffer.
-    // ///
-    // /// When this function returns, `buf` will have been populated with the results of the `get`
-    // ///
-    // /// # Safety
-    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    // /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
-    // ///
-    // /// # One-sided Operation
-    // /// the calling PE initaites the remote transfer
-    // ///
-    // /// # Examples
-    // ///```
-    // /// use lamellar::array::prelude::*;
-    // /// use lamellar::memregion::prelude::*;
-    // ///
-    // /// let world = LamellarWorldBuilder::new().build();
-    // /// let my_pe = world.my_pe();
-    // /// let array = UnsafeArray::<usize>::new(&world,12,Distribution::Block).block();
-    // /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    // /// unsafe {
-    // ///     let _ =array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
-    // ///     for elem in buf.as_mut_slice()
-    // ///                          .expect("we just created it so we know its local") { //initialize mem_region
-    // ///         *elem = buf.len();
-    // ///     }
-    // ///     array.wait_all();
-    // ///     array.barrier();
-    // ///     println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
-    // ///     if my_pe == 0 { //only perfrom the transfer from one PE
-    // ///          println!();
-    // ///         array.blocking_get(0,&buf);
-    // ///
-    // ///     }
-    // ///     println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
-    // /// }
-    // ///```
-    // /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    // ///```text
-    // /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // ///
-    // /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    // /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
-    // ///```
-    // pub unsafe fn blocking_get<U: TeamTryInto<LamellarArrayRdmaOutput<T>>>(
-    //     &self,
-    //     index: usize,
-    //     buf: U,
-    // ) {
-    //     // println!("unsafe iget {:?}",index);
-    //     if let Ok(buf) = buf.team_try_into(&self.inner.data.team.team()) {
-    //         match self.inner.distribution {
-    //             Distribution::Block => self.block_op(ArrayRdmaCmd::Get(true), index, buf),
-    //             Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::Get(true), index, buf),
-    //         };
-    //     }
-    // }
 
     // #[doc(alias("One-sided", "onesided"))]
     // /// Performs an (active message based) "Get" of the data in this array starting at the provided index into the specified buffer
@@ -801,53 +824,73 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
-    unsafe fn internal_put<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> ArrayRdmaHandle<T> {
-        let reqs = match self.inner.distribution {
-            Distribution::Block => self.block_op(ArrayRdmaCmd::PutAm, index, buf.into()),
-            Distribution::Cyclic => self.cyclic_op(ArrayRdmaCmd::PutAm, index, buf.into()),
-        };
-        ArrayRdmaHandle {
-            array: self.as_lamellar_byte_array(),
-            reqs: reqs,
-            spawned: false,
-        }
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+        <Self as LamellarRdmaPut<T>>::put(self, index, data)
     }
-}
-
-impl<T: Dist> LamellarArrayPut<T> for UnsafeArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>>>(
+    pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
+        <Self as LamellarRdmaPut<T>>::put_unmanaged(self, index, data)
+    }
+    pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle<T> {
-        match buf.team_try_into(&self.inner.data.team.team()) {
-            Ok(buf) => {
-                let inner_handle = match self.inner.distribution {
-                    Distribution::Block => self.rdma_block_put(index, buf),
-                    Distribution::Cyclic => self.rdma_cyclic_put(index, buf),
-                };
-                ArrayRdmaHandle {
-                    array: self.as_lamellar_byte_array(),
-                    reqs: inner_handle,
-                    spawned: false,
-                }
-            }
-            Err(_) => ArrayRdmaHandle {
-                array: self.as_lamellar_byte_array(),
-                reqs: InnerRdmaHandle::Am(VecDeque::new()),
-                spawned: false,
-            },
-        }
+    ) -> ArrayRdmaHandle2<T> {
+        <Self as LamellarRdmaPut<T>>::put_buffer(self, index, buf.into())
+    }
+    pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
+        <Self as LamellarRdmaPut<T>>::put_buffer_unmanaged(self, index, buf.into())
+    }
+    pub unsafe fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaHandle2<T> {
+        <Self as LamellarRdmaPut<T>>::put_pe(self, pe, offset, data)
+    }
+    pub unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
+        <Self as LamellarRdmaPut<T>>::put_pe_unmanaged(self, pe, offset, data)
+    }
+    pub unsafe fn put_pe_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+    ) -> ArrayRdmaHandle2<T> {
+        <Self as LamellarRdmaPut<T>>::put_pe_buffer(self, pe, offset, buf.into())
+    }
+    pub unsafe fn put_pe_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+    ) {
+        <Self as LamellarRdmaPut<T>>::put_pe_buffer_unmanaged(self, pe, offset, buf.into())
+    }
+    pub unsafe fn put_all(&self, offset: usize, data: T) -> ArrayRdmaHandle2<T> {
+        <Self as LamellarRdmaPut<T>>::put_all(self, offset, data)
+    }
+    pub unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
+        <Self as LamellarRdmaPut<T>>::put_all_unmanaged(self, offset, data)
+    }
+    pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+    ) -> ArrayRdmaHandle2<T> {
+        <Self as LamellarRdmaPut<T>>::put_all_buffer(self, offset, buf.into())
+    }
+    pub unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+    ) {
+        <Self as LamellarRdmaPut<T>>::put_all_buffer_unmanaged(self, offset, buf.into())
     }
 }
 
 impl<T: Dist> LamellarRdmaPut<T> for UnsafeArray<T> {
-    unsafe fn new_put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
+    unsafe fn put(&self, index: usize, data: T) -> ArrayRdmaHandle2<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let req = self.inner.data.mem_region.put(pe, offset, data);
             ArrayRdmaHandle2 {
@@ -859,12 +902,110 @@ impl<T: Dist> LamellarRdmaPut<T> for UnsafeArray<T> {
             panic!("index out of bounds in LamellarArray put");
         }
     }
-    unsafe fn new_put_unmanaged(&self, index: usize, data: T) {
+    unsafe fn put_unmanaged(&self, index: usize, data: T) {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             self.inner.data.mem_region.put_unmanaged(pe, offset, data);
         } else {
             panic!("index out of bounds in LamellarArray put");
         }
+    }
+    unsafe fn put_buffer<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) -> ArrayRdmaHandle2<T> {
+        let reqs = match self.inner.distribution {
+            Distribution::Block => self.rdma_block_put2(index, buf, false),
+            Distribution::Cyclic => self.rdma_cyclic_put2(index, buf, false),
+        };
+        ArrayRdmaHandle2 {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaState::MultiRdmaPut(reqs),
+            spawned: false,
+        }
+    }
+    unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+    ) {
+        match self.inner.distribution {
+            Distribution::Block => {
+                self.rdma_block_put2(index, buf, true);
+            }
+            Distribution::Cyclic => {
+                self.rdma_cyclic_put2(index, buf, true);
+            }
+        };
+    }
+    unsafe fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaHandle2<T> {
+        let req = self.inner.data.mem_region.put(pe, offset, data);
+        ArrayRdmaHandle2 {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaState::RdmaPut(req),
+            spawned: false,
+        }
+    }
+    unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
+        self.inner.data.mem_region.put_unmanaged(pe, offset, data);
+    }
+    unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+    ) -> ArrayRdmaHandle2<T> {
+        let req = self.inner.data.mem_region.put_buffer(pe, offset, buf);
+        ArrayRdmaHandle2 {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaState::RdmaPut(req),
+            spawned: false,
+        }
+    }
+    unsafe fn put_pe_buffer_unmanaged<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+    ) {
+        self.inner
+            .data
+            .mem_region
+            .put_buffer_unmanaged(pe, offset, buf);
+    }
+
+    unsafe fn put_all(&self, offset: usize, data: T) -> ArrayRdmaHandle2<T> {
+        let req = self.inner.data.mem_region.put_all(offset, data);
+        ArrayRdmaHandle2 {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaState::RdmaPut(req),
+            spawned: false,
+        }
+    }
+    unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
+        self.inner.data.mem_region.put_all_unmanaged(offset, data);
+    }
+    unsafe fn put_all_buffer<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+    ) -> ArrayRdmaHandle2<T> {
+        let req = self.inner.data.mem_region.put_all_buffer(offset, buf);
+        ArrayRdmaHandle2 {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaState::RdmaPut(req),
+            spawned: false,
+        }
+    }
+    unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+    ) {
+        self.inner
+            .data
+            .mem_region
+            .put_all_buffer_unmanaged(offset, buf);
     }
 }
 
@@ -881,9 +1022,9 @@ impl UnsafeByteArray {
         self.inner.element_for_local_index(index)
     }
 
-    pub(crate) fn comm_slice_for_range(&self, index: usize, len: usize) -> CommSlice<u8> {
-        self.inner.comm_slice_for_range(index, len)
-    }
+    // pub(crate) fn comm_slice_for_range(&self, index: usize, len: usize) -> CommSlice<u8> {
+    //     self.inner.comm_slice_for_range(index, len)
+    // }
 }
 
 impl UnsafeArrayInner {

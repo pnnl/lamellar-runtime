@@ -7,7 +7,7 @@ use crate::{
         shmem_lamellae::rdma::{ShmemAtFuture, ShmemFuture},
         CommSlice, Scheduler,
     },
-    memregion::MemregionRdmaInput,
+    memregion::MemregionRdmaInputInner,
     LamellarTask,
 };
 
@@ -121,11 +121,11 @@ impl<T: Remote> Future for RdmaHandle<T> {
 #[pin_project]
 pub struct RdmaGetHandle<T> {
     #[pin]
-    pub(crate) future: RdmaAtFuture<T>,
+    pub(crate) future: RdmaGetFuture<T>,
 }
 
-#[pin_project(project = RdmaAtFutureProj)]
-pub(crate) enum RdmaAtFuture<T> {
+#[pin_project(project = RdmaGetFutureProj)]
+pub(crate) enum RdmaGetFuture<T> {
     #[cfg(feature = "rofi-c")]
     RofiC(#[pin] RofiCFuture<T>),
     #[cfg(feature = "enable-rofi-rust")]
@@ -145,17 +145,17 @@ impl<T: Remote> RdmaGetHandle<T> {
     pub fn block(self) -> T {
         match self.future {
             #[cfg(feature = "rofi-c")]
-            RdmaAtFuture::RofiC(f) => f.block(),
+            RdmaGetFuture::RofiC(f) => f.block(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaAtFuture::RofiRust(f) => f.block(),
+            RdmaGetFuture::RofiRust(f) => f.block(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaAtFuture::RofiRustAsync(f) => f.block(),
+            RdmaGetFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaAtFuture::LibfabricAlloc(f) => f.block(),
+            RdmaGetFuture::LibfabricAlloc(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
-            RdmaAtFuture::UcxAlloc(f) => f.block(),
-            RdmaAtFuture::Shmem(f) => f.block(),
-            RdmaAtFuture::LocalAlloc(f) => f.block(),
+            RdmaGetFuture::UcxAlloc(f) => f.block(),
+            RdmaGetFuture::Shmem(f) => f.block(),
+            RdmaGetFuture::LocalAlloc(f) => f.block(),
         }
     }
 
@@ -167,17 +167,17 @@ impl<T: Remote> RdmaGetHandle<T> {
     pub fn spawn(self) -> LamellarTask<T> {
         match self.future {
             #[cfg(feature = "rofi-c")]
-            RdmaAtFuture::RofiC(f) => f.spawn(),
+            RdmaGetFuture::RofiC(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaAtFuture::RofiRust(f) => f.spawn(),
+            RdmaGetFuture::RofiRust(f) => f.spawn(),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaAtFuture::RofiRustAsync(f) => f.spawn(),
+            RdmaGetFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            RdmaAtFuture::LibfabricAlloc(f) => f.spawn(),
+            RdmaGetFuture::LibfabricAlloc(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
-            RdmaAtFuture::UcxAlloc(f) => f.spawn(),
-            RdmaAtFuture::Shmem(f) => f.spawn(),
-            RdmaAtFuture::LocalAlloc(f) => f.spawn(),
+            RdmaGetFuture::UcxAlloc(f) => f.spawn(),
+            RdmaGetFuture::Shmem(f) => f.spawn(),
+            RdmaGetFuture::LocalAlloc(f) => f.spawn(),
         }
     }
 }
@@ -189,17 +189,17 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
         let this = self.project();
         match this.future.project() {
             #[cfg(feature = "rofi-c")]
-            RdmaAtFutureProj::RofiC(f) => f.poll(cx),
+            RdmaGetFutureProj::RofiC(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaAtFutureProj::RofiRust(f) => f.poll(cx),
+            RdmaGetFutureProj::RofiRust(f) => f.poll(cx),
             #[cfg(feature = "enable-rofi-rust")]
-            RdmaAtFutureProj::RofiRustAsync(f) => f.poll(cx),
+            RdmaGetFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            RdmaAtFutureProj::LibfabricAlloc(f) => f.poll(cx),
+            RdmaGetFutureProj::LibfabricAlloc(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
-            RdmaAtFutureProj::UcxAlloc(f) => f.poll(cx),
-            RdmaAtFutureProj::Shmem(f) => f.poll(cx),
-            RdmaAtFutureProj::LocalAlloc(f) => f.poll(cx),
+            RdmaGetFutureProj::UcxAlloc(f) => f.poll(cx),
+            RdmaGetFutureProj::Shmem(f) => f.poll(cx),
+            RdmaGetFutureProj::LocalAlloc(f) => f.poll(cx),
         }
     }
 }
@@ -219,13 +219,13 @@ pub(crate) trait CommAllocRdma {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T>;
     fn put_buffer_unmanaged<T: Remote>(
         &self,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         pe: usize,
         offset: usize,
     );
@@ -233,9 +233,22 @@ pub(crate) trait CommAllocRdma {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInput<T>>,
+        src: T,
         offset: usize,
     ) -> RdmaHandle<T>;
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize);
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T>;
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    );
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -249,6 +262,21 @@ pub(crate) trait CommAllocRdma {
         counters: Vec<Arc<AMCounters>>,
         pe: usize,
         offset: usize,
+    ) -> RdmaGetHandle<Vec<T>>;
+    fn get_into_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
         dst: CommSlice<T>,
-    ) -> RdmaHandle<T>;
+    ) -> RdmaGetHandle<Vec<T>>;
+    fn get_into_buffer_unmanaged<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: CommSlice<T>,
+    );
 }

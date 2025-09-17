@@ -106,7 +106,7 @@ impl LamellarAm for RecvAm {
                 // );
                 self.buffer
                     .res_recv_buffer
-                    .put(self.remote_pe, my_start, res_send_buf.clone())
+                    .put_buffer(self.remote_pe, my_start, res_send_buf.clone())
                     .await;
             }
             println!("{} recv_cnt: {}", self.remote_pe, cnt);
@@ -167,7 +167,7 @@ impl LamellarAm for SendAm {
             let _comm = self.comm_lock.acquire().await;
             buffer
                 .idx_recv_buffer
-                .put(
+                .put_buffer(
                     self.remote_pe,
                     my_start,
                     buffer.idx_send_buffer.sub_region(start..end),

@@ -792,7 +792,7 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
         )
         .await;
         if local_vals.len() > 0 {
-            unsafe { array.put(my_start, local_vals).await };
+            unsafe { array.put_buffer(my_start, local_vals).await };
         }
         team.async_barrier().await;
         array
@@ -828,7 +828,7 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
         }
         let array = UnsafeArray::<T>::new(team.clone(), size, distribution).block();
         if local_vals.len() > 0 {
-            array.block_on(unsafe { array.put(my_start, local_vals) });
+            array.block_on(unsafe { array.put_buffer(my_start, local_vals) });
         }
         array.barrier();
         array
