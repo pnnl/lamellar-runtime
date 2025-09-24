@@ -24,20 +24,11 @@ struct DataAM {
 impl LamellarAM for DataAM {
     async fn exec(&self) {
         unsafe {
-            // let local = lamellar::team.local_array::<u8>(self.length, 255u8);
-            let local = lamellar::team.alloc_one_sided_mem_region::<u8>(self.length);
-            let local_slice = local.as_mut_slice();
-            local_slice[self.length - 1] = 255u8;
-            self.array.get_buffer(self.index, local.clone()).await;
+            let local = self.array.get_buffer(self.index, self.length).await;
 
-            if local_slice[self.length - 1] == 255u8 {
+            if local[self.length - 1] == 255u8 {
                 println!("get failed");
             }
-            // TODO: not needed
-            // while local_slice[self.length - 1] == 255u8 {
-            //     // async_std::task::yield_now().await;
-            //     std::thread::yield_now();
-            // }
         }
     }
 }

@@ -141,7 +141,7 @@ macro_rules! fetch_mul_test {
         // array.print();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array, val, max_val, success);
             if !success {
                 eprintln!("{:?} {:?} {:?}", i, val, max_val);
@@ -178,7 +178,7 @@ macro_rules! fetch_mul_test {
         sub_array.barrier();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array, val, max_val, success);
             if !success {
                 eprintln!("{:?} {:?} {:?}", i, val, max_val);
@@ -215,7 +215,7 @@ macro_rules! fetch_mul_test {
             sub_array.barrier();
             #[allow(unused_unsafe)]
             for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
-                let val = *elem;
+                let val = elem;
                 check_val!($array, val, max_val, success);
                 if !success {
                     eprintln!("{:?} {:?} {:?}", i, val, max_val);

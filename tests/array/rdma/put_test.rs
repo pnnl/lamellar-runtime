@@ -38,45 +38,49 @@ macro_rules! onesided_iter {
     };
 }
 
-macro_rules! put_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let my_pe = world.my_pe();
-            let array_total_len = $len;
-            let mem_seg_len = array_total_len;
-            let mut success = true;
-            let array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+macro_rules! put_test {
+    ($array:ident, $t:ty, $len:expr, $dist:ident) => {{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let my_pe = world.my_pe();
+        let array_total_len = $len;
+        let mut success = true;
+        let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
+            .block()
+            .into(); //convert into abstract LamellarArray, distributed len is total_len
 
-            //initialize array
-            let init_val = 0 as $t;
-            initialize_array!($array, array, init_val);
-            array.wait_all();
-            array.barrier();
-            // world.barrier();
+        //initialize array
+        let init_val = 0 as $t;
+        initialize_array!($array, array, init_val);
+        array.wait_all();
+        array.barrier();
+        // world.barrier();
 
-            for idx in (my_pe..array_total_len).step_by(num_pes){
-                #[allow(unused_unsafe)]
-                unsafe { let _ = array.put(idx, my_pe as $t).spawn(); }
-            }
-            array.wait_all();
-            array.barrier();
+        for idx in (my_pe..array_total_len).step_by(num_pes) {
             #[allow(unused_unsafe)]
-            for (i,elem) in unsafe {onesided_iter!($array,array).into_iter().enumerate()} {
-                if (((i%num_pes) as $t - *elem) as f32).abs() > 0.0001 {
-                    eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                    success = false;
-                }
-            }
-
-
-
-            if !success{
-                eprintln!("failed");
+            unsafe {
+                let _ = array.put(idx, my_pe as $t).spawn();
             }
         }
-    }
+        array.wait_all();
+        array.barrier();
+        #[allow(unused_unsafe)]
+        for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
+            if (((i % num_pes) as $t - elem) as f32).abs() > 0.0001 {
+                eprintln!(
+                    "{:?} {:?} {:?}",
+                    i as $t,
+                    elem,
+                    ((i as $t - elem) as f32).abs()
+                );
+                success = false;
+            }
+        }
+
+        if !success {
+            eprintln!("failed");
+        }
+    }};
 }
 
 fn main() {

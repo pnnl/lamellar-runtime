@@ -66,7 +66,8 @@
 use crate::barrier::BarrierHandle;
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::{
-    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, Dist, LamellarMemoryRegion,
+    one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, AsLamellarBuffer, Dist,
+    LamellarBuffer, LamellarMemoryRegion, MemregionRdmaInputInner,
 };
 use crate::scheduler::LamellarTask;
 use crate::{active_messaging::*, LamellarTeam, LamellarTeamRT};
@@ -1225,9 +1226,9 @@ pub trait InnerArray: Sized {
 pub(crate) mod private {
     use crate::active_messaging::*;
     use crate::array::{
-        AtomicArray, GenericAtomicArray, GlobalLockArray, LamellarByteArray, LamellarReadArray,
-        LamellarWriteArray, LocalLockArray, NativeAtomicArray, NetworkAtomicArray, ReadOnlyArray,
-        UnsafeArray,
+        AtomicArray, GenericAtomicArray, GlobalLockArray, LamellarByteArray, LamellarRdmaGet,
+        LamellarRdmaPut, LamellarReadArray, LamellarWriteArray, LocalLockArray, NativeAtomicArray,
+        NetworkAtomicArray, ReadOnlyArray, UnsafeArray,
     };
     use crate::memregion::Dist;
     use crate::LamellarTeamRT;
@@ -1236,7 +1237,7 @@ pub(crate) mod private {
     use std::sync::Arc;
     //#[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-    pub trait LamellarArrayPrivate<T: Dist>: Clone {
+    pub trait LamellarArrayPrivate<T: Dist>: Clone + LamellarRdmaGet<T> {
         // // fn my_pe(&self) -> usize;
         fn inner_array(&self) -> &UnsafeArray<T>;
         fn local_as_ptr(&self) -> *const T;
@@ -1520,142 +1521,142 @@ pub trait SubArray<T: Dist>: LamellarArray<T> {
 }
 
 /// Interface defining low level APIs for copying data from an array into a buffer or local variable
-pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
-    #[doc(alias("One-sided", "onesided"))]
-    /// Performs an RDMA (Remote Direct Memory Access)  "Get" of the data in this array starting at the provided `index` into the specified `dst`
-    ///
-    /// The length of the Get is dictated by the length of the buffer.
-    ///
-    /// This call returns a future that can be awaited to determine when the `get` has finished
-    ///
-    /// Lock-based array types are not supported with RDMA calls
-    ///
-    /// # Warning
-    /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
-    /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
-    ///
-    /// # Safety
-    /// when using this call we need to think about safety in terms of the array and the destination buffer
-    /// ## Arrays
-    /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
-    /// - [AtomicArray] - technically safe, but potentially not what you want, `loads` of individual elements are atomic, but a copy of a range of elements its not atomic (we iterate through the range copying each element individually)
-    /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
-    /// ## Destination Buffer
-    /// - [SharedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
-    /// - [OneSidedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
-    ///
-    /// # One-sided Operation
-    /// the remote transfer is initiated by the calling PE
-    /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
-    /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
-    /// let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
-    /// unsafe { // we just created buf and have not shared it so free to mutate safely
-    ///     for elem in buf.as_mut_slice()
-    ///                          .expect("we just created it so we know its local") { //initialize mem_region
-    ///         *elem = buf.len();
-    ///     }
-    /// }
-    /// array.wait_all();
-    /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
-    /// if my_pe == 0 { //only perfrom the transfer from one PE
-    ///     println!();
-    ///      unsafe { array.get(0,&buf).block()}; //safe because we have not shared buf, and we block immediately on the request
-    /// }
-    /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
-    ///
-    ///```
-    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```text
-    /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    ///
-    /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
-    /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
-    ///```
-    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
-        &self,
-        index: usize,
-        dst: U,
-    ) -> ArrayRdmaHandle<T>;
+// pub trait LamellarArrayGet<T: Dist>: LamellarArrayInternalGet<T> {
+//     #[doc(alias("One-sided", "onesided"))]
+//     /// Performs an RDMA (Remote Direct Memory Access)  "Get" of the data in this array starting at the provided `index` into the specified `dst`
+//     ///
+//     /// The length of the Get is dictated by the length of the buffer.
+//     ///
+//     /// This call returns a future that can be awaited to determine when the `get` has finished
+//     ///
+//     /// Lock-based array types are not supported with RDMA calls
+//     ///
+//     /// # Warning
+//     /// This is a low-level API, unless you are very confident in low level distributed memory access it is highly recommended
+//     /// you use a safe Array type and utilize the LamellarArray load/store operations instead.
+//     ///
+//     /// # Safety
+//     /// when using this call we need to think about safety in terms of the array and the destination buffer
+//     /// ## Arrays
+//     /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
+//     /// - [AtomicArray] - technically safe, but potentially not what you want, `loads` of individual elements are atomic, but a copy of a range of elements its not atomic (we iterate through the range copying each element individually)
+//     /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
+//     /// ## Destination Buffer
+//     /// - [SharedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
+//     /// - [OneSidedMemoryRegion] - always unsafe as there are no guarantees that there may be other local and remote readers/writers.
+//     ///
+//     /// # One-sided Operation
+//     /// the remote transfer is initiated by the calling PE
+//     /// # Note
+//     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
+//     /// # Examples
+//     ///```
+//     /// use lamellar::array::prelude::*;
+//     /// use lamellar::memregion::prelude::*;
+//     ///
+//     /// let world = LamellarWorldBuilder::new().build();
+//     /// let my_pe = world.my_pe();
+//     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
+//     /// let buf = world.alloc_one_sided_mem_region::<usize>(12);
+//     /// let _ = array.dist_iter_mut().enumerate().for_each(|(i,elem)| *elem = i).spawn(); //we will used this val as completion detection
+//     /// unsafe { // we just created buf and have not shared it so free to mutate safely
+//     ///     for elem in buf.as_mut_slice()
+//     ///                          .expect("we just created it so we know its local") { //initialize mem_region
+//     ///         *elem = buf.len();
+//     ///     }
+//     /// }
+//     /// array.wait_all();
+//     /// array.barrier();
+//     /// println!("PE{my_pe} array data: {:?}",unsafe{buf.as_slice().unwrap()});
+//     /// if my_pe == 0 { //only perfrom the transfer from one PE
+//     ///     println!();
+//     ///      unsafe { array.get(0,&buf).block()}; //safe because we have not shared buf, and we block immediately on the request
+//     /// }
+//     /// println!("PE{my_pe} buf data: {:?}",unsafe{buf.as_slice().unwrap()});
+//     ///
+//     ///```
+//     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+//     ///```text
+//     /// PE0: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     ///
+//     /// PE1: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     /// PE2: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     /// PE3: buf data [12,12,12,12,12,12,12,12,12,12,12,12]
+//     /// PE0: buf data [0,1,2,3,4,5,6,7,8,9,10,11] //we only did the "get" on PE0, also likely to be printed last since the other PEs do not wait for PE0 in this example
+//     ///```
+//     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+//     unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+//         &self,
+//         index: usize,
+//         dst: U,
+//     ) -> ArrayRdmaHandle<T>;
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Retrieves the element in this array located at the specified `index`
-    ///
-    /// This call returns a future that can be awaited to retrieve to requested element
-    ///
-    /// # Safety
-    /// when using this call we need to think about safety in terms of the array type
-    /// ## Arrays
-    /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
-    /// - [AtomicArray] - always safe as loads of a single element are atomic
-    /// - [LocalLockArray] - always safe as we grab a local read lock before transfering the data (preventing any modifcation from happening on the array)
-    /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
-    ///
-    /// # One-sided Operation
-    /// the remote transfer is initiated by the calling PE
-    /// # Note
-    /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
-    /// let _ = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe).block(); //we will used this val as completion detection
-    /// array.barrier();
-    /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
-    /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
-    /// let at_req = array.at(index).spawn();
-    /// //do some other work
-    /// let val = at_req.block();
-    /// println!("PE{my_pe} array[{index}] = {val}");
-    ///```
-    /// Possible output on A 4 PE system (ordering with respect to PEs may change)
-    ///```text
-    /// PE0: buf data [0,0,0]
-    /// PE1: buf data [1,1,1]
-    /// PE2: buf data [2,2,2]
-    /// PE3: buf data [3,3,3]
-    ///
-    /// PE0: array[3] = 1
-    /// PE1: array[6] = 2
-    /// PE2: array[9] = 3
-    /// PE3: array[0] = 0
-    ///```
-    #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
-    fn at(&self, index: usize) -> ArrayAtHandle<T>;
-}
+//     #[doc(alias("One-sided", "onesided"))]
+//     /// Retrieves the element in this array located at the specified `index`
+//     ///
+//     /// This call returns a future that can be awaited to retrieve to requested element
+//     ///
+//     /// # Safety
+//     /// when using this call we need to think about safety in terms of the array type
+//     /// ## Arrays
+//     /// - [UnsafeArray] - always unsafe as there are no protections on the arrays data.
+//     /// - [AtomicArray] - always safe as loads of a single element are atomic
+//     /// - [LocalLockArray] - always safe as we grab a local read lock before transfering the data (preventing any modifcation from happening on the array)
+//     /// - [ReadOnlyArray] - always safe, read only arrays are never modified.
+//     ///
+//     /// # One-sided Operation
+//     /// the remote transfer is initiated by the calling PE
+//     /// # Note
+//     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][ArrayRdmaHandle::spawn] or [blocked on][ArrayRdmaHandle::block]
+//     /// # Examples
+//     ///```
+//     /// use lamellar::array::prelude::*;
+//     /// use lamellar::memregion::prelude::*;
+//     ///
+//     /// let world = LamellarWorldBuilder::new().build();
+//     /// let my_pe = world.my_pe();
+//     /// let num_pes = world.num_pes();
+//     /// let array = LocalLockArray::<usize>::new(&world,12,Distribution::Block).block();
+//     /// let _ = array.dist_iter_mut().enumerate().for_each(move |(i,elem)| *elem = my_pe).block(); //we will used this val as completion detection
+//     /// array.barrier();
+//     /// println!("PE{my_pe} array data: {:?}",array.read_local_data().block());
+//     /// let index = ((my_pe+1)%num_pes) * array.num_elems_local(); // get first index on PE to the right (with wrap arround)
+//     /// let at_req = array.at(index).spawn();
+//     /// //do some other work
+//     /// let val = at_req.block();
+//     /// println!("PE{my_pe} array[{index}] = {val}");
+//     ///```
+//     /// Possible output on A 4 PE system (ordering with respect to PEs may change)
+//     ///```text
+//     /// PE0: buf data [0,0,0]
+//     /// PE1: buf data [1,1,1]
+//     /// PE2: buf data [2,2,2]
+//     /// PE3: buf data [3,3,3]
+//     ///
+//     /// PE0: array[3] = 1
+//     /// PE1: array[6] = 2
+//     /// PE2: array[9] = 3
+//     /// PE3: array[0] = 0
+//     ///```
+//     #[must_use = "this function is lazy and does nothing unless awaited. Either await the returned future, or call 'spawn()' or 'block()' on it "]
+//     fn at(&self, index: usize) -> ArrayAtHandle<T>;
+// }
 
-#[doc(hidden)]
-#[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
-pub trait LamellarArrayInternalGet<T: Dist>: LamellarArray<T> {
-    unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        index: usize,
-        dst: U,
-    ) -> ArrayRdmaHandle<T>;
+// #[doc(hidden)]
+// #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
+// pub trait LamellarArrayInternalGet<T: Dist>: LamellarArray<T> {
+//     unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
+//         &self,
+//         index: usize,
+//         dst: U,
+//     ) -> ArrayRdmaHandle<T>;
 
-    // blocking call that gets the value stored and the provided index
-    unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T>;
-}
+//     // blocking call that gets the value stored and the provided index
+//     unsafe fn internal_at(&self, index: usize) -> ArrayAtHandle<T>;
+// }
 
 /// Interface defining low level APIs for copying data from a buffer or local variable into this array
 // pub trait LamellarArrayPut<T: Dist>: LamellarArrayInternalPut<T> {
@@ -1915,7 +1916,7 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 ///     println!{"sum {sum:?}"};
 /// }
 ///```
-pub trait LamellarArrayReduce<T>: LamellarArrayInternalGet<T>
+pub trait LamellarArrayReduce<T>
 where
     T: Dist + AmDist + 'static,
 {

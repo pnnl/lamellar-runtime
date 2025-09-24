@@ -22,7 +22,7 @@ use std::{
 use tracing::trace;
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAllocAtomicFuture<T> {
+pub(crate) struct LibfabricAtomicFuture<T> {
     pub(crate) alloc: Arc<LibfabricAlloc>,
     pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
@@ -32,7 +32,7 @@ pub(crate) struct LibfabricAllocAtomicFuture<T> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Send + 'static> LibfabricAllocAtomicFuture<T> {
+impl<T: Send + 'static> LibfabricAtomicFuture<T> {
     fn exec_op(&self) {
         trace!(
             "performing atomic op: {:?} offset: {:?} ",
@@ -61,7 +61,7 @@ impl<T: Send + 'static> LibfabricAllocAtomicFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LibfabricAllocAtomicFuture<T> {
+impl<T> PinnedDrop for LibfabricAtomicFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -69,15 +69,15 @@ impl<T> PinnedDrop for LibfabricAllocAtomicFuture<T> {
     }
 }
 
-impl<T> From<LibfabricAllocAtomicFuture<T>> for AtomicOpHandle<T> {
-    fn from(f: LibfabricAllocAtomicFuture<T>) -> AtomicOpHandle<T> {
+impl<T> From<LibfabricAtomicFuture<T>> for AtomicOpHandle<T> {
+    fn from(f: LibfabricAtomicFuture<T>) -> AtomicOpHandle<T> {
         AtomicOpHandle {
-            future: AtomicOpFuture::LibfabricAlloc(f),
+            future: AtomicOpFuture::Libfabric(f),
         }
     }
 }
 
-impl<T: Send + 'static> Future for LibfabricAllocAtomicFuture<T> {
+impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -90,7 +90,7 @@ impl<T: Send + 'static> Future for LibfabricAllocAtomicFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LibfabricAllocAtomicFetchFuture<T> {
+pub(crate) struct LibfabricAtomicFetchFuture<T> {
     pub(crate) alloc: Arc<LibfabricAlloc>,
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
@@ -101,7 +101,7 @@ pub(crate) struct LibfabricAllocAtomicFetchFuture<T> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Send + 'static> LibfabricAllocAtomicFetchFuture<T> {
+impl<T: Send + 'static> LibfabricAtomicFetchFuture<T> {
     fn exec_op(&mut self) {
         trace!(
             "performing atomic op: {:?} offset: {:?} ",
@@ -150,7 +150,7 @@ impl<T: Send + 'static> LibfabricAllocAtomicFetchFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LibfabricAllocAtomicFetchFuture<T> {
+impl<T> PinnedDrop for LibfabricAtomicFetchFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -158,15 +158,15 @@ impl<T> PinnedDrop for LibfabricAllocAtomicFetchFuture<T> {
     }
 }
 
-impl<T> From<LibfabricAllocAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
-    fn from(f: LibfabricAllocAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
+impl<T> From<LibfabricAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
+    fn from(f: LibfabricAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
         AtomicFetchOpHandle {
-            future: AtomicFetchOpFuture::LibfabricAlloc(f),
+            future: AtomicFetchOpFuture::Libfabric(f),
         }
     }
 }
 
-impl<T: Send + 'static> Future for LibfabricAllocAtomicFetchFuture<T> {
+impl<T: Send + 'static> Future for LibfabricAtomicFetchFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -191,7 +191,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        LibfabricAllocAtomicFuture {
+        LibfabricAtomicFuture {
             alloc: self.clone(),
             remote_pes: vec![pe],
             offset,
@@ -214,7 +214,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        LibfabricAllocAtomicFuture {
+        LibfabricAtomicFuture {
             alloc: self.clone(),
             remote_pes: (0..self.num_pes()).collect(),
             offset,
@@ -240,7 +240,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        LibfabricAllocAtomicFetchFuture {
+        LibfabricAtomicFetchFuture {
             alloc: self.clone(),
             remote_pe: pe,
             offset,

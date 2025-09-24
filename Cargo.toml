@@ -114,6 +114,7 @@ enable-ucx = ["ucx1-sys", "pmi", "thiserror"]
 tokio-executor = ["tokio"]
 disable-runtime-warnings = []
 runtime-warnings-panic = []
+slurm-test = []
 default = []
 
 
@@ -141,12 +142,20 @@ name = "put_test"
 path = "tests/array/rdma/put_test.rs"
 
 [[example]]
-name = "blocking_get_test"
-path = "tests/array/rdma/blocking_get_test.rs"
-
-[[example]]
 name = "get_test"
 path = "tests/array/rdma/get_test.rs"
+
+[[example]]
+name = "get_buffer_test"
+path = "tests/array/rdma/get_buffer_test.rs"
+
+[[example]]
+name = "get_into_buffer_test"
+path = "tests/array/rdma/get_into_buffer_test.rs"
+
+[[example]]
+name = "get_into_buffer_unmanaged_test"
+path = "tests/array/rdma/get_into_buffer_unmanaged_test.rs"
 
 [[example]]
 name = "add_test"

@@ -545,7 +545,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for AtomicElement<T> {
 /// as such there can be many concurrent threads modifying the array at any given time.
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
-#[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>)]
+#[enum_dispatch(LamellarArray<T>,LamellarEnv,ArrayExecAm<T>,LamellarArrayPrivate<T>)]
 // #[enum_dispatch(LamellarArray<T>,LamellarEnv,LamellarArrayInternalGet<T>,LamellarArrayInternalPut<T>,ArrayExecAm<T>,LamellarArrayPrivate<T>)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]

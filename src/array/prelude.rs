@@ -28,7 +28,7 @@ pub use crate::array::{
     LamellarArray,
     //LamellarArrayArithmeticReduce,
     //LamellarArrayCompareReduce,
-    LamellarArrayGet,
+    // LamellarArrayGet,
     // LamellarArrayPut,
     //LamellarArrayReduce,
     LamellarReadArray,

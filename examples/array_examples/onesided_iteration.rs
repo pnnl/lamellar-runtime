@@ -76,11 +76,11 @@ fn main() {
 
     if my_pe == 0 {
         for chunk in block_array.onesided_iter().chunks(10).skip(4).into_iter() {
-            println!("{:?}", unsafe { chunk.as_slice() });
+            println!("{:?}", chunk.as_slice());
         }
         println!("-----");
         for chunk in cyclic_array.onesided_iter().chunks(10).into_iter() {
-            println!("{:?}", unsafe { chunk.as_slice() });
+            println!("{:?}", chunk.as_slice());
         }
 
         println!("-----");
@@ -99,9 +99,7 @@ fn main() {
             .zip(block_array.onesided_iter().chunks(10))
             .into_iter()
         {
-            unsafe {
-                println!("{:?} {:?}", a.as_slice(), b.as_slice());
-            }
+            println!("{:?} {:?}", a.as_slice(), b.as_slice());
         }
     }
 
@@ -139,7 +137,7 @@ fn main() {
                 .onesided_iter()
                 .into_stream()
                 .take(4)
-                .map(|elem| *elem as f64)
+                .map(|elem| elem as f64)
                 .all(|elem| async move { elem < num_pes as f64 });
             assert_eq!(result.await, true);
         }

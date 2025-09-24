@@ -12,10 +12,13 @@ use tracing::trace;
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
-        comm::rdma::{RdmaAtFuture, RdmaFuture, RdmaGetHandle, RdmaHandle, Remote},
+        comm::rdma::{
+            RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle,
+            RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaHandle, RdmaPutFuture, Remote,
+        },
         CommAllocRdma, CommSlice,
     },
-    memregion::MemregionRdmaInputInner,
+    memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     warnings::RuntimeWarning,
     LamellarTask,
 };
@@ -31,22 +34,21 @@ pub(super) enum AllocOp<T: Remote> {
     PutBuf(usize, MemregionRdmaInputInner<T>),
     PutAll(Vec<usize>, T),
     PutAllBuf(Vec<usize>, MemregionRdmaInputInner<T>),
-    Get(usize, CommSlice<T>),
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxAllocFuture<T: Remote> {
+pub(crate) struct UcxPutFuture<T: Remote> {
     my_pe: usize,
-    pub(crate) alloc: Arc<UcxAlloc>,
-    pub(crate) offset: usize,
-    pub(super) op: AllocOp<T>,
-    pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
-    pub(crate) spawned: bool,
-    pub(crate) request: Option<UcxRequest>,
+    alloc: Arc<UcxAlloc>,
+    offset: usize,
+    op: AllocOp<T>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+    request: Option<UcxRequest>,
 }
 
-impl<T: Remote> UcxAllocFuture<T> {
+impl<T: Remote> UcxPutFuture<T> {
     fn inner_put(&mut self, pe: usize, src: T) {
         if pe != self.my_pe {
             self.request = unsafe {
@@ -75,14 +77,16 @@ impl<T: Remote> UcxAllocFuture<T> {
             self.request =
                 unsafe { UcxAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), true) };
         } else {
-            let dst = self.alloc.start() + self.offset;
-            if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
-                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
-            } else {
-                unsafe {
-                    std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-                }
-            }
+            self.alloc.as_mut_slice()[self.offset..self.offset + src.len()]
+                .copy_from_slice(src.as_slice());
+            // let dst = self.alloc.start() + self.offset;
+            // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+            //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
+            // } else {
+            //     unsafe {
+            //         std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
+            //     }
+            // }
         }
     }
 
@@ -99,28 +103,6 @@ impl<T: Remote> UcxAllocFuture<T> {
             self.inner_put_buf(*pe, src);
         }
     }
-    fn inner_get(&mut self, pe: usize, mut dst: CommSlice<T>) {
-        trace!(
-            "getting src: {:?} dst: {:?} len: {}",
-            self.alloc.start() + self.offset,
-            dst.usize_addr(),
-            dst.len()
-        );
-        if pe != self.my_pe {
-            self.request = Some(unsafe { UcxAlloc::get(&self.alloc, pe, self.offset, &mut dst) });
-        } else {
-            let src = self.alloc.start() + self.offset;
-            if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
-                unsafe {
-                    std::ptr::copy_nonoverlapping(src as *const T, dst.as_mut_ptr(), dst.len());
-                }
-            } else {
-                unsafe {
-                    std::ptr::copy(src as *const T, dst.as_mut_ptr(), dst.len());
-                }
-            }
-        }
-    }
 
     fn exec_op(&mut self) {
         match self.op.clone() {
@@ -135,9 +117,6 @@ impl<T: Remote> UcxAllocFuture<T> {
             }
             AllocOp::PutAllBuf(pes, src) => {
                 self.inner_put_all_buf(&pes, &src);
-            }
-            AllocOp::Get(pe, dst) => {
-                self.inner_get(pe, dst);
             }
         }
     }
@@ -169,7 +148,7 @@ impl<T: Remote> UcxAllocFuture<T> {
 }
 
 #[pinned_drop]
-impl<T: Remote> PinnedDrop for UcxAllocFuture<T> {
+impl<T: Remote> PinnedDrop for UcxPutFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -177,15 +156,15 @@ impl<T: Remote> PinnedDrop for UcxAllocFuture<T> {
     }
 }
 
-impl<T: Remote> From<UcxAllocFuture<T>> for RdmaHandle<T> {
-    fn from(f: UcxAllocFuture<T>) -> RdmaHandle<T> {
+impl<T: Remote> From<UcxPutFuture<T>> for RdmaHandle<T> {
+    fn from(f: UcxPutFuture<T>) -> RdmaHandle<T> {
         RdmaHandle {
-            future: RdmaFuture::UcxAlloc(f),
+            future: RdmaPutFuture::Ucx(f),
         }
     }
 }
 
-impl<T: Remote> Future for UcxAllocFuture<T> {
+impl<T: Remote> Future for UcxPutFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -204,28 +183,27 @@ impl<T: Remote> Future for UcxAllocFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxAllocAtFuture<T> {
-    pub(crate) alloc: Arc<UcxAlloc>,
-    pub(crate) pe: usize,
-    pub(crate) offset: usize,
-    pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
-    pub(crate) spawned: bool,
-    pub(crate) result: MaybeUninit<T>,
-    pub(crate) request: Option<UcxRequest>,
+pub(crate) struct UcxGetFuture<T> {
+    alloc: Arc<UcxAlloc>,
+    pe: usize,
+    offset: usize,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+    result: MaybeUninit<T>,
+    request: Option<UcxRequest>,
 }
 
-impl<T: Remote> UcxAllocAtFuture<T> {
+impl<T: Remote> UcxGetFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
-        trace!("getting at: {:?} {:?} ", self.pe, self.offset);
-        self.request = Some(unsafe {
-            self.alloc.inner_get(
+        unsafe {
+            self.request = Some(self.alloc.inner_get(
                 self.pe,
                 self.offset,
                 std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
-            )
-        });
+            ));
+        }
     }
 
     pub(crate) fn block(mut self) -> T {
@@ -258,7 +236,7 @@ impl<T: Remote> UcxAllocAtFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for UcxAllocAtFuture<T> {
+impl<T> PinnedDrop for UcxGetFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -266,15 +244,15 @@ impl<T> PinnedDrop for UcxAllocAtFuture<T> {
     }
 }
 
-impl<T: Remote> From<UcxAllocAtFuture<T>> for RdmaGetHandle<T> {
-    fn from(f: UcxAllocAtFuture<T>) -> RdmaGetHandle<T> {
+impl<T: Remote> From<UcxGetFuture<T>> for RdmaGetHandle<T> {
+    fn from(f: UcxGetFuture<T>) -> RdmaGetHandle<T> {
         RdmaGetHandle {
-            future: RdmaAtFuture::UcxAlloc(f),
+            future: RdmaGetFuture::Ucx(f),
         }
     }
 }
 
-impl<T: Remote> Future for UcxAllocAtFuture<T> {
+impl<T: Remote> Future for UcxGetFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -296,6 +274,208 @@ impl<T: Remote> Future for UcxAllocAtFuture<T> {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub(crate) struct UcxGetBufferFuture<T> {
+    alloc: Arc<UcxAlloc>,
+    pe: usize,
+    offset: usize,
+    len: usize,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+    result: MaybeUninit<Vec<T>>,
+    request: Option<UcxRequest>,
+}
+
+impl<T: Remote> UcxGetBufferFuture<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn exec_at(&mut self) {
+        unsafe {
+            let mut dst = Vec::<T>::with_capacity(self.len);
+            dst.set_len(self.len);
+            self.request = Some(
+                self.alloc
+                    .inner_get(self.pe, self.offset, dst.as_mut_slice()),
+            );
+            self.result.write(dst);
+        }
+    }
+
+    pub(crate) fn block(mut self) -> Vec<T> {
+        self.exec_at();
+        self.spawned = true;
+        if let Some(request) = self.request.take() {
+            request.wait();
+        } else {
+            self.alloc.wait_all();
+        }
+        let mut res = MaybeUninit::uninit();
+        std::mem::swap(&mut self.result, &mut res);
+        unsafe { res.assume_init() }
+    }
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        self.exec_at();
+        self.spawned = true;
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(
+            async move {
+                if let Some(request) = self.request.take() {
+                    request.wait();
+                } else {
+                    self.alloc.wait_all();
+                }
+                let mut res = MaybeUninit::uninit();
+                std::mem::swap(&mut self.result, &mut res);
+                unsafe { res.assume_init() }
+            },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for UcxGetBufferFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T: Remote> From<UcxGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
+    fn from(f: UcxGetBufferFuture<T>) -> RdmaGetBufferHandle<T> {
+        RdmaGetBufferHandle {
+            future: RdmaGetBufferFuture::Ucx(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for UcxGetBufferFuture<T> {
+    type Output = Vec<T>;
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_at();
+        }
+        let this = self.project();
+        *this.spawned = true;
+        if let Some(request) = this.request.take() {
+            request.wait();
+        } else {
+            this.alloc.wait_all();
+        }
+
+        Poll::Ready(unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(this.result, &mut res);
+            res.assume_init()
+        })
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct UcxGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    my_pe: usize,
+    alloc: Arc<UcxAlloc>,
+    pe: usize,
+    offset: usize,
+    dst: LamellarBuffer<T, B>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+    request: Option<UcxRequest>,
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
+    fn exec_op(&mut self) {
+        if self.pe != self.my_pe {
+            self.request = Some(unsafe {
+                UcxAlloc::inner_get(&self.alloc, self.pe, self.offset, self.dst.as_mut_slice())
+            });
+        } else {
+            let len = self.dst.len();
+            unsafe {
+                self.dst
+                    .as_mut_slice()
+                    .copy_from_slice(&self.alloc.as_mut_slice()[self.offset..(self.offset + len)])
+            };
+            // let src = self.alloc.start() + self.offset;
+            // if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
+            //     unsafe {
+            //         std::ptr::copy_nonoverlapping(src as *const T, dst.as_mut_ptr(), dst.len());
+            //     }
+            // } else {
+            //     unsafe {
+            //         std::ptr::copy(src as *const T, dst.as_mut_ptr(), dst.len());
+            //     }
+            // }
+        }
+    }
+    pub(crate) fn block(mut self) {
+        self.exec_op();
+        if let Some(request) = self.request.take() {
+            request.wait();
+        } else {
+            self.alloc.wait_all();
+        }
+        self.spawned = true;
+    }
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        self.exec_op();
+        self.spawned = true;
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        let request = self.request.take();
+        let alloc = self.alloc.clone();
+        self.scheduler.clone().spawn_task(
+            async move {
+                match request {
+                    Some(request) => request.wait().expect("ucx get failed"),
+                    None => alloc.wait_all(),
+                };
+            },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for UcxGetIntoBufferFuture<T, B> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> From<UcxGetIntoBufferFuture<T, B>>
+    for RdmaGetIntoBufferHandle<T, B>
+{
+    fn from(f: UcxGetIntoBufferFuture<T, B>) -> RdmaGetIntoBufferHandle<T, B> {
+        RdmaGetIntoBufferHandle {
+            future: RdmaGetIntoBufferFuture::Ucx(f),
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxGetIntoBufferFuture<T, B> {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        let this = self.project();
+        *this.spawned = true;
+        if let Some(request) = this.request.take() {
+            request.wait();
+        } else {
+            this.alloc.wait_all();
+        }
+
+        Poll::Ready(())
+    }
+}
+
 impl CommAllocRdma for Arc<UcxAlloc> {
     fn put<T: Remote>(
         &self,
@@ -307,8 +487,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
     ) -> RdmaHandle<T> {
         //  self.put_amt
         //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-
-        UcxAllocFuture {
+        UcxPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
@@ -326,8 +505,9 @@ impl CommAllocRdma for Arc<UcxAlloc> {
             // not that the operation has completed on the remote side
             unsafe { UcxAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false) };
         } else {
-            let dst = (self.start() + offset) as *mut T;
-            unsafe { dst.write(src) };
+            self.as_mut_slice()[offset] = src;
+            // let dst = (self.start() + offset) as *mut T;
+            // unsafe { dst.write(src) };
         }
     }
     fn put_buffer<T: Remote>(
@@ -341,7 +521,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         //  self.put_amt
         //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
 
-        UcxAllocFuture {
+        UcxPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
@@ -372,14 +552,15 @@ impl CommAllocRdma for Arc<UcxAlloc> {
             // not that the operation has completed on the remote side
             unsafe { UcxAlloc::put_inner(&self, pe, offset, src.as_slice(), false) };
         } else {
-            let dst = self.start() + offset;
-            if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
-                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
-            } else {
-                unsafe {
-                    std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-                }
-            }
+            self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
+            // let dst = self.start() + offset;
+            // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+            //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
+            // } else {
+            //     unsafe {
+            //         std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
+            //     }
+            // }
         }
     }
     fn put_all<T: Remote>(
@@ -390,7 +571,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         offset: usize,
     ) -> RdmaHandle<T> {
         let pes = (0..self.num_pes).collect();
-        UcxAllocFuture {
+        UcxPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
@@ -412,8 +593,9 @@ impl CommAllocRdma for Arc<UcxAlloc> {
                     UcxAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false)
                 };
             } else {
-                let dst = (self.start() + offset) as *mut T;
-                unsafe { dst.write(src) };
+                self.as_mut_slice()[offset] = src;
+                // let dst = (self.start() + offset) as *mut T;
+                // unsafe { dst.write(src) };
             }
         }
     }
@@ -425,7 +607,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         offset: usize,
     ) -> RdmaHandle<T> {
         let pes = (0..self.num_pes).collect();
-        UcxAllocFuture {
+        UcxPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
             offset,
@@ -457,40 +639,21 @@ impl CommAllocRdma for Arc<UcxAlloc> {
                 // not that the operation has completed on the remote side
                 unsafe { UcxAlloc::put_inner(&self, pe, offset, src.as_slice(), false) };
             } else {
-                let dst = self.start() + offset;
-                if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len())
-                    };
-                } else {
-                    unsafe {
-                        std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-                    }
-                }
+                self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
+                // let dst = self.start() + offset;
+                // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+                //     unsafe {
+                //         std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len())
+                //     };
+                // } else {
+                //     unsafe {
+                //         std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
+                //     }
+                // }
             }
         }
     }
 
-    fn get_buffer<T: Remote>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        pe: usize,
-        offset: usize,
-        dst: CommSlice<T>,
-    ) -> RdmaHandle<T> {
-        UcxAllocFuture {
-            my_pe: self.my_pe,
-            alloc: self.clone(),
-            offset,
-            op: AllocOp::Get(pe, dst),
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-            request: None,
-        }
-        .into()
-    }
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -498,7 +661,7 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
-        UcxAllocAtFuture {
+        UcxGetFuture {
             alloc: self.clone(),
             pe,
             offset,
@@ -509,5 +672,75 @@ impl CommAllocRdma for Arc<UcxAlloc> {
             request: None,
         }
         .into()
+    }
+
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        len: usize,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaGetBufferHandle<T> {
+        UcxGetBufferFuture {
+            alloc: self.clone(),
+            pe,
+            offset,
+            len,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+            request: None,
+        }
+        .into()
+    }
+
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        UcxGetIntoBufferFuture {
+            my_pe: self.my_pe,
+            alloc: self.clone(),
+            pe,
+            offset,
+            dst,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        if pe != self.my_pe {
+            let _ = unsafe { UcxAlloc::inner_get(&self, pe, offset, dst.as_mut_slice()) };
+        } else {
+            let len = dst.len();
+            unsafe {
+                dst.as_mut_slice()
+                    .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
+            }
+            // let src = self.alloc.start() + self.offset;
+            // if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
+            //     unsafe {
+            //         std::ptr::copy_nonoverlapping(src as *const T, dst.as_mut_ptr(), dst.len());
+            //     }
+            // } else {
+            //     unsafe {
+            //         std::ptr::copy(src as *const T, dst.as_mut_ptr(), dst.len());
+            //     }
+            // }
+        }
     }
 }

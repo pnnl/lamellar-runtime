@@ -1,19 +1,4 @@
 use lamellar::array::prelude::*;
-use lamellar::memregion::prelude::*;
-
-fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
-    memregion: &LamellarMemoryRegion<T>,
-    init_val: T,
-    inc_val: T,
-) {
-    unsafe {
-        let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice() {
-            *elem = i;
-            i += inc_val;
-        }
-    }
-}
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$t:ty) => {
@@ -115,145 +100,120 @@ macro_rules! initialize_array_range {
 }
 
 macro_rules! get_test{
-    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
-       {
-            let world = lamellar::LamellarWorldBuilder::new().build();
-            let num_pes = world.num_pes();
-            let _my_pe = world.my_pe();
-            let array_total_len = $len;
-            let mem_seg_len = array_total_len;
-            #[allow(unused_mut)]
-            let mut success = true;
-            #[allow(unused_mut)]
-            let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
-            // println!("bout to initialize");
-            initialize_array!($array, array, $t);
-            let shared_mem_region: LamellarMemoryRegion<$t> = world.alloc_shared_mem_region(mem_seg_len).block().into(); //Convert into abstract LamellarMemoryRegion, each local segment is total_len
-            //initialize array
+    ($array:ident, $t:ty, $len:expr, $dist:ident) =>{{
+        let world = lamellar::LamellarWorldBuilder::new().build();
+        let num_pes = world.num_pes();
+        let _my_pe = world.my_pe();
+        let array_total_len = $len;
+        let mem_seg_len = array_total_len;
+        #[allow(unused_mut)]
+        let mut success = true;
+        #[allow(unused_mut)]
+        let mut array: $array::<$t> = $array::<$t>::new(world.team(), array_total_len, $dist).block().into(); //convert into abstract LamellarArray, distributed len is total_len
+        // println!("bout to initialize");
+        initialize_array!($array, array, $t);
+        //initialize array
 
-            array.wait_all();
-            array.barrier();
-            initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
-            // world.barrier();
+        array.wait_all();
+        array.barrier();
 
-            for tx_size in 1..=mem_seg_len{
-                let num_txs = mem_seg_len/tx_size;
-                for tx in (0..num_txs){
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(mem_seg_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                    unsafe {let _ = array.get_buffer(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).spawn();}
-                }
-                array.wait_all();
-                array.barrier();
-                // unsafe{println!("{:?}",shared_mem_region.as_slice());}
-                unsafe{
-                    for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
-                        if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                            success = false;
-                        }
-                    }
-                }
-                array.barrier();
-                // array.print();
-                initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
-                array.wait_all();
-                array.barrier();
+        let mut reqs = vec![];
+        for tx in (0..mem_seg_len){
+            #[allow(unused_unsafe)]
+            unsafe { reqs.push(array.get(tx).spawn()); }
+        }
+        array.wait_all();
+        array.barrier();
+
+        for (i,req) in reqs.drain(..).enumerate(){
+            let elem =req.block();
+            if ((i as $t - elem) as f32).abs() > 0.0001 {
+                eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                success = false;
             }
-            array.barrier();
-            world.wait_all();
-            world.barrier();
-            if !success{
-                eprintln!("failed 1");
+        }
+
+
+        array.barrier();
+        world.wait_all();
+        world.barrier();
+        if !success{
+            eprintln!("failed 1");
+        }
+
+
+        let half_len = array_total_len/2;
+        let start_i = half_len/2;
+        let end_i = start_i + half_len;
+        initialize_array_range!($array, array, $t,(start_i..end_i));
+        let sub_array = array.sub_array(start_i..end_i);
+        world.barrier();
+
+        sub_array.barrier();
+        // sub_array.print();
+
+        let mut reqs = vec![];
+        for tx in (0..half_len){
+            #[allow(unused_unsafe)]
+            unsafe { reqs.push(array.get(tx).spawn()); }
+        }
+        sub_array.wait_all();
+        sub_array.barrier();
+        for (i,req) in reqs.drain(..).enumerate(){
+            let elem =req.block();
+            if ((i as $t - elem) as f32).abs() > 0.0001 {
+                eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                success = false;
             }
+        }
 
+        array.barrier();
+        world.wait_all();
+        world.barrier();
+        if !success{
+            eprintln!("failed 2");
+        }
+        drop(sub_array); //needed for if we are using a ReadOnlyArray, as we will switch to an unsafe array to re-initialize
 
-            let half_len = array_total_len/2;
-            let start_i = half_len/2;
-            let end_i = start_i + half_len;
+        let pe_len = array_total_len/num_pes;
+
+        for pe in 0..num_pes{
+            let len = pe_len/2;
+            let start_i = (pe*pe_len)+ len/2;
+
+            let end_i = start_i+len;
             initialize_array_range!($array, array, $t,(start_i..end_i));
             let sub_array = array.sub_array(start_i..end_i);
             world.barrier();
 
             sub_array.barrier();
-            // sub_array.print();
-            for tx_size in 1..=half_len{
-                let num_txs = half_len/tx_size;
-                for tx in (0..num_txs){
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
-                    unsafe {let _ = sub_array.get_buffer(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).spawn();}
-                }
-                sub_array.wait_all();
-                sub_array.barrier();
-                // unsafe{println!("{:?}",shared_mem_region.as_slice());}
-                unsafe{
-                    for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
-                        if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                            success = false;
-                        }
-                    }
-                }
-                sub_array.barrier();
-                // sub_array.print();
-                initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
-                sub_array.wait_all();
-                sub_array.barrier();
-                // sub_array.print();
+
+
+            let mut reqs = vec![];
+            for tx in (0..len){
+                #[allow(unused_unsafe)]
+                unsafe { reqs.push(array.get(tx).spawn()) };
+
             }
+            sub_array.wait_all();
+            sub_array.barrier();
+            for (i,req) in reqs.drain(..).enumerate(){
+                let elem =req.block();
+                if ((i as $t - elem) as f32).abs() > 0.0001 {
+                    eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                    success = false;
+                }
+            }
+
             array.barrier();
             world.wait_all();
             world.barrier();
-            if !success{
-                eprintln!("failed 2");
-            }
-            drop(sub_array); //needed for if we are using a ReadOnlyArray, as we will switch to an unsafe array to re-initialize
-
-            let pe_len = array_total_len/num_pes;
-
-            for pe in 0..num_pes{
-                let len = pe_len/2;
-                let start_i = (pe*pe_len)+ len/2;
-
-                let end_i = start_i+len;
-                initialize_array_range!($array, array, $t,(start_i..end_i));
-                let sub_array = array.sub_array(start_i..end_i);
-                world.barrier();
-
-                sub_array.barrier();
-
-                for tx_size in 1..len{
-                    let num_txs = len/tx_size;
-                    for tx in (0..num_txs){
-                        // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)).as_slice());}
-                        unsafe {let _ = sub_array.get_buffer(tx*tx_size,&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).spawn(); }
-                    }
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                    unsafe{
-                        for (i,elem) in shared_mem_region.as_slice().iter().enumerate().take( num_txs * tx_size){
-                            if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
-                                success = false;
-                            }
-                        }
-                    }
-
-                    sub_array.barrier();
-                    // sub_array.print();
-                    initialize_mem_region(&shared_mem_region,num_pes as $t,0 as $t);
-                    sub_array.wait_all();
-                    sub_array.barrier();
-                }
-                array.barrier();
-                world.wait_all();
-                world.barrier();
-            }
-
-            if !success{
-                eprintln!("failed 3");
-            }
         }
-    }
+
+        if !success{
+            eprintln!("failed 3");
+        }
+    }};
 }
 
 fn main() {

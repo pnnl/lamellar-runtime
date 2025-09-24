@@ -1,14 +1,17 @@
 mod consumer;
 mod distributed;
 mod local;
+// mod one_sided;
 
+use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::r#unsafe::*;
 
 use crate::array::iterator::distributed_iterator::{DistIter, DistIterMut};
 use crate::array::iterator::local_iterator::{LocalIter, LocalIterMut};
-use crate::array::iterator::one_sided_iterator::OneSidedIter;
+// use crate::array::iterator::one_sided_iterator::OneSidedIter;
 use crate::array::*;
 use crate::memregion::Dist;
+// use one_sided::UnsafeArrayOneSidedIter;
 
 impl<T: Dist> UnsafeArray<T> {
     #[doc(alias = "Collective")]
@@ -145,8 +148,8 @@ impl<T: Dist> UnsafeArray<T> {
     ///     }
     /// }
     ///```
-    pub unsafe fn onesided_iter(&self) -> OneSidedIter<'_, T, UnsafeArray<T>> {
-        OneSidedIter::new(self.clone(), self.inner.data.team.clone(), 1)
+    pub unsafe fn onesided_iter(&self) -> OneSidedIter<T, UnsafeArray<T>> {
+        OneSidedIter::new(self, 1)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -183,11 +186,7 @@ impl<T: Dist> UnsafeArray<T> {
     pub unsafe fn buffered_onesided_iter(
         &self,
         buf_size: usize,
-    ) -> OneSidedIter<'_, T, UnsafeArray<T>> {
-        OneSidedIter::new(
-            self.clone(),
-            self.inner.data.team.clone(),
-            std::cmp::min(buf_size, self.len()),
-        )
+    ) -> OneSidedIter<T, UnsafeArray<T>> {
+        OneSidedIter::new(self, std::cmp::min(buf_size, self.len()))
     }
 }

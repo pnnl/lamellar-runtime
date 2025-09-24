@@ -1,6 +1,8 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
-use crate::lamellae::{AllocationType, CommMem, CommSlice};
+use crate::lamellae::{
+    AllocationType, CommMem, CommSlice, RdmaGetBufferHandle, RdmaGetIntoBufferHandle,
+};
 use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LamellarTeamRT;
 use crate::LAMELLAES;
@@ -577,62 +579,25 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     //     MemoryRegionRDMA::<T>::blocking_put(self, self.pe, index, data);
     // }
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// "Gets" (copies) data from (this) memory region into the provided `data` buffer.
-    /// After calling this function, the data may or may not have actually arrived into the data buffer.
-    /// The user is responsible for transmission termination detection
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Panics
-    /// Panics if "data" does not have any local data on this PE
-    /// Panics if index is out of bounds
-    /// Panics if PE is out of bounds
-    /// # Examples
-    ///```
-    /// use lamellar::active_messaging::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    /// use std::time::{Duration, Instant};
-    ///
-    /// #[AmData]
-    /// struct MemRegionAm{
-    ///     mem_region: OneSidedMemoryRegion<usize>,
-    /// }
-    ///
-    /// #[am]
-    /// impl LamellarAm for MemRegionAm{
-    ///     async fn exec(self){
-    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
-    ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone()).await};
-    ///         
-    ///     }
-    /// }
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    ///
-    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
-    ///```
-    pub unsafe fn get_buffer<U: Into<LamellarMemoryRegion<T>>>(
+    pub unsafe fn get(&self, index: usize) -> RdmaGetHandle<T> {
+        RTMemoryRegionRDMA::<T>::get(self, self.pe, index)
+    }
+    pub unsafe fn get_buffer(&self, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
+        RTMemoryRegionRDMA::<T>::get_buffer(self, self.pe, index, len)
+    }
+    pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
-        data: U,
-    ) -> RdmaHandle<T> {
-        RTMemoryRegionRDMA::<T>::get_buffer(self, self.pe, index, data)
+        data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        RTMemoryRegionRDMA::<T>::get_into_buffer(self, self.pe, index, data)
     }
-
-    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
-        RTMemoryRegionRDMA::<T>::get(self, pe, index)
+    pub unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        RTMemoryRegionRDMA::<T>::get_into_buffer_unmanaged(self, self.pe, index, data);
     }
 
     // #[doc(alias("One-sided", "onesided"))]
@@ -897,6 +862,10 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     pub fn len(&self) -> usize {
         self.sub_region_size
     }
+
+    pub fn orig_pe(&self) -> usize {
+        self.pe
+    }
 }
 
 // This could be useful for if we want to transfer the actual data instead of the pointer
@@ -1115,11 +1084,11 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         }
     }
     unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
-        RTMemoryRegionRDMA::<T>::put(self,self.pe, index, data)
+        RTMemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
     unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
-        RTMemoryRegionRDMA::<T>::put_unmanaged(self,self.pe, index, data)
+        RTMemoryRegionRDMA::<T>::put_unmanaged(self, self.pe, index, data)
     }
 
     unsafe fn put_all_buffer(
@@ -1127,14 +1096,14 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         index: usize,
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
-        RTMemoryRegionRDMA::<T>::put_buffer(self,self.pe, index, data)
+        RTMemoryRegionRDMA::<T>::put_buffer(self, self.pe, index, data)
     }
     unsafe fn put_all_buffer_unmanaged(
         &self,
         index: usize,
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
-        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self,self.pe, index, data)
+        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self, self.pe, index, data)
     }
 
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
@@ -1149,17 +1118,12 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
         }
     }
 
-    unsafe fn get_buffer<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) -> RdmaHandle<T> {
+    unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .get_buffer(pe, self.sub_region_offset + index, data)
+                .get_buffer(pe, self.sub_region_offset + index, len)
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -1168,34 +1132,72 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
+    unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .put_comm_slice(pe, self.sub_region_offset + index, data)
+                .get_into_buffer(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
-                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
                 pe, self.pe
             );
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
+    unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .get_comm_slice(pe, self.sub_region_offset + index, data)
+                .get_into_buffer_unmanaged(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
-                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
                 pe, self.pe
             );
             // Err(MemNotLocalError {})
         }
     }
+    // unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
+    //     if self.pe == pe {
+    //         self.mr
+    //             .inner
+    //             .mr
+    //             .put_comm_slice(pe, self.sub_region_offset + index, data)
+    //     } else {
+    //         panic!(
+    //             "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+    //             pe, self.pe
+    //         );
+    //         // Err(MemNotLocalError {})
+    //     }
+    // }
+    // unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
+    //     if self.pe == pe {
+    //         self.mr
+    //             .inner
+    //             .mr
+    //             .get_comm_slice(pe, self.sub_region_offset + index, data)
+    //     } else {
+    //         panic!(
+    //             "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+    //             pe, self.pe
+    //         );
+    //         // Err(MemNotLocalError {})
+    //     }
+    // }
 }
 
 impl<T: Remote> std::fmt::Debug for OneSidedMemoryRegion<T> {

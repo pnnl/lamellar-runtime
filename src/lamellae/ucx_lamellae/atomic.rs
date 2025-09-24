@@ -25,7 +25,7 @@ use std::{
 use tracing::trace;
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxAllocAtomicFuture<T> {
+pub(crate) struct UcxAtomicFuture<T> {
     pub(crate) alloc: Arc<UcxAlloc>,
     pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
@@ -36,7 +36,7 @@ pub(crate) struct UcxAllocAtomicFuture<T> {
     pub(crate) request: Option<UcxRequest>,
 }
 
-impl<T: Copy + Send + 'static> UcxAllocAtomicFuture<T> {
+impl<T: Copy + Send + 'static> UcxAtomicFuture<T> {
     fn exec_op(&mut self) {
         trace!(
             "performing atomic op: {:?} offset: {:?} ",
@@ -44,9 +44,7 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFuture<T> {
             self.offset
         );
         for pe in &self.remote_pes {
-            unsafe {
-                UcxAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op, true);
-            }
+            UcxAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op, true);
         }
     }
     pub(crate) fn block(mut self) {
@@ -71,7 +69,7 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for UcxAllocAtomicFuture<T> {
+impl<T> PinnedDrop for UcxAtomicFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -79,15 +77,15 @@ impl<T> PinnedDrop for UcxAllocAtomicFuture<T> {
     }
 }
 
-impl<T> From<UcxAllocAtomicFuture<T>> for AtomicOpHandle<T> {
-    fn from(f: UcxAllocAtomicFuture<T>) -> AtomicOpHandle<T> {
+impl<T> From<UcxAtomicFuture<T>> for AtomicOpHandle<T> {
+    fn from(f: UcxAtomicFuture<T>) -> AtomicOpHandle<T> {
         AtomicOpHandle {
-            future: AtomicOpFuture::UcxAlloc(f),
+            future: AtomicOpFuture::Ucx(f),
         }
     }
 }
 
-impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFuture<T> {
+impl<T: Copy + Send + 'static> Future for UcxAtomicFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -101,7 +99,7 @@ impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct UcxAllocAtomicFetchFuture<T> {
+pub(crate) struct UcxAtomicFetchFuture<T> {
     pub(crate) alloc: Arc<UcxAlloc>,
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
@@ -113,7 +111,7 @@ pub(crate) struct UcxAllocAtomicFetchFuture<T> {
     pub(crate) request: Option<UcxRequest>,
 }
 
-impl<T: Copy + Send + 'static> UcxAllocAtomicFetchFuture<T> {
+impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
     fn exec_op(&mut self) {
         trace!(
             "performing atomic op: {:?} offset: {:?} ",
@@ -163,7 +161,7 @@ impl<T: Copy + Send + 'static> UcxAllocAtomicFetchFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for UcxAllocAtomicFetchFuture<T> {
+impl<T> PinnedDrop for UcxAtomicFetchFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -171,15 +169,15 @@ impl<T> PinnedDrop for UcxAllocAtomicFetchFuture<T> {
     }
 }
 
-impl<T> From<UcxAllocAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
-    fn from(f: UcxAllocAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
+impl<T> From<UcxAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
+    fn from(f: UcxAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
         AtomicFetchOpHandle {
-            future: AtomicFetchOpFuture::UcxAlloc(f),
+            future: AtomicFetchOpFuture::Ucx(f),
         }
     }
 }
 
-impl<T: Copy + Send + 'static> Future for UcxAllocAtomicFetchFuture<T> {
+impl<T: Copy + Send + 'static> Future for UcxAtomicFetchFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -205,7 +203,7 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        UcxAllocAtomicFuture {
+        UcxAtomicFuture {
             alloc: self.clone(),
             remote_pes: vec![pe],
             offset,
@@ -228,7 +226,7 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
         offset: usize,
     ) -> AtomicOpHandle<T> {
         let pes = (0..self.num_pes).collect();
-        UcxAllocAtomicFuture {
+        UcxAtomicFuture {
             alloc: self.clone(),
             remote_pes: pes,
             offset,
@@ -254,7 +252,7 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        UcxAllocAtomicFetchFuture {
+        UcxAtomicFetchFuture {
             alloc: self.clone(),
             remote_pe: pe,
             offset,

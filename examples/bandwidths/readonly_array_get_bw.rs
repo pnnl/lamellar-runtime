@@ -51,15 +51,18 @@ fn main() {
         } else if num_bytes >= 4096 {
             exp = 30;
         }
+        let mut buffer = unsafe { LamellarBuffer::from_one_sided_memory_region(data.clone()) };
         let timer = Instant::now();
         let mut sub_time = 0f64;
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                let sub_reg = data.sub_region(j..(j + num_bytes as usize));
-                unsafe {
-                    let _ = array.get_buffer(ARRAY_LEN * (num_pes - 1), &sub_reg).spawn();
-                }
+                // let sub_reg = data.sub_region(j..(j + num_bytes as usize));
+                let remaining_buffer = buffer.split_off(num_bytes as usize);
+
+                let _ = array.get_into_buffer_unmanaged(ARRAY_LEN * (num_pes - 1), buffer);
+
+                buffer = remaining_buffer;
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;

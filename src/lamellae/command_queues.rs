@@ -5,6 +5,7 @@ use super::{
 use crate::{
     env_var::config,
     lamellae::{CommAllocRdma, Des},
+    memregion::LamellarBuffer,
     scheduler::Scheduler,
 };
 use parking_lot::Mutex;
@@ -1064,7 +1065,7 @@ impl InnerCQ {
 
     //update cmdbuffers to include a hash the wait on that here
     #[tracing::instrument(skip(self), level = "debug")]
-    async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: CommSlice<u8>) {
+    async fn get_data(&self, src: usize, cmd: CmdMsg) -> Vec<CmdMsg> {
         // let local_daddr = self.comm.local_addr(src, cmd.daddr);
         // let local_daddr_alloc = self.comm.get_alloc(local_daddr).expect("invalid daddr");
         let (local_daddr_alloc, offset) =
@@ -1079,30 +1080,44 @@ impl InnerCQ {
         //         data_slice.clone(),
         //     )
         //     .await;
-        local_daddr_alloc
-            .get_buffer(&self.scheduler, vec![], src, offset, data_slice.clone())
+        let data = local_daddr_alloc
+            .get_buffer(&self.scheduler, vec![], src, offset, cmd.dsize as usize)
             .await;
-        // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
-        let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
-            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
-        {
-            async_std::task::yield_now().await;
-            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                info!(
-                    "stuck waiting for data from {:?}!!! {:?} {:?} {:?} {:?} -- calced hash {:?}",
-                    src,
-                    cmd,
-                    data_slice.len(),
-                    cmd.dsize,
-                    &data_slice,
-                    calc_hash(data_slice.as_ptr() as usize, data_slice.len())
-                );
-                self.send_print(src, cmd).await;
-                timer = std::time::Instant::now();
-            }
+        if calc_hash(data.as_ptr() as usize, data.len()) != cmd.msg_hash {
+            info!(
+                "data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
+                src,
+                cmd,
+                data.len(),
+                &data,
+                calc_hash(data.as_ptr() as usize, data.len()),
+                cmd.msg_hash
+            );
+            self.send_print(src, cmd).await;
         }
+
+        // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
+        // let mut timer = std::time::Instant::now();
+        // while calc_hash(data.as_ptr() as usize, data.len()) != cmd.msg_hash
+        //     && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        // {
+        //     async_std::task::yield_now().await;
+        //     if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+        //         info!(
+        //             "stuck waiting for data from {:?}!!! {:?} {:?} {:?} {:?} -- calced hash {:?}",
+        //             src,
+        //             cmd,
+        //             data_slice.len(),
+        //             cmd.dsize,
+        //             &data_slice,
+        //             calc_hash(data_slice.as_ptr() as usize, data_slice.len())
+        //         );
+        //         self.send_print(src, cmd).await;
+        //         timer = std::time::Instant::now();
+        //     }
+        // }
         // println!("got data {:?}", data_slice);
+        data
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1125,7 +1140,9 @@ impl InnerCQ {
         //     )
         //     .await;
         local_daddr_alloc
-            .get_buffer(&self.scheduler, vec![], src, offset, data_slice.clone())
+            .get_into_buffer(&self.scheduler, vec![], src, offset, unsafe {
+                LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(data_slice.clone())
+            })
             .await;
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
         let mut timer = std::time::Instant::now();
@@ -1207,30 +1224,32 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> CommAlloc {
+    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> Vec<CmdMsg> {
         trace!("getting cmd buf from {}", src);
-        let mut data = self
-            .comm
-            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
-        let mut timer = std::time::Instant::now();
-        while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
-            async_std::task::yield_now().await;
-            // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
-            self.send_alloc(cmd.dsize);
-            data = self
-                .comm
-                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
-            // println!("cq 874 data {:?}",data.is_ok());
-            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                println!("get cmd buf stuck waiting for alloc");
-                timer = std::time::Instant::now();
-            }
-        }
-        let data = data.unwrap();
-        let data_slice = data.as_comm_slice();
+        // let data_len = cmd.dsize as usize;
+        // let mut data = self
+        //     .comm
+        //     .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
+        // let mut timer = std::time::Instant::now();
+        // while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
+        //     async_std::task::yield_now().await;
+        //     // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
+        //     self.send_alloc(cmd.dsize);
+        //     data = self
+        //         .comm
+        //         .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
+        //     // println!("cq 874 data {:?}",data.is_ok());
+        //     if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+        //         println!("get cmd buf stuck waiting for alloc");
+        //         timer = std::time::Instant::now();
+        //     }
+        // }
+        // let data = data.unwrap();
+        // let data_slice = data.as_comm_slice();
         // let data_slice =
         //     unsafe { std::slice::from_raw_parts_mut(data as *mut u8, cmd.dsize as usize) };
-        self.get_data(src, cmd, data_slice).await;
+
+        let data = self.get_data(src, cmd).await;
         // println!("received cmd_buf {:?}", data_slice);
         // println!(
         //     "sending release to src: {:?} {:?} (s: {:?} r: {:?})",
@@ -1520,11 +1539,11 @@ impl CommandQueue {
                                 let cq = self.cq.clone();
                                 let lamellae = lamellae.clone();
                                 let scheduler1 = self.scheduler.clone();
-                                let comm = self.comm.clone();
+                                // let comm = self.comm.clone();
                                 let task = async move {
                                     trace!("going to get cmd_buf {:?} from {:?}", cmd_buf_cmd, src);
                                     let data = cq.get_cmd_buf(src, cmd_buf_cmd).await;
-                                    let cmd_buf: CommSlice<CmdMsg> = data.as_comm_slice();
+                                    let cmd_buf = data.as_slice();
                                     // let cmd_buf = unsafe {
                                     //     std::slice::from_raw_parts(
                                     //         data as *const CmdMsg,
@@ -1579,7 +1598,7 @@ impl CommandQueue {
                                         }
                                     }
 
-                                    comm.rt_free(data);
+                                    // comm.rt_free(data);
                                 };
                                 // println!(
                                 //     "[{:?}] recv_data submitting tx task",

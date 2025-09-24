@@ -431,8 +431,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         let u8_ptr = unsafe { self.inner.local_as_mut_ptr() };
-        // self.inner.data.mem_region.as_casted_mut_ptr::<T>().unwrap();
-        // println!("ptr: {:?} {:?}", u8_ptr, u8_ptr as *const T);
         u8_ptr as *mut T
     }
 

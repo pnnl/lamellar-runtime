@@ -401,7 +401,7 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockReadGuard<T> {
     // type Array = GlobalLockArray<T>;
     type DistIter = GlobalLockDistIter<T>;
     type LocalIter = GlobalLockLocalIter<T>;
-    type OnesidedIter = OneSidedIter<'static, T, GlobalLockArray<T>>;
+    type OnesidedIter = OneSidedIter<T, GlobalLockArray<T>>;
 
     fn dist_iter(&self) -> Self::DistIter {
         GlobalLockDistIter {
@@ -424,22 +424,18 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockReadGuard<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.array.clone(), self.array.team_rt(), 1)
+        OneSidedIter::new(&self.array, 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(
-            self.array.clone(),
-            self.array.team_rt(),
-            std::cmp::min(buf_size, self.array.len()),
-        )
+        OneSidedIter::new(&self.array, std::cmp::min(buf_size, self.array.len()))
     }
 }
 
 impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     type DistIter = GlobalLockDistIter<T>;
     type LocalIter = GlobalLockLocalIter<T>;
-    type OnesidedIter = OneSidedIter<'static, T, GlobalLockArray<T>>;
+    type OnesidedIter = OneSidedIter<T, GlobalLockArray<T>>;
 
     fn dist_iter(&self) -> Self::DistIter {
         GlobalLockDistIter {
@@ -462,15 +458,11 @@ impl<T: Dist> LamellarArrayIterators<T> for GlobalLockArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone(), self.array.team_rt(), 1)
+        OneSidedIter::new(self, 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(
-            self.clone(),
-            self.array.team_rt(),
-            std::cmp::min(buf_size, self.array.len()),
-        )
+        OneSidedIter::new(self, std::cmp::min(buf_size, self.array.len()))
     }
 }
 

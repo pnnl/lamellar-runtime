@@ -113,7 +113,7 @@ macro_rules! add_test{
             array.barrier();
             #[allow(unused_unsafe)]
             for (i,elem) in unsafe {onesided_iter!($array,array).into_iter().enumerate()}{
-                let val = *elem;
+                let val = elem;
                 check_val!($array,val,max_val,success);
                 if !success{
                     eprintln!("full_0 {:?} {:?} {:?}",i,val,max_val);
@@ -142,7 +142,7 @@ macro_rules! add_test{
             array.barrier();
             #[allow(unused_unsafe)]
             for (i,elem) in unsafe{ onesided_iter!($array,array).into_iter().enumerate()}{
-                let val = *elem;
+                let val = elem;
                 check_val!($array,val,max_val,success);
                 if !success{
                     eprintln!("full_1 {:?} {:?} {:?}",i,val,max_val);
@@ -179,7 +179,7 @@ macro_rules! add_test{
             sub_array.barrier();
             #[allow(unused_unsafe)]
             for (i,elem) in unsafe { onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                let val = *elem;
+                let val = elem;
                 check_val!($array,val,max_val,success);
                 if !success{
                     eprintln!("half_0 {:?} {:?} {:?}",i,val,max_val);
@@ -205,7 +205,7 @@ macro_rules! add_test{
             sub_array.barrier();
             #[allow(unused_unsafe)]
             for (i,elem) in  unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                let val = *elem;
+                let val = elem;
                 check_val!($array,val,max_val,success);
                 if !success{
                     eprintln!("half_1 {:?} {:?} {:?}",i,val,max_val);
@@ -243,7 +243,7 @@ macro_rules! add_test{
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                    let val = *elem;
+                    let val = elem;
                     check_val!($array,val,max_val,success);
                     if !success{
                         eprintln!("small_0 {:?} {:?} {:?}",i,val,max_val);
@@ -269,7 +269,7 @@ macro_rules! add_test{
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                    let val = *elem;
+                    let val = elem;
                     check_val!($array,val,max_val,success);
                     if !success{
                        eprintln!("small_1 {:?} {:?} {:?}",i,val,max_val);
@@ -305,7 +305,7 @@ macro_rules! check_results {
         $array.barrier();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array_ty, $array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array_ty, val, $num_pes, success);
             if !success {
                 eprintln!("input {:?}: {:?} {:?} {:?}", $test, i, val, $num_pes);

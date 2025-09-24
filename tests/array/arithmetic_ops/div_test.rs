@@ -106,7 +106,7 @@ macro_rules! div_test {
         // array.print();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array, val, one, success);
             if !success {
                 eprintln!("full {:?} {:?} {:?}", i, val, one);
@@ -132,7 +132,7 @@ macro_rules! div_test {
         sub_array.barrier();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array, val, one, success);
             if !success {
                 eprintln!("half {:?} {:?} {:?}", i, val, one);
@@ -158,7 +158,7 @@ macro_rules! div_test {
             sub_array.barrier();
             #[allow(unused_unsafe)]
             for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
-                let val = *elem;
+                let val = elem;
                 check_val!($array, val, one, success);
                 if !success {
                     eprintln!("pe {:?} {:?} {:?}", i, val, one);

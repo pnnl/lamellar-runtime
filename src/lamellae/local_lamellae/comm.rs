@@ -29,6 +29,14 @@ impl LocalAlloc {
     pub(crate) fn as_mut_ptr<T>(&self) -> *mut T {
         self.ptr as *mut T
     }
+    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.as_mut_ptr::<T>(),
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
 
     pub(crate) fn num_bytes(&self) -> usize {
         self.layout.size()

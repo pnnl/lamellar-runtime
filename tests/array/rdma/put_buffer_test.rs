@@ -9,7 +9,7 @@ fn initialize_mem_region<T: Dist + std::ops::AddAssign>(
     unsafe {
         let mut i = init_val; //(len_per_pe * my_pe as f32).round() as usize;
         for elem in memregion.as_mut_slice() {
-            *elem = i;
+            elem = i;
             i += inc_val;
         }
     }
@@ -84,8 +84,8 @@ macro_rules! put_buffer_test{
                 array.barrier();
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe { onesided_iter!($array,array).into_iter().enumerate().take( num_txs * tx_size) }{
-                    if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                    if ((i as $t - elem) as f32).abs() > 0.0001 {
+                        eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
                         success = false;
                     }
                 }
@@ -118,8 +118,8 @@ macro_rules! put_buffer_test{
                 sub_array.barrier();
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate().take( num_txs * tx_size)}{
-                    if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                        eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                    if ((i as $t - elem) as f32).abs() > 0.0001 {
+                        eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
                         success = false;
                     }
                 }
@@ -155,8 +155,8 @@ macro_rules! put_buffer_test{
                     sub_array.barrier();
                     #[allow(unused_unsafe)]
                     for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate().take( num_txs * tx_size)}{
-                        if ((i as $t - *elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,*elem,((i as $t - *elem) as f32).abs());
+                        if ((i as $t - elem) as f32).abs() > 0.0001 {
+                            eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
                             success = false;
                         }
                     }

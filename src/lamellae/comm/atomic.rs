@@ -1,12 +1,12 @@
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::atomic::{
-    LibfabricAllocAtomicFetchFuture, LibfabricAllocAtomicFuture,
+    LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
 };
 #[cfg(feature = "enable-ucx")]
-use crate::lamellae::ucx_lamellae::atomic::{UcxAllocAtomicFetchFuture, UcxAllocAtomicFuture};
+use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
 use crate::{
     lamellae::{
-        local_lamellae::atomic::{LocalAllocAtomicFetchFuture, LocalAllocAtomicFuture},
+        local_lamellae::atomic::{LocalAtomicFetchFuture, LocalAtomicFuture},
         shmem_lamellae::atomic::{ShmemAtomicFetchFuture, ShmemAtomicFuture},
         CommAllocAddr,
     },
@@ -92,36 +92,24 @@ pub struct AtomicOpHandle<T> {
 
 #[pin_project(project = AtomicOpFutureProj)]
 pub(crate) enum AtomicOpFuture<T> {
-    #[cfg(feature = "rofi-c")]
-    RofiC(#[pin] RofiCFuture<T>),
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRust(#[pin] RofiRustFuture),
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsync(#[pin] RofiRustAsyncFuture),
     #[cfg(feature = "enable-libfabric")]
-    LibfabricAlloc(#[pin] LibfabricAllocAtomicFuture<T>),
+    Libfabric(#[pin] LibfabricAtomicFuture<T>),
     #[cfg(feature = "enable-ucx")]
-    UcxAlloc(#[pin] UcxAllocAtomicFuture<T>),
+    Ucx(#[pin] UcxAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
-    LocalAlloc(#[pin] LocalAllocAtomicFuture<T>),
+    Local(#[pin] LocalAtomicFuture<T>),
 }
 
 impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicOp Operation completes
     pub fn block(self) {
         match self.future {
-            #[cfg(feature = "rofi-c")]
-            AtomicOpFuture::RofiC(f) => f.block(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicOpFuture::RofiRust(f) => f.block(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicOpFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicOpFuture::LibfabricAlloc(f) => f.block(),
+            AtomicOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
-            AtomicOpFuture::UcxAlloc(f) => f.block(),
+            AtomicOpFuture::Ucx(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
-            AtomicOpFuture::LocalAlloc(f) => f.block(),
+            AtomicOpFuture::Local(f) => f.block(),
         }
     }
 
@@ -132,18 +120,12 @@ impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<()> {
         match self.future {
-            #[cfg(feature = "rofi-c")]
-            AtomicOpFuture::RofiC(f) => f.spawn(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicOpFuture::RofiRust(f) => f.spawn(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicOpFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicOpFuture::LibfabricAlloc(f) => f.spawn(),
+            AtomicOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
-            AtomicOpFuture::UcxAlloc(f) => f.spawn(),
+            AtomicOpFuture::Ucx(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
-            AtomicOpFuture::LocalAlloc(f) => f.spawn(),
+            AtomicOpFuture::Local(f) => f.spawn(),
         }
     }
 }
@@ -154,18 +136,12 @@ impl<T: Copy + Send + 'static> Future for AtomicOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
-            #[cfg(feature = "rofi-c")]
-            AtomicOpFutureProj::RofiC(f) => f.poll(cx),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicOpFutureProj::RofiRust(f) => f.poll(cx),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicOpFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            AtomicOpFutureProj::LibfabricAlloc(f) => f.poll(cx),
+            AtomicOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
-            AtomicOpFutureProj::UcxAlloc(f) => f.poll(cx),
+            AtomicOpFutureProj::Ucx(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
-            AtomicOpFutureProj::LocalAlloc(f) => f.poll(cx),
+            AtomicOpFutureProj::Local(f) => f.poll(cx),
         }
     }
 }
@@ -179,36 +155,24 @@ pub struct AtomicFetchOpHandle<T> {
 
 #[pin_project(project = AtomicFetchOpFutureProj)]
 pub(crate) enum AtomicFetchOpFuture<T> {
-    #[cfg(feature = "rofi-c")]
-    RofiC(#[pin] RofiCFuture<T>),
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRust(#[pin] RofiRustFuture),
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsync(#[pin] RofiRustAsyncFuture),
     #[cfg(feature = "enable-libfabric")]
-    LibfabricAlloc(#[pin] LibfabricAllocAtomicFetchFuture<T>),
+    Libfabric(#[pin] LibfabricAtomicFetchFuture<T>),
     #[cfg(feature = "enable-ucx")]
-    UcxAlloc(#[pin] UcxAllocAtomicFetchFuture<T>),
+    Ucx(#[pin] UcxAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
-    LocalAlloc(#[pin] LocalAllocAtomicFetchFuture<T>),
+    Local(#[pin] LocalAtomicFetchFuture<T>),
 }
 
 impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> T {
         match self.future {
-            #[cfg(feature = "rofi-c")]
-            AtomicFetchOpFuture::RofiC(f) => f.block(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicFetchOpFuture::RofiRust(f) => f.block(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicFetchOpFuture::RofiRustAsync(f) => f.block(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicFetchOpFuture::LibfabricAlloc(f) => f.block(),
+            AtomicFetchOpFuture::Libfabric(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
-            AtomicFetchOpFuture::UcxAlloc(f) => f.block(),
+            AtomicFetchOpFuture::Ucx(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
-            AtomicFetchOpFuture::LocalAlloc(f) => f.block(),
+            AtomicFetchOpFuture::Local(f) => f.block(),
         }
     }
 
@@ -219,18 +183,12 @@ impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<T> {
         match self.future {
-            #[cfg(feature = "rofi-c")]
-            AtomicFetchOpFuture::RofiC(f) => f.spawn(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicFetchOpFuture::RofiRust(f) => f.spawn(),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicFetchOpFuture::RofiRustAsync(f) => f.spawn(),
             #[cfg(feature = "enable-libfabric")]
-            AtomicFetchOpFuture::LibfabricAlloc(f) => f.spawn(),
+            AtomicFetchOpFuture::Libfabric(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
-            AtomicFetchOpFuture::UcxAlloc(f) => f.spawn(),
+            AtomicFetchOpFuture::Ucx(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
-            AtomicFetchOpFuture::LocalAlloc(f) => f.spawn(),
+            AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
     }
 }
@@ -241,18 +199,12 @@ impl<T: Copy + Send + 'static> Future for AtomicFetchOpHandle<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         match this.future.project() {
-            #[cfg(feature = "rofi-c")]
-            AtomicFetchOpFutureProj::RofiC(f) => f.poll(cx),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicFetchOpFutureProj::RofiRust(f) => f.poll(cx),
-            #[cfg(feature = "enable-rofi-rust")]
-            AtomicFetchOpFutureProj::RofiRustAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-libfabric")]
-            AtomicFetchOpFutureProj::LibfabricAlloc(f) => f.poll(cx),
+            AtomicFetchOpFutureProj::Libfabric(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
-            AtomicFetchOpFutureProj::UcxAlloc(f) => f.poll(cx),
+            AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
-            AtomicFetchOpFutureProj::LocalAlloc(f) => f.poll(cx),
+            AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
     }
 }

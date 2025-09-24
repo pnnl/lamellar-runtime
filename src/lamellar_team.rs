@@ -1143,60 +1143,54 @@ impl LamellarTeamRT {
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
 
             let team_counters = Arc::new(AMCounters::new());
-            // println!("allocating temp_buf");
-            let temp_buf = MemoryRegion::<usize>::new(
+            // println!("allocating hash_buf");
+            let dropped = MemoryRegion::<usize>::new(
                 parent.num_pes,
                 &parent.scheduler,
                 vec![team_counters.clone(), parent.world_counters.clone()],
                 &parent.lamellae,
                 parent_alloc.clone(),
             );
+            unsafe { dropped.as_mut_slice().fill(0) };
 
             // println!("allocating temp_array");
-            let temp_array = MemoryRegion::<usize>::new(
-                parent.num_pes,
-                &parent.scheduler,
-                vec![],
-                &parent.lamellae,
-                AllocationType::Local,
-            );
-            let mut temp_array_slice =
-                unsafe { temp_array.as_comm_slice().expect("data should exist on pe") };
-            for e in temp_array_slice.iter_mut() {
-                *e = 0;
-            }
-            unsafe {
-                temp_buf
-                    .put_comm_slice(
-                        parent.world_pe,
-                        0,
-                        temp_array_slice.sub_slice(..parent.num_pes),
-                    )
-                    .block();
-            }
+            // let temp_array = MemoryRegion::<usize>::new(
+            //     parent.num_pes,
+            //     &parent.scheduler,
+            //     vec![],
+            //     &parent.lamellae,
+            //     AllocationType::Local,
+            // );
+            // let mut temp_array_slice =
+            //     unsafe { temp_array.as_comm_slice().expect("data should exist on pe") };
+            // for e in temp_array_slice.iter_mut() {
+            //     *e = 0;
+            // }
+            // unsafe {
+            //     hash_buf.put_buffer(parent.world_pe, 0, temp_array_slice.sub_slice(..parent.num_pes)).block();
+            // }
+            // let mut temp_array = vec![0; parent.num_pes];
+            // temp_array[0] = hash as usize;
             let s = Instant::now();
             parent.barrier();
             // println!("barrier done in {:?}", s.elapsed());
             let timeout = Instant::now() - s;
-            temp_array_slice[0] = hash as usize;
+            // temp_array_slice[0] = hash as usize;
+
             // println!("putting hash vals");
             if let Ok(parent_world_pe) = parent.arch.team_pe(parent.world_pe) {
                 for world_pe in parent.arch.team_iter() {
                     if world_pe != parent.world_pe {
                         unsafe {
-                            temp_buf
-                                .put_comm_slice(
-                                    world_pe,
-                                    parent_world_pe,
-                                    temp_array_slice.sub_slice(0..1),
-                                )
+                            dropped
+                                .put(world_pe, parent_world_pe, hash as usize)
                                 .block();
                         }
                     }
                 }
             }
             // println!("done putting hash, now gonna check hash vals");
-            parent.check_hash_vals(hash as usize, &temp_buf, timeout);
+            parent.check_hash_vals(hash as usize, &dropped, timeout);
             // println!("passed check hash vals");
 
             let remote_ptr_alloc = parent
@@ -1210,9 +1204,9 @@ impl LamellarTeamRT {
                 .expect("alloc failed creating LamellarTeam");
             // ------------------------------------------------------------------------------------------------- //
             // println!("passed remote_ptr_alloc");
-            for e in temp_array_slice.iter_mut() {
-                *e = 0;
-            }
+            // for e in temp_array_slice.iter_mut() {
+            //     *e = 0;
+            // }
             let num_pes = archrt.num_pes();
             parent.barrier();
             // println!("passed barrier, creating RT team");
@@ -1242,7 +1236,7 @@ impl LamellarTeamRT {
                     parent.panic.clone(),
                 ),
                 team_hash: hash,
-                dropped: temp_buf,
+                dropped,
                 remote_ptr_alloc: remote_ptr_alloc,
                 panic: parent.panic.clone(),
                 tid: parent.tid,
@@ -1349,49 +1343,35 @@ impl LamellarTeamRT {
     fn put_dropped(&self) {
         if self.panic.load(Ordering::SeqCst) == 0 {
             if let Some(parent) = &self.parent {
-                let mut temp_slice = unsafe {
-                    self.dropped
-                        .as_comm_slice()
-                        .expect("data should exist on pe")
-                };
+                // let mut temp_slice = unsafe {
+                //     self.dropped
+                //         .as_comm_slice()
+                //         .expect("data should exist on pe")
+                // };
 
                 let my_index = parent
                     .arch
                     .team_pe(self.world_pe)
                     .expect("invalid parent pe");
-                temp_slice[my_index] = 1;
+                // temp_slice[my_index] = 1;
                 for world_pe in self.arch.team_iter() {
-                    if world_pe != self.world_pe {
-                        unsafe {
-                            let _ = self
-                                .dropped
-                                .put_comm_slice(
-                                    world_pe,
-                                    my_index,
-                                    temp_slice.sub_slice(my_index..=my_index),
-                                )
-                                .spawn();
-                        }
+                    // if world_pe != self.world_pe {
+                    unsafe {
+                        let _ = self.dropped.put(world_pe, my_index, 1).spawn();
                     }
+                    // }
                 }
             } else {
-                let mut temp_slice = unsafe {
-                    self.dropped
-                        .as_comm_slice()
-                        .expect("data should exist on pe")
-                };
-                temp_slice[self.world_pe] = 1;
+                // let mut temp_slice = unsafe {
+                //     self.dropped
+                //         .as_comm_slice()
+                //         .expect("data should exist on pe")
+                // };
+                // temp_slice[self.world_pe] = 1;
                 for world_pe in self.arch.team_iter() {
                     if world_pe != self.world_pe {
                         unsafe {
-                            let _ = self
-                                .dropped
-                                .put_comm_slice(
-                                    world_pe,
-                                    self.world_pe,
-                                    temp_slice.sub_slice(self.world_pe..=self.world_pe),
-                                )
-                                .spawn();
+                            let _ = self.dropped.put(world_pe, self.world_pe, 1).spawn();
                         }
                     }
                 }

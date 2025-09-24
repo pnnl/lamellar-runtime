@@ -12,11 +12,12 @@ use tracing::trace;
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
-        comm::rdma::{RdmaFuture, RdmaHandle, Remote},
+        comm::rdma::{RdmaHandle, RdmaPutFuture, Remote},
         shmem_lamellae::fabric::ShmemAlloc,
-        CommAllocAddr, CommAllocRdma, CommSlice, RdmaAtFuture, RdmaGetHandle,
+        CommAllocAddr, CommAllocRdma, CommSlice, RdmaGetBufferFuture, RdmaGetBufferHandle,
+        RdmaGetFuture, RdmaGetHandle, RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle,
     },
-    memregion::MemregionRdmaInputInner,
+    memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     warnings::RuntimeWarning,
     LamellarTask,
 };
@@ -28,20 +29,19 @@ pub(super) enum Op<T: Remote> {
     PutBuf(MemregionRdmaInputInner<T>, CommAllocAddr),
     PutAll(T, Vec<CommAllocAddr>),
     PutAllBuf(MemregionRdmaInputInner<T>, Vec<CommAllocAddr>),
-    Get(CommAllocAddr, CommSlice<T>),
 }
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct ShmemFuture<T: Remote> {
-    pub(super) op: Op<T>,
-    pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
-    pub(crate) spawned: bool,
+    op: Op<T>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
 }
 
 impl<T: Remote> ShmemFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_buf(&self, src: &MemregionRdmaInputInner<T>, dst: &CommAllocAddr) {
+    fn inner_put_buf(src: &MemregionRdmaInputInner<T>, dst: &CommAllocAddr) {
         trace!(
             "putting src: {:?} dst: {:?} len: {} num bytes {}",
             src.as_ptr(),
@@ -49,39 +49,24 @@ impl<T: Remote> ShmemFuture<T> {
             src.len(),
             src.len() * std::mem::size_of::<T>()
         );
-        if !(src.contains(dst) || src.contains(&(dst + src.len()))) {
-            unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
-        } else {
-            unsafe {
-                std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
-            }
-        }
+        let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr::<T>(), src.len()) };
+        dst_slice.copy_from_slice(src.as_slice());
+        // if !(src.contains(dst) || src.contains(&(dst + src.num_bytes()))) {
+        //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
+        // } else {
+        //     unsafe {
+        //         std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
+        //     }
+        // }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_get(&self, src: &CommAllocAddr, dst: &CommSlice<T>) {
-        trace!(
-            "getting src: {:?} dst: {:?} len: {}",
-            src,
-            dst.usize_addr(),
-            dst.len()
-        );
-        if !(dst.contains(src) || dst.contains(&(src + dst.len()))) {
-            unsafe {
-                std::ptr::copy_nonoverlapping(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
-            }
-        } else {
-            unsafe {
-                std::ptr::copy(src.as_mut_ptr(), dst.as_mut_ptr(), dst.len());
-            }
-        }
-    }
-    fn exec_op(&self) {
-        match &self.op {
+
+    fn exec_op(&mut self) {
+        match &mut self.op {
             Op::Put(src, dst) => unsafe {
                 dst.as_mut_ptr::<T>().write(*src);
             },
             Op::PutBuf(src, dst) => {
-                self.inner_put_buf(src, dst);
+                ShmemFuture::inner_put_buf(src, dst);
             }
             Op::PutAll(src, dsts) => {
                 for dst in dsts {
@@ -90,18 +75,14 @@ impl<T: Remote> ShmemFuture<T> {
             }
             Op::PutAllBuf(src, dsts) => {
                 for dst in dsts {
-                    self.inner_put_buf(src, dst);
+                    ShmemFuture::inner_put_buf(src, dst);
                 }
-            }
-            Op::Get(src, dst) => {
-                self.inner_get(src, dst);
             }
         }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
         self.spawned = true;
-        // Ok(())
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
@@ -124,14 +105,14 @@ impl<T: Remote> PinnedDrop for ShmemFuture<T> {
 impl<T: Remote> From<ShmemFuture<T>> for RdmaHandle<T> {
     fn from(f: ShmemFuture<T>) -> RdmaHandle<T> {
         RdmaHandle {
-            future: RdmaFuture::Shmem(f),
+            future: RdmaPutFuture::Shmem(f),
         }
     }
 }
 
 impl<T: Remote> Future for ShmemFuture<T> {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
             *self.project().spawned = true;
@@ -141,23 +122,19 @@ impl<T: Remote> Future for ShmemFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct ShmemAtFuture<T> {
-    pub(super) src: CommAllocAddr,
-    pub(crate) scheduler: Arc<Scheduler>,
-    pub(crate) counters: Vec<Arc<AMCounters>>,
-    pub(crate) spawned: bool,
-    pub(crate) result: MaybeUninit<T>,
+pub(crate) struct ShmemGetFuture<T> {
+    src: CommAllocAddr,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+    result: MaybeUninit<T>,
 }
 
-impl<T: Remote> ShmemAtFuture<T> {
+impl<T: Remote> ShmemGetFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
-        unsafe {
-            self.result
-                .as_mut_ptr()
-                .write(self.src.as_ptr::<T>().read())
-        };
+        unsafe { self.result.write(self.src.as_ptr::<T>().read()) };
     }
 
     pub(crate) fn block(mut self) -> T {
@@ -188,7 +165,7 @@ impl<T: Remote> ShmemAtFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for ShmemAtFuture<T> {
+impl<T> PinnedDrop for ShmemGetFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -196,15 +173,15 @@ impl<T> PinnedDrop for ShmemAtFuture<T> {
     }
 }
 
-impl<T: Remote> From<ShmemAtFuture<T>> for RdmaGetHandle<T> {
-    fn from(f: ShmemAtFuture<T>) -> RdmaGetHandle<T> {
+impl<T: Remote> From<ShmemGetFuture<T>> for RdmaGetHandle<T> {
+    fn from(f: ShmemGetFuture<T>) -> RdmaGetHandle<T> {
         RdmaGetHandle {
-            future: RdmaAtFuture::Shmem(f),
+            future: RdmaGetFuture::Shmem(f),
         }
     }
 }
 
-impl<T: Remote> Future for ShmemAtFuture<T> {
+impl<T: Remote> Future for ShmemGetFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -221,6 +198,148 @@ impl<T: Remote> Future for ShmemAtFuture<T> {
         })
     }
 }
+#[pin_project(PinnedDrop)]
+pub(crate) struct ShmemGetBufferFuture<T> {
+    src: CommAllocAddr,
+    len: usize,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+    result: MaybeUninit<Vec<T>>,
+}
+
+impl<T: Remote> ShmemGetBufferFuture<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn exec_at(&mut self) {
+        trace!("getting src: {:?} ", self.src);
+        unsafe {
+            let mut dst = Vec::<T>::with_capacity(self.len);
+            dst.set_len(self.len);
+            let src_slice = std::slice::from_raw_parts(self.src.as_ptr::<T>(), self.len);
+            dst.copy_from_slice(src_slice);
+            self.result.write(dst);
+        }
+    }
+
+    pub(crate) fn block(mut self) -> Vec<T> {
+        self.exec_at();
+        self.spawned = true;
+        unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(&mut self.result, &mut res);
+            res.assume_init()
+        }
+    }
+    pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
+        self.exec_at();
+        self.spawned = true;
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(
+            async move {
+                unsafe {
+                    let mut res = MaybeUninit::uninit();
+                    std::mem::swap(&mut self.result, &mut res);
+                    res.assume_init()
+                }
+            },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for ShmemGetBufferFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T: Remote> From<ShmemGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
+    fn from(f: ShmemGetBufferFuture<T>) -> RdmaGetBufferHandle<T> {
+        RdmaGetBufferHandle {
+            future: RdmaGetBufferFuture::Shmem(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for ShmemGetBufferFuture<T> {
+    type Output = Vec<T>;
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_at();
+        }
+        let this = self.project();
+        *this.spawned = true;
+        // rofi_c_wait();
+
+        Poll::Ready(unsafe {
+            let mut res = MaybeUninit::uninit();
+            std::mem::swap(this.result, &mut res);
+            res.assume_init()
+        })
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct ShmemGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    src: CommAllocAddr,
+    buffer: LamellarBuffer<T, B>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> ShmemGetIntoBufferFuture<T, B> {
+    fn exec_op(&mut self) {
+        let dst = self.buffer.as_mut_slice();
+        let src_slice = unsafe { std::slice::from_raw_parts(self.src.as_ptr::<T>(), dst.len()) };
+        unsafe { dst.copy_from_slice(src_slice) };
+    }
+    pub(crate) fn block(mut self) {
+        self.exec_op();
+        self.spawned = true;
+    }
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        self.exec_op();
+        self.spawned = true;
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.spawn_task(async {}, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for ShmemGetIntoBufferFuture<T, B> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> From<ShmemGetIntoBufferFuture<T, B>>
+    for RdmaGetIntoBufferHandle<T, B>
+{
+    fn from(f: ShmemGetIntoBufferFuture<T, B>) -> RdmaGetIntoBufferHandle<T, B> {
+        RdmaGetIntoBufferHandle {
+            future: RdmaGetIntoBufferFuture::Shmem(f),
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemGetIntoBufferFuture<T, B> {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+            *self.project().spawned = true;
+        }
+        Poll::Ready(())
+    }
+}
 
 impl CommAllocRdma for Arc<ShmemAlloc> {
     fn put<T: Remote>(
@@ -231,6 +350,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         ShmemFuture {
             op: Op::Put(src.into(), CommAllocAddr(self.pe_base_offset(pe) + offset)),
             spawned: false,
@@ -240,6 +360,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         .into()
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
         let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
         unsafe {
             dst.as_mut_ptr::<T>().write(src);
@@ -253,6 +374,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         ShmemFuture {
             op: Op::PutBuf(src.into(), CommAllocAddr(self.pe_base_offset(pe) + offset)),
             spawned: false,
@@ -267,9 +389,10 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         pe: usize,
         offset: usize,
     ) {
+        let offset = offset * std::mem::size_of::<T>();
         let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
         let src = src.into();
-        if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+        if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
             unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
         } else {
             unsafe {
@@ -284,6 +407,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         src: T,
         offset: usize,
     ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         let pe_addrs = (0..self.num_pes())
             .map(|pe| {
                 let real_dst_base = self.pe_base_offset(pe);
@@ -300,6 +424,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         .into()
     }
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
         for pe in 0..self.num_pes() {
             let real_dst_base = self.pe_base_offset(pe);
             let real_dst_addr = real_dst_base + offset;
@@ -316,6 +441,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) -> RdmaHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         let pe_addrs = (0..self.num_pes())
             .map(|pe| {
                 let real_dst_base = self.pe_base_offset(pe);
@@ -336,12 +462,13 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         src: impl Into<MemregionRdmaInputInner<T>>,
         offset: usize,
     ) {
+        let offset = offset * std::mem::size_of::<T>();
         let src = src.into();
         for pe in 0..self.num_pes() {
             let real_dst_base = self.pe_base_offset(pe);
             let real_dst_addr = real_dst_base + offset;
             let dst = CommAllocAddr(real_dst_addr);
-            if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
+            if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
                 unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
             } else {
                 unsafe {
@@ -350,22 +477,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
             }
         }
     }
-    fn get_buffer<T: Remote>(
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        pe: usize,
-        offset: usize,
-        dst: CommSlice<T>,
-    ) -> RdmaHandle<T> {
-        ShmemFuture {
-            op: Op::Get(CommAllocAddr(self.pe_base_offset(pe) + offset), dst),
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-        }
-        .into()
-    }
+
     fn get<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -373,15 +485,89 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
-        ShmemAtFuture {
+        ShmemGetFuture {
             src: remote_src_addr,
+
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
             result: MaybeUninit::uninit(),
         }
         .into()
+    }
+
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> RdmaGetBufferHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemGetBufferFuture {
+            src: remote_src_addr,
+            len,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+        }
+        .into()
+    }
+
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        let offset = offset * std::mem::size_of::<T>();
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemGetIntoBufferFuture {
+            src: remote_src_addr,
+            buffer: dst,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let src_slice =
+            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
+        unsafe {
+            dst.as_mut_slice().copy_from_slice(src_slice);
+        }
+        // if !(dst.contains(&remote_src_addr) || dst.contains(&(remote_src_addr + dst.num_bytes()))) {
+        //     unsafe {
+        //         std::ptr::copy_nonoverlapping(
+        //             remote_src_addr.as_ptr(),
+        //             dst.as_mut_ptr(),
+        //             dst.len(),
+        //         );
+        //     }
+        // } else {
+        //     unsafe {
+        //         std::ptr::copy(remote_src_addr.as_ptr(), dst.as_mut_ptr(), dst.len());
+        //     }
+        // }
     }
 }

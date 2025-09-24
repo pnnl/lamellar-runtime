@@ -102,7 +102,7 @@ fn main() {
         while index < ARRAY_LEN {
             let cur_index = index;
             unsafe {
-                let _ = array.put_all(cur_index, data.sub_region(0..=0)).spawn();
+                let _ = array.put_all(cur_index, data.as_slice()[0]).spawn();
             };
             index += num_pes;
         }

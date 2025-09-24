@@ -1,5 +1,5 @@
 use crate::array::iterator::one_sided_iterator::{private::*, *};
-use crate::array::ArrayRdmaHandle;
+use crate::array::{ArrayRdmaGetBufferHandle, LamellarRdmaGet};
 use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_request::LamellarRequest;
 use crate::memregion::OneSidedMemoryRegion;
@@ -15,11 +15,13 @@ where
     iter: I,
     index: usize,
     chunk_size: usize,
+    #[pin]
     state: ChunkState<I::ElemType>,
 }
 
-enum ChunkState<I: Dist> {
-    Pending(OneSidedMemoryRegion<I>, ArrayRdmaHandle<I>),
+#[pin_project(project = ChunkStateProj)]
+enum ChunkState<E: Dist> {
+    Pending(#[pin] LamellarTask<Vec<E>>),
     Finished,
 }
 
@@ -39,24 +41,6 @@ where
         };
         chunks
     }
-
-    fn get_buffer(
-        array: <I as OneSidedIteratorInner>::Array,
-        index: usize,
-        size: usize,
-    ) -> (
-        OneSidedMemoryRegion<I::ElemType>,
-        ArrayRdmaHandle<I::ElemType>,
-    ) {
-        // println!(" get chunk of len: {:?}", size);
-        let mem_region: OneSidedMemoryRegion<I::ElemType> =
-            array.team().team.alloc_one_sided_mem_region(size);
-        // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-        // but safe with respect to the mem_region as this is the only reference
-        let mut req = unsafe { array.internal_get(index, &mem_region) };
-        req.launch();
-        (mem_region, req)
-    }
 }
 
 impl<I> OneSidedIterator for Chunks<I> where I: OneSidedIterator + Send {}
@@ -66,35 +50,34 @@ where
     I: OneSidedIterator + Send,
 {
     type ElemType = I::ElemType;
-    type Item = OneSidedMemoryRegion<I::ElemType>;
+    type Item = Vec<I::ElemType>;
     type Array = I::Array;
 
     fn init(&mut self) {
         let array = self.array();
         let size = std::cmp::min(self.chunk_size, array.len() - self.index);
-        let (new_mem_region, new_req) = Self::get_buffer(array, self.index, size);
+        let new_req = unsafe { array.get_buffer(self.index, size).spawn() };
         self.index += size;
-        self.state = ChunkState::Pending(new_mem_region, new_req);
+        self.state = ChunkState::Pending(new_req);
     }
     fn next(&mut self) -> Option<Self::Item> {
         let array = self.array();
         let mut cur_state = ChunkState::Finished;
         std::mem::swap(&mut self.state, &mut cur_state);
         match cur_state {
-            ChunkState::Pending(mem_region, req) => {
+            ChunkState::Pending(req) => {
                 // println!("next: index: {:?}", self.index);
                 if self.index < array.len() {
                     //prefetch
                     let size = std::cmp::min(self.chunk_size, array.len() - self.index);
                     // println!("prefectching: index: {:?} {:?}", self.index, size);
-                    let (new_mem_region, new_req) = Self::get_buffer(array, self.index, size);
+                    let new_req = unsafe { array.get_buffer(self.index, size).spawn() };
                     self.index += size;
-                    self.state = ChunkState::Pending(new_mem_region, new_req);
+                    self.state = ChunkState::Pending(new_req);
                 } else {
                     self.state = ChunkState::Finished;
                 }
-                req.blocking_wait();
-                Some(mem_region)
+                Some(req.block())
             }
             ChunkState::Finished => None,
         }
@@ -102,33 +85,29 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let array = self.array();
-        let this = self.as_mut().project();
-        let mut cur_state = ChunkState::Finished;
+        let mut this = self.as_mut().project();
+        // let mut cur_state = ChunkState::Finished;
 
-        std::mem::swap(&mut *this.state, &mut cur_state);
+        // std::mem::swap(&mut *this.state, &mut cur_state);
 
-        match cur_state {
-            ChunkState::Pending(mem_region, mut req) => {
-                if !req.ready_or_set_waker(cx.waker()) {
-                    *this.state = ChunkState::Pending(mem_region, req);
-                    return Poll::Pending;
+        match this.state.as_mut().project() {
+            ChunkStateProj::Pending(req) => match req.poll(cx) {
+                Poll::Ready(mem_region) => {
+                    if *this.index < array.len() {
+                        //prefetch
+                        let size = std::cmp::min(*this.chunk_size, array.len() - *this.index);
+                        // println!("prefectching: index: {:?} {:?}", this.index, size);
+                        let new_req = unsafe { array.get_buffer(*this.index, size).spawn() };
+                        *this.index += size;
+                        *this.state = ChunkState::Pending(new_req);
+                    } else {
+                        *this.state = ChunkState::Finished;
+                    }
+                    Poll::Ready(Some(mem_region))
                 }
-                // println!("next: index: {:?}", this.index);
-                if *this.index < array.len() {
-                    // println!("got chunk! {:?}", *this.index);
-                    //prefetch
-                    let size = std::cmp::min(*this.chunk_size, array.len() - *this.index);
-                    // println!("prefectching: index: {:?} {:?}", this.index, size);
-                    let (new_mem_region, new_req) = Self::get_buffer(array, *this.index, size);
-                    *this.index += size;
-                    *this.state = ChunkState::Pending(new_mem_region, new_req);
-                } else {
-                    // println!("finished chunks!");
-                    *this.state = ChunkState::Finished;
-                }
-                Poll::Ready(Some(mem_region))
-            }
-            ChunkState::Finished => Poll::Ready(None),
+                Poll::Pending => Poll::Pending,
+            },
+            ChunkStateProj::Finished => Poll::Ready(None),
         }
     }
 

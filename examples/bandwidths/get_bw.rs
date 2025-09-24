@@ -13,7 +13,7 @@ fn main() {
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
     let mem_reg = world.alloc_shared_mem_region::<u8>(MEMREG_LEN).block();
-    let data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN);
+    let mut data = world.alloc_one_sided_mem_region::<u8>(MEMREG_LEN);
     for j in 0..MEMREG_LEN as usize {
         unsafe {
             data.as_mut_slice()[j] = my_pe as u8;
@@ -50,19 +50,20 @@ fn main() {
         } else if num_bytes >= 4096 {
             exp = 30;
         }
+        let mut buffer = unsafe { LamellarBuffer::from_one_sided_memory_region(data) };
         let timer = Instant::now();
         let mut sub_time = 0f64;
         if my_pe == 0 {
-            for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+            for _j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 // if j % 1024 ==0 {
                 // println!("[{:?}] j: {:?}",my_pe, j);
                 // }
+                let remaining_buf = buffer.split_off(num_bytes as usize);
                 let sub_timer = Instant::now();
                 unsafe {
-                    let _ = mem_reg
-                        .get_buffer(num_pes - 1, 0, data.sub_region(j..(j + num_bytes as usize)))
-                        .spawn();
+                    let _ = mem_reg.get_into_buffer_unmanaged(num_pes - 1, 0, buffer);
                 };
+                buffer = remaining_buf;
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
@@ -70,16 +71,22 @@ fn main() {
             println!("issue time: {:?}", timer.elapsed());
             world.wait_all();
         }
+        let cur_t = timer.elapsed().as_secs_f64();
+        world.barrier();
+        data = buffer.try_unwrap().unwrap();
         let data_slice = unsafe { data.as_slice() };
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {
-                    std::thread::yield_now()
+                if data_slice[(j + num_bytes as usize) - 1] == my_pe as u8 {
+                    panic!(
+                        "Error: {:?} {:?}",
+                        j + num_bytes as usize - 1,
+                        data_slice[j + num_bytes as usize - 1]
+                    );
                 }
             }
         }
-        let cur_t = timer.elapsed().as_secs_f64();
-        world.barrier();
+
         // let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
         let mbs_c = world.MB_sent();

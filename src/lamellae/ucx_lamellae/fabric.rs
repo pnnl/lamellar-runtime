@@ -527,7 +527,7 @@ impl UcxAlloc {
     pub(crate) unsafe fn put<T>(
         &self,
         pe: usize,
-        offset: usize,
+        offset: usize, //with respect to T
         src_addr: &CommSlice<T>,
         managed: bool,
     ) -> Option<UcxRequest> {
@@ -536,10 +536,11 @@ impl UcxAlloc {
     pub(crate) unsafe fn put_inner<T>(
         &self,
         pe: usize,
-        offset: usize,
+        offset: usize, //with respect to T
         src_addr: &[T],
         managed: bool,
     ) -> Option<UcxRequest> {
+        let offset = offset * std::mem::size_of::<T>();
         let (remote_addr, rkey) = &self.remote_keys[pe];
         self.endpoints[pe].put(
             src_addr.as_ptr() as _,
@@ -565,6 +566,7 @@ impl UcxAlloc {
         offset: usize,
         dst_addr: &mut [T],
     ) -> UcxRequest {
+        let offset = offset * std::mem::size_of::<T>();
         let (remote_addr, rkey) = &self.remote_keys[pe];
         self.endpoints[pe].get(
             dst_addr.as_mut_ptr() as _,

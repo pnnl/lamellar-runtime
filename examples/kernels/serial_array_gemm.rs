@@ -72,8 +72,8 @@ fn main() {
                     let mut sum = 0.0;
                     for k in 0..n {
                         // a cols b rows
-                        let a_val = a_c.at(k + i * m);
-                        let b_val = b_c.at(j + k * n);
+                        let a_val = a_c.get(k + i * m).spawn();
+                        let b_val = b_c.get(j + k * n).spawn();
                         sum += a_val.await * b_val.await;
                     }
                     let _ = c_c.store(j + i * m, sum).spawn(); // could also do c.add(j+i*m,sum), but each element of c will only be updated once so store is slightly faster

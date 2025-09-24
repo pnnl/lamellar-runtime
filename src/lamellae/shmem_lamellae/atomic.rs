@@ -168,6 +168,7 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         let remote_dst_base = self.pe_base_offset(pe);
         let remote_dst_addr = remote_dst_base + offset;
         ShmemAtomicFuture {
@@ -180,6 +181,7 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         .into()
     }
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
         let remote_dst_base = self.pe_base_offset(pe);
         let remote_dst_addr = remote_dst_base + offset;
         net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
@@ -191,6 +193,7 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         let remote_dst_addrs: Vec<CommAllocAddr> = (0..self.num_pes())
             .map(|pe| {
                 let remote_dst_base = self.pe_base_offset(pe);
@@ -207,6 +210,7 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         .into()
     }
     fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
         for pe in 0..self.num_pes() {
             let remote_dst_base = self.pe_base_offset(pe);
             let remote_dst_addr = remote_dst_base + offset;
@@ -221,6 +225,7 @@ impl CommAllocAtomic for Arc<ShmemAlloc> {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
         let remote_dst_base = self.pe_base_offset(pe);
         let remote_dst_addr = remote_dst_base + offset;
         ShmemAtomicFetchFuture {

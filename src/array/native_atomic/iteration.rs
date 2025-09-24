@@ -176,7 +176,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
     // type Array = NativeAtomicArray<T>;
     type DistIter = NativeAtomicDistIter<T>;
     type LocalIter = NativeAtomicLocalIter<T>;
-    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    type OnesidedIter = OneSidedIter< T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
         NativeAtomicDistIter {
             data: self.clone(),
@@ -194,13 +194,11 @@ impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone(), self.array.team_rt(), 1)
+        OneSidedIter::new(self, 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(
-            self.clone(),
-            self.array.team_rt(),
+        OneSidedIter::new(self,
             std::cmp::min(buf_size, self.len()),
         )
     }

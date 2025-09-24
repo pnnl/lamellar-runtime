@@ -23,7 +23,7 @@ use std::{
 };
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LocalAllocAtomicFuture<T> {
+pub(crate) struct LocalAtomicFuture<T> {
     alloc: Arc<LocalAlloc>,
     offset: usize,
     pub(super) op: AtomicOp<T>,
@@ -32,7 +32,7 @@ pub(crate) struct LocalAllocAtomicFuture<T> {
     pub(crate) spawned: bool,
 }
 
-impl<T: 'static> LocalAllocAtomicFuture<T> {
+impl<T: 'static> LocalAtomicFuture<T> {
     fn exec_op(&mut self) {
         net_atomic_op(&self.op, &CommAllocAddr(self.alloc.start() + self.offset))
     }
@@ -54,7 +54,7 @@ impl<T: 'static> LocalAllocAtomicFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalAllocAtomicFuture<T> {
+impl<T> PinnedDrop for LocalAtomicFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -62,15 +62,15 @@ impl<T> PinnedDrop for LocalAllocAtomicFuture<T> {
     }
 }
 
-impl<T> From<LocalAllocAtomicFuture<T>> for AtomicOpHandle<T> {
-    fn from(f: LocalAllocAtomicFuture<T>) -> AtomicOpHandle<T> {
+impl<T> From<LocalAtomicFuture<T>> for AtomicOpHandle<T> {
+    fn from(f: LocalAtomicFuture<T>) -> AtomicOpHandle<T> {
         AtomicOpHandle {
-            future: AtomicOpFuture::LocalAlloc(f),
+            future: AtomicOpFuture::Local(f),
         }
     }
 }
 
-impl<T: 'static> Future for LocalAllocAtomicFuture<T> {
+impl<T: 'static> Future for LocalAtomicFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -85,7 +85,7 @@ impl<T: 'static> Future for LocalAllocAtomicFuture<T> {
 }
 
 #[pin_project(PinnedDrop)]
-pub(crate) struct LocalAllocAtomicFetchFuture<T> {
+pub(crate) struct LocalAtomicFetchFuture<T> {
     alloc: Arc<LocalAlloc>,
     offset: usize,
     pub(super) op: AtomicOp<T>,
@@ -95,7 +95,7 @@ pub(crate) struct LocalAllocAtomicFetchFuture<T> {
     pub(crate) spawned: bool,
 }
 
-impl<T: Send + 'static> LocalAllocAtomicFetchFuture<T> {
+impl<T: Send + 'static> LocalAtomicFetchFuture<T> {
     fn exec_op(&mut self) {
         net_atomic_fetch_op(
             &self.op,
@@ -132,7 +132,7 @@ impl<T: Send + 'static> LocalAllocAtomicFetchFuture<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalAllocAtomicFetchFuture<T> {
+impl<T> PinnedDrop for LocalAtomicFetchFuture<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.spawned {
             RuntimeWarning::DroppedHandle("a RdmaHandle").print();
@@ -140,15 +140,15 @@ impl<T> PinnedDrop for LocalAllocAtomicFetchFuture<T> {
     }
 }
 
-impl<T> From<LocalAllocAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
-    fn from(f: LocalAllocAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
+impl<T> From<LocalAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
+    fn from(f: LocalAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
         AtomicFetchOpHandle {
-            future: AtomicFetchOpFuture::LocalAlloc(f),
+            future: AtomicFetchOpFuture::Local(f),
         }
     }
 }
 
-impl<T: Send + 'static> Future for LocalAllocAtomicFetchFuture<T> {
+impl<T: Send + 'static> Future for LocalAtomicFetchFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
@@ -175,7 +175,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         _pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        LocalAllocAtomicFuture {
+        LocalAtomicFuture {
             alloc: self.clone(),
             offset,
             op,
@@ -195,7 +195,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        LocalAllocAtomicFuture {
+        LocalAtomicFuture {
             alloc: self.clone(),
             offset,
             op,
@@ -216,7 +216,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         _pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        LocalAllocAtomicFetchFuture {
+        LocalAtomicFetchFuture {
             alloc: self.clone(),
             offset,
             op,

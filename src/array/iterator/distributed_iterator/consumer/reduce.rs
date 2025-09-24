@@ -123,7 +123,7 @@ where
 
         Some(
             stream
-                .fold(*first, |a, &b| {
+                .fold(first, |a, b| {
                     let val = op(a, b);
                     async move { val }
                 })

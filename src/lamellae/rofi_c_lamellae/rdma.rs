@@ -11,7 +11,7 @@ use tracing::trace;
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
-        comm::rdma::{CommRdma, RdmaFuture, RdmaHandle, Remote},
+        comm::rdma::{CommRdma, RdmaPutFuture, RdmaHandle, Remote},
         CommAllocAddr, CommSlice,
     },
     warnings::RuntimeWarning,
@@ -136,7 +136,7 @@ impl<T> PinnedDrop for RofiCFuture<T> {
 impl<T: Remote> From<RofiCFuture<T>> for RdmaHandle<T> {
     fn from(f: RofiCFuture<T>) -> RdmaHandle<T> {
         RdmaHandle {
-            future: RdmaFuture::RofiC(f),
+            future: RdmaPutFuture::RofiC(f),
         }
     }
 }

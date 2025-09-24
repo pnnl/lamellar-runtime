@@ -897,248 +897,248 @@ impl Ofi {
         Ok(())
     }
 
-    pub(crate) unsafe fn get<T: Copy>(
-        &self,
-        pe: usize,
-        src_addr: &CommAllocAddr,
-        dst_addr: &mut CommSlice<T>,
-        sync: bool,
-    ) -> Result<(), libfabric::error::Error> {
-        self.inner_get(pe, *(src_addr as &usize), dst_addr, sync)
-    }
+    // pub(crate) unsafe fn get<T: Copy>(
+    //     &self,
+    //     pe: usize,
+    //     src_addr: &CommAllocAddr,
+    //     dst_addr: &mut CommSlice<T>,
+    //     sync: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     self.inner_get(pe, *(src_addr as &usize), dst_addr, sync)
+    // }
 
-    pub(crate) unsafe fn inner_get<T: Copy>(
-        &self,
-        pe: usize,
-        src_addr: usize,
-        dst_addr: &mut [T],
-        sync: bool,
-    ) -> Result<(), libfabric::error::Error> {
-        let (offset, mr, remote_alloc_info) = {
-            let table = self.alloc_manager.mr_info_table.read();
-            let alloc_info = table
-                .iter()
-                .find(|e| e.contains(&src_addr))
-                .expect("Invalid address");
+    // pub(crate) unsafe fn inner_get<T: Copy>(
+    //     &self,
+    //     pe: usize,
+    //     src_addr: usize,
+    //     dst_addr: &mut [T],
+    //     sync: bool,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let (offset, mr, remote_alloc_info) = {
+    //         let table = self.alloc_manager.mr_info_table.read();
+    //         let alloc_info = table
+    //             .iter()
+    //             .find(|e| e.contains(&src_addr))
+    //             .expect("Invalid address");
 
-            (
-                alloc_info.start(),
-                alloc_info.mr(),
-                alloc_info.remote_info(&pe).expect(&format!(
-                    "PE {} is not part of the sub allocation group",
-                    pe
-                )),
-            )
-        };
+    //         (
+    //             alloc_info.start(),
+    //             alloc_info.mr(),
+    //             alloc_info.remote_info(&pe).expect(&format!(
+    //                 "PE {} is not part of the sub allocation group",
+    //                 pe
+    //             )),
+    //         )
+    //     };
 
-        let mut remote_src_addr = remote_alloc_info.mem_address().add(src_addr - offset);
-        let remote_key = remote_alloc_info.key();
+    //     let mut remote_src_addr = remote_alloc_info.mem_address().add(src_addr - offset);
+    //     let remote_key = remote_alloc_info.key();
 
-        let mut curr_idx = 0;
+    //     let mut curr_idx = 0;
 
-        while curr_idx < dst_addr.len() {
-            let msg_len = std::cmp::min(
-                dst_addr.len() - curr_idx,
-                self.info_entry.ep_attr().max_msg_size(),
-            );
-            self.post_get(|| unsafe {
-                self.ep.read_from(
-                    &mut dst_addr[curr_idx..curr_idx + msg_len],
-                    Some(&mr.descriptor()),
-                    &self.mapped_addresses[pe],
-                    remote_src_addr,
-                    &remote_key,
-                )
-            })?;
-            remote_src_addr = remote_src_addr.add(msg_len);
-            curr_idx += msg_len;
-        }
+    //     while curr_idx < dst_addr.len() {
+    //         let msg_len = std::cmp::min(
+    //             dst_addr.len() - curr_idx,
+    //             self.info_entry.ep_attr().max_msg_size(),
+    //         );
+    //         self.post_get(|| unsafe {
+    //             self.ep.read_from(
+    //                 &mut dst_addr[curr_idx..curr_idx + msg_len],
+    //                 Some(&mr.descriptor()),
+    //                 &self.mapped_addresses[pe],
+    //                 remote_src_addr,
+    //                 &remote_key,
+    //             )
+    //         })?;
+    //         remote_src_addr = remote_src_addr.add(msg_len);
+    //         curr_idx += msg_len;
+    //     }
 
-        if sync {
-            self.wait_for_rx_cntr()?;
-        }
+    //     if sync {
+    //         self.wait_for_rx_cntr()?;
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
-    pub(crate) fn atomic_op<T: 'static>(
-        &self,
-        pe: usize,
-        op: &LamellarAtomicOp<T>,
-        dst_addr: &CommAllocAddr,
-    ) -> Result<(), libfabric::error::Error> {
-        unsafe {
-            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-                self.typed_atomic_op::<T, u8>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-                self.typed_atomic_op::<T, u16>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-                self.typed_atomic_op::<T, u32>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_op::<T, u64>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                self.typed_atomic_op::<T, usize>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-                self.typed_atomic_op::<T, i8>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-                self.typed_atomic_op::<T, i16>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-                self.typed_atomic_op::<T, i32>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-                self.typed_atomic_op::<T, i64>(pe, op, *(dst_addr as &usize))
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-                self.typed_atomic_op::<T, isize>(pe, op, *(dst_addr as &usize))
-            } else {
-                panic!("Unsupported atomic operation type");
-            }
-        }
-    }
+    // pub(crate) fn atomic_op<T: 'static>(
+    //     &self,
+    //     pe: usize,
+    //     op: &LamellarAtomicOp<T>,
+    //     dst_addr: &CommAllocAddr,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_atomic_op::<T, u8>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_atomic_op::<T, u16>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_atomic_op::<T, u32>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_atomic_op::<T, u64>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_atomic_op::<T, usize>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_atomic_op::<T, i8>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_atomic_op::<T, i16>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_atomic_op::<T, i32>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_atomic_op::<T, i64>(pe, op, *(dst_addr as &usize))
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_atomic_op::<T, isize>(pe, op, *(dst_addr as &usize))
+    //         } else {
+    //             panic!("Unsupported atomic operation type");
+    //         }
+    //     }
+    // }
 
-    unsafe fn typed_atomic_op<T, OFI: AsFiType>(
-        &self,
-        pe: usize,
-        op: &LamellarAtomicOp<T>,
-        dst_addr: usize,
-    ) -> Result<(), libfabric::error::Error> {
-        let (offset, mr, remote_alloc_info) = {
-            let table = self.alloc_manager.mr_info_table.read();
-            let alloc_info = table
-                .iter()
-                .find(|e| e.contains(&dst_addr))
-                .expect("Invalid address");
+    // unsafe fn typed_atomic_op<T, OFI: AsFiType>(
+    //     &self,
+    //     pe: usize,
+    //     op: &LamellarAtomicOp<T>,
+    //     dst_addr: usize,
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let (offset, mr, remote_alloc_info) = {
+    //         let table = self.alloc_manager.mr_info_table.read();
+    //         let alloc_info = table
+    //             .iter()
+    //             .find(|e| e.contains(&dst_addr))
+    //             .expect("Invalid address");
 
-            (
-                alloc_info.start(),
-                alloc_info.mr(),
-                alloc_info.remote_info(&pe).expect(&format!(
-                    "PE {} is not part of the sub allocation group",
-                    pe
-                )),
-            )
-        };
-        let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
-        trace!(
-            "Remote destination address for PE {}: {:?}",
-            pe,
-            remote_dst_addr
-        );
+    //         (
+    //             alloc_info.start(),
+    //             alloc_info.mr(),
+    //             alloc_info.remote_info(&pe).expect(&format!(
+    //                 "PE {} is not part of the sub allocation group",
+    //                 pe
+    //             )),
+    //         )
+    //     };
+    //     let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
+    //     trace!(
+    //         "Remote destination address for PE {}: {:?}",
+    //         pe,
+    //         remote_dst_addr
+    //     );
 
-        let remote_key = remote_alloc_info.key();
-        let src = op.src().expect("Atomic operation has no source");
-        let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
-        self.post_put(|| {
-            self.ep.inject_atomic_to(
-                buf,
-                &self.mapped_addresses[pe],
-                remote_dst_addr,
-                &remote_key,
-                op.into(),
-            )
-        })?;
-        Ok(())
-    }
+    //     let remote_key = remote_alloc_info.key();
+    //     let src = op.src().expect("Atomic operation has no source");
+    //     let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+    //     self.post_put(|| {
+    //         self.ep.inject_atomic_to(
+    //             buf,
+    //             &self.mapped_addresses[pe],
+    //             remote_dst_addr,
+    //             &remote_key,
+    //             op.into(),
+    //         )
+    //     })?;
+    //     Ok(())
+    // }
 
-    pub(crate) fn atomic_fetch_op<T: 'static>(
-        &self,
-        pe: usize,
-        op: &LamellarAtomicOp<T>,
-        dst_addr: &CommAllocAddr,
-        result: &mut [T],
-    ) -> Result<(), libfabric::error::Error> {
-        unsafe {
-            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-                self.typed_atomic_fetch_op::<T, u8>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-                self.typed_atomic_fetch_op::<T, u16>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-                self.typed_atomic_fetch_op::<T, u32>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_fetch_op::<T, u64>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                self.typed_atomic_fetch_op::<T, usize>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-                self.typed_atomic_fetch_op::<T, i8>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-                self.typed_atomic_fetch_op::<T, i16>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-                self.typed_atomic_fetch_op::<T, i32>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-                self.typed_atomic_fetch_op::<T, i64>(pe, op, *(dst_addr as &usize), result)
-            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-                self.typed_atomic_fetch_op::<T, isize>(pe, op, *(dst_addr as &usize), result)
-            } else {
-                panic!("Unsupported atomic operation type");
-            }
-        }
-    }
+    // pub(crate) fn atomic_fetch_op<T: 'static>(
+    //     &self,
+    //     pe: usize,
+    //     op: &LamellarAtomicOp<T>,
+    //     dst_addr: &CommAllocAddr,
+    //     result: &mut [T],
+    // ) -> Result<(), libfabric::error::Error> {
+    //     unsafe {
+    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+    //             self.typed_atomic_fetch_op::<T, u8>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+    //             self.typed_atomic_fetch_op::<T, u16>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+    //             self.typed_atomic_fetch_op::<T, u32>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+    //             self.typed_atomic_fetch_op::<T, u64>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+    //             self.typed_atomic_fetch_op::<T, usize>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+    //             self.typed_atomic_fetch_op::<T, i8>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+    //             self.typed_atomic_fetch_op::<T, i16>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+    //             self.typed_atomic_fetch_op::<T, i32>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+    //             self.typed_atomic_fetch_op::<T, i64>(pe, op, *(dst_addr as &usize), result)
+    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+    //             self.typed_atomic_fetch_op::<T, isize>(pe, op, *(dst_addr as &usize), result)
+    //         } else {
+    //             panic!("Unsupported atomic operation type");
+    //         }
+    //     }
+    // }
 
-    unsafe fn typed_atomic_fetch_op<T, OFI: AsFiType>(
-        &self,
-        pe: usize,
-        op: &LamellarAtomicOp<T>,
-        dst_addr: usize,
-        result: &mut [T],
-    ) -> Result<(), libfabric::error::Error> {
-        let (offset, mr, remote_alloc_info) = {
-            let table = self.alloc_manager.mr_info_table.read();
-            let alloc_info = table
-                .iter()
-                .find(|e| e.contains(&dst_addr))
-                .expect("Invalid address");
+    // unsafe fn typed_atomic_fetch_op<T, OFI: AsFiType>(
+    //     &self,
+    //     pe: usize,
+    //     op: &LamellarAtomicOp<T>,
+    //     dst_addr: usize,
+    //     result: &mut [T],
+    // ) -> Result<(), libfabric::error::Error> {
+    //     let (offset, mr, remote_alloc_info) = {
+    //         let table = self.alloc_manager.mr_info_table.read();
+    //         let alloc_info = table
+    //             .iter()
+    //             .find(|e| e.contains(&dst_addr))
+    //             .expect("Invalid address");
 
-            (
-                alloc_info.start(),
-                alloc_info.mr(),
-                alloc_info.remote_info(&pe).expect(&format!(
-                    "PE {} is not part of the sub allocation group",
-                    pe
-                )),
-            )
-        };
-        let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
-        trace!(
-            "Remote destination address for PE {}: {:?}",
-            pe,
-            remote_dst_addr
-        );
+    //         (
+    //             alloc_info.start(),
+    //             alloc_info.mr(),
+    //             alloc_info.remote_info(&pe).expect(&format!(
+    //                 "PE {} is not part of the sub allocation group",
+    //                 pe
+    //             )),
+    //         )
+    //     };
+    //     let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
+    //     trace!(
+    //         "Remote destination address for PE {}: {:?}",
+    //         pe,
+    //         remote_dst_addr
+    //     );
 
-        let remote_key = remote_alloc_info.key();
-        let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
-        match op.src() {
-            Some(src) => {
-                let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
-                self.post_get(|| {
-                    self.ep.fetch_atomic_from(
-                        buf,
-                        None,
-                        res,
-                        None,
-                        &self.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        op.into(),
-                    )
-                })?;
-            }
-            None => {
-                let buf_val = res[0];
-                self.post_get(|| {
-                    self.ep.fetch_atomic_from(
-                        std::slice::from_ref(&buf_val),
-                        None,
-                        res,
-                        None,
-                        &self.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                        op.into(),
-                    )
-                })?;
-            }
-        };
+    //     let remote_key = remote_alloc_info.key();
+    //     let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+    //     match op.src() {
+    //         Some(src) => {
+    //             let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+    //             self.post_get(|| {
+    //                 self.ep.fetch_atomic_from(
+    //                     buf,
+    //                     None,
+    //                     res,
+    //                     None,
+    //                     &self.mapped_addresses[pe],
+    //                     remote_dst_addr,
+    //                     &remote_key,
+    //                     op.into(),
+    //                 )
+    //             })?;
+    //         }
+    //         None => {
+    //             let buf_val = res[0];
+    //             self.post_get(|| {
+    //                 self.ep.fetch_atomic_from(
+    //                     std::slice::from_ref(&buf_val),
+    //                     None,
+    //                     res,
+    //                     None,
+    //                     &self.mapped_addresses[pe],
+    //                     remote_dst_addr,
+    //                     &remote_key,
+    //                     op.into(),
+    //                 )
+    //             })?;
+    //         }
+    //     };
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     // impl<T: Copy + Default + libfabric::AsFiType> LibfabricArray<T> {
     //     pub fn atomic_put(&self, index: usize, val: T) {
@@ -1381,6 +1381,15 @@ impl LibfabricAlloc {
         }))
     }
 
+    pub(crate) unsafe fn as_mut_slice<T: Copy>(&self) -> &mut [T] {
+        unsafe {
+            std::slice::from_raw_parts_mut(
+                self.mem.as_ptr() as *mut T,
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
+
     pub(crate) fn start(&self) -> usize {
         self.range.start
     }
@@ -1425,7 +1434,7 @@ impl LibfabricAlloc {
     pub(crate) unsafe fn put<T: Copy>(
         &self,
         pe: usize,
-        offset: usize,
+        offset: usize, //T-sized offset
         src_addr: &CommSlice<T>,
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
@@ -1435,10 +1444,11 @@ impl LibfabricAlloc {
     pub(crate) unsafe fn inner_put<T: Copy>(
         &self,
         pe: usize,
-        offset: usize,
+        offset: usize, //T-sized offset
         src_addr: &[T],
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>();
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe

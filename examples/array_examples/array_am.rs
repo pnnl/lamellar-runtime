@@ -7,8 +7,8 @@
 ///----------------------------------------------------------------
 use lamellar::array::prelude::*;
 use lamellar::memregion::prelude::*;
-use tracing_subscriber::{fmt,EnvFilter};
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
 
 const ARRAY_LEN: usize = 100;
 
@@ -39,27 +39,25 @@ impl LamellarAM for RdmaAM {
         });
 
         //get the original nodes data
-        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
-        println!(
-            "({},{}) local region allocated at addr {:?}",
-            self.orig_pe,
-            self.index,
-            unsafe { local.as_ptr() }
-        );
-        let local_slice = unsafe { local.as_mut_slice() };
-        local_slice[ARRAY_LEN - 1] = num_pes as u8;
-        unsafe {
-            self.array.get(0, &local).await;
-        }
+        // let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+        // println!(
+        //     "({},{}) local region allocated at addr {:?}",
+        //     self.orig_pe,
+        //     self.index,
+        //     unsafe { local.as_ptr() }
+        // );
+        // let local_slice = unsafe { local.as_mut_slice() };
+        // local_slice[ARRAY_LEN - 1] = num_pes as u8;
+        let local = unsafe { self.array.get_buffer(0, ARRAY_LEN).await };
 
         let my_index = self.index * num_pes + lamellar::current_pe;
         println!("\t({},{}) current view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe,
-        self.index,self.orig_pe, &local_slice[self.index..max_i], &local_slice[local_slice.len()-max_i..],lamellar::current_pe, my_index, self.orig_pe);
+        self.index,self.orig_pe, &local[self.index..max_i], &local[local.len()-max_i..],lamellar::current_pe, my_index, self.orig_pe);
 
         //update an element on the original node
-        local_slice[0] = lamellar::current_pe as u8;
+        // local[0] = lamellar::current_pe as u8;
         unsafe {
-            self.array.put_buffer(my_index, &local.sub_region(0..=0)).await;
+            self.array.put(my_index, lamellar::current_pe as u8).await;
         }
     }
 }
@@ -74,7 +72,13 @@ impl LamellarAM for RdmaAM {
 fn main() {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(tracing_subscriber::fmt::layer().with_thread_ids(true).with_file(true).with_line_number(true).with_level(true))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true),
+        )
         .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
@@ -119,11 +123,14 @@ fn main() {
     // while index < ARRAY_LEN / num_pes {
     if my_pe == 0 {
         let _ = world
-            .exec_am_pe(1,RdmaAM {
-                array: array.clone(),
-                orig_pe: my_pe,
-                index: index,
-            })
+            .exec_am_pe(
+                1,
+                RdmaAM {
+                    array: array.clone(),
+                    orig_pe: my_pe,
+                    index: index,
+                },
+            )
             .spawn();
         index += 1;
     }

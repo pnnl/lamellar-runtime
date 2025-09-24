@@ -75,15 +75,21 @@ impl SubMatrix {
 async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
     let start_row = mat.row_block * mat.block_size;
     let start_col = mat.col_block * mat.block_size;
-    let sub_mat_slice = unsafe { sub_mat.as_mut_slice() };
-    sub_mat_slice[sub_mat.len() - 1] = f32::NAN;
+    // let sub_mat_slice = unsafe { sub_mat.as_mut_slice() };
+    // sub_mat_slice[sub_mat.len() - 1] = f32::NAN;
     // println!("getting {:?}",mat);
+    let mut buffer = unsafe { LamellarBuffer::from_one_sided_memory_region(sub_mat.clone()) };
     for row in 0..mat.block_size {
         let offset = (row + start_row) * mat.cols + (start_col);
-        let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
-        DATA_CNT.fetch_add(data.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
-        unsafe { mat.mat.get_buffer(mat.pe, offset, data.clone()).await };
+        // let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
+        let remaining_buffer = buffer.split_off((row + 1) * mat.block_size);
+        DATA_CNT.fetch_add(buffer.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
+        unsafe {
+            mat.mat.get_into_buffer_unmanaged(mat.pe, offset, buffer);
+        };
+        buffer = remaining_buffer;
     }
+    mat.mat.wait_all();
 
     // while sub_mat_slice[sub_mat.len() - 1].is_nan() {
     //     async_std::task::yield_now().await;

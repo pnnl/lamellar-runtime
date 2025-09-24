@@ -345,7 +345,7 @@ fn dft_lamellar_array(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f64>) -> f
             .enumerate()
             .for_each(move |(k, spec_bin)| {
                 let mut sum = 0f64;
-                for (i, &x) in signal_clone
+                for (i, x) in signal_clone
                     .buffered_onesided_iter(1000)
                     .into_iter()
                     .enumerate()
@@ -376,7 +376,7 @@ fn dft_lamellar_array_2(signal: ReadOnlyArray<f64>, spectrum: AtomicArray<f64>) 
         .enumerate()
         .for_each(move |(k, spec_bin)| {
             let mut sum = 0f64;
-            for (i, &x) in signal_clone
+            for (i, x) in signal_clone
                 .buffered_onesided_iter(1000)
                 .into_iter()
                 .enumerate()
@@ -400,7 +400,7 @@ fn dft_lamellar_array_swapped(signal: UnsafeArray<f64>, spectrum: UnsafeArray<f6
 
     unsafe {
         for (i, x) in signal.onesided_iter().into_iter().enumerate() {
-            let x = (*x).clone();
+            let x = (x).clone();
             let _ = spectrum
                 .dist_iter_mut()
                 .enumerate()
@@ -531,18 +531,18 @@ fn dft_lamellar_array_opt_2(
                 .enumerate()
                 .for_each(move |(k, mut spec_bin)| {
                     let mut sum = 0f64;
-                    unsafe {
-                        for (j, &x) in signal
-                            .iter()
-                            .enumerate()
-                            .map(|(j, x)| (j + i * buf_size, x))
-                        {
-                            let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI
-                                / sig_len as f64;
-                            let twiddle = angle * (angle.cos() + angle * angle.sin());
-                            sum = sum + twiddle * x;
-                        }
+
+                    for (j, &x) in signal
+                        .iter()
+                        .enumerate()
+                        .map(|(j, x)| (j + i * buf_size, x))
+                    {
+                        let angle =
+                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                        let twiddle = angle * (angle.cos() + angle * angle.sin());
+                        sum = sum + twiddle * x;
                     }
+
                     spec_bin += sum;
                 })
                 .spawn();
@@ -575,18 +575,18 @@ fn dft_lamellar_array_opt_3(
                 .for_each(move |(k, spec_bin)| {
                     //we are accessing each element independently so free to mutate
                     let mut sum = 0f64;
-                    unsafe {
-                        for (j, &x) in signal
-                            .iter()
-                            .enumerate()
-                            .map(|(j, x)| (j + i * buf_size, x))
-                        {
-                            let angle = -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI
-                                / sig_len as f64;
-                            let twiddle = angle * (angle.cos() + angle * angle.sin());
-                            sum = sum + twiddle * x;
-                        }
+
+                    for (j, &x) in signal
+                        .iter()
+                        .enumerate()
+                        .map(|(j, x)| (j + i * buf_size, x))
+                    {
+                        let angle =
+                            -1f64 * (j * k) as f64 * 2f64 * std::f64::consts::PI / sig_len as f64;
+                        let twiddle = angle * (angle.cos() + angle * angle.sin());
+                        sum = sum + twiddle * x;
                     }
+
                     *spec_bin += sum;
                 })
                 .spawn();

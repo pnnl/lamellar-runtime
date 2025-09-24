@@ -17,7 +17,7 @@ impl<T: Dist> LamellarArrayIterators<T> for ReadOnlyArray<T> {
     // type Array = ReadOnlyArray<T>;
     type DistIter = DistIter<'static, T, Self>;
     type LocalIter = LocalIter<'static, T, Self>;
-    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    type OnesidedIter = OneSidedIter<T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
         DistIter::new(self.clone().into(), 0, 0)
     }
@@ -27,15 +27,11 @@ impl<T: Dist> LamellarArrayIterators<T> for ReadOnlyArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone(), self.array.team_rt(), 1)
+        OneSidedIter::new(self, 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(
-            self.clone(),
-            self.array.team_rt(),
-            std::cmp::min(buf_size, self.len()),
-        )
+        OneSidedIter::new(self, std::cmp::min(buf_size, self.len()))
     }
 }
 

@@ -5,7 +5,7 @@
 ///----------------------------------------------------------------
 use lamellar::memregion::prelude::*;
 
-const ARRAY_LEN: usize = 100;
+const SHARED_MEM_REGION_LEN: usize = 100;
 
 // memory regions are low level (unsafe) abstractions
 // upon which we will build safer PGAS abstractions
@@ -19,65 +19,87 @@ fn main() {
     if num_pes > 1 {
         // instatiates a shared memory region on every PE in world
         // all other pes can put/get into this region
-        let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
-        let array_slice = unsafe { array.as_slice() }; //we can unwrap because we know array is local
-                                                       // instatiates a local array whos memory is registered with
-                                                       // the underlying network device, so that it can be used
-                                                       // as the src buffer in a put or as the dst buffer in a get
-        let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
+        let shared_mem_region = world
+            .alloc_shared_mem_region::<u8>(SHARED_MEM_REGION_LEN)
+            .block();
+        let shared_mem_region_slice = unsafe { shared_mem_region.as_slice() }; //we can unwrap because we know shared_mem_region is local
+                                                                               // instatiates a local shared_mem_region whos memory is registered with
+                                                                               // the underlying network device, so that it can be used
+                                                                               // as the src buffer in a put or as the dst buffer in a get
+        let data = world.alloc_one_sided_mem_region::<u8>(SHARED_MEM_REGION_LEN);
         let data_slice = unsafe { data.as_mut_slice() }; //we can unwrap because we know data is local
         for elem in data_slice.iter_mut() {
             *elem = my_pe as u8;
         }
 
-        // we can use the local_array to initialize our local portion a shared memory region
+        // we can use the local_shared_mem_region to initialize our local portion a shared memory region
         unsafe {
-            array.put_buffer(my_pe, 0, data.clone()).block();
+            shared_mem_region.put_buffer(my_pe, 0, data.clone()).block();
         };
 
         //we can "get" from a remote segment of a shared mem region into a local segment of the shared mem region
         world.barrier();
         if my_pe == 0 {
+            println!("-------------- testing single element get --------------");
+            let val = unsafe {
+                shared_mem_region.get(num_pes - 1, 0).block();
+            };
+            println!("[{:?}] got {:?}", my_pe, val);
+
+            println!("-------------------------------------------------------");
+            println!("-------------- testing get_buffer -------------------");
+            let buf = unsafe {
+                shared_mem_region
+                    .get_buffer(num_pes - 1, 0, SHARED_MEM_REGION_LEN)
+                    .block()
+            };
+            println!("[{:?}] got {:?}", my_pe, buf);
             println!(
                 "-------------- testing shared mem region get to shared mem region --------------"
             );
-            println!("[{:?}] Before {:?}", my_pe, array_slice);
+            println!("[{:?}] Before {:?}", my_pe, shared_mem_region_slice);
             unsafe {
-                array.get_buffer(num_pes - 1, 0, array.clone()).block();
+                let buffer = LamellarBuffer::from_shared_memory_region(shared_mem_region.clone());
+                shared_mem_region
+                    .get_into_buffer(num_pes - 1, 0, buffer)
+                    .block();
             }
 
-            println!("[{:?}] After {:?}", my_pe, array_slice);
+            println!("[{:?}] After {:?}", my_pe, shared_mem_region_slice);
             println!(
                 "-------------------------------------------------------------------------------"
             );
             unsafe {
-                array.put_buffer(my_pe, 0, data.clone()).block();
+                shared_mem_region.put_buffer(my_pe, 0, data.clone()).block();
             }; //reset our local segment
         }
 
         world.barrier();
 
-        //we can "get" from  another nodes shared mem region into a local_array
+        //we can "get" from  another nodes shared mem region into a local_shared_mem_region
         if my_pe == 0 {
             println!(
-                "----------------- testing shared mem region get to local_array ----------------"
+                "----------------- testing shared mem region get to local_shared_mem_region ----------------"
             );
             println!("[{:?}] Before {:?}", my_pe, data_slice);
             unsafe {
-                let _ = array.get_buffer(num_pes - 1, 0, data.clone()).spawn();
+                let buffer = LamellarBuffer::from_one_sided_memory_region(data.clone());
+                let _ = shared_mem_region.get_into_buffer_unmanaged(num_pes - 1, 0, buffer);
             }
+            shared_mem_region.wait_all();
             println!("[{:?}] After {:?}", my_pe, data_slice);
             println!(
                 "-------------------------------------------------------------------------------"
             );
             unsafe {
-                array.get_buffer(my_pe, 0, data.clone()).block();
-            } // reset local_array;
+                let buffer = LamellarBuffer::from_one_sided_memory_region(data.clone());
+                shared_mem_region.get_into_buffer(my_pe, 0, buffer).block();
+            } // reset local_shared_mem_region;
         }
         world.barrier();
         if my_pe == 0 {
             println!(
-                "--------------- testing local_array put_all to shared mem region --------------"
+                "--------------- testing local_shared_mem_region put_all to shared mem region --------------"
             );
         }
         world.barrier();
@@ -85,15 +107,16 @@ fn main() {
         world.barrier();
 
         //stripe pe ids accross all shared mem regions
-        for i in 0..ARRAY_LEN {
+        let mut buffer = unsafe { LamellarBuffer::from_one_sided_memory_region(data.clone()) };
+        for i in 0..SHARED_MEM_REGION_LEN {
+            let remaining_buffer = buffer.split_off(1);
             unsafe {
-                let _ = array
-                    .get_buffer(i % num_pes, i, data.sub_region(i..=i))
-                    .spawn();
+                shared_mem_region.get_into_buffer_unmanaged(i % num_pes, i, buffer);
             };
+            buffer = remaining_buffer;
         }
 
-        array.wait_all();
+        shared_mem_region.wait_all();
 
         world.barrier();
         if my_pe == 0 {
