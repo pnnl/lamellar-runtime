@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::field_info::FieldInfo;
 use crate::gen_am::*;
 use crate::replace::{LamellarDSLReplace, ReplaceSelf};
@@ -12,21 +14,21 @@ fn impl_am_group_remote_lamellar_active_message_trait(
     generics: &syn::Generics,
     am_group_am_name: &syn::Ident,
     am_group_body: &proc_macro2::TokenStream,
-    ret_contatiner: &proc_macro2::TokenStream,
+    ret_container: &proc_macro2::TokenStream,
     ret_push: &proc_macro2::TokenStream,
     ret_stmt: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
 ) -> proc_macro2::TokenStream {
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     // let trace_name = quote! {stringify!(#am_group_am_name)};
-    // println!("ret_contatiner: {}", ret_contatiner.to_string());
+    // println!("ret_container: {}", ret_container.to_string());
     // println!("ret_push: {}", ret_push.to_string());
     // println!("ret_stmt: {}", ret_stmt.to_string());
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
                 Box::pin( async move {
-                    #ret_contatiner
+                    #ret_container
                     for i in 0..self.len(){
                         let _e = { #am_group_body };
                         #ret_push
@@ -189,7 +191,7 @@ fn impl_am_group_remote(
     am_group_am_name: &syn::Ident,
     am_group_body: &proc_macro2::TokenStream,
     ret_type: &proc_macro2::TokenStream,
-    ret_contatiner: &proc_macro2::TokenStream,
+    ret_container: &proc_macro2::TokenStream,
     ret_push: &proc_macro2::TokenStream,
     ret_stmt: &proc_macro2::TokenStream,
     lamellar: &proc_macro2::TokenStream,
@@ -198,7 +200,7 @@ fn impl_am_group_remote(
         generics,
         am_group_am_name,
         am_group_body,
-        ret_contatiner,
+        ret_container,
         ret_push,
         ret_stmt,
         lamellar,
@@ -440,9 +442,9 @@ pub(crate) fn generate_am_group(
         }
     };
 
-    let am_group_remote_body = gen_am_group_remote_body2(&orig_name, &input);
+    let am_group_remote_body = gen_am_group_remote_body2(&orig_name, input);
 
-    let (ret_contatiner, ret_push, ret_stmt) =
+    let (ret_container, ret_push, ret_stmt) =
         gen_am_group_return_stmt(&am_type, &am_group_return_name, lamellar, false);
 
     let am_group_remote = impl_am_group_remote(
@@ -450,18 +452,18 @@ pub(crate) fn generate_am_group(
         &am_group_am_name,
         &am_group_remote_body,
         &ret_type,
-        &ret_contatiner,
+        &ret_container,
         &ret_push,
         &ret_stmt,
-        &lamellar,
+        lamellar,
     );
 
     let am_group_return = impl_return_struct(
         &generics,
-        &am_data_header,
+        am_data_header,
         &am_group_return_name,
         &ret_type,
-        &lamellar,
+        lamellar,
         false,
         local,
     );
@@ -473,7 +475,7 @@ pub(crate) fn generate_am_group(
         &am_group_am_name,
         &am_group_user_name,
         &inner_ret_type,
-        &lamellar,
+        lamellar,
     );
 
     let mut am_user_generics = generics.clone();
@@ -592,7 +594,7 @@ fn create_am_group_remote(
         }
     });
 
-    let my_len = if fields.names().len() > 0 {
+    let my_len = if !fields.names().is_empty() {
         let f = &fields.names()[0];
         quote! {
             self.#f.len()
@@ -653,7 +655,7 @@ pub(crate) fn create_am_group_structs(
     let am_group_user_struct = generate_am_group_user_struct(
         generics,
         vis,
-        &get_am_group_user_name(&name),
+        &get_am_group_user_name(name),
         &get_am_group_name(&format_ident!("{}", name)),
     );
 

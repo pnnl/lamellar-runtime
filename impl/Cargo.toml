@@ -22,3 +22,6 @@ quote = "1.0.21"
 syn = { version = "2.0.17", features = ["full","extra-traits","fold","visit-mut",] }
 async-trait = "0.1.58"
 futures = "0.3.25"
+
+[dev-dependencies]
+lamellar = "0.7" # Don't depend on the latest or publishing will fail
