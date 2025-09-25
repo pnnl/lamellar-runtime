@@ -47,8 +47,8 @@ impl WorkStealingThread {
                 // let _span = trace_span!("WorkStealingThread::run");
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
-                let mut rng = rand::thread_rng();
-                let t = rand::distributions::Uniform::from(0..worker.work_stealers.len());
+                let mut rng = rand::rng();
+                let t = rand::distr::Uniform::try_from(0..worker.work_stealers.len()).expect("error getting uniform distribution");
                 let mut timer = std::time::Instant::now();
                 while worker.panic.load(Ordering::SeqCst) == 0
                     && (
@@ -279,8 +279,8 @@ impl LamellarExecutor for WorkStealing {
 
     //#[tracing::instrument(skip_all)]
     fn exec_task(&self) {
-        let mut rng = rand::thread_rng();
-        let t = rand::distributions::Uniform::from(0..self.work_stealers.len());
+        let mut rng = rand::rng();
+        let t = rand::distr::Uniform::try_from(0..self.work_stealers.len()).expect("error getting uniform distribution");
         let ret = if !self.imm_inj.is_empty() {
             self.imm_inj.steal().success()
         } else {

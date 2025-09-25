@@ -283,7 +283,7 @@ pub struct GenericAtomicByteArray {
 
 impl GenericAtomicByteArray {
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         let index = self
             .array
             .inner
@@ -524,7 +524,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         // if let Some(ref locks) = *self.locks {
         //     let start_index = (index * std::mem::size_of::<T>()) / self.orig_t_size;
         //     let end_index = ((index + 1) * std::mem::size_of::<T>()) / self.orig_t_size;

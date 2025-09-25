@@ -1,7 +1,6 @@
 use lamellar::array::prelude::*;
 
-use rand::distributions::Distribution;
-use rand::distributions::Uniform;
+use rand::distr::{Distribution, Uniform};
 
 macro_rules! initialize_array {
     (UnsafeArray,$array:ident,$init_val:ident) => {
@@ -102,8 +101,8 @@ macro_rules! fetch_sub_test {
         let _my_pe = world.my_pe();
         let array_total_len = $len;
 
-        let mut rng = rand::thread_rng();
-        let rand_idx = Uniform::from(0..array_total_len);
+        let mut rng = rand::rng();
+        let rand_idx = Uniform::try_from(0..array_total_len).unwrap();
         let mut success = true;
         let array: $array<$t> = $array::<$t>::new(world.team(), array_total_len, $dist)
             .block()
@@ -181,7 +180,7 @@ macro_rules! fetch_sub_test {
         let half_len = array_total_len / 2;
         let start_i = half_len / 2;
         let end_i = start_i + half_len;
-        let rand_idx = Uniform::from(0..half_len);
+        let rand_idx = Uniform::try_from(0..half_len).unwrap();
         let sub_array = array.sub_array(start_i..end_i);
         sub_array.barrier();
         for idx in 0..sub_array.len() {
@@ -248,7 +247,7 @@ macro_rules! fetch_sub_test {
             let len = std::cmp::max(pe_len / 2, 1);
             let start_i = (pe * pe_len) + len / 2;
             let end_i = start_i + len;
-            let rand_idx = Uniform::from(0..len);
+            let rand_idx = Uniform::try_from(0..len).unwrap();
             let sub_array = array.sub_array(start_i..end_i);
             sub_array.barrier();
             for idx in 0..sub_array.len() {

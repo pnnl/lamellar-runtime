@@ -31,9 +31,9 @@ fn main() {
         let array =
             AtomicArray::<usize>::new(world.clone(), array_size, Distribution::Block).block(); //non intrinsic atomic, non bitwise
                                                                                                //create vec of random indices between 0 & 1000000
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let indices = (0..10_000_000)
-            .map(|_| rng.gen_range(0..array_size))
+            .map(|_| rng.random_range(0..array_size))
             .collect::<Vec<_>>();
         // let _vals = vec![1; 10_000_000];
 

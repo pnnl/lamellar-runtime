@@ -193,7 +193,7 @@ impl CmdBuf {
         self.index * std::mem::size_of::<CmdMsg>()
     }
     //#[tracing::instrument(skip_all)]
-    fn iter(&self) -> std::slice::Iter<CmdMsg> {
+    fn iter(&self) -> std::slice::Iter<'_, CmdMsg> {
         self.buf[0..self.index].iter()
     }
     //#[tracing::instrument(skip_all)]
