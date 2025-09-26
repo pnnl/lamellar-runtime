@@ -17,8 +17,7 @@ use futures_util::{ready, Future};
 
 use pin_project::{pin_project, pinned_drop};
 
-// /// a task handle for a single array operation that doesnt return any values
-// pub type ArrayOpHandle<T> = ArrayBatchOpHandle;
+/// a task handle for a single array operation that doesnt return any values
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
 #[pin_project(PinnedDrop)]
 pub struct ArrayOpHandle<T: Remote> {
@@ -90,7 +89,7 @@ impl<T: Dist> ArrayOpHandle<T> {
 impl<T: Dist> Future for ArrayOpHandle<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.as_mut().project();
+        let this = self.as_mut().project();
         let res = match this.state.project() {
             OpStateProj::Am(op_handle) => op_handle.poll(cx),
             OpStateProj::Network(op_handle) => return op_handle.poll(cx),

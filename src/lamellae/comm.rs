@@ -217,6 +217,26 @@ impl CommAllocInner {
         let my_addr = self.addr().into();
         my_addr <= *addr && *addr < my_addr
     }
+
+    pub(crate) fn wait(&self) {
+        match self {
+            CommAllocInner::Raw(_, _) => {}
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.wait();
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.wait();
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.wait();
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.wait();
+            }
+        }
+    }
 }
 
 impl CommAllocRdma for CommAllocInner {
@@ -1081,6 +1101,10 @@ impl<T> CommSlice<T> {
         self.inner_alloc.contains(&addr)
     }
 
+    pub(crate) fn wait(&self) {
+        self.inner_alloc.wait()
+    }
+
     // pub(crate) fn num_bytes(&self) -> usize {
     //     self.info.size() * std::mem::size_of::<T>()
     // }
@@ -1095,13 +1119,10 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<U> {
-        self.inner_alloc.put(
-            scheduler, counters, src, pe, offset, //* std::mem::size_of::<U>(),
-        )
+        self.inner_alloc.put(scheduler, counters, src, pe, offset)
     }
     fn put_unmanaged<U: Remote>(&self, src: U, pe: usize, offset: usize) {
-        self.inner_alloc
-            .put_unmanaged(src, pe, offset * std::mem::size_of::<U>())
+        self.inner_alloc.put_unmanaged(src, pe, offset)
     }
     fn put_buffer<U: Remote>(
         &self,
@@ -1111,9 +1132,8 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<U> {
-        self.inner_alloc.put_buffer(
-            scheduler, counters, src, pe, offset, // * std::mem::size_of::<U>(),
-        )
+        self.inner_alloc
+            .put_buffer(scheduler, counters, src, pe, offset)
     }
     fn put_buffer_unmanaged<U: Remote>(
         &self,
@@ -1121,7 +1141,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) {
-        self.inner_alloc.put_buffer_unmanaged(src, pe, offset) // * std::mem::size_of::<U>())
+        self.inner_alloc.put_buffer_unmanaged(src, pe, offset)
     }
 
     fn put_all<U: Remote>(
@@ -1131,10 +1151,10 @@ impl<T> CommAllocRdma for CommSlice<T> {
         src: U,
         offset: usize,
     ) -> RdmaHandle<U> {
-        self.inner_alloc.put_all(scheduler, counters, src, offset) // * std::mem::size_of::<U>())
+        self.inner_alloc.put_all(scheduler, counters, src, offset)
     }
     fn put_all_unmanaged<U: Remote>(&self, src: U, offset: usize) {
-        self.inner_alloc.put_all_unmanaged(src, offset) // * std::mem::size_of::<U>())
+        self.inner_alloc.put_all_unmanaged(src, offset)
     }
     fn put_all_buffer<U: Remote>(
         &self,
@@ -1144,14 +1164,14 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
     ) -> RdmaHandle<U> {
         self.inner_alloc
-            .put_all_buffer(scheduler, counters, src, offset) // * std::mem::size_of::<U>())
+            .put_all_buffer(scheduler, counters, src, offset)
     }
     fn put_all_buffer_unmanaged<U: Remote>(
         &self,
         src: impl Into<MemregionRdmaInputInner<U>>,
         offset: usize,
     ) {
-        self.inner_alloc.put_all_buffer_unmanaged(src, offset) // * std::mem::size_of::<U>())
+        self.inner_alloc.put_all_buffer_unmanaged(src, offset)
     }
     fn get<U: Remote>(
         &self,
@@ -1160,7 +1180,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<U> {
-        self.inner_alloc.get(scheduler, counters, pe, offset) // * std::mem::size_of::<U>())
+        self.inner_alloc.get(scheduler, counters, pe, offset)
     }
     fn get_buffer<U: Remote>(
         &self,
@@ -1170,10 +1190,8 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
         len: usize,
     ) -> RdmaGetBufferHandle<U> {
-        self.inner_alloc.get_buffer(
-            scheduler, counters, pe, offset, // * std::mem::size_of::<U>(),
-            len,    // * std::mem::size_of::<U>(),
-        )
+        self.inner_alloc
+            .get_buffer(scheduler, counters, pe, offset, len)
     }
     fn get_into_buffer<U: Remote, B: AsLamellarBuffer<U>>(
         &self,
@@ -1183,10 +1201,8 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
         dst: LamellarBuffer<U, B>,
     ) -> RdmaGetIntoBufferHandle<U, B> {
-        self.inner_alloc.get_into_buffer(
-            scheduler, counters, pe, offset, // * std::mem::size_of::<U>(),
-            dst,
-        )
+        self.inner_alloc
+            .get_into_buffer(scheduler, counters, pe, offset, dst)
     }
     fn get_into_buffer_unmanaged<U: Remote, B: AsLamellarBuffer<U>>(
         &self,
@@ -1194,10 +1210,7 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
         dst: LamellarBuffer<U, B>,
     ) {
-        self.inner_alloc.get_into_buffer_unmanaged(
-            pe, offset, // * std::mem::size_of::<U>(),
-            dst,
-        )
+        self.inner_alloc.get_into_buffer_unmanaged(pe, offset, dst)
     }
 }
 

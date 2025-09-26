@@ -7,7 +7,6 @@ use crate::array::iterator::{
     private::{InnerIter, Sealed},
     LamellarArrayIterators, LamellarArrayMutIterators,
 };
-use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;

@@ -16,7 +16,7 @@ use crate::{
             RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle,
             RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaHandle, RdmaPutFuture, Remote,
         },
-        CommAllocRdma, CommSlice,
+        CommAllocRdma,
     },
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     warnings::RuntimeWarning,
@@ -173,7 +173,7 @@ impl<T: Remote> Future for UcxPutFuture<T> {
         let this = self.project();
         *this.spawned = true;
         if let Some(request) = this.request.take() {
-            request.wait();
+            let _ = request.wait();
         } else {
             this.alloc.wait_all();
         }
@@ -289,7 +289,7 @@ pub(crate) struct UcxGetBufferFuture<T> {
 
 impl<T: Remote> UcxGetBufferFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
-    fn exec_at(&mut self) {
+    fn exec_get(&mut self) {
         unsafe {
             let mut dst = Vec::<T>::with_capacity(self.len);
             dst.set_len(self.len);
@@ -302,7 +302,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
-        self.exec_at();
+        self.exec_get();
         self.spawned = true;
         if let Some(request) = self.request.take() {
             request.wait();
@@ -314,7 +314,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
         unsafe { res.assume_init() }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
-        self.exec_at();
+        self.exec_get();
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
@@ -355,7 +355,7 @@ impl<T: Remote> Future for UcxGetBufferFuture<T> {
     type Output = Vec<T>;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
-            self.exec_at();
+            self.exec_get();
         }
         let this = self.project();
         *this.spawned = true;
@@ -394,11 +394,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
             });
         } else {
             let len = self.dst.len();
-            unsafe {
-                self.dst
-                    .as_mut_slice()
-                    .copy_from_slice(&self.alloc.as_mut_slice()[self.offset..(self.offset + len)])
-            };
+            self.dst
+                .as_mut_slice()
+                .copy_from_slice(&self.alloc.as_mut_slice()[self.offset..(self.offset + len)])
             // let src = self.alloc.start() + self.offset;
             // if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
             //     unsafe {
@@ -487,6 +485,13 @@ impl CommAllocRdma for Arc<UcxAlloc> {
     ) -> RdmaHandle<T> {
         //  self.put_amt
         //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+        trace!(
+            "putting to dst: {:?} offset<T>: {:?} final addr{:x} len: 1 num bytes {}",
+            self.start(),
+            offset,
+            self.start() + offset,
+            std::mem::size_of::<T>()
+        );
         UcxPutFuture {
             my_pe: self.my_pe,
             alloc: self.clone(),
@@ -500,6 +505,13 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         .into()
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        trace!(
+            "put unmanaged to dst: {:x} offset<T>: {:?} final addr {:x} len: 1 num bytes {}",
+            self.start(),
+            offset,
+            self.start() + offset,
+            std::mem::size_of::<T>()
+        );
         if pe != self.my_pe {
             // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
             // not that the operation has completed on the remote side
@@ -727,10 +739,9 @@ impl CommAllocRdma for Arc<UcxAlloc> {
             let _ = unsafe { UcxAlloc::inner_get(&self, pe, offset, dst.as_mut_slice()) };
         } else {
             let len = dst.len();
-            unsafe {
-                dst.as_mut_slice()
-                    .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
-            }
+            dst.as_mut_slice()
+                .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
+
             // let src = self.alloc.start() + self.offset;
             // if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
             //     unsafe {

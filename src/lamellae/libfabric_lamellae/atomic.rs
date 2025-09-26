@@ -40,7 +40,7 @@ impl<T: Send + 'static> LibfabricAtomicFuture<T> {
             self.offset
         );
         for pe in &self.remote_pes {
-            unsafe { LibfabricAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op).unwrap() };
+            LibfabricAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op).unwrap();
         }
     }
     pub(crate) fn block(mut self) {
@@ -203,9 +203,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
         .into()
     }
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        unsafe {
-            LibfabricAlloc::atomic_op(self, pe, offset, &op).unwrap();
-        }
+        LibfabricAlloc::atomic_op(self, pe, offset, &op).unwrap();
     }
     fn atomic_op_all<T: Copy>(
         &self,
@@ -227,9 +225,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
     }
     fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         for pe in 0..self.num_pes() {
-            unsafe {
-                LibfabricAlloc::atomic_op(self, pe, offset, &op).unwrap();
-            }
+            LibfabricAlloc::atomic_op(self, pe, offset, &op).unwrap();
         }
     }
     fn atomic_fetch_op<T: Copy>(

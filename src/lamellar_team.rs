@@ -705,7 +705,10 @@ impl From<&LamellarWorld> for IntoLamellarTeam {
     #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: &LamellarWorld) -> Self {
         IntoLamellarTeam {
-            team: world.team_rt.clone(),
+            team: world
+                .team_rt
+                .clone()
+                .expect("Lamellar World is no longer valid"),
         }
     }
 }
@@ -714,7 +717,10 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: LamellarWorld) -> Self {
         IntoLamellarTeam {
-            team: world.team_rt.clone(),
+            team: world
+                .team_rt
+                .clone()
+                .expect("Lamellar World is no longer valid"),
         }
     }
 }
@@ -1357,7 +1363,7 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     // if world_pe != self.world_pe {
                     unsafe {
-                        let _ = self.dropped.put(world_pe, my_index, 1).spawn();
+                        let _ = self.dropped.put_unmanaged(world_pe, my_index, 1usize);
                     }
                     // }
                 }
@@ -1369,13 +1375,14 @@ impl LamellarTeamRT {
                 // };
                 // temp_slice[self.world_pe] = 1;
                 for world_pe in self.arch.team_iter() {
-                    if world_pe != self.world_pe {
-                        unsafe {
-                            let _ = self.dropped.put(world_pe, self.world_pe, 1).spawn();
-                        }
+                    // if world_pe != self.world_pe {
+                    unsafe {
+                        let _ = self.dropped.put_unmanaged(world_pe, self.world_pe, 1usize);
                     }
+                    // }
                 }
             }
+            self.wait_all();
         }
     }
 
@@ -2403,7 +2410,7 @@ impl Drop for LamellarTeamRT {
         //         println!("Deserialize: {:?}", duration.load(Ordering::SeqCst));
         //     }
         // }
-        // println!("LamellarTeamRT dropped");
+        trace!("LamellarTeamRT dropped");
     }
 }
 
@@ -2477,7 +2484,7 @@ impl Drop for LamellarTeam {
         // }
         // println!("how am i here...");
 
-        // println!("team handle dropped");
+        trace!("team handle dropped");
 
         // if let Some(world) = &self.world{
         //     println!("world: {:?}", Arc::strong_count(world));

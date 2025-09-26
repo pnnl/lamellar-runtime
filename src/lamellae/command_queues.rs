@@ -307,7 +307,7 @@ impl CmdMsgBuffer {
         if let Some(buf) = self.tx_bufs.remove(&addr) {
             match buf.state() {
                 Cmd::Tx => {
-                    trace!("transfer in progress {:x} {:?} !!", addr, buf.state());
+                    // trace!("transfer in progress {:x} {:?} !!", addr, buf.state());
                     self.tx_bufs.insert(addr, buf);
                     false
                 }
@@ -339,7 +339,10 @@ impl CmdMsgBuffer {
         for (addr, buf) in self.waiting_bufs.iter() {
             match buf.state() {
                 Cmd::Release => {} //do nothing
-                Cmd::Free => freed_bufs.push(*addr),
+                Cmd::Free => {
+                    trace!("freeing buffer {:x} {:?}", addr, buf.state());
+                    freed_bufs.push(*addr)
+                }
                 Cmd::Tx => panic! {"should not be transerring if in waiting bufs"},
                 Cmd::Clear => panic!("should not clear before release"),
                 Cmd::Print => panic!("shoud not encounter Print here"),
@@ -361,6 +364,7 @@ impl CmdMsgBuffer {
                         //creates and then drops to decrement the reference count
                     }
                 }
+                trace!("freeing buffer back to empty bufs {:x}", buf.addr());
                 buf.reset();
                 self.empty_bufs.push(buf);
             } else {
@@ -657,7 +661,7 @@ impl InnerCQ {
                 cmd_buffer.flush_buffer(&mut send_buf[dst]);
                 if send_buf[dst].dsize > 0 {
                     let recv_buffer = self.recv_buffer.lock();
-                    trace! {"sending data to dst {:?} {:?} {:?} {:?}, sending cmd {:?} {:?} {:?}",recv_buffer.index_addr(self.my_pe),send_buf[dst],send_buf[dst].as_bytes(),send_buf, send_buf[dst],send_buf.sub_slice(dst..=dst),send_buf.sub_slice(dst..=dst)[0]};
+                    trace! {"sending data to dst({dst}) {:x} {:?} {:x} {:?} {:?} {:?}, sending cmd {:?} {:?} {:?}",recv_buffer.index_addr(0),recv_buffer.index_addr(self.my_pe)-recv_buffer.index_addr(0),recv_buffer.index_addr(self.my_pe),send_buf[dst],send_buf[dst].as_bytes(),send_buf, send_buf[dst],send_buf.sub_slice(dst..=dst),send_buf.sub_slice(dst..=dst)[0]};
                     // let _ = self
                     //     .comm
                     //     .put(
@@ -952,6 +956,7 @@ impl InnerCQ {
         // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
         let (local_daddr_alloc, offset) =
             self.comm.local_alloc_and_offset_from_addr(dst, cmd.daddr);
+
         // let _ = self
         //     .comm
         //     .put(
@@ -962,22 +967,20 @@ impl InnerCQ {
         //         local_daddr + offset_of!(CmdMsg, cmd),
         //     )
         //     .spawn();
-        local_daddr_alloc.put_unmanaged(
-            self.release_cmd.cmd, //self.release_cmd.cmd_as_comm_slice(),
-            dst,
-            offset + offset_of!(CmdMsg, cmd),
-        );
+        let local_daddr_slice =
+            local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
+        local_daddr_slice.put_unmanaged(self.release_cmd.cmd, dst, 0);
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn send_free(&self, dst: usize, cmd: CmdMsg) {
         trace!(
             "sending free: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",
-            self.release_cmd,
+            self.free_cmd,
             cmd,
-            self.release_cmd.cmd_as_bytes(),
+            self.free_cmd.cmd_as_bytes(),
             cmd.cmd_as_bytes(),
-            self.release_cmd.as_addr(),
+            self.free_cmd.as_addr(),
             cmd.daddr + offset_of!(CmdMsg, cmd)
         );
         // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
@@ -993,11 +996,9 @@ impl InnerCQ {
         //         local_daddr + offset_of!(CmdMsg, cmd),
         //     )
         //     .spawn();
-        local_daddr_alloc.put_unmanaged(
-            self.free_cmd.cmd, //self.free_cmd.cmd_as_comm_slice(),
-            dst,
-            offset + offset_of!(CmdMsg, cmd),
-        );
+        let local_daddr_slice =
+            local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
+        local_daddr_slice.put_unmanaged(self.free_cmd.cmd, dst, 0);
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1070,7 +1071,13 @@ impl InnerCQ {
         // let local_daddr_alloc = self.comm.get_alloc(local_daddr).expect("invalid daddr");
         let (local_daddr_alloc, offset) =
             self.comm.local_alloc_and_offset_from_addr(src, cmd.daddr);
-        trace!("command queue getting data from {src}, {:?}", cmd.daddr);
+        trace!(
+            "command queue getting data from {src}, {:x} local_alloc: {:?} offset ({:?}, {:x})",
+            cmd.daddr,
+            local_daddr_alloc,
+            offset,
+            offset
+        );
         // self.comm
         //     .get(
         //         &self.scheduler,
@@ -1080,20 +1087,46 @@ impl InnerCQ {
         //         data_slice.clone(),
         //     )
         //     .await;
-        let data = local_daddr_alloc
-            .get_buffer(&self.scheduler, vec![], src, offset, cmd.dsize as usize)
-            .await;
-        if calc_hash(data.as_ptr() as usize, data.len()) != cmd.msg_hash {
-            info!(
+        let mut data = self
+            .comm
+            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
+        let mut timer = std::time::Instant::now();
+        while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
+            async_std::task::yield_now().await;
+            self.send_alloc(cmd.dsize);
+            data = self
+                .comm
+                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
+            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                println!("get cmd buf stuck waiting for alloc");
+                timer = std::time::Instant::now();
+            }
+        }
+        let data = data.expect("failed to alloc data in get_data");
+        unsafe {
+            local_daddr_alloc
+                .get_into_buffer(
+                    &self.scheduler,
+                    vec![],
+                    src,
+                    offset,
+                    LamellarBuffer::from_comm_slice(data.as_comm_slice::<u8>()),
+                )
+                .await;
+        }
+        unsafe {
+            if calc_hash(data.as_ptr::<u8>() as usize, data.num_bytes()) != cmd.msg_hash {
+                info!(
                 "data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
                 src,
                 cmd,
-                data.len(),
+                data.num_bytes(),
                 &data,
-                calc_hash(data.as_ptr() as usize, data.len()),
+                calc_hash(data.as_ptr::<u8>() as usize, data.num_bytes()),
                 cmd.msg_hash
             );
-            self.send_print(src, cmd).await;
+                self.send_print(src, cmd).await;
+            }
         }
 
         // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
@@ -1117,7 +1150,9 @@ impl InnerCQ {
         //     }
         // }
         // println!("got data {:?}", data_slice);
-        data
+        let msg_data = data.as_comm_slice().to_vec();
+        self.comm.rt_free(data);
+        msg_data
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1543,7 +1578,7 @@ impl CommandQueue {
                                 let task = async move {
                                     trace!("going to get cmd_buf {:?} from {:?}", cmd_buf_cmd, src);
                                     let data = cq.get_cmd_buf(src, cmd_buf_cmd).await;
-                                    let cmd_buf = data.as_slice();
+                                    // let cmd_buf = data.as_slice();
                                     // let cmd_buf = unsafe {
                                     //     std::slice::from_raw_parts(
                                     //         data as *const CmdMsg,
@@ -1553,12 +1588,11 @@ impl CommandQueue {
                                     // };
                                     // println!("cmd_buf {:?}", cmd_buf);
                                     let mut i = 0;
-                                    let len = cmd_buf.len();
+                                    let len = data.len();
                                     let cmd_cnt = Arc::new(AtomicUsize::new(len));
                                     // println!("src: {:?} cmd_buf len {:?}", src, len);
 
-                                    for cmd in cmd_buf.iter() {
-                                        let cmd = *cmd;
+                                    for cmd in data.into_iter() {
                                         if cmd.dsize != 0 {
                                             let cq = cq.clone();
                                             let lamellae = lamellae.clone();

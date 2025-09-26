@@ -94,6 +94,10 @@ impl ShmemAlloc {
                 .add(self.pe_map[&pe] * self.base_len + offset) as usize
         }
     }
+
+    pub(crate) fn wait(&self) {
+        //shmem is always ready
+    }
 }
 
 impl From<Arc<ShmemAlloc>> for CommAlloc {

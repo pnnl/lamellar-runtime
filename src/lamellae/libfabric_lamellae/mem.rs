@@ -87,10 +87,9 @@ impl CommMem for LibfabricComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
         debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        trace!("rt_free: {:?}", alloc);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
-                trace!("should i be here, rt_free should only be called with AllocInfo");
-
                 trace!("freeing rt alloc: {:x}", addr);
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {
@@ -100,7 +99,11 @@ impl CommMem for LibfabricComm {
                 }
             }
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                trace!("freeing rt alloc: {:?}", inner_alloc);
+                trace!(
+                    "freeing rt alloc: {:?} cnt: {}",
+                    inner_alloc,
+                    std::sync::Arc::strong_count(&inner_alloc)
+                );
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {
                     if let Ok(_) = alloc.free(inner_alloc.start()) {

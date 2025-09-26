@@ -953,9 +953,7 @@ impl<T: Remote> MemoryRegion<T> {
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
         // println!("put unmanaged memregion data addr {:?} pe addr {:?}", &data as *const R, &pe as *const usize);
         if (index + 1) * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc
-                .inner_alloc
-                .put_unmanaged(data, pe, index * std::mem::size_of::<R>())
+            self.alloc.inner_alloc.put_unmanaged(data, pe, index)
         } else {
             println!(
                 "mem region bytes: {:?} sizeof elem {:?} len {:?}",

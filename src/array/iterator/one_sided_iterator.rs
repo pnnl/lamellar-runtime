@@ -412,7 +412,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
         //     self.array.len()
         // );
         // let temp_buf = self.buf_0.split(0);
-        let mut req = unsafe { self.array.get_buffer(self.index, self.buf_size) };
+        let req = unsafe { self.array.get_buffer(self.index, self.buf_size) };
         // req.launch();
         self.state = State::Pending(req.spawn());
     }

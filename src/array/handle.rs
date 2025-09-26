@@ -1,30 +1,16 @@
 use std::{
-    collections::VecDeque,
-    iter::{Enumerate, StepBy},
-    ops::Range,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 
-use futures_util::{ready, stream::FuturesUnordered, Future, Stream};
+use futures_util::Future;
 
 use pin_project::{pin_project, pinned_drop};
 
-use crate::{
-    active_messaging::{AmHandle, LocalAmHandle},
-    array::LamellarByteArray,
-    lamellae::{CommProgress, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaHandle},
-    lamellar_request::LamellarRequest,
-    scheduler::{LamellarTask, Scheduler},
-    warnings::RuntimeWarning,
-    AtomicFetchOpHandle, Dist, LamellarMemoryRegion, LamellarTeamRT, OneSidedMemoryRegion,
-};
+use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, Dist, LamellarTeamRT};
 
-use super::{
-    AMCounters, ArrayRdmaCmd, AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray,
-    UnsafeArray,
-};
+use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeArray};
 
 // #[pin_project(project = InnerRdmaHandleProj)]
 // pub(crate) enum InnerRdmaHandle<T: Dist> {

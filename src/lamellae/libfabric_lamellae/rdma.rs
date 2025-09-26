@@ -16,7 +16,7 @@ use crate::{
             RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle,
             RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaHandle, RdmaPutFuture, Remote,
         },
-        CommAllocAddr, CommAllocRdma, CommSlice,
+        CommAllocAddr, CommAllocRdma,
     },
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     warnings::RuntimeWarning,

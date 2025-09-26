@@ -51,6 +51,10 @@ impl LocalAlloc {
             layout: std::alloc::Layout::from_size_align(len, self.layout.align()).unwrap(),
         }))
     }
+
+    pub(crate) fn wait(&self) {
+        // Local memory is always ready
+    }
 }
 
 impl From<Arc<LocalAlloc>> for CommAlloc {

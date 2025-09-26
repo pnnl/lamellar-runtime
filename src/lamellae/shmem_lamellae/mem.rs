@@ -1,4 +1,4 @@
-use std::{sync::atomic::Ordering};
+use std::sync::atomic::Ordering;
 
 use tracing::trace;
 
@@ -104,8 +104,6 @@ impl CommMem for ShmemComm {
         debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
-                trace!("should i be here, rt_free should only be called with AllocInfo");
-
                 trace!("freeing rt alloc: {:x}", addr);
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {

@@ -129,6 +129,7 @@ impl CommInfo for LibfabricComm {
 impl Drop for LibfabricComm {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        trace!("dropping libfabric comm");
         if self.mem_occupied() > 0 {
             println!(
                 "dropping libfabric -- memory in use {:?}",
@@ -144,5 +145,6 @@ impl Drop for LibfabricComm {
         // }
         let _ = self.ofi.clear_allocs();
         let _ = self.ofi.barrier();
+        trace!("libfabric comm dropped");
     }
 }

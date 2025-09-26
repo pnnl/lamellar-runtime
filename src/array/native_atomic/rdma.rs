@@ -5,8 +5,8 @@ use crate::array::native_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::*;
 use crate::memregion::{
-    AsBase, AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
-    RTMemoryRegionRDMA, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion,
+    AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
+    RemoteMemoryRegion, SubRegion,
 };
 
 impl<T: Dist> NativeAtomicArray<T> {
@@ -348,7 +348,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NativeAtomicArray<T> {
         index: usize,
         data: LamellarBuffer<T, B>,
     ) {
-        self.get_into_buffer(index, data).spawn();
+        let _ = self.get_into_buffer(index, data).spawn();
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
@@ -413,7 +413,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NativeAtomicArray<T> {
         offset: usize,
         data: LamellarBuffer<T, B>,
     ) {
-        self.get_into_buffer_pe(pe, offset, data).spawn();
+        let _ = self.get_into_buffer_pe(pe, offset, data).spawn();
     }
 }
 
@@ -583,7 +583,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
                 Distribution::Block => {
                     let cur_index = 0;
 
-                    let mut buf_slice = buf.as_mut_slice();
+                    let buf_slice = buf.as_mut_slice();
                     let buf_u8_slice = std::slice::from_raw_parts_mut(
                         buf_slice.as_mut_ptr() as *mut u8,
                         buf_slice.len() * std::mem::size_of::<T>(),
@@ -594,7 +594,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
                     }
                 }
                 Distribution::Cyclic => {
-                    let mut buf_slice = buf.as_mut_slice();
+                    let buf_slice = buf.as_mut_slice();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;

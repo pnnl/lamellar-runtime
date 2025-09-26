@@ -11,10 +11,7 @@ use pin_project::{pin_project, pinned_drop};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
-        comm::{
-            rdma::{RdmaHandle, RdmaPutFuture, Remote},
-            CommSlice,
-        },
+        comm::rdma::{RdmaHandle, RdmaPutFuture, Remote},
         local_lamellae::comm::LocalAlloc,
         CommAllocRdma, RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle,
         RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle,
@@ -512,7 +509,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        pe: usize,
+        _pe: usize,
         offset: usize,
         len: usize,
     ) -> RdmaGetBufferHandle<T> {
@@ -531,7 +528,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        pe: usize,
+        _pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
@@ -547,7 +544,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
-        pe: usize,
+        _pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,
     ) {

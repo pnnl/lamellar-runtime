@@ -14,8 +14,8 @@ use crate::{
     lamellae::{
         comm::rdma::{RdmaHandle, RdmaPutFuture, Remote},
         shmem_lamellae::fabric::ShmemAlloc,
-        CommAllocAddr, CommAllocRdma, CommSlice, RdmaGetBufferFuture, RdmaGetBufferHandle,
-        RdmaGetFuture, RdmaGetHandle, RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle,
+        CommAllocAddr, CommAllocRdma, RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture,
+        RdmaGetHandle, RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle,
     },
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     warnings::RuntimeWarning,
@@ -296,7 +296,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let dst = self.buffer.as_mut_slice();
         let src_slice = unsafe { std::slice::from_raw_parts(self.src.as_ptr::<T>(), dst.len()) };
-        unsafe { dst.copy_from_slice(src_slice) };
+        dst.copy_from_slice(src_slice);
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
@@ -553,9 +553,9 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         let src_slice =
             unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
-        unsafe {
-            dst.as_mut_slice().copy_from_slice(src_slice);
-        }
+
+        dst.as_mut_slice().copy_from_slice(src_slice);
+
         // if !(dst.contains(&remote_src_addr) || dst.contains(&(remote_src_addr + dst.num_bytes()))) {
         //     unsafe {
         //         std::ptr::copy_nonoverlapping(

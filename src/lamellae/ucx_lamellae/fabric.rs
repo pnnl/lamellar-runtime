@@ -18,6 +18,7 @@ use crate::lamellae::{
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 use std::sync::{Arc, Mutex};
+use tracing::trace;
 
 pub(crate) struct UcxWorld {
     pmi: Arc<PmiX>,
@@ -446,6 +447,7 @@ impl UcxWorld {
 
 impl Drop for UcxWorld {
     fn drop(&mut self) {
+        trace!("dropping ucx world");
         self.barrier();
         self.exchange_buffer.take();
         self.remote_keys.lock().unwrap().clear();
@@ -542,6 +544,13 @@ impl UcxAlloc {
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         let (remote_addr, rkey) = &self.remote_keys[pe];
+        trace!(
+            "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x}",
+            pe,
+            remote_addr,
+            offset,
+            remote_addr + offset
+        );
         self.endpoints[pe].put(
             src_addr.as_ptr() as _,
             src_addr.len() * std::mem::size_of::<T>(),
@@ -576,7 +585,7 @@ impl UcxAlloc {
         )
     }
 
-    pub fn atomic_op<T: Copy>(
+    pub(crate) fn atomic_op<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
@@ -592,7 +601,7 @@ impl UcxAlloc {
         }
     }
 
-    pub fn atomic_fetch_op<T: Copy>(
+    pub(crate) fn atomic_fetch_op<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
@@ -617,15 +626,19 @@ impl UcxAlloc {
         }
     }
 
-    pub fn as_mut_slice<T>(&self) -> &mut [T] {
+    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
     }
 
-    pub fn wait_all(&self) {
+    pub(crate) fn wait_all(&self) {
         self.worker.wait_all();
     }
 
-    pub fn contains(&self, addr: usize) -> bool {
+    pub(crate) fn wait(&self) {
+        self.worker.wait_all();
+    }
+
+    pub(crate) fn contains(&self, addr: usize) -> bool {
         self.mem.inner.addr <= addr && addr < self.mem.inner.addr + self.local_size
     }
 }

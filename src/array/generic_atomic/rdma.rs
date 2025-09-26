@@ -2,8 +2,8 @@ use crate::array::generic_atomic::*;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::*;
 use crate::memregion::{
-    AsBase, AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
-    RTMemoryRegionRDMA, RegisteredMemoryRegion, RemoteMemoryRegion, SubRegion,
+    AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
+    RemoteMemoryRegion, SubRegion,
 };
 use futures_util::future::join_all;
 use parking_lot::Mutex;
@@ -360,7 +360,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GenericAtomicArray<T> {
         index: usize,
         data: LamellarBuffer<T, B>,
     ) {
-        self.get_into_buffer(index, data).spawn();
+        let _ = self.get_into_buffer(index, data).spawn();
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
@@ -425,7 +425,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GenericAtomicArray<T> {
         offset: usize,
         data: LamellarBuffer<T, B>,
     ) {
-        self.get_into_buffer_pe(pe, offset, data).spawn();
+        let _ = self.get_into_buffer_pe(pe, offset, data).spawn();
     }
 }
 

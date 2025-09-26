@@ -72,11 +72,11 @@ fn main() {
         test_var: 1000,
     };
     if my_pe == 0 {
-        println!("---------------------------------------------------------------");
-        println!("Testing local am no return");
-        let res = world.exec_am_pe(my_pe, am.clone()).block();
-        assert_eq!(res, ());
-        println!("no return result: {:?}", res);
+        // println!("---------------------------------------------------------------");
+        // println!("Testing local am no return");
+        // let res = world.exec_am_pe(my_pe, am.clone()).block();
+        // assert_eq!(res, ());
+        // println!("no return result: {:?}", res);
         println!("-----------------------------------");
         println!("Testing remote am no return");
         // for i in 0..1 {
@@ -87,55 +87,58 @@ fn main() {
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
-        println!("Testing all am no return");
-        println!("[{:?}] exec on all", my_pe);
-        let res = world.exec_am_all(am.clone()).block();
-        assert!(res.iter().all(|x| *x == ()));
-        println!("no return result: {:?}", res);
-        println!("---------------------------------------------------------------");
-
-        println!("Task Group---------------------------------------------------------------");
-
-        let task_group = LamellarTaskGroup::new(world.clone());
-        for i in 0..10 {
-            task_group
-                .exec_am_pe(
-                    i % num_pes,
-                    AmNoReturn {
-                        my_pe: i,
-                        test_var: 10 * (i as u16),
-                    },
-                )
-                .block();
-            task_group
-                .exec_am_all(AmNoReturn {
-                    my_pe: i,
-                    test_var: 10 * (i as u16),
-                })
-                .block();
-        }
-        for r in res.iter() {
-            println!("PE[{:?}] return result: {:?}", my_pe, r);
-        }
-        println!("Typed Am Group---------------------------------------------------------------");
-
-        let mut am_group = typed_am_group!(AmNoReturn, world.clone());
-        for i in 0..10 {
-            am_group.add_am_pe(
-                i % num_pes,
-                AmNoReturn {
-                    my_pe: i,
-                    test_var: 10 * (i as u16),
-                },
-            );
-            am_group.add_am_all(AmNoReturn {
-                my_pe: i,
-                test_var: 10 * (i as u16),
-            });
-        }
-        let res = world.block_on(am_group.exec());
-        for r in res.iter() {
-            println!("PE[{:?}] return result: {:?}", my_pe, r);
-        }
+        // println!("Testing all am no return");
+        // println!("[{:?}] exec on all", my_pe);
+        // let res = world.exec_am_all(am.clone()).block();
+        // assert!(res.iter().all(|x| *x == ()));
+        // println!("no return result: {:?}", res);
+        // println!("---------------------------------------------------------------");
     }
+
+    //     println!("Task Group---------------------------------------------------------------");
+
+    //     let task_group = LamellarTaskGroup::new(world.clone());
+    //     for i in 0..10 {
+    //         task_group
+    //             .exec_am_pe(
+    //                 i % num_pes,
+    //                 AmNoReturn {
+    //                     my_pe: i,
+    //                     test_var: 10 * (i as u16),
+    //                 },
+    //             )
+    //             .block();
+    //         task_group
+    //             .exec_am_all(AmNoReturn {
+    //                 my_pe: i,
+    //                 test_var: 10 * (i as u16),
+    //             })
+    //             .block();
+    //     }
+    //     for r in res.iter() {
+    //         println!("PE[{:?}] return result: {:?}", my_pe, r);
+    //     }
+    //     println!("Typed Am Group---------------------------------------------------------------");
+
+    //     let mut am_group = typed_am_group!(AmNoReturn, world.clone());
+    //     for i in 0..10 {
+    //         am_group.add_am_pe(
+    //             i % num_pes,
+    //             AmNoReturn {
+    //                 my_pe: i,
+    //                 test_var: 10 * (i as u16),
+    //             },
+    //         );
+    //         am_group.add_am_all(AmNoReturn {
+    //             my_pe: i,
+    //             test_var: 10 * (i as u16),
+    //         });
+    //     }
+    //     let res = world.block_on(am_group.exec());
+    //     for r in res.iter() {
+    //         println!("PE[{:?}] return result: {:?}", my_pe, r);
+    //     }
+    // }
+    // println!("PE[{:?}] done", my_pe);
+    println!("done");
 }

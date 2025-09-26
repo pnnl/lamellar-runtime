@@ -229,7 +229,7 @@ impl Ofi {
             mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
         let alloc_manager = AllocInfoManager::new();
 
-        let mut ofi = Arc::new(Self {
+        let ofi = Arc::new(Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
             _my_pmi: my_pmi,
@@ -897,278 +897,6 @@ impl Ofi {
         Ok(())
     }
 
-    // pub(crate) unsafe fn get<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: &CommAllocAddr,
-    //     dst_addr: &mut CommSlice<T>,
-    //     sync: bool,
-    // ) -> Result<(), libfabric::error::Error> {
-    //     self.inner_get(pe, *(src_addr as &usize), dst_addr, sync)
-    // }
-
-    // pub(crate) unsafe fn inner_get<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: usize,
-    //     dst_addr: &mut [T],
-    //     sync: bool,
-    // ) -> Result<(), libfabric::error::Error> {
-    //     let (offset, mr, remote_alloc_info) = {
-    //         let table = self.alloc_manager.mr_info_table.read();
-    //         let alloc_info = table
-    //             .iter()
-    //             .find(|e| e.contains(&src_addr))
-    //             .expect("Invalid address");
-
-    //         (
-    //             alloc_info.start(),
-    //             alloc_info.mr(),
-    //             alloc_info.remote_info(&pe).expect(&format!(
-    //                 "PE {} is not part of the sub allocation group",
-    //                 pe
-    //             )),
-    //         )
-    //     };
-
-    //     let mut remote_src_addr = remote_alloc_info.mem_address().add(src_addr - offset);
-    //     let remote_key = remote_alloc_info.key();
-
-    //     let mut curr_idx = 0;
-
-    //     while curr_idx < dst_addr.len() {
-    //         let msg_len = std::cmp::min(
-    //             dst_addr.len() - curr_idx,
-    //             self.info_entry.ep_attr().max_msg_size(),
-    //         );
-    //         self.post_get(|| unsafe {
-    //             self.ep.read_from(
-    //                 &mut dst_addr[curr_idx..curr_idx + msg_len],
-    //                 Some(&mr.descriptor()),
-    //                 &self.mapped_addresses[pe],
-    //                 remote_src_addr,
-    //                 &remote_key,
-    //             )
-    //         })?;
-    //         remote_src_addr = remote_src_addr.add(msg_len);
-    //         curr_idx += msg_len;
-    //     }
-
-    //     if sync {
-    //         self.wait_for_rx_cntr()?;
-    //     }
-
-    //     Ok(())
-    // }
-
-    // pub(crate) fn atomic_op<T: 'static>(
-    //     &self,
-    //     pe: usize,
-    //     op: &LamellarAtomicOp<T>,
-    //     dst_addr: &CommAllocAddr,
-    // ) -> Result<(), libfabric::error::Error> {
-    //     unsafe {
-    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-    //             self.typed_atomic_op::<T, u8>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-    //             self.typed_atomic_op::<T, u16>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-    //             self.typed_atomic_op::<T, u32>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-    //             self.typed_atomic_op::<T, u64>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-    //             self.typed_atomic_op::<T, usize>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-    //             self.typed_atomic_op::<T, i8>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-    //             self.typed_atomic_op::<T, i16>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-    //             self.typed_atomic_op::<T, i32>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-    //             self.typed_atomic_op::<T, i64>(pe, op, *(dst_addr as &usize))
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-    //             self.typed_atomic_op::<T, isize>(pe, op, *(dst_addr as &usize))
-    //         } else {
-    //             panic!("Unsupported atomic operation type");
-    //         }
-    //     }
-    // }
-
-    // unsafe fn typed_atomic_op<T, OFI: AsFiType>(
-    //     &self,
-    //     pe: usize,
-    //     op: &LamellarAtomicOp<T>,
-    //     dst_addr: usize,
-    // ) -> Result<(), libfabric::error::Error> {
-    //     let (offset, mr, remote_alloc_info) = {
-    //         let table = self.alloc_manager.mr_info_table.read();
-    //         let alloc_info = table
-    //             .iter()
-    //             .find(|e| e.contains(&dst_addr))
-    //             .expect("Invalid address");
-
-    //         (
-    //             alloc_info.start(),
-    //             alloc_info.mr(),
-    //             alloc_info.remote_info(&pe).expect(&format!(
-    //                 "PE {} is not part of the sub allocation group",
-    //                 pe
-    //             )),
-    //         )
-    //     };
-    //     let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
-    //     trace!(
-    //         "Remote destination address for PE {}: {:?}",
-    //         pe,
-    //         remote_dst_addr
-    //     );
-
-    //     let remote_key = remote_alloc_info.key();
-    //     let src = op.src().expect("Atomic operation has no source");
-    //     let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
-    //     self.post_put(|| {
-    //         self.ep.inject_atomic_to(
-    //             buf,
-    //             &self.mapped_addresses[pe],
-    //             remote_dst_addr,
-    //             &remote_key,
-    //             op.into(),
-    //         )
-    //     })?;
-    //     Ok(())
-    // }
-
-    // pub(crate) fn atomic_fetch_op<T: 'static>(
-    //     &self,
-    //     pe: usize,
-    //     op: &LamellarAtomicOp<T>,
-    //     dst_addr: &CommAllocAddr,
-    //     result: &mut [T],
-    // ) -> Result<(), libfabric::error::Error> {
-    //     unsafe {
-    //         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-    //             self.typed_atomic_fetch_op::<T, u8>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-    //             self.typed_atomic_fetch_op::<T, u16>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-    //             self.typed_atomic_fetch_op::<T, u32>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-    //             self.typed_atomic_fetch_op::<T, u64>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-    //             self.typed_atomic_fetch_op::<T, usize>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-    //             self.typed_atomic_fetch_op::<T, i8>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-    //             self.typed_atomic_fetch_op::<T, i16>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-    //             self.typed_atomic_fetch_op::<T, i32>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-    //             self.typed_atomic_fetch_op::<T, i64>(pe, op, *(dst_addr as &usize), result)
-    //         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-    //             self.typed_atomic_fetch_op::<T, isize>(pe, op, *(dst_addr as &usize), result)
-    //         } else {
-    //             panic!("Unsupported atomic operation type");
-    //         }
-    //     }
-    // }
-
-    // unsafe fn typed_atomic_fetch_op<T, OFI: AsFiType>(
-    //     &self,
-    //     pe: usize,
-    //     op: &LamellarAtomicOp<T>,
-    //     dst_addr: usize,
-    //     result: &mut [T],
-    // ) -> Result<(), libfabric::error::Error> {
-    //     let (offset, mr, remote_alloc_info) = {
-    //         let table = self.alloc_manager.mr_info_table.read();
-    //         let alloc_info = table
-    //             .iter()
-    //             .find(|e| e.contains(&dst_addr))
-    //             .expect("Invalid address");
-
-    //         (
-    //             alloc_info.start(),
-    //             alloc_info.mr(),
-    //             alloc_info.remote_info(&pe).expect(&format!(
-    //                 "PE {} is not part of the sub allocation group",
-    //                 pe
-    //             )),
-    //         )
-    //     };
-    //     let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
-    //     trace!(
-    //         "Remote destination address for PE {}: {:?}",
-    //         pe,
-    //         remote_dst_addr
-    //     );
-
-    //     let remote_key = remote_alloc_info.key();
-    //     let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
-    //     match op.src() {
-    //         Some(src) => {
-    //             let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
-    //             self.post_get(|| {
-    //                 self.ep.fetch_atomic_from(
-    //                     buf,
-    //                     None,
-    //                     res,
-    //                     None,
-    //                     &self.mapped_addresses[pe],
-    //                     remote_dst_addr,
-    //                     &remote_key,
-    //                     op.into(),
-    //                 )
-    //             })?;
-    //         }
-    //         None => {
-    //             let buf_val = res[0];
-    //             self.post_get(|| {
-    //                 self.ep.fetch_atomic_from(
-    //                     std::slice::from_ref(&buf_val),
-    //                     None,
-    //                     res,
-    //                     None,
-    //                     &self.mapped_addresses[pe],
-    //                     remote_dst_addr,
-    //                     &remote_key,
-    //                     op.into(),
-    //                 )
-    //             })?;
-    //         }
-    //     };
-
-    //     Ok(())
-    // }
-
-    // impl<T: Copy + Default + libfabric::AsFiType> LibfabricArray<T> {
-    //     pub fn atomic_put(&self, index: usize, val: T) {
-    //         let (pe, offset) = self.pe_and_offset(index);
-    //         let remote_alloc_info = self
-    //             .alloc_info
-    //             .remote_info(&pe)
-    //             .expect(&format!("PE {} is not part of the allocation group", pe));
-    //         let remote_addr = unsafe {
-    //             remote_alloc_info
-    //                 .mem_address()
-    //                 .add(offset * std::mem::size_of::<T>())
-    //         };
-    //         let remote_key = remote_alloc_info.key();
-    //         let cntr_order = self
-    //             .ofi
-    //             .post_put(|| unsafe {
-    //                 self.ofi.ep.inject_atomic_to(
-    //                     &[val],
-    //                     &self.ofi.mapped_addresses[pe],
-    //                     remote_addr,
-    //                     &remote_key,
-    //                     AtomicOp::AtomicWrite,
-    //                 )
-    //             })
-    //             .expect("Failed to post atomic put operation");
-    //         // self.ofi.wait_for_tx_cntr(cntr_order)
-    //         //     .expect("Failed to wait for atomic put operation");
-    //     }
-
     pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> usize {
         self.alloc_manager
             .local_addr(remote_pe, remote_addr)
@@ -1200,6 +928,8 @@ impl Ofi {
 
 impl Drop for Ofi {
     fn drop(&mut self) {
+        trace!("Dropping OFI backend");
+        let _ = self.barrier();
         let _ = self.wait_for_tx_cntr();
         trace!("wait_all put done");
         let _ = self.wait_for_rx_cntr();
@@ -1228,6 +958,9 @@ impl AllocInfoManager {
 
     pub(crate) fn clear(&self) {
         let mut table = self.mr_info_table.write();
+        for alloc in table.iter() {
+            trace!("Clearing alloc: {:?}", alloc);
+        }
         table.clear();
     }
 
@@ -1320,14 +1053,22 @@ pub(crate) struct LibfabricAlloc {
     mr: MemoryRegion,
     range: std::ops::Range<usize>,
     remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
+    id: usize,
 }
 
 impl std::fmt::Debug for LibfabricAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("LibfabricAlloc ")
-            .field("range", &self.range)
-            // .field("remote_allocs", &self.remote_allocs)
-            .finish()
+        write!(
+            f,
+            "LibfabricAlloc: id:[{}] 0x{:x}-0x{:x}, num_bytes: {}  ofi cnt: {} mem cnt: {}  mem: {:?}",
+            self.id,
+            self.range.start,
+            self.range.end,
+            self.num_bytes(),
+            Arc::strong_count(&self.ofi),
+            Arc::strong_count(&self.mem),
+            self.mem.as_ptr()
+        )
     }
 }
 
@@ -1340,6 +1081,7 @@ impl From<Arc<LibfabricAlloc>> for CommAlloc {
     }
 }
 
+static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 impl LibfabricAlloc {
     pub(crate) fn new(
         ofi: Arc<Ofi>,
@@ -1350,13 +1092,24 @@ impl LibfabricAlloc {
     ) -> Result<Self, libfabric::error::Error> {
         let start = mem.as_ptr() as usize;
         let end = start + num_bytes; //mem.len();
-
+        let id = ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+        trace!(
+            "Created LibfabricAlloc[{}]: 0x{:x}-0x{:x}, num_bytes: {} ofi cnt: {} mem cnt: {}  mem: {:?}",
+            id,
+            start,
+            end,
+            num_bytes,
+            Arc::strong_count(&ofi),
+            Arc::strong_count(&mem),
+            mem.as_ptr()
+        );
         Ok(Self {
             ofi,
             mem: mem,
             mr,
             range: std::ops::Range { start, end },
             remote_allocs,
+            id,
         })
     }
     pub(crate) fn num_pes(&self) -> usize {
@@ -1371,6 +1124,17 @@ impl LibfabricAlloc {
             let new_remote_info = unsafe { remote_info.sub_region(offset..offset + len) };
             remote_allocs.insert(*pe, new_remote_info);
         }
+        let id = ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+        trace!(
+            "Created LibfabricAlloc sub_alloc[{}]: 0x{:x}-0x{:x}, num_bytes: {} ofi cnt: {} mem cnt: {}  mem: {:?}",
+            id,
+            self.range.start + offset,
+            self.range.start + offset + len,
+            len,
+            Arc::strong_count(&self.ofi) + 1,
+            Arc::strong_count(&self.mem) + 1,
+            self.mem.as_ptr()
+        );
 
         Ok(Arc::new(Self {
             ofi: self.ofi.clone(),
@@ -1378,6 +1142,7 @@ impl LibfabricAlloc {
             mr: self.mr.clone(),
             range: self.range.start + offset..self.range.start + offset + len,
             remote_allocs,
+            id,
         }))
     }
 
@@ -1600,7 +1365,7 @@ impl LibfabricAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
 
         let src = op.src().expect("Atomic operation has no source");
@@ -1662,7 +1427,7 @@ impl LibfabricAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
 
         let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
@@ -1700,6 +1465,27 @@ impl LibfabricAlloc {
         };
 
         Ok(())
+    }
+
+    pub(crate) fn wait(&self) -> Result<(), libfabric::error::Error> {
+        self.ofi.wait_for_tx_cntr()?;
+        self.ofi.wait_for_rx_cntr()?;
+        Ok(())
+    }
+}
+
+impl Drop for LibfabricAlloc {
+    fn drop(&mut self) {
+        trace!(
+            "Dropping LibfabricAlloc[{}]: {:?} mem: {:?}",
+            self.id,
+            self,
+            self.mem.as_ptr()
+        );
+        let ofi_cnt = Arc::strong_count(&self.ofi);
+        let mem_cnt = Arc::strong_count(&self.mem);
+        trace!("  ofi strong count: {}", ofi_cnt);
+        trace!("  mem strong count: {}", mem_cnt);
     }
 }
 

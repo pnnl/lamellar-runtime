@@ -9,7 +9,6 @@ use crate::array::{
 };
 use crate::memregion::{
     AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
-    RTMemoryRegionRDMA, RegisteredMemoryRegion,
 };
 use crate::{ActiveMessaging, LamellarArray};
 
