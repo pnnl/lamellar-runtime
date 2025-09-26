@@ -186,6 +186,7 @@ fn gen_am_group_return_stmt(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn impl_am_group_remote(
     generics: &syn::Generics,
     am_group_am_name: &syn::Ident,
@@ -539,6 +540,7 @@ pub(crate) fn generate_am_group(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_am_group_remote(
     generics: &syn::Generics,
     attributes: &proc_macro2::TokenStream,
@@ -640,6 +642,7 @@ fn create_am_group_remote(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_am_group_structs(
     generics: &syn::Generics,
     attributes: &proc_macro2::TokenStream,

@@ -113,7 +113,7 @@ impl UnsafeArrayInner {
             let mut cur_i = 0;
             let mut i;
             while elems_per_thread > 100.0 && cur_i < num_elems_local_orig {
-                num_elems_local = num_elems_local / 1.61; //golden ratio
+                num_elems_local /= 1.61; //golden ratio
                 let start_i = cur_i;
                 let end_i = std::cmp::min(
                     cur_i + num_elems_local.round() as usize,

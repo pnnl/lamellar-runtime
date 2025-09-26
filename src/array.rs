@@ -42,7 +42,7 @@
 //! - `into_atomic`, `into_read_only`, etc., convert between disributed array types.
 //! - `collect` and `collect_async` provide functionality analogous to the [collect](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.collect) method for Rust iterators
 //! - We also provided access directly to the underlying local data of an array using functions (and container types) that preserve the safety guarantees of a given array type
-//!     -`local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
+//!     - `local_data`, `read_local_data`, `write_local_data`, etc. convert to slices and other data types.
 //!     - Consequently, these functions can be used to create valid inputs for batched operations,  see [OpInput] for details.
 //! ```
 //! use lamellar::array::prelude::*;
@@ -560,7 +560,6 @@ pub trait AsyncTeamInto<T: ?Sized> {
 }
 
 /// Provides the same abstraction as the `TryInto` trait in the standard language, but with a `team` parameter so that lamellar memory regions can be allocated
-
 pub trait TeamTryInto<T>: Sized {
     /// Trys to convert this type into the (usually inferred) input type
     fn team_try_into(self, team: &Arc<LamellarTeam>) -> Result<T, anyhow::Error>;
@@ -762,7 +761,7 @@ impl<T: Dist> ActiveMessaging for LamellarReadArray<T> {
             LamellarReadArray::GlobalLockArray(array) => array.async_barrier(),
         }
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
@@ -958,7 +957,7 @@ impl<T: Dist> ActiveMessaging for LamellarWriteArray<T> {
             LamellarWriteArray::GlobalLockArray(array) => array.async_barrier(),
         }
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
@@ -1116,19 +1115,19 @@ pub trait LamellarArray<T: Dist>:
     private::LamellarArrayPrivate<T> + ActiveMessaging + LamellarEnv
 {
     // #[doc(alias("One-sided", "onesided"))]
-    /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
-    ///
-    /// # One-sided Operation
-    /// the result is returned only on the calling PE
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::array::prelude::*;
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
-    ///
-    /// let a_team = array.team();
-    ///```
+    // /// Returns the team used to construct this array, the PEs in the team represent the same PEs which have a slice of data of the array
+    // ///
+    // /// # One-sided Operation
+    // /// the result is returned only on the calling PE
+    // ///
+    // /// # Examples
+    // ///```
+    // /// use lamellar::array::prelude::*;
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let array: LocalLockArray<usize> = LocalLockArray::new(&world,100,Distribution::Cyclic).block();
+    // ///
+    // /// let a_team = array.team();
+    // ///```
     // fn team(&self) -> Arc<LamellarTeam>; //todo turn this into Arc<LamellarTeam>
 
     #[doc(alias("One-sided", "onesided"))]
@@ -1707,10 +1706,10 @@ pub trait ArrayPrint<T: Dist + std::fmt::Debug>: LamellarArray<T> {
 /// use std::sync::atomic::{AtomicUsize,Ordering};
 /// use std::sync::Arc;
 /// use std::thread;
-
+///
 /// use rand::prelude::*;
 /// use std::time::Duration;
-
+///
 /// let  mut data = vec![];
 /// for _i in 0..1000{
 ///     data.push(AtomicUsize::new(0));

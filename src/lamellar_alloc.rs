@@ -98,30 +98,30 @@ impl LamellarAlloc for LinearAlloc {
             if prev_end + size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: prev_end,
-                    padding: padding,
-                    size: size,
+                    padding,
+                    size,
                 };
                 entries.insert(idx, n_vma);
                 self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
-                return Some(prev_end + padding);
+                Some(prev_end + padding)
             } else {
                 cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
-                return None;
+                None
             }
         } else {
             let padding = calc_padding(self.start_addr, align);
             if size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: self.start_addr,
-                    padding: padding,
-                    size: size,
+                    padding,
+                    size,
                 };
                 entries.push(n_vma);
                 self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
-                return Some(self.start_addr + padding);
+                Some(self.start_addr + padding)
             } else {
                 cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
-                return None;
+                None
             }
         }
     }
@@ -257,7 +257,7 @@ impl LamellarAlloc for BTreeAlloc {
             allocated_addrs: Arc::new((Mutex::new(BTreeMap::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
-            id: id,
+            id,
             free_space: Arc::new(AtomicUsize::new(0)),
         }
     }

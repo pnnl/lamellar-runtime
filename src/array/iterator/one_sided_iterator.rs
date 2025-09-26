@@ -442,11 +442,11 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
             )
         };
         let iter = OneSidedIter {
-            array: array,
-            buf_0: buf_0,
+            array,
+            buf_0,
             index: 0,
             buf_index: 0,
-            ptr: ptr,
+            ptr,
             state: State::Finished,
             _marker: PhantomData,
         };

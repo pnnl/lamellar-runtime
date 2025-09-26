@@ -25,15 +25,14 @@ lazy_static! {
         let mut temp = HashMap::new();
         let mut duplicates = vec![];
         for am in ams {
-            if !temp.contains_key(&am) {
-                // println!("{:?}", am);
-                temp.insert(am, cnt);
+            if let std::collections::hash_map::Entry::Vacant(e) = temp.entry(am) {
+                e.insert(cnt);
                 cnt += 1;
             } else {
                 duplicates.push(am);
             }
         }
-        if duplicates.len() > 0 {
+        if !duplicates.is_empty() {
             panic!(
                 "duplicate registered active message {:?}, AMs must have unique names",
                 duplicates
@@ -69,12 +68,12 @@ pub(crate) struct RegisteredActiveMessages {
 
 lazy_static! {
     pub(crate) static ref AM_HEADER_LEN: usize =
-        crate::serialized_size::<AmHeader>(&AmHeader::default(), false);
+        crate::serialized_size::<AmHeader>(&AmHeader::default());
     pub(crate) static ref DATA_HEADER_LEN: usize =
-        crate::serialized_size::<DataHeader>(&DataHeader::default(), false);
+        crate::serialized_size::<DataHeader>(&DataHeader::default());
     pub(crate) static ref UNIT_HEADER_LEN: usize =
-        crate::serialized_size::<UnitHeader>(&UnitHeader::default(), false);
-    pub(crate) static ref CMD_LEN: usize = crate::serialized_size::<Cmd>(&Cmd::Am, false);
+        crate::serialized_size::<UnitHeader>(&UnitHeader::default());
+    pub(crate) static ref CMD_LEN: usize = crate::serialized_size::<Cmd>(&Cmd::Am);
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
@@ -276,12 +275,12 @@ impl RegisteredActiveMessages {
         let data_slice = data_buf.data_as_bytes();
 
         let am_header = AmHeader {
-            am_id: am_id,
+            am_id,
             req_id: req_data.id,
             team_addr: req_data.team_addr,
         };
 
-        crate::serialize_into(&mut data_slice[0..*AM_HEADER_LEN], &am_header, false).unwrap();
+        crate::serialize_into(&mut data_slice[0..*AM_HEADER_LEN], &am_header).unwrap();
 
         let i = *AM_HEADER_LEN;
 
@@ -309,11 +308,11 @@ impl RegisteredActiveMessages {
         let header = self.create_header(&req_data, Cmd::Data);
         let mut darcs = vec![];
         data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
-        let darc_list_size = crate::serialized_size(&darcs, false);
+        let darc_list_size = crate::serialized_size(&darcs);
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
-            darc_list_size: darc_list_size,
+            darc_list_size,
         };
 
         let data_buf = self
@@ -325,10 +324,10 @@ impl RegisteredActiveMessages {
             .await;
         let data_slice = data_buf.data_as_bytes();
 
-        crate::serialize_into(&mut data_slice[0..*DATA_HEADER_LEN], &data_header, false).unwrap();
+        crate::serialize_into(&mut data_slice[0..*DATA_HEADER_LEN], &data_header).unwrap();
         let mut i = *DATA_HEADER_LEN;
 
-        crate::serialize_into(&mut data_slice[i..(i + darc_list_size)], &darcs, false).unwrap();
+        crate::serialize_into(&mut data_slice[i..(i + darc_list_size)], &darcs).unwrap();
         i += darc_list_size;
 
         data.serialize_into(&mut data_slice[i..]);
@@ -351,7 +350,7 @@ impl RegisteredActiveMessages {
         let unit_header = UnitHeader {
             req_id: req_data.id,
         };
-        crate::serialize_into(&mut data_slice[0..*UNIT_HEADER_LEN], &unit_header, false).unwrap();
+        crate::serialize_into(&mut data_slice[0..*UNIT_HEADER_LEN], &unit_header).unwrap();
         req_data
             .lamellae
             .send_to_pes_async(req_data.dst, req_data.team.arch.clone(), data_buf)
@@ -362,9 +361,9 @@ impl RegisteredActiveMessages {
     fn create_header(&self, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
-            cmd: cmd,
+            cmd,
         };
-        SerializeHeader { msg: msg }
+        SerializeHeader { msg }
     }
 
     //#[tracing::instrument(skip_all)]
@@ -449,9 +448,9 @@ impl RegisteredActiveMessages {
     ) {
         // println!("exec_am");
         let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN]).unwrap();
         let (team, world) =
-            self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            self.get_team_and_world(msg.src as usize, am_header.team_addr, lamellae);
         *i += *AM_HEADER_LEN;
 
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
@@ -506,9 +505,9 @@ impl RegisteredActiveMessages {
     ) {
         // println!("exec_return_am");
         let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN]).unwrap();
         let (team, world) =
-            self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            self.get_team_and_world(msg.src as usize, am_header.team_addr, lamellae);
         *i += *AM_HEADER_LEN;
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
@@ -536,11 +535,11 @@ impl RegisteredActiveMessages {
     ) {
         // println!("exec_data_am");
         let data_header: DataHeader =
-            crate::deserialize(&data_buf[*i..*i + *DATA_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data_buf[*i..*i + *DATA_HEADER_LEN]).unwrap();
         *i += *DATA_HEADER_LEN;
 
         let darcs: Vec<RemotePtr> =
-            crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size], false).unwrap();
+            crate::deserialize(&data_buf[*i..*i + data_header.darc_list_size]).unwrap();
         *i += data_header.darc_list_size;
 
         let data = ser_data.sub_data(*i, *i + data_header.size);
@@ -557,7 +556,7 @@ impl RegisteredActiveMessages {
     pub(crate) async fn exec_unit_am(&self, msg: &Msg, data: &[u8], i: &mut usize) {
         // println!("exec_unit_am");
         let unit_header: UnitHeader =
-            crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *UNIT_HEADER_LEN]).unwrap();
         *i += *UNIT_HEADER_LEN;
         self.send_data_to_user_handle(unit_header.req_id, msg.src as usize, InternalResult::Unit);
     }

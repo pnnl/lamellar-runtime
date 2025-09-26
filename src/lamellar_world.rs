@@ -305,8 +305,8 @@ impl Clone for LamellarWorld {
             team_rt: self.team_rt.clone(),
             // teams: self.teams.clone(),
             _counters: self._counters.clone(),
-            my_pe: self.my_pe.clone(),
-            num_pes: self.num_pes.clone(),
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
             ref_cnt: self.ref_cnt.clone(),
         }
     }
@@ -477,8 +477,8 @@ impl LamellarWorldBuilder {
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
-            executor: executor,
-            num_threads: num_threads,
+            executor,
+            num_threads,
         }
     }
 
@@ -571,7 +571,7 @@ impl LamellarWorldBuilder {
     //#[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
         // let mut timer = std::time::Instant::now();
-        assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
+        assert!(!INIT.fetch_or(true, Ordering::SeqCst), "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         // println!("{:?}: INIT", timer.elapsed());
 
@@ -632,8 +632,8 @@ impl LamellarWorldBuilder {
             team_rt: team_rt.clone(),
             // teams: teams.clone(),
             _counters: counters,
-            my_pe: my_pe,
-            num_pes: num_pes,
+            my_pe,
+            num_pes,
             ref_cnt: Arc::new(AtomicUsize::new(1)),
         };
         // println!("{:?}: init_world", timer.elapsed());
@@ -674,3 +674,10 @@ impl LamellarWorldBuilder {
         world
     }
 }
+
+impl Default for LamellarWorldBuilder {
+    fn default() -> Self {
+       Self::new()
+    }
+}
+

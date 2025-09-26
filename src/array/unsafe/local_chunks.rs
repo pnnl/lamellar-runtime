@@ -90,7 +90,7 @@ impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunks<T> {
             // );
             Some(unsafe {
                 std::slice::from_raw_parts_mut(
-                    self.array.local_as_mut_ptr().offset(start_i as isize),
+                    self.array.local_as_mut_ptr().add(start_i),
                     end_i - start_i,
                 )
             })
@@ -99,7 +99,7 @@ impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunks<T> {
         }
     }
     fn elems(&self, in_elems: usize) -> usize {
-        in_elems / self.chunk_size + (in_elems % self.chunk_size != 0) as usize
+        in_elems / self.chunk_size + (!in_elems.is_multiple_of(self.chunk_size)) as usize
     }
 
     fn advance_index(&mut self, count: usize) {
@@ -153,7 +153,7 @@ impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunksMut<T> {
             // );
             Some(unsafe {
                 std::slice::from_raw_parts_mut(
-                    self.array.local_as_mut_ptr().offset(start_i as isize),
+                    self.array.local_as_mut_ptr().add(start_i),
                     end_i - start_i,
                 )
             })
@@ -162,7 +162,7 @@ impl<T: Dist + 'static> LocalIterator for UnsafeLocalChunksMut<T> {
         }
     }
     fn elems(&self, in_elems: usize) -> usize {
-        in_elems / self.chunk_size + (in_elems % self.chunk_size != 0) as usize
+        in_elems / self.chunk_size + (!in_elems.is_multiple_of(self.chunk_size)) as usize
     }
 
     fn advance_index(&mut self, count: usize) {
@@ -198,7 +198,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// array.wait_all();
     ///
     /// ```
-    pub unsafe fn local_chunks(&self, chunk_size: usize) -> UnsafeLocalChunks<T> {
+    pub fn local_chunks(&self, chunk_size: usize) -> UnsafeLocalChunks<T> {
         UnsafeLocalChunks {
             chunk_size,
             index: 0,
@@ -226,7 +226,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// array.wait_all();
     ///
     /// ```
-    pub unsafe fn local_chunks_mut(&self, chunk_size: usize) -> UnsafeLocalChunksMut<T> {
+    pub fn local_chunks_mut(&self, chunk_size: usize) -> UnsafeLocalChunksMut<T> {
         UnsafeLocalChunksMut {
             chunk_size,
             index: 0,

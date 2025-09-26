@@ -88,9 +88,9 @@ impl<'a> RuntimeWarning<'a> {
                     Using '{async_func}' is likely a better choice. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning.")
                 }
                 RuntimeWarning::BlockOn => {
-                    format!("[LAMELLAR WARNING] You are calling block_on from within an async context, this may result in deadlock! 
+                    "[LAMELLAR WARNING] You are calling block_on from within an async context, this may result in deadlock!
                     If you have something like: `world.block_on(my_future)` you can simply change to my_future.await.
-                    If this is not the case, please file an issue on github. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning.")
+                    If this is not the case, please file an issue on github. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning.".into()
                 }
                 RuntimeWarning::BarrierTimeout(_) => {
                     format!("[LAMELLAR WARNING][{:?}] You have encoutered a barrier timeout. Potential deadlock detected.

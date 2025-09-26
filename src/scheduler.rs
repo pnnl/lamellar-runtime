@@ -134,7 +134,7 @@ unsafe impl<T: Send> Send for LamellarTaskInner<T> {}
 unsafe impl<T: Sync> Sync for LamellarTaskInner<T> {}
 
 impl<T> Drop for LamellarTaskInner<T> {
-    fn drop(self: &mut Self) {
+    fn drop(&mut self) {
         // let mut dropped = LamellarTaskInner::Dropped;
 
         // std::mem::swap(&mut dropped, self);
@@ -242,7 +242,7 @@ impl Scheduler {
         panic: Arc<AtomicU8>,
     ) -> Self {
         Self {
-            executor: executor,
+            executor,
             active_message_engine,
             num_ams: Arc::new(AtomicUsize::new(0)),
             max_ams: Arc::new(AtomicUsize::new(0)),

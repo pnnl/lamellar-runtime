@@ -815,8 +815,8 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GlobalLockArray<T> {
             .expect("PE in team");
 
         GlobalLockArray {
-            lock: lock,
-            array: array,
+            lock,
+            array,
         }
     }
 }
@@ -924,7 +924,7 @@ impl<T: Dist> ActiveMessaging for GlobalLockArray<T> {
     fn async_barrier(&self) -> BarrierHandle {
         self.array.async_barrier()
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,

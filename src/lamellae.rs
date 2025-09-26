@@ -31,7 +31,7 @@ mod shmem;
 
 lazy_static! {
     static ref SERIALIZE_HEADER_LEN: usize =
-        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
+        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()));
 }
 
 /// The list of available lamellae backends, used to specify how data is transfered between PEs
@@ -221,7 +221,6 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
 }
 
 #[allow(unused_variables)]
-
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "rofi")]

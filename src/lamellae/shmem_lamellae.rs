@@ -29,7 +29,7 @@ impl ShmemBuilder {
         ShmemBuilder {
             my_pe: shmem_comm.my_pe(),
             num_pes: shmem_comm.num_pes(),
-            shmem_comm: shmem_comm,
+            shmem_comm,
         }
     }
 }
@@ -89,8 +89,8 @@ impl Shmem {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
         let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
         Shmem {
-            my_pe: my_pe,
-            num_pes: num_pes,
+            my_pe,
+            num_pes,
             shmem_comm: shmem_comm.clone(),
             active: active.clone(),
             cq: Arc::new(CommandQueue::new(shmem_comm, my_pe, num_pes, active)),
@@ -205,7 +205,7 @@ impl Ser for Shmem {
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
         let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+        crate::serialize_into(ser_data.header_as_bytes(), &header)?; //we want header to be a fixed size
         Ok(SerializedData::ShmemData(ser_data))
     }
 }
