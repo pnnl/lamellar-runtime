@@ -392,7 +392,7 @@ impl RegisteredActiveMessages {
             async_std::task::yield_now().await;
             match err.downcast_ref::<AllocError>() {
                 Some(AllocError::OutOfMemoryError(_)) => {
-                    lamellae.request_new_alloc(size * 2);
+                    lamellae.request_new_alloc(size * 2).await;
                 }
                 _ => panic!("unhanlded error!! {:?}", err),
             }

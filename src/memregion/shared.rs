@@ -115,7 +115,8 @@ impl<T: Remote> SharedMemoryRegion<T> {
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
                     team.lamellae
-                        .request_new_alloc(size * std::mem::size_of::<T>());
+                        .request_new_alloc(size * std::mem::size_of::<T>())
+                        .await;
                     mr_t = MemoryRegion::try_new(
                         size,
                         &team.scheduler,

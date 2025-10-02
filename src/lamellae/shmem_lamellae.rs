@@ -162,12 +162,12 @@ impl LamellaeUtil for Shmem {
         }
     }
 
-    fn request_new_alloc(&self, min_size: usize) {
+    async fn request_new_alloc(&self, min_size: usize) {
         if config().heap_mode == HeapMode::Static {
             panic!("Error: request_new_alloc should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
         }
-        println!("Requesting new pool of size: {} bytes", min_size);
-        self.cq.send_alloc(min_size);
+        // println!("Requesting new pool of size: {} bytes", min_size);
+        self.cq.send_alloc(min_size).await;
     }
 }
 

@@ -605,7 +605,7 @@ pub(crate) trait LamellaeUtil: Send {
         data: SerializedData,
     );
 
-    fn request_new_alloc(&self, min_size: usize);
+    async fn request_new_alloc(&self, min_size: usize);
 }
 
 #[allow(unused_variables)]

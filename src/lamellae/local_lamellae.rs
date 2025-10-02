@@ -95,7 +95,7 @@ impl LamellaeUtil for Local {
         _data: SerializedData,
     ) {
     }
-    fn request_new_alloc(&self, min_size: usize) {
+    async fn request_new_alloc(&self, min_size: usize) {
         panic!("should never request new alloc in local")
     }
 }

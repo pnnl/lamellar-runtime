@@ -654,9 +654,11 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
             //     size,
             //     std::mem::size_of::<T>()
             // );
-            self.team
+            let alloc_fut = self
+                .team
                 .lamellae
                 .request_new_alloc(size * std::mem::size_of::<T>());
+            self.team.scheduler.block_on(alloc_fut);
             lmr = OneSidedMemoryRegion::try_new(size, &self.team);
         }
         lmr.expect("out of memory")
@@ -2339,8 +2341,10 @@ impl LamellarTeamRT {
             //     size,
             //     std::mem::size_of::<T>()
             // );
-            self.lamellae
+            let alloc_fut = self
+                .lamellae
                 .request_new_alloc(size * std::mem::size_of::<T>());
+            self.scheduler.block_on(alloc_fut);
             lmr = OneSidedMemoryRegion::try_new(size, self);
         }
         lmr.expect("out of memory")

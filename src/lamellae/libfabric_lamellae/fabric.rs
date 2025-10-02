@@ -616,7 +616,7 @@ impl Ofi {
         };
 
         println!("Allocating aligned size: {} aligned", aligned_size);
-        println!("{:?}", std::backtrace::Backtrace::capture());
+        // println!("{:?}", std::backtrace::Backtrace::capture());
 
         // Map memory of aligned size
         let mut mem = memmap::MmapOptions::new()
