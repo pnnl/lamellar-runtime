@@ -62,57 +62,6 @@ impl UcxRequest {
         }
     }
 }
-//     pub(crate) fn wait(
-//         mut self,
-//         delete_on_wait_failure: bool,
-//     ) -> Result<Option<UcxRequest>, Error> {
-//         if self.managed_put {
-//             println!(
-//                 "[{:?}] waiting for managed put",
-//                 std::thread::current().id()
-//             );
-//             if !self.worker.wait_all().expect("Wait all failed") {
-//                 return Ok(Some(self));
-//             }
-//             return Ok(None);
-//         } else {
-//             if self.request.is_null() {
-//                 println!("[{:?}] UCX Request is null", std::thread::current().id());
-//                 return Ok(None);
-//             }
-//             if UCS_PTR_IS_PTR(self.request) {
-//                 println!(
-//                     "[{:?}] UCX Request is not null",
-//                     std::thread::current().id()
-//                 );
-//                 loop {
-//                     if unsafe { ucp_request_check_status(self.request as _) }
-//                         != ucs_status_t::UCS_INPROGRESS
-//                     {
-//                         break;
-//                     }
-//                     if self.worker.progress().is_none() {
-//                         if delete_on_wait_failure {
-//                             unsafe { ucp_request_free(self.request as _) };
-//                             self.request = std::ptr::null_mut();
-//                         }
-//                         return Ok(Some(self));
-//                     }
-//                     std::thread::yield_now();
-//                 }
-//                 unsafe { ucp_request_free(self.request as _) };
-//                 self.request = std::ptr::null_mut();
-//                 Ok(None)
-//             } else {
-//                 // println!(
-//                 //     "[{:?}] UCX Request is not valid",
-//                 //     std::thread::current().id()
-//                 // );
-//                 Error::from_ptr(self.request).map(|_| None)
-//             }
-//         }
-//     }
-// }
 
 impl Drop for UcxRequest {
     fn drop(&mut self) {

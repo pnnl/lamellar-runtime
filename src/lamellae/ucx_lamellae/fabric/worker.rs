@@ -5,6 +5,8 @@ use super::{context::Context, error::Error};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
+use tracing::trace;
+
 #[derive(Debug)]
 pub(crate) struct Worker {
     context: Arc<Context>,
@@ -186,7 +188,7 @@ impl Worker {
 impl Drop for Worker {
     fn drop(&mut self) {
         // let _lock_handle = self.lock.lock();
-        println!("dropping worker");
+        trace!("dropping worker");
         unsafe { ucp_worker_destroy(self.handle) }
     }
 }

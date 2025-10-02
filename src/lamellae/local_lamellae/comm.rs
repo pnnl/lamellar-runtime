@@ -26,10 +26,10 @@ impl LocalAlloc {
         self.ptr as usize
     }
 
-    pub(crate) fn as_mut_ptr<T>(&self) -> *mut T {
+    pub(crate) unsafe fn as_mut_ptr<T>(&self) -> *mut T {
         self.ptr as *mut T
     }
-    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
+    pub(crate) unsafe fn as_mut_slice<T>(&self) -> &mut [T] {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.as_mut_ptr::<T>(),

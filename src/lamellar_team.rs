@@ -4,7 +4,7 @@ use crate::{
     env_var::config,
     lamellae::{
         AllocationType, CommAlloc, CommAllocInner, CommAllocType, CommInfo, CommMem, CommProgress,
-        Lamellae, LamellaeShutdown, Remote,
+        Lamellae, LamellaeShutdown, LamellaeUtil, Remote,
     },
     lamellar_arch::{GlobalArch, IdError, LamellarArch, LamellarArchEnum, LamellarArchRT},
     lamellar_env::LamellarEnv,
@@ -656,8 +656,7 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
             // );
             self.team
                 .lamellae
-                .comm()
-                .alloc_pool(size * std::mem::size_of::<T>());
+                .request_new_alloc(size * std::mem::size_of::<T>());
             lmr = OneSidedMemoryRegion::try_new(size, &self.team);
         }
         lmr.expect("out of memory")
@@ -705,10 +704,7 @@ impl From<&LamellarWorld> for IntoLamellarTeam {
     #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: &LamellarWorld) -> Self {
         IntoLamellarTeam {
-            team: world
-                .team_rt
-                .clone()
-                .expect("Lamellar World is no longer valid"),
+            team: world.team_rt.clone(),
         }
     }
 }
@@ -717,10 +713,7 @@ impl From<LamellarWorld> for IntoLamellarTeam {
     #[tracing::instrument(skip_all, level = "debug")]
     fn from(world: LamellarWorld) -> Self {
         IntoLamellarTeam {
-            team: world
-                .team_rt
-                .clone()
-                .expect("Lamellar World is no longer valid"),
+            team: world.team_rt.clone(),
         }
     }
 }
@@ -922,6 +915,7 @@ impl LamellarTeamRT {
             &lamellae,
             alloc.clone(),
         );
+        unsafe { dropped.as_mut_slice().fill(0) };
 
         let remote_ptr_alloc = lamellae
             .comm()
@@ -961,11 +955,9 @@ impl LamellarTeamRT {
         };
 
         // trace!("team addr {:?}", team.remote_ptr_alloc);
-        unsafe {
-            for e in team.dropped.as_mut_slice().iter_mut() {
-                *e = 0;
-            }
-        }
+        // unsafe {
+        //     team.dropped.as_mut_slice().fill(0);
+        // }
 
         let team = Arc::pin(team);
         unsafe {
@@ -1143,7 +1135,7 @@ impl LamellarTeamRT {
             arch.hash(&mut hasher);
             let hash = hasher.finish();
             let archrt = Arc::new(LamellarArchRT::new(parent.arch.clone(), arch));
-            // println!("arch: {:?}", archrt);
+            trace!("arch: {:?}", archrt);
             parent.barrier();
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
@@ -1159,45 +1151,24 @@ impl LamellarTeamRT {
             );
             unsafe { dropped.as_mut_slice().fill(0) };
 
-            // println!("allocating temp_array");
-            // let temp_array = MemoryRegion::<usize>::new(
-            //     parent.num_pes,
-            //     &parent.scheduler,
-            //     vec![],
-            //     &parent.lamellae,
-            //     AllocationType::Local,
-            // );
-            // let mut temp_array_slice =
-            //     unsafe { temp_array.as_comm_slice().expect("data should exist on pe") };
-            // for e in temp_array_slice.iter_mut() {
-            //     *e = 0;
-            // }
-            // unsafe {
-            //     hash_buf.put_buffer(parent.world_pe, 0, temp_array_slice.sub_slice(..parent.num_pes)).block();
-            // }
-            // let mut temp_array = vec![0; parent.num_pes];
-            // temp_array[0] = hash as usize;
             let s = Instant::now();
             parent.barrier();
             // println!("barrier done in {:?}", s.elapsed());
             let timeout = Instant::now() - s;
-            // temp_array_slice[0] = hash as usize;
 
-            // println!("putting hash vals");
+            trace!("putting hash vals {:?}", hash);
             if let Ok(parent_world_pe) = parent.arch.team_pe(parent.world_pe) {
                 for world_pe in parent.arch.team_iter() {
-                    if world_pe != parent.world_pe {
-                        unsafe {
-                            dropped
-                                .put(world_pe, parent_world_pe, hash as usize)
-                                .block();
-                        }
+                    unsafe {
+                        dropped
+                            .put(world_pe, parent_world_pe, hash as usize)
+                            .block();
                     }
                 }
             }
-            // println!("done putting hash, now gonna check hash vals");
+            trace!("done putting hash, now gonna check hash vals");
             parent.check_hash_vals(hash as usize, &dropped, timeout);
-            // println!("passed check hash vals");
+            trace!("passed check hash vals");
 
             let remote_ptr_alloc = parent
                 .lamellae
@@ -1209,13 +1180,10 @@ impl LamellarTeamRT {
                 )
                 .expect("alloc failed creating LamellarTeam");
             // ------------------------------------------------------------------------------------------------- //
-            // println!("passed remote_ptr_alloc");
-            // for e in temp_array_slice.iter_mut() {
-            //     *e = 0;
-            // }
+            trace!("passed remote_ptr_alloc");
             let num_pes = archrt.num_pes();
             parent.barrier();
-            // println!("passed barrier, creating RT team");
+            trace!("passed barrier, creating RT team");
             let team = LamellarTeamRT {
                 world: Some(world.clone()),
                 parent: Some(parent.clone()),
@@ -1250,9 +1218,7 @@ impl LamellarTeamRT {
                 _pin: PhantomPinned,
             };
             unsafe {
-                for e in team.dropped.as_mut_slice().iter_mut() {
-                    *e = 0;
-                }
+                team.dropped.as_mut_slice().fill(0);
             }
             let team = Arc::pin(team);
             unsafe {
@@ -1268,7 +1234,7 @@ impl LamellarTeamRT {
                 trace!("team_ptr {:?} {:?}", team_ptr, team_ptr.as_ref());
             }
 
-            // println!("team created in {:?}", s.elapsed());
+            trace!("team created in {:?}", s.elapsed());
 
             let mut sub_teams = parent.sub_teams.write();
             sub_teams.insert(team.id, team.clone());
@@ -1319,12 +1285,12 @@ impl LamellarTeamRT {
                         To view backtrace set RUST_LIB_BACKTRACE=1\n\
                         {}",status,config().deadlock_warning_timeout,std::backtrace::Backtrace::capture()
                     );
-                        // println!(
-                        //     "[{:?}] ({:?})  hash: {:?}",
-                        //     self.world_pe,
-                        //     hash,
-                        //     hash_buf.as_slice().unwrap()
-                        // );
+                        trace!(
+                            "[{:?}] ({:?})  hash: {:?}",
+                            self.world_pe,
+                            hash,
+                            hash_buf.as_slice()
+                        );
                         s = Instant::now();
                     }
                 }
@@ -1363,7 +1329,9 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     // if world_pe != self.world_pe {
                     unsafe {
-                        let _ = self.dropped.put_unmanaged(world_pe, my_index, 1usize);
+                        let _ = self
+                            .dropped
+                            .put_unmanaged::<usize>(world_pe, my_index, 1usize);
                     }
                     // }
                 }
@@ -1377,7 +1345,9 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     // if world_pe != self.world_pe {
                     unsafe {
-                        let _ = self.dropped.put_unmanaged(world_pe, self.world_pe, 1usize);
+                        let _ =
+                            self.dropped
+                                .put_unmanaged::<usize>(world_pe, self.world_pe, 1usize);
                     }
                     // }
                 }
@@ -2370,8 +2340,7 @@ impl LamellarTeamRT {
             //     std::mem::size_of::<T>()
             // );
             self.lamellae
-                .comm()
-                .alloc_pool(size * std::mem::size_of::<T>());
+                .request_new_alloc(size * std::mem::size_of::<T>());
             lmr = OneSidedMemoryRegion::try_new(size, self);
         }
         lmr.expect("out of memory")
@@ -2505,7 +2474,7 @@ impl Drop for LamellarTeam {
 // #[cfg(test)]
 // mod tests {
 //     use super::*;
-//     use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeAM};
+//     use crate::lamellae::{create_lamellae, Backend, Lamellae, LamellaeUtil};
 //     use crate::lamellar_arch::StridedArch;
 //     use crate::schedulers::{create_scheduler, Scheduler, SchedulerType};
 //     use std::collections::BTreeMap;
@@ -2524,7 +2493,7 @@ impl Drop for LamellarTeam {
 //         );
 //         lamellae.init_lamellae(sched.get_queue().clone());
 //         let lamellae = Arc::new(lamellae);
-//         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
+//         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeUtil>> = BTreeMap::new();
 //         lamellaes.insert(lamellae.comm().backend(), lamellae.get_am());
 //         sched.init(num_pes, world_pe, lamellaes);
 //         let counters = Arc::new(AMCounters::new());
@@ -2599,7 +2568,7 @@ impl Drop for LamellarTeam {
 //         );
 //         lamellae.init_lamellae(sched.get_queue().clone());
 //         let lamellae = Arc::new(lamellae);
-//         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeAM>> = BTreeMap::new();
+//         let mut lamellaes: BTreeMap<Backend, Arc<dyn LamellaeUtil>> = BTreeMap::new();
 //         lamellaes.insert(lamellae.comm().backend(), lamellae.get_am());
 //         sched.init(num_pes, world_pe, lamellaes);
 //         let counters = Arc::new(AMCounters::new());

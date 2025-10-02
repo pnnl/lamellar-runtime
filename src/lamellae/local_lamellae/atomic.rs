@@ -34,6 +34,7 @@ pub(crate) struct LocalAtomicFuture<T> {
 
 impl<T: 'static> LocalAtomicFuture<T> {
     fn exec_op(&mut self) {
+        assert!(self.offset < unsafe { self.alloc.as_mut_slice::<T>().len() });
         net_atomic_op(&self.op, &CommAllocAddr(self.alloc.start() + self.offset))
     }
     pub(crate) fn block(mut self) {
@@ -97,6 +98,7 @@ pub(crate) struct LocalAtomicFetchFuture<T> {
 
 impl<T: Send + 'static> LocalAtomicFetchFuture<T> {
     fn exec_op(&mut self) {
+        assert!(self.offset < unsafe { self.alloc.as_mut_slice::<T>().len() });
         net_atomic_fetch_op(
             &self.op,
             &CommAllocAddr(self.alloc.start() + self.offset),
@@ -186,6 +188,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         .into()
     }
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) {
+        assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
     }
     fn atomic_op_all<T: Copy>(
@@ -206,6 +209,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         .into()
     }
     fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
     }
     fn atomic_fetch_op<T: Copy>(

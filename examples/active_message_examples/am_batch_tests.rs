@@ -1,6 +1,7 @@
 // use rand::Rng;
 use rand::distributions::{Distribution, Uniform};
 use std::time::Instant;
+use tracing_subscriber::fmt;
 
 use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
@@ -108,6 +109,7 @@ impl LamellarAM for ReturnVecAM {
 
 fn main() {
     // let _guard = setup_global_subscriber();
+    let subscriber = fmt::init();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
@@ -121,7 +123,7 @@ fn main() {
     // let _guard = setup_global_subscriber();
 
     let mut rng = rand::thread_rng();
-    let pe_rng = Uniform::from(0..num_pes + 1);
+    let pe_rng = Uniform::from(num_pes..num_pes + 1);
     let am_rng = Uniform::from(0..12);
     let buf_rng = Uniform::from(10000..100000);
     world.barrier();

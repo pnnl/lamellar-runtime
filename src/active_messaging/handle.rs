@@ -12,7 +12,7 @@ use std::{
 use futures_util::Future;
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 use crate::{
     lamellae::Des,
@@ -415,6 +415,7 @@ impl LamellarRequestAddResult for MultiAmHandleInner {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
         self.data.lock().insert(pe, data);
         self.cnt.fetch_sub(1, Ordering::SeqCst);
+
         if self.cnt.load(Ordering::SeqCst) == 0 {
             if let Some(waker) = self.waker.lock().take() {
                 waker.wake();

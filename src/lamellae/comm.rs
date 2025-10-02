@@ -186,7 +186,7 @@ impl CommAllocInner {
     }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAllocInner {
         trace!("sub_alloc offset: {} size: {}", offset, size);
-        debug_assert!(offset + size <= self.size());
+        assert!(offset + size <= self.size());
         match self {
             CommAllocInner::Raw(addr, _) => CommAllocInner::Raw(*addr + offset, size),
             CommAllocInner::LocalAlloc(inner_alloc) => CommAllocInner::LocalAlloc(
@@ -739,7 +739,7 @@ impl std::fmt::Debug for CommAlloc {
 
 impl CommAlloc {
     pub(crate) fn byte_add(&self, offset: usize) -> CommAllocAddr {
-        debug_assert!(offset < self.num_bytes());
+        assert!(offset < self.num_bytes());
         self.inner_alloc.addr() + offset
     }
     #[tracing::instrument(skip(self), level = "debug")]
@@ -762,10 +762,7 @@ impl CommAlloc {
             num_elems,
             num_elems * std::mem::size_of::<T>()
         );
-        debug_assert!(
-            offset < self.num_bytes()
-                && offset + num_elems * std::mem::size_of::<T>() <= self.num_bytes()
-        );
+        assert!(offset + num_elems * std::mem::size_of::<T>() <= self.num_bytes());
         CommSlice {
             inner_alloc: self
                 .inner_alloc
@@ -1047,8 +1044,8 @@ impl<T> CommSlice<T> {
             std::ops::Bound::Excluded(&index) => index,
             std::ops::Bound::Unbounded => self.len(),
         };
-        debug_assert!(start <= end);
-        debug_assert!(end <= self.len());
+        assert!(start <= end);
+        assert!(end <= self.len());
         trace!(
             "subslice start: {} end: {} new size: {} ({} {})",
             start,
@@ -1082,7 +1079,7 @@ impl<T> CommSlice<T> {
     }
 
     pub(crate) fn index_addr(&self, index: usize) -> CommAllocAddr {
-        debug_assert!(index < self.inner_alloc.size());
+        assert!(index < self.inner_alloc.size());
         self.inner_alloc.addr() + index * std::mem::size_of::<T>()
     }
 
@@ -1119,9 +1116,24 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put: CommSlice<{:?}> vs put<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.put(scheduler, counters, src, pe, offset)
     }
     fn put_unmanaged<U: Remote>(&self, src: U, pe: usize, offset: usize) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_unmanaged: CommSlice<{:?}> vs put_unmanaged<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
+        trace!("put_unmanaged called on CommSlice {:?}", self.as_ptr(),);
         self.inner_alloc.put_unmanaged(src, pe, offset)
     }
     fn put_buffer<U: Remote>(
@@ -1132,6 +1144,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_buffer: CommSlice<{:?}> vs put_buffer<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc
             .put_buffer(scheduler, counters, src, pe, offset)
     }
@@ -1141,6 +1160,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_buffer_unmanaged: CommSlice<{:?}> vs put_buffer_unmanaged<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.put_buffer_unmanaged(src, pe, offset)
     }
 
@@ -1151,9 +1177,23 @@ impl<T> CommAllocRdma for CommSlice<T> {
         src: U,
         offset: usize,
     ) -> RdmaHandle<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_all: CommSlice<{:?}> vs put_all<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.put_all(scheduler, counters, src, offset)
     }
     fn put_all_unmanaged<U: Remote>(&self, src: U, offset: usize) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_all_unmanaged: CommSlice<{:?}> vs put_all_unmanaged<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.put_all_unmanaged(src, offset)
     }
     fn put_all_buffer<U: Remote>(
@@ -1163,6 +1203,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         src: impl Into<MemregionRdmaInputInner<U>>,
         offset: usize,
     ) -> RdmaHandle<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_all_buffer: CommSlice<{:?}> vs put_all_buffer<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc
             .put_all_buffer(scheduler, counters, src, offset)
     }
@@ -1171,6 +1218,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         src: impl Into<MemregionRdmaInputInner<U>>,
         offset: usize,
     ) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_all_buffer_unmanaged: CommSlice<{:?}> vs put_all_buffer_unmanaged<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.put_all_buffer_unmanaged(src, offset)
     }
     fn get<U: Remote>(
@@ -1180,6 +1234,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get: CommSlice<{:?}> vs get<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.get(scheduler, counters, pe, offset)
     }
     fn get_buffer<U: Remote>(
@@ -1190,6 +1251,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
         len: usize,
     ) -> RdmaGetBufferHandle<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get_buffer: CommSlice<{:?}> vs get_buffer<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc
             .get_buffer(scheduler, counters, pe, offset, len)
     }
@@ -1201,6 +1269,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
         dst: LamellarBuffer<U, B>,
     ) -> RdmaGetIntoBufferHandle<U, B> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get_into_buffer: CommSlice<{:?}> vs get_into_buffer<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc
             .get_into_buffer(scheduler, counters, pe, offset, dst)
     }
@@ -1210,6 +1285,13 @@ impl<T> CommAllocRdma for CommSlice<T> {
         offset: usize,
         dst: LamellarBuffer<U, B>,
     ) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get_into_buffer_unmanaged: CommSlice<{:?}> vs get_into_buffer_unmanaged<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
         self.inner_alloc.get_into_buffer_unmanaged(pe, offset, dst)
     }
 }

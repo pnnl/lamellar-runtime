@@ -32,7 +32,7 @@ impl LamellarAM for DataAM {
         if self.depth > 0 {
             for _i in 0..self.width {
                 let pe = pes.sample(&mut rng);
-                println!("sending {:?} to {:?}", path, pe);
+                // println!("sending {:?} to {:?}", path, pe);
                 let _ = lamellar::team
                     .exec_am_pe(
                         pe,

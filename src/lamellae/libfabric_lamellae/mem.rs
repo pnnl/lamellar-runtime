@@ -3,6 +3,8 @@ use std::sync::atomic::Ordering;
 use tracing::trace;
 
 use crate::{
+    config,
+    env_var::HeapMode,
     lamellae::{
         comm::{
             error::{AllocError, AllocResult},
@@ -34,7 +36,7 @@ impl CommMem for LibfabricComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn free(&self, alloc: CommAlloc) {
-        debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
+        assert!(alloc.alloc_type == CommAllocType::Fabric);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
                 println!("freeing raw alloc: {:x} should we ever be here?", addr);
@@ -86,7 +88,7 @@ impl CommMem for LibfabricComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
-        debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        assert!(alloc.alloc_type == CommAllocType::RtHeap);
         trace!("rt_free: {:?}", alloc);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
@@ -131,15 +133,20 @@ impl CommMem for LibfabricComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
+        if config().heap_mode == HeapMode::Static {
+            panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
+        }
         let size = std::cmp::max(
             min_size * 2 * self.num_pes,
             HEAP_SIZE.load(Ordering::SeqCst),
         );
+        println!("Allocating new pool of size: {} bytes", size);
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
             if let CommAllocInner::LibfabricAlloc(inner_alloc) = alloc.inner_alloc {
-                let mut new_alloc = BTreeAlloc::new("libfabric_c_mem".to_string());
+                println!("Allocated new libfabric alloc pool: {:?}", inner_alloc);
+                let mut new_alloc = BTreeAlloc::new("libfabric_mem".to_string());
                 new_alloc.init(inner_alloc.start(), size);
                 self.runtime_allocs
                     .write()
@@ -185,7 +192,10 @@ impl CommMem for LibfabricComm {
     ) -> (CommAlloc, usize) {
         self.ofi
             .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
-            .expect("local_alloc_and_offset_from_addr failed")
+            .expect(&format!(
+                "local_alloc_and_offset_from_addr failed for pe: {} addr: {:x}",
+                remote_pe, remote_addr
+            ))
     }
 
     #[tracing::instrument(skip(self), level = "debug")]

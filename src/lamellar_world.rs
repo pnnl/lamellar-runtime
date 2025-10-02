@@ -41,8 +41,8 @@ lazy_static! {
 /// create [sub teams][LamellarWorld::create_team_from_arch] of PEs, and be used to construct [LamellarTaskGroups][crate::lamellar_task_group::LamellarTaskGroup].
 #[derive(Debug)]
 pub struct LamellarWorld {
-    team: Option<Arc<LamellarTeam>>,
-    pub(crate) team_rt: Option<std::pin::Pin<Arc<LamellarTeamRT>>>,
+    team: Arc<LamellarTeam>,
+    pub(crate) team_rt: std::pin::Pin<Arc<LamellarTeamRT>>,
     _counters: Arc<AMCounters>,
     my_pe: usize,
     num_pes: usize,
@@ -58,10 +58,7 @@ impl ActiveMessaging for LamellarWorld {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .exec_am_all(am)
+        self.team.exec_am_all(am)
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
@@ -69,49 +66,31 @@ impl ActiveMessaging for LamellarWorld {
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .exec_am_pe(pe, am)
+        self.team.exec_am_pe(pe, am)
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .exec_am_local(am)
+        self.team.exec_am_local(am)
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .wait_all();
+        self.team.wait_all();
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn await_all(&self) -> impl Future<Output = ()> + Send {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .await_all()
+        self.team.await_all()
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .barrier();
+        self.team.barrier();
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn async_barrier(&self) -> BarrierHandle {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .async_barrier()
+        self.team.async_barrier()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -120,16 +99,13 @@ impl ActiveMessaging for LamellarWorld {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        if let Some(team_rt) = &self.team_rt {
-            return team_rt.scheduler.spawn_task(
-                f,
-                vec![
-                    team_rt.world_counters.clone(),
-                    team_rt.team_counters.clone(),
-                ],
-            );
-        }
-        panic!("LamellarWorld has been destroyed");
+        self.team_rt.scheduler.spawn_task(
+            f,
+            vec![
+                self.team_rt.world_counters.clone(),
+                self.team_rt.team_counters.clone(),
+            ],
+        )
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -137,10 +113,9 @@ impl ActiveMessaging for LamellarWorld {
     where
         F: Future,
     {
-        if let Some(team_rt) = &self.team_rt {
-            return team_rt.scheduler.block_on(f);
-        }
-        panic!("LamellarWorld has been destroyed");
+        // trace_span!("block_on").in_scope(||
+        self.team_rt.scheduler.block_on(f)
+        // )
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -150,20 +125,19 @@ impl ActiveMessaging for LamellarWorld {
         <I as IntoIterator>::Item: Future + Send + 'static,
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
-        if let Some(team_rt) = &self.team_rt {
-            return team_rt
-                .scheduler
-                .block_on(join_all(iter.into_iter().map(|task| {
-                    team_rt.scheduler.spawn_task(
-                        task,
-                        vec![
-                            team_rt.world_counters.clone(),
-                            team_rt.team_counters.clone(),
-                        ],
-                    )
-                })));
-        }
-        panic!("LamellarWorld has been destroyed");
+        // trace_span!("block_on_all").in_scope(||
+        self.team_rt
+            .scheduler
+            .block_on(join_all(iter.into_iter().map(|task| {
+                self.team_rt.scheduler.spawn_task(
+                    task,
+                    vec![
+                        self.team_rt.world_counters.clone(),
+                        self.team_rt.team_counters.clone(),
+                    ],
+                )
+            })))
+        // )
     }
 }
 
@@ -173,18 +147,12 @@ impl RemoteMemoryRegion for LamellarWorld {
         &self,
         size: usize,
     ) -> FallibleSharedMemoryRegionHandle<T> {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .try_alloc_shared_mem_region::<T>(size)
+        self.team.try_alloc_shared_mem_region::<T>(size)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_shared_mem_region<T: Remote>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .alloc_shared_mem_region::<T>(size)
+        self.team.alloc_shared_mem_region::<T>(size)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -192,18 +160,12 @@ impl RemoteMemoryRegion for LamellarWorld {
         &self,
         size: usize,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .try_alloc_one_sided_mem_region::<T>(size)
+        self.team.try_alloc_one_sided_mem_region::<T>(size)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn alloc_one_sided_mem_region<T: Remote>(&self, size: usize) -> OneSidedMemoryRegion<T> {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .alloc_one_sided_mem_region::<T>(size)
+        self.team.alloc_one_sided_mem_region::<T>(size)
     }
 }
 
@@ -280,10 +242,7 @@ impl LamellarWorld {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        if let Some(team) = LamellarTeam::create_subteam_from_arch(
-            self.team.clone().expect("lamellarworld not initialized"),
-            arch,
-        ) {
+        if let Some(team) = LamellarTeam::create_subteam_from_arch(self.team.clone(), arch) {
             // self.teams
             //     .write()
             //     .insert(team.team.team_hash, Arc::downgrade(&team.team));
@@ -304,7 +263,7 @@ impl LamellarWorld {
     /// let team = world.team();
     ///```
     pub fn team(&self) -> Arc<LamellarTeam> {
-        self.team.clone().expect("lamellarworld not initialized")
+        self.team.clone()
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -322,10 +281,7 @@ impl LamellarWorld {
     /// let num_threads = world.num_threads_per_pe();
     ///```
     pub fn num_threads_per_pe(&self) -> usize {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .num_threads_per_pe()
+        self.team.num_threads_per_pe()
     }
 
     // pub fn flush(&self) {
@@ -341,18 +297,15 @@ impl LamellarEnv for LamellarWorld {
         self.num_pes
     }
     fn num_threads_per_pe(&self) -> usize {
-        self.team
-            .as_ref()
-            .expect("lamellarworld not initialized")
-            .num_threads_per_pe()
+        self.team.num_threads_per_pe()
     }
     fn world(&self) -> Arc<LamellarTeam> {
         // println!("LamellarWorld world");
-        self.team.clone().expect("lamellarworld not initialized")
+        self.team.clone()
     }
     fn team(&self) -> Arc<LamellarTeam> {
         // println!("LamellarWorld team");
-        self.team.clone().expect("lamellarworld not initialized")
+        self.team.clone()
     }
 }
 
@@ -377,17 +330,15 @@ impl Drop for LamellarWorld {
     fn drop(&mut self) {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
-            if let Some(team) = self.team.take() {
-                trace!("Dropping LamellarWorld");
-                if team.panic.load(Ordering::SeqCst) < 2 {
-                    team.barrier();
-                    team.wait_all();
-                    team.barrier();
-                }
-                if let Some(team_rt) = self.team_rt.take() {
-                    team_rt.destroy();
-                }
+            trace!("Dropping LamellarWorld");
+            if self.team.panic.load(Ordering::SeqCst) < 2 {
+                self.team.barrier();
+                self.team.wait_all();
+                self.team.barrier();
             }
+
+            self.team_rt.destroy();
+
             for (backend, lamellae) in LAMELLAES.write().drain() {
                 trace!("finalizing lamellae for backend: {:?}", backend);
                 lamellae.comm().barrier();
@@ -631,8 +582,8 @@ impl LamellarWorldBuilder {
 
         // timer = std::time::Instant::now();
         let world = LamellarWorld {
-            team: Some(LamellarTeam::new(None, team_rt.clone(), false)),
-            team_rt: Some(team_rt.clone()),
+            team: LamellarTeam::new(None, team_rt.clone(), false),
+            team_rt: team_rt.clone(),
             // teams: teams.clone(),
             _counters: counters,
             my_pe: my_pe,

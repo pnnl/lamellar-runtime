@@ -543,7 +543,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                 // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
                 // let temp_buf = self.buf_0.split(0);
-                let mut req = unsafe { self.array.get_buffer(self.index, self.buf_size).spawn() };
+                let req = unsafe { self.array.get_buffer(self.index, self.buf_size).spawn() };
                 // req.launch();
                 self.state = State::Pending(req);
             } else {
@@ -552,7 +552,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
                 // let temp_buf = self.buf_0.split(0);
                 // let _ = temp_buf.split(self.array.len() - self.index);
-                let mut req = unsafe {
+                let req = unsafe {
                     self.array
                         .get_buffer(self.index, self.array.len() - self.index)
                         .spawn()

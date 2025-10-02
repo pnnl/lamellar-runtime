@@ -308,141 +308,6 @@ impl UcxWorld {
         self.mem_handles.lock().unwrap().clear();
         self.remote_keys.lock().unwrap().clear();
     }
-
-    // pub(crate) unsafe fn put<T>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: &CommSlice<T>,
-    //     dst_addr: &CommAllocAddr,
-    //     managed: bool,
-    // ) -> Option<UcxRequest> {
-    //     self.inner_put(pe, src_addr.as_ref(), *(dst_addr as &usize), managed)
-    // }
-    // pub(crate) unsafe fn inner_put<T>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: &[T],
-    //     dst_addr: usize,
-    //     managed: bool,
-    // ) -> Option<UcxRequest> {
-    //     // println!("ucx put: remote_pe: {pe} dst_addr: {dst_addr:x}");
-    //     let allocs = self.remote_keys.lock().unwrap();
-    //     for (alloc, remote_addrs) in allocs.iter() {
-    //         if alloc.contains(dst_addr) {
-    //             let (remote_addr, rkey) = &remote_addrs[pe];
-    //             let offset = dst_addr - alloc.start();
-    //             let remote_dst_addr = remote_addr + offset;
-    //             // println!("found remote_dst_addr: {remote_dst_addr:x} = remote_addr {remote_addr:x} + offset {offset:x}");
-    //             return self.endpoints[pe].put(
-    //                 src_addr.as_ptr() as _,
-    //                 src_addr.len() * std::mem::size_of::<T>(),
-    //                 remote_dst_addr,
-    //                 &rkey,
-    //                 managed,
-    //             );
-    //         }
-    //     }
-    //     panic!("Failed to find remote address");
-    // }
-
-    // pub(crate) unsafe fn get<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: &CommAllocAddr,
-    //     dst_addr: &mut CommSlice<T>,
-    //     sync: bool,
-    // ) -> UcxRequest {
-    //     self.inner_get(pe, *(src_addr as &usize), dst_addr, sync)
-    // }
-
-    // pub(crate) unsafe fn inner_get<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     src_addr: usize,
-    //     dst_addr: &mut [T],
-    //     sync: bool,
-    // ) -> UcxRequest {
-    //     let allocs = self.remote_keys.lock().unwrap();
-    //     for (alloc, remote_addrs) in allocs.iter() {
-    //         if alloc.contains(src_addr) {
-    //             let (remote_addr, rkey) = &remote_addrs[pe];
-    //             let remote_src_addr = remote_addr + (src_addr - alloc.start());
-    //             return self.endpoints[pe].get(
-    //                 dst_addr.as_mut_ptr() as _,
-    //                 dst_addr.len() * std::mem::size_of::<T>(),
-    //                 remote_src_addr,
-    //                 &rkey,
-    //             );
-    //         }
-    //     }
-    //     panic!("Failed to find remote address");
-    // }
-
-    // pub fn atomic_op<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     op: &AtomicOp<T>,
-    //     dst_addr: &CommAllocAddr,
-    // ) -> Option<UcxRequest> {
-    //     let dst_addr = *(dst_addr as &usize);
-    //     match op {
-    //         AtomicOp::Write(val) => {
-    //             let allocs = self.remote_keys.lock().unwrap();
-    //             for (alloc, remote_addrs) in allocs.iter() {
-    //                 if alloc.contains(dst_addr) {
-    //                     let (remote_addr, rkey) = &remote_addrs[pe];
-    //                     let remote_dst_addr = remote_addr + (dst_addr - alloc.start());
-    //                     return self.endpoints[pe].atomic_put(*val, remote_dst_addr, &rkey, true);
-    //                 }
-    //             }
-    //         }
-    //         _ => panic!("Unsupported atomic operation"),
-    //     }
-    //     panic!("Failed to find remote address");
-    // }
-
-    // pub fn atomic_fetch_op<T: Copy>(
-    //     &self,
-    //     pe: usize,
-    //     op: &AtomicOp<T>,
-    //     dst_addr: &CommAllocAddr,
-    //     result: &mut [T],
-    // ) -> UcxRequest {
-    //     let dst_addr = *(dst_addr as &usize);
-    //     match op {
-    //         AtomicOp::Read => {
-    //             let allocs = self.remote_keys.lock().unwrap();
-    //             for (alloc, remote_addrs) in allocs.iter() {
-    //                 if alloc.contains(dst_addr) {
-    //                     let (remote_addr, rkey) = &remote_addrs[pe];
-    //                     let remote_dst_addr = remote_addr + (dst_addr - alloc.start());
-    //                     return self.endpoints[pe].atomic_get(
-    //                         result.as_mut_ptr(),
-    //                         remote_dst_addr,
-    //                         &rkey,
-    //                     );
-    //                 }
-    //             }
-    //         }
-    //         AtomicOp::Write(val) => {
-    //             let allocs = self.remote_keys.lock().unwrap();
-    //             for (alloc, remote_addrs) in allocs.iter() {
-    //                 if alloc.contains(dst_addr) {
-    //                     let (remote_addr, rkey) = &remote_addrs[pe];
-    //                     let remote_dst_addr = remote_addr + (dst_addr - alloc.start());
-    //                     return self.endpoints[pe].atomic_swap(
-    //                         *val,
-    //                         result.as_mut_ptr(),
-    //                         remote_dst_addr,
-    //                         &rkey,
-    //                     );
-    //                 }
-    //             }
-    //         }
-    //         _ => panic!("Unsupported atomic operation"),
-    //     }
-    //     panic!("Failed to find remote address");
-    // }
 }
 
 impl Drop for UcxWorld {
@@ -476,17 +341,6 @@ impl From<Arc<UcxAlloc>> for CommAlloc {
         }
     }
 }
-// impl Hash for UcxAlloc {
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//         self.mem.hash(state);
-//     }
-// }
-// impl PartialEq for UcxAlloc {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.mem == other.mem
-//     }
-// }
-// impl Eq for UcxAlloc {}
 
 impl std::fmt::Debug for UcxAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -543,6 +397,16 @@ impl UcxAlloc {
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
+        trace!(
+            "put_inner pe {} offset {} src_addr len {} * size_of T {} total bytes {}, alloc local size {}",
+            pe,
+            offset,
+            src_addr.len(),
+            std::mem::size_of::<T>(),
+            src_addr.len() * std::mem::size_of::<T>(),
+            self.num_bytes(),
+        );
+        assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
         trace!(
             "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x}",
@@ -576,6 +440,16 @@ impl UcxAlloc {
         dst_addr: &mut [T],
     ) -> UcxRequest {
         let offset = offset * std::mem::size_of::<T>();
+        trace!(
+            "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
+            pe,
+            offset,
+            dst_addr.len(),
+            std::mem::size_of::<T>(),
+            dst_addr.len() * std::mem::size_of::<T>(),
+            self.num_bytes(),
+        );
+        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
         self.endpoints[pe].get(
             dst_addr.as_mut_ptr() as _,
@@ -592,6 +466,7 @@ impl UcxAlloc {
         op: &AtomicOp<T>,
         managed: bool,
     ) -> Option<UcxRequest> {
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         match op {
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
@@ -608,6 +483,7 @@ impl UcxAlloc {
         op: &AtomicOp<T>,
         result: &mut [T],
     ) -> UcxRequest {
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];

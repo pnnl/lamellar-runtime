@@ -7,10 +7,10 @@ pub(crate) mod rdma;
 use super::{
     comm::{CmdQStatus, CommInfo, CommShutdown},
     command_queues::CommandQueue,
-    Comm, Lamellae, LamellaeAM, LamellaeInit, LamellaeShutdown, Ser, SerializeHeader,
+    Comm, Lamellae, LamellaeInit, LamellaeShutdown, LamellaeUtil, Ser, SerializeHeader,
     SerializedData, SERIALIZE_HEADER_LEN,
 };
-use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use crate::{config, env_var::HeapMode, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::RofiCComm;
 
 use async_trait::async_trait;
@@ -41,7 +41,12 @@ impl LamellaeInit for RofiCBuilder {
         (self.my_pe, self.num_pes)
     }
     fn init_lamellae(&mut self, scheduler: Arc<Scheduler>) -> Arc<Lamellae> {
-        let rofi_c = RofiC::new(self.my_pe, self.num_pes, self.rofi_c_comm.clone(),scheduler.clone());
+        let rofi_c = RofiC::new(
+            self.my_pe,
+            self.num_pes,
+            self.rofi_c_comm.clone(),
+            scheduler.clone(),
+        );
         let cq = rofi_c.cq();
         let rofi_c = Arc::new(Lamellae::RofiC(rofi_c));
         let rofi_c_clone = rofi_c.clone();
@@ -81,7 +86,12 @@ impl std::fmt::Debug for RofiC {
 }
 
 impl RofiC {
-    fn new(my_pe: usize, num_pes: usize, rofi_c_comm: Arc<Comm>, scheduler: Arc<Scheduler>,) -> RofiC {
+    fn new(
+        my_pe: usize,
+        num_pes: usize,
+        rofi_c_comm: Arc<Comm>,
+        scheduler: Arc<Scheduler>,
+    ) -> RofiC {
         // println!("my_pe {:?} num_pes {:?}",my_pe,num_pes);
         let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
         RofiC {
@@ -89,7 +99,13 @@ impl RofiC {
             num_pes: num_pes,
             rofi_c_comm: rofi_c_comm.clone(),
             active: active.clone(),
-            cq: Arc::new(CommandQueue::new(rofi_c_comm, scheduler,my_pe, num_pes, active)),
+            cq: Arc::new(CommandQueue::new(
+                rofi_c_comm,
+                scheduler,
+                my_pe,
+                num_pes,
+                active,
+            )),
         }
     }
     fn cq(&self) -> Arc<CommandQueue> {
@@ -128,9 +144,8 @@ impl LamellaeShutdown for RofiC {
     }
 }
 
-
 #[async_trait]
-impl LamellaeAM for RofiC {
+impl LamellaeUtil for RofiC {
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -148,6 +163,15 @@ impl LamellaeAM for RofiC {
                 .collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
             while let Some(_) = futures.next().await {}
         }
+    }
+
+    fn request_new_alloc(&self, min_size: usize) {
+        if config().heap_mode == HeapMode::Static {
+            panic!("Error: request_new_alloc should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
+        }
+        println!("Requesting new pool of size: {} bytes", min_size);
+        self.cq.send_alloc(min_size);
+        Ok(())
     }
 }
 

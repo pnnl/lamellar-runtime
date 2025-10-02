@@ -1,7 +1,7 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
-use crate::lamellae::{AllocationType, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
+use crate::lamellae::{AllocationType, LamellaeUtil, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
@@ -115,8 +115,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
                     team.lamellae
-                        .comm()
-                        .alloc_pool(size * std::mem::size_of::<T>());
+                        .request_new_alloc(size * std::mem::size_of::<T>());
                     mr_t = MemoryRegion::try_new(
                         size,
                         &team.scheduler,

@@ -7,10 +7,10 @@ pub(crate) mod rdma;
 use super::{
     comm::{CmdQStatus, CommInfo, CommShutdown},
     command_queues::CommandQueue,
-    Comm, Lamellae, LamellaeAM, LamellaeInit, LamellaeShutdown, Ser, SerializeHeader,
+    Comm, Lamellae, LamellaeInit, LamellaeShutdown, LamellaeUtil, Ser, SerializeHeader,
     SerializedData, SERIALIZE_HEADER_LEN,
 };
-use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use crate::{config, env_var::HeapMode, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::UcxComm;
 
 use async_trait::async_trait;
@@ -139,7 +139,7 @@ impl LamellaeShutdown for Ucx {
 }
 
 #[async_trait]
-impl LamellaeAM for Ucx {
+impl LamellaeUtil for Ucx {
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
@@ -157,6 +157,13 @@ impl LamellaeAM for Ucx {
                 .collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
             while let Some(_) = futures.next().await {}
         }
+    }
+    fn request_new_alloc(&self, min_size: usize) {
+        if config().heap_mode == HeapMode::Static {
+            panic!("Error: request_new_alloc should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
+        }
+        println!("Requesting new pool of size: {} bytes", min_size);
+        self.cq.send_alloc(min_size);
     }
 }
 

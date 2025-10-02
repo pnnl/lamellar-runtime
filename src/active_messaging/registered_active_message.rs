@@ -5,7 +5,7 @@ use crate::{
     },
     config,
     lamellae::{
-        comm::error::AllocError, Backend, CommInfo, CommMem, Lamellae, LamellaeAM, Ser,
+        comm::error::AllocError, Backend, CommInfo, CommMem, Lamellae, LamellaeUtil, Ser,
         SerializeHeader, SerializedData,
     },
 };
@@ -392,7 +392,7 @@ impl RegisteredActiveMessages {
             async_std::task::yield_now().await;
             match err.downcast_ref::<AllocError>() {
                 Some(AllocError::OutOfMemoryError(_)) => {
-                    lamellae.comm().alloc_pool(size * 2);
+                    lamellae.request_new_alloc(size * 2);
                 }
                 _ => panic!("unhanlded error!! {:?}", err),
             }

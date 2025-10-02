@@ -51,13 +51,6 @@ impl<T: Remote> ShmemFuture<T> {
         );
         let dst_slice = unsafe { std::slice::from_raw_parts_mut(dst.as_mut_ptr::<T>(), src.len()) };
         dst_slice.copy_from_slice(src.as_slice());
-        // if !(src.contains(dst) || src.contains(&(dst + src.num_bytes()))) {
-        //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
-        // } else {
-        //     unsafe {
-        //         std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
-        //     }
-        // }
     }
 
     fn exec_op(&mut self) {
@@ -351,6 +344,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         offset: usize,
     ) -> RdmaHandle<T> {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         ShmemFuture {
             op: Op::Put(src.into(), CommAllocAddr(self.pe_base_offset(pe) + offset)),
             spawned: false,
@@ -361,6 +355,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
         unsafe {
             dst.as_mut_ptr::<T>().write(src);
@@ -375,8 +370,10 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         offset: usize,
     ) -> RdmaHandle<T> {
         let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
         ShmemFuture {
-            op: Op::PutBuf(src.into(), CommAllocAddr(self.pe_base_offset(pe) + offset)),
+            op: Op::PutBuf(src, CommAllocAddr(self.pe_base_offset(pe) + offset)),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -390,8 +387,9 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         offset: usize,
     ) {
         let offset = offset * std::mem::size_of::<T>();
-        let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
         let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let dst = CommAllocAddr(self.pe_base_offset(pe) + offset);
         if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
             unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
         } else {
@@ -408,6 +406,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         offset: usize,
     ) -> RdmaHandle<T> {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let pe_addrs = (0..self.num_pes())
             .map(|pe| {
                 let real_dst_base = self.pe_base_offset(pe);
@@ -425,6 +424,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
     }
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         for pe in 0..self.num_pes() {
             let real_dst_base = self.pe_base_offset(pe);
             let real_dst_addr = real_dst_base + offset;
@@ -442,6 +442,8 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         offset: usize,
     ) -> RdmaHandle<T> {
         let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let pe_addrs = (0..self.num_pes())
             .map(|pe| {
                 let real_dst_base = self.pe_base_offset(pe);
@@ -450,7 +452,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
             })
             .collect::<Vec<_>>();
         ShmemFuture {
-            op: Op::PutAllBuf(src.into(), pe_addrs),
+            op: Op::PutAllBuf(src, pe_addrs),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -464,6 +466,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
     ) {
         let offset = offset * std::mem::size_of::<T>();
         let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
         for pe in 0..self.num_pes() {
             let real_dst_base = self.pe_base_offset(pe);
             let real_dst_addr = real_dst_base + offset;
@@ -486,6 +489,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         offset: usize,
     ) -> RdmaGetHandle<T> {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetFuture {
@@ -508,6 +512,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         len: usize,
     ) -> RdmaGetBufferHandle<T> {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetBufferFuture {
@@ -530,6 +535,7 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         dst: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         ShmemGetIntoBufferFuture {
@@ -549,25 +555,12 @@ impl CommAllocRdma for Arc<ShmemAlloc> {
         mut dst: LamellarBuffer<T, B>,
     ) {
         let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         let src_slice =
             unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
 
         dst.as_mut_slice().copy_from_slice(src_slice);
-
-        // if !(dst.contains(&remote_src_addr) || dst.contains(&(remote_src_addr + dst.num_bytes()))) {
-        //     unsafe {
-        //         std::ptr::copy_nonoverlapping(
-        //             remote_src_addr.as_ptr(),
-        //             dst.as_mut_ptr(),
-        //             dst.len(),
-        //         );
-        //     }
-        // } else {
-        //     unsafe {
-        //         std::ptr::copy(remote_src_addr.as_ptr(), dst.as_mut_ptr(), dst.len());
-        //     }
-        // }
     }
 }

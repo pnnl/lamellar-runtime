@@ -929,40 +929,25 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     pub(crate) unsafe fn put<R: Remote>(&self, pe: usize, index: usize, data: R) -> RdmaHandle<R> {
-        trace!("put memregion {:?} index: {:?}", self.alloc, index);
-        if (index + 1) * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.put(
-                &self.scheduler,
-                self.counters.clone(),
-                data,
-                pe,
-                index * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!(
-                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.num_bytes(),
-                std::mem::size_of::<T>(),
-                self.num_elems
-            );
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!("put memregion {:?} index: {:?}", self.alloc, index);
+        self.alloc
+            .inner_alloc
+            .put(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
     pub(crate) unsafe fn put_unmanaged<R: Remote>(&self, pe: usize, index: usize, data: R) {
-        trace!("put memregion {:?} index: {:?}", self.alloc, index);
-        // println!("put unmanaged memregion data addr {:?} pe addr {:?}", &data as *const R, &pe as *const usize);
-        if (index + 1) * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.put_unmanaged(data, pe, index)
-        } else {
-            println!(
-                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.num_bytes(),
-                std::mem::size_of::<T>(),
-                self.num_elems
-            );
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put unmanaged of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "put unmanaged memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc.inner_alloc.put_unmanaged(data, pe, index)
     }
 
     // impl<T: AmDist+ 'static> MemoryRegionRDMA<T> for MemoryRegion<T> {
@@ -982,38 +967,14 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         data: impl Into<MemregionRdmaInputInner<R>>,
     ) -> RdmaHandle<R> {
-        trace!("put memregion {:?} index: {:?}", self.alloc, index);
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            // if let Ok(data_slice) = data.as_comm_slice() {
-            self.alloc.inner_alloc.put_buffer(
-                &self.scheduler,
-                self.counters.clone(),
-                data,
-                pe,
-                index,
-            )
-            // } else {
-            //     panic!("ERROR: put data src is not local");
-            // }
-        } else {
-            println!(
-                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.num_bytes(),
-                std::mem::size_of::<T>(),
-                self.num_elems
-            );
-            println!(
-                "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
-                data.len() * std::mem::size_of::<R>(),
-                std::mem::size_of::<R>(),
-                data.len(),
-                index
-            );
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!("put buffer memregion {:?} index: {:?}", self.alloc, index);
+        let data = data.into();
+        self.alloc
+            .inner_alloc
+            .put_buffer(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
     pub(crate) unsafe fn put_buffer_unmanaged<R: Remote>(
@@ -1022,48 +983,36 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         data: impl Into<MemregionRdmaInputInner<R>>,
     ) {
-        trace!("put memregion {:?} index: {:?}", self.alloc, index);
-        let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            self.alloc.inner_alloc.put_buffer_unmanaged(data, pe, index)
-        } else {
-            println!(
-                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.num_bytes(),
-                std::mem::size_of::<T>(),
-                self.num_elems
-            );
-            println!(
-                "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
-                data.len() * std::mem::size_of::<R>(),
-                std::mem::size_of::<R>(),
-                data.len(),
-                index
-            );
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put unmanaged buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!("put buffer memregion {:?} index: {:?}", self.alloc, index);
+        let data = data.into();
+        self.alloc.inner_alloc.put_buffer_unmanaged(data, pe, index)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all<R: Remote>(&self, offset: usize, data: R) -> RdmaHandle<R> {
-        if (offset + 1) * std::mem::size_of::<R>() < self.alloc.num_bytes() {
-            self.alloc
-                .inner_alloc
-                .put_all(&self.scheduler, self.counters.clone(), data, offset)
-        } else {
-            panic!("offset out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put all of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!("put all memregion {:?} index: {:?}", self.alloc, offset);
+        self.alloc
+            .inner_alloc
+            .put_all(&self.scheduler, self.counters.clone(), data, offset)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn put_all_unmanaged<R: Remote>(&self, offset: usize, data: R) {
-        if (offset + 1) * std::mem::size_of::<R>() < self.alloc.num_bytes() {
-            self.alloc.inner_alloc.put_all_unmanaged(data, offset);
-        } else {
-            panic!("offset out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put all unmanaged of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "put all unmanaged memregion {:?} index: {:?}",
+            self.alloc,
+            offset
+        );
+        self.alloc.inner_alloc.put_all_unmanaged(data, offset);
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1072,19 +1021,19 @@ impl<T: Remote> MemoryRegion<T> {
         offset: usize,
         data: impl Into<MemregionRdmaInputInner<R>>,
     ) -> RdmaHandle<R> {
-        let data = data.into();
-        if (offset + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            self.alloc.inner_alloc.put_all_buffer(
-                &self.scheduler,
-                self.counters.clone(),
-                data,
-                offset,
-            )
-        } else {
-            panic!("offset out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put all buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "put all buffer memregion {:?} index: {:?}",
+            self.alloc,
+            offset
+        );
+        let data = data.into();
+
+        self.alloc
+            .inner_alloc
+            .put_all_buffer(&self.scheduler, self.counters.clone(), data, offset)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1093,29 +1042,30 @@ impl<T: Remote> MemoryRegion<T> {
         offset: usize,
         data: impl Into<MemregionRdmaInputInner<R>>,
     ) {
-        let data = data.into();
-        if (offset + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            self.alloc
-                .inner_alloc
-                .put_all_buffer_unmanaged(data, offset);
-        } else {
-            panic!("offset out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant put all unmanaged buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "put all buffer unmanaged memregion {:?} index: {:?}",
+            self.alloc,
+            offset
+        );
+        let data = data.into();
+
+        self.alloc
+            .inner_alloc
+            .put_all_buffer_unmanaged(data, offset);
     }
 
     pub(crate) unsafe fn get<R: Remote>(&self, pe: usize, index: usize) -> RdmaGetHandle<R> {
-        trace!("at memregion {:?} index: {:?}", self.alloc, index);
-
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc
-                .inner_alloc
-                .get(&self.scheduler, self.counters.clone(), pe, index)
-        } else {
-            println!("{:?} {:?}", self.alloc.num_bytes(), index);
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant get of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!("get memregion {:?} index: {:?}", self.alloc, index);
+
+        self.alloc
+            .inner_alloc
+            .get(&self.scheduler, self.counters.clone(), pe, index)
     }
 
     //TODO: once we have a reliable asynchronos get wait mechanism, we return a request handle,
@@ -1134,20 +1084,20 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         len: usize,
     ) -> RdmaGetBufferHandle<R> {
-        trace!("get memregion {:?} index: {:?}", self.alloc, index);
-        // let data = data.into();
-        if (index + len) * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.get_buffer(
-                &self.scheduler,
-                self.counters.clone(),
-                pe,
-                index,
-                len,
-            )
-        } else {
-            println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, len,);
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant get buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "get buffer memregion pe: {:?} index: {:?} num_elems: {:?} alloc {:?}",
+            pe,
+            index,
+            len,
+            self.alloc
+        );
+
+        self.alloc
+            .inner_alloc
+            .get_buffer(&self.scheduler, self.counters.clone(), pe, index, len)
     }
 
     pub(crate) unsafe fn get_into_buffer<R: Remote, B: AsLamellarBuffer<R>>(
@@ -1156,34 +1106,22 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         data: LamellarBuffer<R, B>,
     ) -> RdmaGetIntoBufferHandle<R, B> {
-        trace!("get memregion {:?} index: {:?}", self.alloc, index);
-        // let data = data.into();
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            self.alloc.inner_alloc.get_into_buffer(
-                &self.scheduler,
-                self.counters.clone(),
-                pe,
-                index,
-                data,
-            )
-        } else {
-            println!(
-                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.num_bytes(),
-                std::mem::size_of::<T>(),
-                self.num_elems
-            );
-            println!(
-                "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
-                data.len() * std::mem::size_of::<R>(),
-                std::mem::size_of::<R>(),
-                data.len(),
-                index
-            );
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant get into buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "get into buffer memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+
+        self.alloc.inner_alloc.get_into_buffer(
+            &self.scheduler,
+            self.counters.clone(),
+            pe,
+            index,
+            data,
+        )
     }
 
     pub(crate) unsafe fn get_into_buffer_unmanaged<R: Remote, B: AsLamellarBuffer<R>>(
@@ -1192,160 +1130,19 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         data: LamellarBuffer<R, B>,
     ) {
-        trace!("get memregion {:?} index: {:?}", self.alloc, index);
-        if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-            && data.len() > 0
-        {
-            self.alloc
-                .inner_alloc
-                .get_into_buffer_unmanaged(pe, index, data);
-        } else {
-            println!(
-                "mem region bytes: {:?} sizeof elem {:?} len {:?}",
-                self.alloc.num_bytes(),
-                std::mem::size_of::<T>(),
-                self.num_elems
-            );
-            println!(
-                "data bytes: {:?} sizeof elem {:?} len {:?} index: {:?}",
-                data.len() * std::mem::size_of::<R>(),
-                std::mem::size_of::<R>(),
-                data.len(),
-                index
-            );
-            panic!("index out of bounds");
+        if std::any::type_name::<R>() != std::any::type_name::<T>() {
+            println!("cant get into unmanaged buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         }
+        trace!(
+            "get into buffer unmanaged memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+
+        self.alloc
+            .inner_alloc
+            .get_into_buffer_unmanaged(pe, index, data);
     }
-
-    // /// copy data from remote memory location into provided data buffer
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `pe` - id of remote PE to grab data from
-    // /// * `index` - offset into the remote memory window
-    // /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    // ///    data will be present within the buffer once this returns.
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) unsafe fn blocking_get<R: Remote, U: Into<LamellarMemoryRegion<R>>>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: U,
-    // ) {
-    //     let data = data.into();
-    //     if (index + data.len()) * std::mem::size_of::<R>() <= self.num_bytes {
-    //         let num_bytes = data.len() * std::mem::size_of::<R>();
-    //         if let Ok(ptr) = data.as_mut_ptr() {
-    //             let bytes = std::slice::from_raw_parts_mut(ptr as *mut u8, num_bytes);
-    //             // println!(
-    //             //     "getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-    //             //     pe,
-    //             //     index,
-    //             //     std::mem::size_of::<R>(),
-    //             //     data.len(),
-    //             //     num_bytes,
-    //             //     self.size,
-    //             //     self.num_bytes
-    //             // );
-    //             self.rdma
-    //                 .comm().iget(pe, self.addr + index * std::mem::size_of::<R>(), bytes);
-    //         //(remote pe, src, dst)
-    //         // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
-    //         } else {
-    //             panic!("ERROR: get data dst is not local");
-    //         }
-    //     } else {
-    //         println!("{:?} {:?} {:?}", self.size, index, data.len(),);
-    //         panic!("index out of bounds");
-    //     }
-    // }
-
-    // //we must ensure the the slice will live long enough and that it already exsists in registered memory
-    // #[tracing::instrument(skip(self, data), level = "debug")]
-    // pub(crate) unsafe fn put_comm_slice<R: Remote>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: CommSlice<R>,
-    // ) -> RdmaHandle<R> {
-    //     trace!(
-    //         "put commslice memregion {:?} index: {:?} {:?} {:?}",
-    //         self.alloc,
-    //         index,
-    //         data.usize_addr(),
-    //         data.len()
-    //     );
-    //     if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-    //         && data.len() > 0
-    //     {
-    //         // let num_bytes = data.len() * std::mem::size_of::<R>();
-    //         // let bytes = std::slice::from_raw_parts(data.as_ptr() as *const u8, num_bytes);
-    //         // println!(
-    //         //     "mem region len: {:?} index: {:?} data len{:?} num_bytes {:?}  from {:?} to {:x} ({:x} [{:?}])",
-    //         //     self.size,
-    //         //     index,
-    //         //     data.len(),
-    //         //     num_bytes,
-    //         //     data.as_ptr(),
-    //         //     self.addr,
-    //         //     self.addr + index * std::mem::size_of::<T>(),
-    //         //     pe,
-    //         // );
-    //         self.alloc.inner_alloc.put_buffer(
-    //             &self.scheduler,
-    //             self.counters.clone(),
-    //             data,
-    //             pe,
-    //             index * std::mem::size_of::<R>(),
-    //         )
-    //     } else {
-    //         println!(
-    //             "mem region len: {:?} index: {:?} data len{:?}",
-    //             self.num_elems,
-    //             index,
-    //             data.len()
-    //         );
-    //         panic!("index out of bounds");
-    //     }
-    // }
-
-    // /// copy data from remote memory location into provided data buffer
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `pe` - id of remote PE to grab data from
-    // /// * `index` - offset into the remote memory window
-    // /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    // ///    data will be present within the buffer once this returns.
-    // // #[tracing::instrument(skip_all)]
-    // pub(crate) unsafe fn get_comm_slice<R: Remote>(
-    //     &self,
-    //     pe: usize,
-    //     index: usize,
-    //     data: CommSlice<R>,
-    // ) -> RdmaGetIntoBufferHandle<R> {
-    //     // let data = data.into();
-    //     if (index + data.len()) * std::mem::size_of::<R>() <= self.alloc.num_bytes()
-    //         && data.len() > 0
-    //     {
-    //         // let num_bytes = data.len() * std::mem::size_of::<R>();
-    //         // let bytes = std::slice::from_raw_parts_mut(data.as_mut_ptr() as *mut u8, num_bytes);
-    //         // println!("getting {:?} {:?} {:?} {:?} {:?} {:?} {:?}",pe,index,std::mem::size_of::<R>(),data.len(), num_bytes,self.size, self.num_bytes);
-
-    //         self.alloc.inner_alloc.get_into_buffer(
-    //             &self.scheduler,
-    //             self.counters.clone(),
-    //             pe,
-    //             index * std::mem::size_of::<R>(),
-    //             LamellarBuffer::<R, CommSlice<R>>::from_comm_slice(data),
-    //         )
-    //         //(remote pe, src, dst)
-    //         // println!("getting {:?} {:?} [{:?}] {:?} {:?} {:?}",pe,self.addr + index * std::mem::size_of::<T>(),index,data.addr(),data.len(),num_bytes);
-    //     } else {
-    //         println!("{:?} {:?} {:?}", self.alloc.num_bytes(), index, data.len(),);
-    //         panic!("index out of bounds");
-    //     }
-    // }
 
     pub(crate) fn atomic_op<R: Remote>(
         &self,
@@ -1353,28 +1150,18 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         op: AtomicOp<R>,
     ) -> AtomicOpHandle<R> {
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.atomic_op(
-                &self.scheduler,
-                self.counters.clone(),
-                op,
-                pe,
-                index * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!("{:?} {:?} ", self.alloc.num_bytes(), index,);
-            panic!("index out of bounds");
-        }
+        trace!("atomic_op memregion {:?} index: {:?}", self.alloc, index);
+        self.alloc
+            .inner_alloc
+            .atomic_op(&self.scheduler, self.counters.clone(), op, pe, index)
     }
     pub(crate) fn atomic_op_unmanaged<R: Remote>(&self, pe: usize, index: usize, op: AtomicOp<R>) {
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc
-                .inner_alloc
-                .atomic_op_unmanaged(op, pe, index * std::mem::size_of::<R>())
-        } else {
-            println!("{:?} {:?} ", self.alloc.num_bytes(), index,);
-            panic!("index out of bounds");
-        }
+        trace!(
+            "atomic_op unmanaged memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc.inner_alloc.atomic_op_unmanaged(op, pe, index)
     }
 
     pub(crate) fn atomic_op_all<R: Remote>(
@@ -1382,27 +1169,22 @@ impl<T: Remote> MemoryRegion<T> {
         offset: usize,
         op: AtomicOp<R>,
     ) -> AtomicOpHandle<R> {
-        if offset * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.atomic_op_all(
-                &self.scheduler,
-                self.counters.clone(),
-                op,
-                offset * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!("{:?} {:?} ", self.alloc.num_bytes(), offset,);
-            panic!("offset out of bounds");
-        }
+        trace!(
+            "atomic_op_all memregion {:?} index: {:?}",
+            self.alloc,
+            offset
+        );
+        self.alloc
+            .inner_alloc
+            .atomic_op_all(&self.scheduler, self.counters.clone(), op, offset)
     }
     pub(crate) fn atomic_op_all_unmanaged<R: Remote>(&self, offset: usize, op: AtomicOp<R>) {
-        if offset * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc
-                .inner_alloc
-                .atomic_op_all_unmanaged(op, offset * std::mem::size_of::<R>())
-        } else {
-            println!("{:?} {:?} ", self.alloc.num_bytes(), offset,);
-            panic!("offset out of bounds");
-        }
+        trace!(
+            "atomic_op_all unmanaged memregion {:?} index: {:?}",
+            self.alloc,
+            offset
+        );
+        self.alloc.inner_alloc.atomic_op_all_unmanaged(op, offset)
     }
 
     pub(crate) fn atomic_fetch_op<R: Remote>(
@@ -1411,53 +1193,24 @@ impl<T: Remote> MemoryRegion<T> {
         index: usize,
         op: AtomicOp<R>,
     ) -> AtomicFetchOpHandle<R> {
-        if index * std::mem::size_of::<R>() <= self.alloc.num_bytes() {
-            self.alloc.inner_alloc.atomic_fetch_op(
-                &self.scheduler,
-                self.counters.clone(),
-                op,
-                pe,
-                index * std::mem::size_of::<R>(),
-            )
-        } else {
-            println!("{:?} {:?} ", self.alloc.num_bytes(), index,);
-            panic!("index out of bounds");
-        }
+        trace!(
+            "atomic_fetch_op memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc.inner_alloc.atomic_fetch_op(
+            &self.scheduler,
+            self.counters.clone(),
+            op,
+            pe,
+            index,
+        )
     }
 
     pub(crate) fn wait_all(&self) {
         self.rdma.comm().wait();
     }
 
-    // #[allow(dead_code)]
-    #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) unsafe fn fill_from_remote_addr<R: Remote>(
-    //     &self,
-    //     my_index: usize,
-    //     pe: usize,
-    //     addr: usize,
-    //     len: usize,
-    // ) {
-    //     if (my_index + len) * std::mem::size_of::<R>() <= self.num_bytes {
-    //         let num_bytes = len * std::mem::size_of::<R>();
-    //         let my_offset = self.addr + my_index * std::mem::size_of::<R>();
-    //         let bytes = std::slice::from_raw_parts_mut(my_offset as *mut u8, num_bytes);
-    //         let local_addr = self.rdma.comm().local_addr(pe, addr);
-    //         self.rdma.comm().iget(pe, local_addr, bytes);
-    //     } else {
-    //         println!(
-    //             "mem region len: {:?} index: {:?} data len{:?}",
-    //             self.size, my_index, len
-    //         );
-    //         panic!("index out of bounds");
-    //     }
-    // }
-
-    // #[allow(dead_code)]
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) fn len(&self) -> usize {
-    //     self.alloc.info().len() / std::mem::size_of::<T>()
-    // }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn addr(&self) -> MemResult<CommAllocAddr> {
         if self.mode == Mode::Remote {

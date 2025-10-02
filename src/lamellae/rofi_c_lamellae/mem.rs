@@ -3,6 +3,8 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 use tracing::{debug, trace};
 
 use crate::{
+    config,
+    env_var::HeapMode,
     lamellae::{
         comm::{
             error::{AllocError, AllocResult},
@@ -39,7 +41,7 @@ impl CommMem for RofiCComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn free(&self, alloc: CommAlloc) {
         //maybe need to do something more intelligent on the drop of the rofi_c_alloc
-        debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
+        assert!(alloc.alloc_type == CommAllocType::Fabric);
         let addr = alloc.comm_addr().into();
         rofi_c_release(addr);
         self.fabric_allocs.write().remove(&addr);
@@ -74,7 +76,7 @@ impl CommMem for RofiCComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
         trace!("freeing rt alloc: {:x}", alloc.comm_addr());
-        debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        assert!(alloc.alloc_type == CommAllocType::RtHeap);
         if let CommAllocInner::Raw(addr, _) = alloc.info {
             trace!("freeing raw alloc: {:x}", addr);
             let allocs = self.runtime_allocs.read();
@@ -101,6 +103,9 @@ impl CommMem for RofiCComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
+        if config().heap_mode == HeapMode::Static {
+            panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
+        }
         let size = std::cmp::max(
             min_size * 2 * self.num_pes,
             ROFI_SIZE.load(Ordering::SeqCst),

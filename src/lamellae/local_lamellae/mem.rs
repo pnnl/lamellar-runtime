@@ -37,7 +37,7 @@ impl CommMem for LocalComm {
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn free(&self, alloc: CommAlloc) {
-        debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
+        assert!(alloc.alloc_type == CommAllocType::Fabric);
         let mut allocs = self.allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
             trace!("freeing alloc: {:x}", alloc.comm_addr());
@@ -71,7 +71,7 @@ impl CommMem for LocalComm {
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
-        debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        assert!(alloc.alloc_type == CommAllocType::RtHeap);
         let mut allocs = self.heap_allocs.lock();
         if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
             trace!("freeing alloc: {:x}", alloc.comm_addr());

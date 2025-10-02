@@ -39,41 +39,23 @@ pub(crate) struct LocalFuture<T: Remote> {
 }
 
 impl<T: Remote> LocalFuture<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn inner_put_buf(&self, src: &MemregionRdmaInputInner<T>) {
-        // let dst = unsafe { self.alloc.as_mut_ptr::<T>().add(self.offset) };
-
-        self.alloc.as_mut_slice()[self.index..src.len()].copy_from_slice(src.as_slice());
-        // let src = src.as_slice();
-
-        // if !(src.contains(&dst.addr()) || src.contains(&(dst.addr() + src.len()))) {
-        //     unsafe {
-        //         std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len());
-        //     }
-        // } else {
-        //     unsafe {
-        //         std::ptr::copy(src.as_ptr(), dst, src.len());
-        //     }
-        // }
-    }
-
     fn exec_op(&mut self) {
         match &mut self.op {
             AllocOp::Put(src) => unsafe {
-                // let dst = self.alloc.as_mut_ptr::<T>().add(self.offset);
-                // dst.write(*src);
-                self.alloc.as_mut_slice()[self.index] = *src;
+                let alloc_slice = self.alloc.as_mut_slice();
+                assert!(self.index < alloc_slice.len());
+                alloc_slice[self.index] = *src;
             },
-            AllocOp::PutBuf(src) => {
-                // self.inner_put_buf(src);
-                self.alloc.as_mut_slice()[self.index..src.len()].copy_from_slice(src.as_slice());
-            }
+            AllocOp::PutBuf(src) => unsafe {
+                let alloc_slice = self.alloc.as_mut_slice();
+                assert!(self.index + src.len() < alloc_slice.len());
+                alloc_slice[self.index..src.len()].copy_from_slice(src.as_slice());
+            },
         }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
         self.spawned = true;
-        // Ok(())
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -127,13 +109,10 @@ impl<T: Remote> LocalGetFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         unsafe {
-            self.result.write(self.alloc.as_mut_slice()[self.index]);
+            let alloc_slice = self.alloc.as_mut_slice();
+            assert!(self.index < alloc_slice.len());
+            self.result.write(alloc_slice[self.index]);
         }
-
-        // let src = unsafe { self.alloc.as_mut_ptr::<T>().add(self.offset) };
-        // unsafe {
-        //     self.result.as_mut_ptr().write(src.read());
-        // }
     }
 
     pub(crate) fn block(mut self) -> T {
@@ -213,18 +192,15 @@ pub(crate) struct LocalGetBufferFuture<T> {
 impl<T: Remote> LocalGetBufferFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_mut_slice() };
+        assert!(self.index + self.len <= alloc_slice.len());
         let mut dst = Vec::<T>::with_capacity(self.len);
         unsafe {
             dst.set_len(self.len);
         }
         dst.as_mut_slice()
-            .copy_from_slice(&self.alloc.as_mut_slice()[self.index..(self.index + self.len)]);
+            .copy_from_slice(&alloc_slice[self.index..(self.index + self.len)]);
         self.result.write(dst);
-
-        // let src = unsafe { self.alloc.as_mut_ptr::<T>().add(self.offset) };
-        // unsafe {
-        //     self.result.as_mut_ptr().write(src.read());
-        // }
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
@@ -303,10 +279,12 @@ pub(crate) struct LocalGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 impl<T: Remote, B: AsLamellarBuffer<T>> LocalGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         let len = self.buffer.len();
+        let alloc_slice = unsafe { self.alloc.as_mut_slice() };
+        assert!(self.index + len <= alloc_slice.len());
 
         self.buffer
             .as_mut_slice()
-            .copy_from_slice(&self.alloc.as_mut_slice()[self.index..(self.index + len)]);
+            .copy_from_slice(&alloc_slice[self.index..(self.index + len)]);
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
@@ -364,6 +342,7 @@ impl CommAllocRdma for Arc<LocalAlloc> {
     ) -> RdmaHandle<T> {
         // self.put_amt
         //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
+
         LocalFuture {
             alloc: self.clone(),
             index: offset, //no need to go to bytes since local lamellae, we can reason in number of T
@@ -407,16 +386,9 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         offset: usize,
     ) {
         let src = src.into();
-        self.as_mut_slice()[offset..(offset + src.len())].copy_from_slice(src.as_slice());
-        // let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
-        // let src = src.into();
-        // if !(src.contains(&dst.addr()) || src.contains(&(dst.addr() + src.len()))) {
-        //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len()) };
-        // } else {
-        //     unsafe {
-        //         std::ptr::copy(src.as_ptr(), dst, src.len());
-        //     }
-        // }
+        let alloc_slice = unsafe { self.as_mut_slice() };
+        assert!(offset + src.len() <= alloc_slice.len());
+        alloc_slice[offset..(offset + src.len())].copy_from_slice(src.as_slice());
     }
     fn put_all<T: Remote>(
         &self,
@@ -440,12 +412,9 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         .into()
     }
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
-        //
-        // let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
-        // unsafe {
-        //     dst.write(src);
-        // }
-        self.as_mut_slice()[offset] = src;
+        let alloc_slice = unsafe { self.as_mut_slice() };
+        assert!(offset < alloc_slice.len());
+        alloc_slice[offset] = src;
     }
     fn put_all_buffer<T: Remote>(
         &self,
@@ -474,17 +443,9 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         offset: usize,
     ) {
         let src = src.into();
-        self.as_mut_slice()[offset..(offset + src.len())].copy_from_slice(src.as_slice());
-        //
-        // let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
-        // let src = src.into();
-        // if !(src.contains(&dst.addr()) || src.contains(&(dst.addr() + src.len()))) {
-        //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst, src.len()) };
-        // } else {
-        //     unsafe {
-        //         std::ptr::copy(src.as_ptr(), dst, src.len());
-        //     }
-        // }
+        let alloc_slice = unsafe { self.as_mut_slice() };
+        assert!(offset + src.len() <= alloc_slice.len());
+        alloc_slice[offset..(offset + src.len())].copy_from_slice(src.as_slice());
     }
     fn get<T: Remote>(
         &self,
@@ -548,6 +509,8 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         offset: usize,
         dst: LamellarBuffer<T, B>,
     ) {
-        self.as_mut_slice()[offset..(offset + dst.len())].copy_from_slice(dst.as_slice());
+        let alloc_slice = unsafe { self.as_mut_slice() };
+        assert!(offset + dst.len() <= alloc_slice.len());
+        alloc_slice[offset..(offset + dst.len())].copy_from_slice(dst.as_slice());
     }
 }

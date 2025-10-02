@@ -531,7 +531,7 @@ impl Ofi {
                 Ok(_) => break,
                 Err(error) => {
                     if matches!(error.kind, libfabric::error::ErrorKind::TryAgain) {
-                        trace!("need to progress, retrying put");
+                        // trace!("need to progress, retrying put");
                         self.progress()?;
                     } else {
                         return Err(error);
@@ -615,11 +615,17 @@ impl Ofi {
             size
         };
 
+        println!("Allocating aligned size: {} aligned", aligned_size);
+        println!("{:?}", std::backtrace::Backtrace::capture());
+
         // Map memory of aligned size
         let mut mem = memmap::MmapOptions::new()
             .len(aligned_size)
             .map_anon()
-            .expect("Error in allocating aligned memory");
+            .expect(&format!(
+                "Error in allocating aligned memory of size: {} {}",
+                aligned_size, size,
+            ));
 
         // Initialize mapped memory to zeros
         mem.iter_mut().map(|x| *x = 0).count();
@@ -1015,6 +1021,11 @@ impl AllocInfoManager {
         remote_pe: usize,
         remote_addr: usize,
     ) -> Option<(CommAlloc, usize)> {
+        trace!(
+            "looking for remote_addr: {:x} on pr {:x}",
+            remote_pe,
+            remote_addr
+        );
         let table = self.mr_info_table.read();
         let alloc_info = table
             .iter()
@@ -1149,7 +1160,7 @@ impl LibfabricAlloc {
     pub(crate) unsafe fn as_mut_slice<T: Copy>(&self) -> &mut [T] {
         unsafe {
             std::slice::from_raw_parts_mut(
-                self.mem.as_ptr() as *mut T,
+                self.start() as *mut T,
                 self.num_bytes() / std::mem::size_of::<T>(),
             )
         }
@@ -1213,7 +1224,8 @@ impl LibfabricAlloc {
         src_addr: &[T],
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
-        let offset = offset * std::mem::size_of::<T>();
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
@@ -1221,9 +1233,13 @@ impl LibfabricAlloc {
 
         let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
         trace!(
-            "Remote destination address for PE {}: {:?}",
+            "Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}",
             pe,
-            remote_dst_addr
+            remote_alloc_info.mem_address(),
+            offset,
+            std::mem::size_of::<T>(),
+            src_addr.len(),
+            remote_dst_addr.as_ptr()
         );
 
         let remote_key = remote_alloc_info.key();
@@ -1231,7 +1247,7 @@ impl LibfabricAlloc {
             trace!(
                 "Injecting write to PE {} at address {:?}",
                 pe,
-                remote_dst_addr
+                remote_dst_addr.as_ptr()
             );
             self.ofi.post_put(|| unsafe {
                 self.ofi.ep.inject_write_to(
@@ -1288,6 +1304,8 @@ impl LibfabricAlloc {
         dst_addr: &mut [T],
         sync: bool,
     ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
@@ -1361,11 +1379,14 @@ impl LibfabricAlloc {
         offset: usize,
         op: &LamellarAtomicOp<T>,
     ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations, offset + 1 because atomics operate on a single element and we verifying we arent missaligned
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_dst_addr =
+            unsafe { remote_alloc_info.mem_address().as_type::<OFI>().add(offset) };
         let remote_key = remote_alloc_info.key();
 
         let src = op.src().expect("Atomic operation has no source");
@@ -1423,11 +1444,13 @@ impl LibfabricAlloc {
         op: &LamellarAtomicOp<T>,
         result: &mut [T],
     ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations, offset + 1 because atomics operate on a single element and we verifying we arent missaligned
         let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
         let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);

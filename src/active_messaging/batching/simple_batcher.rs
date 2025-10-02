@@ -1,13 +1,14 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
-        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeAM, Ser,
+        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeUtil, Ser,
         SerializeHeader,
     },
 };
 use batching::*;
 
 use async_trait::async_trait;
+use tracing::debug;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
 
@@ -293,6 +294,7 @@ impl Batcher for SimpleBatcher {
     ) {
         let mut i = 0;
         trace!("executing batched msg {:?}", ser_data.data_len());
+        let mut cnts = HashMap::new();
         while i < ser_data.data_len() {
             // trace!("before i: {:?} dl {:?} cl {:?}", i, ser_data.data_len(), *CMD_LEN);
             //data.len() {
@@ -305,19 +307,35 @@ impl Batcher for SimpleBatcher {
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
             match cmd {
-                Cmd::Am => self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame),
+                Cmd::Am => {
+                    *cnts.entry(Cmd::Am).or_insert(0) += 1;
+                    self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame)
+                }
                 Cmd::ReturnAm => {
+                    *cnts.entry(Cmd::ReturnAm).or_insert(0) += 1;
                     self.exec_return_am(&msg, &ser_data, &mut i, &lamellae, ame)
                         .await
                 }
-                Cmd::Data => ame.exec_data_am(&msg, &mut i, &mut ser_data).await,
-                Cmd::Unit => ame.exec_unit_am(&msg, &ser_data, &mut i).await,
+                Cmd::Data => {
+                    *cnts.entry(Cmd::Data).or_insert(0) += 1;
+                    ame.exec_data_am(&msg, &mut i, &mut ser_data).await
+                }
+                Cmd::Unit => {
+                    *cnts.entry(Cmd::Unit).or_insert(0) += 1;
+                    ame.exec_unit_am(&msg, &ser_data, &mut i).await
+                }
                 Cmd::BatchedMsg => {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")
                 }
             }
             // trace!("after i: {:?} dl {:?} cl {:?}", i, ser_data.data_len(), *CMD_LEN);
         }
+        debug!(
+            "finished batched msg from {:?} {:?} {:?}",
+            msg.src,
+            cnts,
+            ser_data.data_len(),
+        );
     }
 }
 
@@ -342,7 +360,7 @@ impl SimpleBatcher {
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn create_tx_task(batch: SimpleBatcherInner) {
-        // println!("[{:?}] create_tx_task", std::thread::current().id());
+        trace!("[{:?}] create_tx_task", std::thread::current().id());
         let (buf, size) = batch.swap();
 
         if size > 0 {
@@ -399,14 +417,14 @@ impl SimpleBatcher {
                     }
                 }
             }
-            // println!(
-            //     "[{:?}] sending batch of size {} {} to pe {:?} {:?}",
-            //     std::thread::current().id(),
-            //     i,
-            //     data_buf.len(),
-            //     batch.pe,
-            //     cnts
-            // );
+            debug!(
+                "[{:?}] sending batch of size {} {:?} to pe {:?} {:?}",
+                std::thread::current().id(),
+                i,
+                data_buf,
+                batch.pe,
+                cnts
+            );
             lamellae.send_to_pes_async(batch.pe, arch, data_buf).await;
         }
     }
@@ -512,7 +530,7 @@ impl SimpleBatcher {
             async_std::task::yield_now().await;
             match err.downcast_ref::<AllocError>() {
                 Some(AllocError::OutOfMemoryError(_)) => {
-                    lamellae.comm().alloc_pool(size * 2);
+                    lamellae.request_new_alloc(size * 2);
                 }
                 _ => panic!("unhanlded error!! {:?}", err),
             }

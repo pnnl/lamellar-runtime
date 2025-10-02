@@ -625,7 +625,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
                 Distribution::Block => {
                     let cur_index = 0;
 
-                    let mut buf_slice = buf.as_mut_slice();
+                    let buf_slice = buf.as_mut_slice();
                     let buf_u8_slice = std::slice::from_raw_parts_mut(
                         buf_slice.as_mut_ptr() as *mut u8,
                         buf_slice.len() * std::mem::size_of::<T>(),
@@ -636,7 +636,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
                     }
                 }
                 Distribution::Cyclic => {
-                    let mut buf_slice = buf.as_mut_slice();
+                    let buf_slice = buf.as_mut_slice();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;

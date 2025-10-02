@@ -690,10 +690,17 @@ impl CommAllocRdma for Arc<UcxAlloc> {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        len: usize,
         pe: usize,
         offset: usize,
+        len: usize,
     ) -> RdmaGetBufferHandle<T> {
+        trace!(
+            "get buffer ucxalloc pe: {:?} index: {:?} num_elems: {:?} alloc {:?}",
+            pe,
+            offset,
+            len,
+            self
+        );
         UcxGetBufferFuture {
             alloc: self.clone(),
             pe,
@@ -741,17 +748,6 @@ impl CommAllocRdma for Arc<UcxAlloc> {
             let len = dst.len();
             dst.as_mut_slice()
                 .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
-
-            // let src = self.alloc.start() + self.offset;
-            // if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
-            //     unsafe {
-            //         std::ptr::copy_nonoverlapping(src as *const T, dst.as_mut_ptr(), dst.len());
-            //     }
-            // } else {
-            //     unsafe {
-            //         std::ptr::copy(src as *const T, dst.as_mut_ptr(), dst.len());
-            //     }
-            // }
         }
     }
 }

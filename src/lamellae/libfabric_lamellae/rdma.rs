@@ -448,12 +448,23 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
         // self.put_amt
         //     .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
 
+        trace!(
+            "put unamanaged dst: {pe}  offset: {offset} size_of<T> {}",
+            std::mem::size_of::<T>()
+        );
         if pe != self.ofi.my_pe {
             unsafe {
                 LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
             };
         } else {
-            unsafe { self.as_mut_slice()[offset] = src };
+            unsafe {
+                trace!(
+                    "put unmanaged local copy {:?} {:?}",
+                    self.as_mut_slice::<T>().as_ptr(),
+                    self.as_mut_slice::<T>().as_ptr().add(offset)
+                )
+            };
+            unsafe { self.as_mut_slice::<T>()[offset] = src };
             // let dst = CommAllocAddr(self.start() + offset);
             // unsafe { dst.as_mut_ptr::<T>().write(src) };
         }
@@ -494,7 +505,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
             unsafe { LibfabricAlloc::inner_put(&self, pe, offset, src.as_slice(), false) };
         } else {
             unsafe {
-                self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice())
+                self.as_mut_slice::<T>()[offset..offset + src.len()].copy_from_slice(src.as_slice())
             };
             // let dst = self.start() + offset;
             // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
@@ -651,7 +662,7 @@ impl CommAllocRdma for Arc<LibfabricAlloc> {
             let len = dst.len();
             unsafe {
                 dst.as_mut_slice()
-                    .copy_from_slice(&self.as_mut_slice()[offset..offset + len]);
+                    .copy_from_slice(&self.as_mut_slice::<T>()[offset..offset + len]);
             }
         }
     }

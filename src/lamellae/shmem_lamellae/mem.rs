@@ -3,6 +3,8 @@ use std::sync::atomic::Ordering;
 use tracing::trace;
 
 use crate::{
+    config,
+    env_var::HeapMode,
     lamellae::{
         comm::{
             error::{AllocError, AllocResult},
@@ -49,7 +51,7 @@ impl CommMem for ShmemComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn free(&self, alloc: CommAlloc) {
         //maybe need to do something more intelligent on the drop of the shmem_alloc
-        debug_assert!(alloc.alloc_type == CommAllocType::Fabric);
+        assert!(alloc.alloc_type == CommAllocType::Fabric);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
                 println!("freeing raw alloc: {:x} should we ever be here?", addr);
@@ -101,7 +103,7 @@ impl CommMem for ShmemComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
-        debug_assert!(alloc.alloc_type == CommAllocType::RtHeap);
+        assert!(alloc.alloc_type == CommAllocType::RtHeap);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
                 trace!("freeing rt alloc: {:x}", addr);
@@ -141,6 +143,9 @@ impl CommMem for ShmemComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn alloc_pool(&self, min_size: usize) {
+        if config().heap_mode == HeapMode::Static {
+            panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
+        }
         let size = std::cmp::max(
             min_size * 2 * self.num_pes,
             SHMEM_SIZE.load(Ordering::SeqCst),

@@ -59,7 +59,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use tracing::trace;
+use tracing::{debug, trace};
 
 lazy_static! {
     static ref SERIALIZE_HEADER_LEN: usize =
@@ -130,7 +130,7 @@ impl Default for Backend {
                 #[cfg(feature = "enable-ucx")]
                 return Backend::Ucx;
                 #[cfg(not(feature = "enable-ucx"))]
-                panic!("unable to set libfabric backend, recompile with 'enable-ucx' feature")
+                panic!("unable to set ucx backend, recompile with 'enable-ucx' feature")
             }
             // "libfabasync" => {
             //     #[cfg(feature = "enable-libfabric")]
@@ -243,7 +243,7 @@ impl SerializedData {
             ref_cnt.load(Ordering::SeqCst)
         );
         if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
-            trace!("freeing serialized data from addr {:x} ", alloc_addr);
+            debug!("freeing serialized data from addr {:x} ", alloc_addr);
             comm.rt_free(CommAlloc {
                 inner_alloc: CommAllocInner::Raw(alloc_addr, *alloc_size),
                 alloc_type: CommAllocType::RtHeap,
@@ -555,7 +555,7 @@ pub(crate) trait Ser {
     ) -> Result<SerializedData, anyhow::Error>;
 }
 
-#[enum_dispatch(Ser, LamellaeAM, LamellaeShutdown)]
+#[enum_dispatch(Ser, LamellaeUtil, LamellaeShutdown)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
     #[cfg(feature = "rofi-c")]
@@ -597,13 +597,15 @@ impl Lamellae {
 
 #[async_trait]
 #[enum_dispatch]
-pub(crate) trait LamellaeAM: Send {
+pub(crate) trait LamellaeUtil: Send {
     async fn send_to_pes_async(
         &self,
         pe: Option<usize>,
         team: Arc<LamellarArchRT>,
         data: SerializedData,
     );
+
+    fn request_new_alloc(&self, min_size: usize);
 }
 
 #[allow(unused_variables)]
@@ -635,9 +637,7 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-ucx")]
-        Backend::Ucx => {
-            LamellaeBuilder::UcxBuilder(UcxBuilder::new())
-        }
+        Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
         // #[cfg(feature = "enable-libfabric")]
         // Backend::LibfabricAsync => {
         //     let provider = config().rofi_provider.clone();

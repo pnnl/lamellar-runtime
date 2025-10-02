@@ -1,4 +1,5 @@
 use futures_util::stream::FuturesOrdered;
+use tracing::trace;
 
 use crate::{
     array::{private::LamellarArrayPrivate, r#unsafe::*, *},
@@ -70,6 +71,7 @@ impl<T: Dist> UnsafeArray<T> {
         index: usize, //relative to inner
         num_elems: usize,
     ) -> FuturesOrdered<RdmaGetBufferHandle<T>> {
+        trace!("rdma_block_get_buffer index {index} num_elems {num_elems}");
         let global_index = index + self.inner.offset;
         let start_pe = match self.inner.pe_for_dist_index(index) {
             Some(pe) => pe,
@@ -86,6 +88,7 @@ impl<T: Dist> UnsafeArray<T> {
         let mut dist_index = global_index;
         let mut buf_index = 0;
         let mut rdma_requests = FuturesOrdered::new();
+        trace!("rdma_block_get_buffer start pe {start_pe} end pe {end_pe}");
         for pe in start_pe..=end_pe {
             let mut full_num_elems_on_pe = self.inner.orig_elem_per_pe;
             if pe < self.inner.orig_remaining_elems {

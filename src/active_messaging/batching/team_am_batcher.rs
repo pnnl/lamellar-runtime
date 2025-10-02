@@ -1,7 +1,7 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
-        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeAM, Ser,
+        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeUtil, Ser,
         SerializeHeader,
     },
     lamellar_arch::LamellarArchRT,
@@ -711,7 +711,7 @@ impl TeamAmBatcher {
             async_std::task::yield_now().await;
             match err.downcast_ref::<AllocError>() {
                 Some(AllocError::OutOfMemoryError(_)) => {
-                    lamellae.comm().alloc_pool(size * 2);
+                    lamellae.request_new_alloc(size * 2);
                 }
                 _ => panic!("unhanlded error!! {:?}", err),
             }

@@ -523,18 +523,6 @@ impl<T: Dist> GenericAtomicArray<T> {
 
     //#[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
-        // if let Some(ref locks) = *self.locks {
-        //     let start_index = (index * std::mem::size_of::<T>()) / self.orig_t_size;
-        //     let end_index = ((index + 1) * std::mem::size_of::<T>()) / self.orig_t_size;
-        //     let mut guards = vec![];
-        //     for i in start_index..end_index {
-        //         guards.push(locks[i].lock())
-        //     }
-        //     Some(guards)
-        // } else {
-        //     None
-        // }
-        // println!("trying to lock {:?}",index);
         let index = self
             .array
             .inner

@@ -4,10 +4,10 @@ pub(crate) mod mem;
 pub(crate) mod rdma;
 
 use super::{
-    AllocationType, Comm, CommInfo, Lamellae, LamellaeAM, LamellaeInit, LamellaeShutdown, Ser,
+    AllocationType, Comm, CommInfo, Lamellae, LamellaeInit, LamellaeShutdown, LamellaeUtil, Ser,
     SerializeHeader, SerializedData,
 };
-use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use crate::{config, env_var::HeapMode, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::LocalComm;
 
 use async_trait::async_trait;
@@ -87,12 +87,15 @@ impl LamellaeShutdown for Local {
 }
 
 #[async_trait]
-impl LamellaeAM for Local {
+impl LamellaeUtil for Local {
     async fn send_to_pes_async(
         &self,
         _pe: Option<usize>,
         _team: Arc<LamellarArchRT>,
         _data: SerializedData,
     ) {
+    }
+    fn request_new_alloc(&self, min_size: usize) {
+        panic!("should never request new alloc in local")
     }
 }
