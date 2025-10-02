@@ -25,6 +25,7 @@ use syn::spanned::Spanned;
 // use syn::visit_mut::VisitMut;
 use syn::parse::{Parse, ParseStream, Result};
 use syn::Token;
+
 fn type_name(ty: &syn::Type) -> Option<String> {
     match ty {
         syn::Type::Path(syn::TypePath { qself: None, path }) => {
@@ -177,7 +178,7 @@ fn check_for_am_group(args: &Punctuated<syn::Meta, Token![,]>) -> bool {
 /// impl LamellarAM for HelloWorld {
 ///     async fn exec(self) {
 ///         println!(
-///             "{:?}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             "{:?}  on PE {:?} of {:?} using thread {:?}, received from PE {}",
 ///             self.msg,
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
@@ -216,7 +217,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
-///     originial_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
+///     original_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
 /// }
 ///
 /// #[lamellar::local_am]
@@ -227,22 +228,22 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe.lock(),
+///             self.original_pe.lock(),
 ///         );
 ///     }
 /// }
-/// fn main() {
-///     let world = lamellar::LamellarWorldBuilder::new().build();
-///     let my_pe = Arc::new(Mutex::new(world.my_pe()));
-///     world.barrier();
 ///
-///     let request = world.exec_am_local(HelloWorld {
-///         originial_pe: my_pe,
-///     });
+/// let world = lamellar::LamellarWorldBuilder::new().build();
+/// let my_pe = Arc::new(Mutex::new(world.my_pe()));
+/// world.barrier();
 ///
-///     //wait for the request to complete
-///     request.block();
-/// } //when world drops there is an implicit world.barrier() that occurs
+/// let request = world.exec_am_local(HelloWorld {
+///     original_pe: my_pe,
+/// });
+///
+/// //wait for the request to complete
+/// request.block();
+/// //when `world` drops there is an implicit world.barrier() that occurs
 ///```
 #[allow(non_snake_case)]
 #[proc_macro_error]
@@ -430,12 +431,12 @@ fn parse_am(
 /// impl LamellarAM for HelloWorld {
 ///     async fn exec(self) {
 ///         println!(
-///             "{:?}  on PE {:?} of {:?} using thread {:?}, received from PE {:?}",
+///             "{:?}  on PE {:?} of {:?} using thread {:?}, received from PE {}",
 ///             self.msg,
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe,
+///             self.original_pe,
 ///         );
 ///     }
 /// }
@@ -447,7 +448,7 @@ fn parse_am(
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
 ///         originial_pe: my_pe,
-///         msg: msg,
+///         msg: msg.into(),
 ///     });
 ///
 ///     //wait for the request to complete
@@ -471,6 +472,7 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 ///```
 /// use lamellar::active_messaging::prelude::*;
+/// use std::sync::{Arc, Mutex};
 ///
 /// use std::sync::{Arc, Mutex};
 ///
@@ -894,7 +896,6 @@ impl Parse for AmGroups {
 #[proc_macro_error]
 #[proc_macro]
 pub fn typed_am_group(input: TokenStream) -> TokenStream {
-    // println!("typed_am_group {:?}",input);
     let am_group: AmGroups = syn::parse(input).unwrap();
     let am_type = am_group.am;
     let team = am_group.team;

@@ -99,7 +99,7 @@ impl WorkStealingThread {
                     }
                     if worker.status.load(Ordering::SeqCst) == SchedulerStatus::Finished as u8
                         && timer.elapsed().as_secs_f64() > config().deadlock_timeout
-                        && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
+                        && (!worker.work_q.is_empty() || !worker.work_inj.is_empty())
                     {
                         println!(
                             "work_q size {:?} work inj size {:?} ", // num_tasks {:?}",
@@ -168,7 +168,7 @@ impl LamellarExecutor for WorkStealing {
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.schedule();
         task.detach();
@@ -185,7 +185,7 @@ impl LamellarExecutor for WorkStealing {
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.schedule();
         task.detach();
@@ -202,7 +202,7 @@ impl LamellarExecutor for WorkStealing {
         let schedule = move |runnable| imm_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.schedule();
         // runnable.run(); //try to run immediately
@@ -283,18 +283,12 @@ impl LamellarExecutor for WorkStealing {
         let t = rand::distr::Uniform::try_from(0..self.work_stealers.len()).expect("error getting uniform distribution");
         let ret = if !self.imm_inj.is_empty() {
             self.imm_inj.steal().success()
+        } else if self.work_flag.compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed) == Ok(0) {
+            let ret = self.work_inj.steal().success();
+            self.work_flag.store(0, Ordering::SeqCst);
+            ret
         } else {
-            if self
-                .work_flag
-                .compare_exchange(0, 1, Ordering::SeqCst, Ordering::Relaxed)
-                == Ok(0)
-            {
-                let ret = self.work_inj.steal().success();
-                self.work_flag.store(0, Ordering::SeqCst);
-                ret
-            } else {
-                self.work_stealers[t.sample(&mut rng)].steal().success()
-            }
+            self.work_stealers[t.sample(&mut rng)].steal().success()
         };
         if let Some(runnable) = ret {
             runnable.run();
@@ -325,9 +319,9 @@ impl WorkStealing {
             work_inj: Arc::new(crossbeam::deque::Injector::new()),
             work_stealers: Vec::new(),
             work_flag: Arc::new(AtomicU8::new(0)),
-            status: status,
+            status,
             active_cnt: Arc::new(AtomicUsize::new(0)),
-            panic: panic,
+            panic,
         };
         ws.init();
         ws

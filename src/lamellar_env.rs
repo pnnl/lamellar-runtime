@@ -1,11 +1,11 @@
-//! A trait for accessing various data about the current lamellar envrionment
+//! A trait for accessing various data about the current lamellar environment
 use crate::AtomicArray;
 use crate::Dist;
 use crate::LamellarTeam;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
-/// A trait for accessing various data about the current lamellar envrionment
+/// A trait for accessing various data about the current lamellar environment
 #[enum_dispatch]
 pub trait LamellarEnv {
     /// Return the PE id of the calling PE,

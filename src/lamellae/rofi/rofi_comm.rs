@@ -720,11 +720,11 @@ impl SerializedDataOps for RofiData {
 impl Des for RofiData {
     //#[tracing::instrument(skip_all)]
     fn deserialize_header(&self) -> Option<SerializeHeader> {
-        crate::deserialize(self.header_as_bytes(), false).unwrap()
+        crate::deserialize(self.header_as_bytes()).unwrap()
     }
     //#[tracing::instrument(skip_all)]
     fn deserialize_data<T: serde::de::DeserializeOwned>(&self) -> Result<T, anyhow::Error> {
-        Ok(crate::deserialize(self.data_as_bytes(), true)?)
+        Ok(crate::deserialize(self.data_as_bytes())?)
     }
     //#[tracing::instrument(skip_all)]
     fn data_as_bytes(&self) -> &mut [u8] {
