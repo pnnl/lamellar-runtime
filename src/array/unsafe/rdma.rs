@@ -120,13 +120,13 @@ impl<T: Dist> UnsafeArray<T> {
                         // if buf.len()*std::mem::size_of::<T>() > config().am_size_threshold{
                         let am = UnsafeBlockGetAm {
                             array: self.clone().into(),
-                            offset: offset,
+                            offset,
                             data: unsafe {
                                 buf.sub_region(buf_index..(buf_index + len))
                                     .to_base::<u8>()
                                     .into()
                             },
-                            pe: pe,
+                            pe,
                         };
                         reqs.push_back(self.exec_am_local(am).into());
                         // }
@@ -301,11 +301,11 @@ impl<T: Dist> UnsafeArray<T> {
                         temp_data: unsafe {
                             temp_memreg.sub_region(0..num_elems).to_base::<u8>().into()
                         },
-                        i: i,
-                        pe: pe,
+                        i,
+                        pe,
                         my_pe: self.inner.data.my_pe,
-                        num_pes: num_pes,
-                        offset: offset,
+                        num_pes,
+                        offset,
                     };
                     reqs.push_back(self.exec_am_local(am).into());
                     if pe + 1 == num_pes {
@@ -644,7 +644,7 @@ impl<T: Dist> UnsafeArray<T> {
         ArrayRdmaAtHandle {
             array: self.as_lamellar_byte_array(),
             req: None,
-            buf: buf,
+            buf,
             spawned: false,
         }
     }
@@ -698,7 +698,7 @@ impl<T: Dist> UnsafeArray<T> {
     }
 }
 
-/// We dont implement this because "at" is actually same for all but UnsafeArray so we just implement those directly
+// /// We dont implement this because "at" is actually the same for all but UnsafeArray so we just implement those directly
 // impl<T: Dist > LamellarArrayGet<T> for UnsafeArray<T> {
 //     fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
 //         &self,
@@ -728,8 +728,8 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         } else {
             let req = self.exec_am_local(InitSmallGetAm {
                 array: self.clone(),
-                index: index,
-                buf: buf,
+                index,
+                buf,
             });
             let mut reqs = VecDeque::new();
             reqs.push_back(req.into());
@@ -737,7 +737,7 @@ impl<T: Dist> LamellarArrayInternalGet<T> for UnsafeArray<T> {
         };
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: reqs,
+            reqs,
             spawned: false,
         }
     }
@@ -759,7 +759,7 @@ impl<T: Dist> LamellarArrayInternalPut<T> for UnsafeArray<T> {
         };
         ArrayRdmaHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: reqs,
+            reqs,
             spawned: false,
         }
     }

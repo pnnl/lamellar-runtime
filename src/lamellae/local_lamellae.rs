@@ -258,7 +258,7 @@ impl LamellaeRDMA for Local {
             data_addr,
             MyPtr {
                 ptr: data_ptr as *mut u8,
-                layout: layout,
+                layout,
             },
         );
         Ok(data_addr)

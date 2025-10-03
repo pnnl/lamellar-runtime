@@ -722,35 +722,35 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             IndexSize::U8 => buffs[pe].extend_from_slice(
                                 IdxVal::<u8, T> {
                                     index: local_index as u8,
-                                    val: val,
+                                    val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::U16 => buffs[pe].extend_from_slice(
                                 IdxVal::<u16, T> {
                                     index: local_index as u16,
-                                    val: val,
+                                    val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::U32 => buffs[pe].extend_from_slice(
                                 IdxVal::<u32, T> {
                                     index: local_index as u32,
-                                    val: val,
+                                    val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::U64 => buffs[pe].extend_from_slice(
                                 IdxVal::<u64, T> {
                                     index: local_index as u64,
-                                    val: val,
+                                    val,
                                 }
                                 .as_bytes(),
                             ),
                             IndexSize::Usize => buffs[pe].extend_from_slice(
                                 IdxVal::<usize, T> {
                                     index: local_index as usize,
-                                    val: val,
+                                    val,
                                 }
                                 .as_bytes(),
                             ),
@@ -829,7 +829,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         buff.extend_from_slice(
             IdxVal {
                 index: local_index,
-                val: val,
+                val,
             }
             .as_bytes(),
         );
@@ -875,7 +875,7 @@ impl SingleValMultiIndex {
             idx: indices,
             val: unsafe { std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>()) }.to_vec(),
             op: op.into(),
-            index_size: index_size,
+            index_size,
         }
     }
 
@@ -943,9 +943,9 @@ impl MultiValMultiIndex {
     ) -> Self {
         Self {
             array: array.into(),
-            idxs_vals: idxs_vals,
+            idxs_vals,
             op: op.into(),
-            index_size: index_size,
+            index_size,
         } //, type_id: TypeId::of::<T>() }
     }
 

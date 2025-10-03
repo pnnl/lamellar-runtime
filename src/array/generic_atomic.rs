@@ -364,7 +364,7 @@ impl<T: Dist> GenericAtomicLocalData<T> {
     pub fn sub_data(&self, start_index: usize, end_index: usize) -> GenericAtomicLocalData<T> {
         GenericAtomicLocalData {
             array: self.array.clone(),
-            start_index: start_index,
+            start_index,
             end_index: std::cmp::min(end_index, self.array.num_elems_local()),
         }
     }
@@ -576,8 +576,8 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GenericAtomicArray<T> {
         let locks = Darc::new(array.team_rt(), vec).await.expect("PE in team");
 
         GenericAtomicArray {
-            locks: locks,
-            array: array,
+            locks,
+            array,
         }
     }
 }
@@ -703,7 +703,7 @@ impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
     fn async_barrier(&self) -> BarrierHandle {
         self.array.async_barrier()
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
