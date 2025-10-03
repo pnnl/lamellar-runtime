@@ -204,13 +204,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
         };
         assert!(at <= self.len());
-        self.range = self.range.start..(self.range.start + at);
 
         let right = LamellarBuffer {
             data: self.data,
             range: (self.range.start + at)..self.range.end,
             _phantom: PhantomData,
         };
+        self.range = self.range.start..(self.range.start + at);
         right
     }
 
@@ -251,6 +251,14 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
+    }
+
+    pub(crate) unsafe fn base_as_ptr<P>(&self) -> *const P {
+        unsafe { self.data.as_ref().data.as_slice().as_ptr() as *const P }
+    }
+
+    pub(crate) fn base_num_bytes(&self) -> usize {
+        unsafe { &self.data.as_ref().data.as_slice().len() * std::mem::size_of::<T>() }
     }
 }
 
