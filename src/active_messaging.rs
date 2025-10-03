@@ -13,10 +13,10 @@
 //! - [typed_am_group]
 //!
 //! Further details are provided in the documentation for each macro but at a high level to implement an active message we need to
-//! define the data to be transfered in a message and then define what to do with that data when we arrive at the destination.
+//! define the data to be transferred in a message and then define what to do with that data when we arrive at the destination.
 //!
 //! The following examples will cover the following topics
-//! - Construncting your first Active Message
+//! - Constructing your first Active Message
 //! - Lamellar AM DSL
 //! - Lamellar AM return types
 //!     - returning plain old data
@@ -155,7 +155,7 @@
 //! #     request.block();
 //! # }
 //!```
-//! the new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
+//! The new Sample output for the above example on a 2 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
 //!```text
 //! Hello World on PE 0 of 2, I'm from PE 0
 //! Hello World on PE 0 of 2, I'm from PE 1
@@ -163,7 +163,7 @@
 //! Hello World on PE 1 of 2, I'm from PE 1
 //!```
 //! # Active Messages with return data
-//! In the above examples, we simply launched a remote active message but did not return an result back to the originating PE.
+//! In the above examples, we simply launched a remote active message but did not return a result back to the originating PE.
 //! Lamellar supports return both "plain old data"(as long as it impls [AmDist]) and other active messages themselves.
 //!
 //! ## Returning normal data
@@ -346,7 +346,7 @@
 //!     }
 //! }
 //!```
-//! Next we need to make an additional change to the  `HelloWorld` am to specify that our returned am will return data itself.
+//! Next we need to make an additional change to the `HelloWorld` am to specify that our returned am will return data itself.
 //! we do this in the argument to the [am] procedural macro
 //!```
 //! # use lamellar::active_messaging::prelude::*;
@@ -412,9 +412,9 @@
 //! # Nested Active Messages
 //! Lamellar Active Messages support nested active messages, i.e launching a new active message from within an executing active message.
 //!
-//! This functionality can be used to setup active message dependencies, enable recursive active messages, ect.
-//! In the following example we will construct a recursive active message that performs a ring like commincation pattern accross PEs, which
-//! will return the reverse order in which it vistited the PE's.
+//! This functionality can be used to setup active message dependencies, enable recursive active messages, etc.
+//! In the following example we will construct a recursive active message that performs a ring like communication pattern across PEs, which
+//! will return the reverse order in which it visited the PE's.
 //!```
 //! use lamellar::active_messaging::prelude::*;
 //! #[AmData(Debug,Clone)]
@@ -456,7 +456,7 @@
 //! }
 //!```
 //! The key thing to notice in this example is how we wait for a request to finish will change depending on the context we are executing in.
-//! When we are in the active message we are already in an asychronous context so we can simply `await` the future returned to us by the `exec_am_pe()` call.
+//! When we are in the active message we are already in an asynchronous context so we can simply `await` the future returned to us by the `exec_am_pe()` call.
 //! This is in contrast to the main function where we must use a `block_on` call to drive the future an retrieve the result.
 //!
 //! The sample output for the above example on a 4 PE system may look something like (exact ordering is nondeterministic due to asynchronous behavior)
@@ -954,7 +954,7 @@ impl AMCounters {
 //     fn spawn_task<F: Future>(&self, future: F) -> F::Output;
 // }
 
-/// The interface for launching, executing, and managing Lamellar Active Messages .
+/// The interface for launching, executing, and managing Lamellar Active Messages.
 pub trait ActiveMessaging {
     /// The handle type for single PE active messages
     type SinglePeAmHandle<R: AmDist>;
@@ -969,14 +969,14 @@ pub trait ActiveMessaging {
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::am procedural macros.
     ///
-    /// Returns a future allow the user to poll for complete and retrive the result of the Active Message stored within a vector,
+    /// Returns a future allow the user to poll for complete and retrieve the result of the Active Message stored within a vector,
     /// each index in the vector corresponds to the data returned by the corresponding PE
     ///
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][MultiAmHandle::spawn] or [blocked on][MultiAmHandle::block]
     ///
     /// # One-sided Operation
-    /// The calling PE manages creating and transfering the active message to the remote PEs (without user intervention on the remote PEs).
+    /// The calling PE manages creating and transferring the active message to the remote PEs (without user intervention on the remote PEs).
     /// If a result is returned it will only be available on the calling PE.
     ///
     /// # Examples
@@ -1012,18 +1012,18 @@ pub trait ActiveMessaging {
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// launch and execute an active message on a specifc PE.
+    /// Launch and execute an active message on a specific PE.
     ///
     /// Expects as input the PE to execute on and an instance of a struct thats been defined using the lamellar::am procedural macros.
     ///
-    /// Returns a future allow the user to poll for complete and retrive the result of the Active Message
+    /// Returns a future allow the user to poll for complete and retrieve the result of the Active Message
     ///
     ///
     /// # Note
     /// The future retuned by this function is lazy and does nothing unless awaited, [spawned][AmHandle::spawn] or [blocked on][AmHandle::block]
     ///
     /// # One-sided Operation
-    /// The calling PE manages creating and transfering the active message to the remote PE (without user intervention on the remote PE).
+    /// The calling PE manages creating and transferring the active message to the remote PE (without user intervention on the remote PE).
     /// If a result is returned it will only be available on the calling PE.
     ///
     /// # Examples
@@ -1057,11 +1057,11 @@ pub trait ActiveMessaging {
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// launch and execute an active message on the calling PE.
+    /// Launch and execute an active message on the calling PE.
     ///
     /// Expects as input an instance of a struct thats been defined using the lamellar::local_am procedural macros.
     ///
-    /// Returns a future allow the user to poll for complete and retrive the result of the Active Message.
+    /// Returns a future allow the user to poll for complete and retrieve the result of the Active Message.
     ///
     ///
     /// # Note
@@ -1105,7 +1105,7 @@ pub trait ActiveMessaging {
         F: LamellarActiveMessage + LocalAM + 'static;
 
     #[doc(alias("One-sided", "onesided"))]
-    /// blocks calling thread until all remote tasks (e.g. active mesages, array operations)
+    /// blocks calling thread until all remote tasks (e.g. active messages, array operations)
     /// initiated by the calling PE have completed.
     ///
     /// # One-sided Operation
@@ -1138,7 +1138,7 @@ pub trait ActiveMessaging {
     fn wait_all(&self);
 
     #[doc(alias("One-sided", "onesided"))]
-    /// blocks calling task until all remote tasks (e.g. active mesages, array operations)
+    /// blocks calling task until all remote tasks (e.g. active messages, array operations)
     /// initiated by the calling PE have completed.
     /// Intended to be used within an async context.
     ///
@@ -1262,7 +1262,7 @@ pub trait ActiveMessaging {
     /// // we can then await the result of the future at some other point
     /// task.block();
     ///```
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send;

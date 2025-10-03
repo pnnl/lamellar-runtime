@@ -433,7 +433,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {
         // println!("readonly from UnsafeArray");
         array.await_on_outstanding(DarcMode::ReadOnlyArray).await;
 
-        ReadOnlyArray { array: array }
+        ReadOnlyArray { array }
     }
 }
 
@@ -689,7 +689,7 @@ impl<T: Dist> ActiveMessaging for ReadOnlyArray<T> {
     fn async_barrier(&self) -> BarrierHandle {
         self.array.async_barrier()
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,

@@ -216,7 +216,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
-///     originial_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
+///     original_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
 /// }
 ///
 /// #[lamellar::local_am]
@@ -227,7 +227,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe.lock(),
+///             self.original_pe.lock(),
 ///         );
 ///     }
 /// }
@@ -237,7 +237,7 @@ pub fn AmData(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     world.barrier();
 ///
 ///     let request = world.exec_am_local(HelloWorld {
-///         originial_pe: my_pe,
+///         original_pe: my_pe,
 ///     });
 ///
 ///     //wait for the request to complete
@@ -421,7 +421,7 @@ fn parse_am(
 ///
 /// #[AmData(Debug,Clone)]
 /// struct HelloWorld {
-///    originial_pe: usize,
+///    original_pe: usize,
 ///    #[AmGroup(static)]
 ///    msg: Darc<String>,
 /// }
@@ -435,7 +435,7 @@ fn parse_am(
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe,
+///             self.original_pe,
 ///         );
 ///     }
 /// }
@@ -446,7 +446,7 @@ fn parse_am(
 ///     let msg = Darc::<String>::new(&world, "Hello World".to_string()).block().unwrap();
 ///     //Send a Hello World Active Message to all pes
 ///     let request = world.exec_am_all(HelloWorld {
-///         originial_pe: my_pe,
+///         original_pe: my_pe,
 ///         msg: msg,
 ///     });
 ///
@@ -476,7 +476,7 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// #[AmLocalData(Debug,Clone)]
 /// struct HelloWorld {
-///     originial_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
+///     original_pe: Arc<Mutex<usize>>, //This would not be allowed in a non-local AM as Arc<Mutex<<>> is not (de)serializable
 /// }
 ///
 /// #[lamellar::local_am]
@@ -487,7 +487,7 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///             lamellar::current_pe,
 ///             lamellar::num_pes,
 ///             std::thread::current().id(),
-///             self.originial_pe.lock(),
+///             self.original_pe.lock(),
 ///         );
 ///     }
 /// }
@@ -497,7 +497,7 @@ pub fn am_group(args: TokenStream, input: TokenStream) -> TokenStream {
 ///     world.barrier();
 ///
 ///     let request = world.exec_am_local(HelloWorld {
-///         originial_pe: my_pe,
+///         original_pe: my_pe,
 ///     });
 ///
 ///     //wait for the request to complete
@@ -549,7 +549,7 @@ pub fn register_reduction(item: TokenStream) -> TokenStream {
     array_reduce::__register_reduction(item)
 }
 
-// probalby should turn this into a derive macro
+// probably should turn this into a derive macro
 // #[proc_macro_error]
 // #[proc_macro]
 // pub fn generate_reductions_for_type(item: TokenStream) -> TokenStream {
@@ -735,7 +735,7 @@ pub fn generate_ops_for_bool_rt(_item: TokenStream) -> TokenStream {
 ///
 ///     // inspect the results
 ///     // -------------------------------------
-///     // NB:  because thewe're working with multithreaded async
+///     // NB:  because we're working with multithreaded async
 ///     //      environments, entries may be printed out of order
 ///     //
 ///     // initialize a length-3 array:
@@ -807,7 +807,7 @@ impl Parse for AmGroups {
     }
 }
 
-/// The macro used to create an new instance of a `TypedAmGroup` which is an Active Message Group that can only include AMs of a specific type (but this type can return data).
+/// The macro used to create a new instance of a `TypedAmGroup` which is an Active Message Group that can only include AMs of a specific type (but this type can return data).
 /// Data is returned in the same order as the AMs were added
 /// (You can think of this as similar to `Vec<T>`)
 /// This macro which expects two parameters, the first being the type (name) of the AM and the second being a reference to a lamellar team.

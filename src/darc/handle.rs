@@ -31,7 +31,7 @@ enum State<T> {
 
 #[must_use = "LocalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project(PinnedDrop)]
-/// Handle used to retrieve the aquired read lock from a LocalRwDarc
+/// Handle used to retrieve the acquired read lock from a LocalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
 ///
@@ -99,7 +99,7 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
             state: State::Init,
         }
     }
-    /// Used to retrieve the aquired read lock from a LocalRwDarc within a non async context
+    /// Used to retrieve the acquired read lock from a LocalRwDarc within a non async context
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     /// # Examples
@@ -190,7 +190,7 @@ impl<T: Sync + Send> Future for LocalRwDarcReadHandle<T> {
 
 #[must_use = "LocalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project(PinnedDrop)]
-/// Handle used to retrieve the aquired write lock from a LocalRwDarc
+/// Handle used to retrieve the acquired write lock from a LocalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
 ///
@@ -257,7 +257,7 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
             state: State::Init,
         }
     }
-    /// used to retrieve the aquired write lock from a LocalRwDarc within a non async context
+    /// Used to retrieve the acquired write lock from a LocalRwDarc within a non async context
     ///
     /// Returns an RAII guard which will drop the write access of the wrlock when dropped
     /// # Examples
@@ -346,7 +346,7 @@ impl<T: Sync + Send> Future for LocalRwDarcWriteHandle<T> {
 
 #[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project] //unused drop warning triggered by AmHandle
-/// Handle used to retrieve the aquired read lock from a GlobalRwDarc
+/// Handle used to retrieve the acquired read lock from a GlobalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
 ///
@@ -393,7 +393,7 @@ pub struct GlobalRwDarcReadHandle<T: 'static> {
 }
 
 impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
-    /// Used to retrieve the aquired read lock from a GlobalRwDarc within a non async context
+    /// Used to retrieve the acquired read lock from a GlobalRwDarc within a non async context
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     /// # Examples
@@ -462,11 +462,11 @@ impl<T: Sync + Send> Future for GlobalRwDarcReadHandle<T> {
 
 #[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project] //unused drop warning triggered by AmHandle
-/// Handle used to retrieve the aquired write lock from a GlobalRwDarc
+/// Handle used to retrieve the acquired write lock from a GlobalRwDarc
 ///
 /// This handle must be awaited or blocked on to acquire the lock
 ///
-/// Once awaited/blocked the handle will not return while any readers orwriter currently has access to the lock
+/// Once awaited/blocked the handle will not return while any readers or writer currently has access to the lock
 ///
 /// Returns an RAII guard which will drop the write access of the wrlock when dropped
 /// # Examples
@@ -509,7 +509,7 @@ pub struct GlobalRwDarcWriteHandle<T: 'static> {
 }
 
 impl<T: Sync + Send> GlobalRwDarcWriteHandle<T> {
-    /// Used to retrieve the aquired write lock from a GlobalRwDarc within a non async context
+    /// Used to retrieve the acquired write lock from a GlobalRwDarc within a non async context
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     /// # Examples
@@ -576,7 +576,7 @@ impl<T: Sync + Send> Future for GlobalRwDarcWriteHandle<T> {
 
 #[must_use = "GlobalRwDarc lock handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project] //unused drop warning triggered by AmHandle
-/// Handle used to retrieve the aquired collective write lock from a GlobalRwDarc
+/// Handle used to retrieve the acquired collective write lock from a GlobalRwDarc
 ///
 /// This handle must be awaited or blocked on to actually acquire the lock
 ///
@@ -605,7 +605,7 @@ pub struct GlobalRwDarcCollectiveWriteHandle<T: 'static> {
 }
 
 impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
-    /// Used to retrieve the aquired collective write lock from a GlobalRwDarc within a non async context
+    /// Used to retrieve the acquired collective write lock from a GlobalRwDarc within a non async context
     ///
     /// Returns an RAII guard which will drop the read access of the wrlock when dropped
     /// # Examples
@@ -783,7 +783,7 @@ impl<T: 'static> PinnedDrop for IntoDarcHandle<T> {
 }
 
 impl<T: Sync + Send> IntoDarcHandle<T> {
-    /// Used to drive the cconversion of a [LocalRwDarc] or [GlobalRwDarc] into a [Darc]
+    /// Used to drive the conversion of a [LocalRwDarc] or [GlobalRwDarc] into a [Darc]
     /// # Examples
     ///
     ///```
@@ -884,7 +884,7 @@ impl<T: 'static> PinnedDrop for IntoLocalRwDarcHandle<T> {
 }
 
 impl<T: Sync + Send> IntoLocalRwDarcHandle<T> {
-    /// Used to drive the cconversion of a [Darc] or [GlobalRwDarc] into a [LocalRwDarc]
+    /// Used to drive the conversion of a [Darc] or [GlobalRwDarc] into a [LocalRwDarc]
     /// # Examples
     ///
     ///```
@@ -987,7 +987,7 @@ impl<T: 'static> PinnedDrop for IntoGlobalRwDarcHandle<T> {
 }
 
 impl<T: Sync + Send> IntoGlobalRwDarcHandle<T> {
-    /// Used to drive the cconversion of a  [Darc] or [LocalRwDarc] into a [GlobalRwDarc]
+    /// Used to drive the conversion of a  [Darc] or [LocalRwDarc] into a [GlobalRwDarc]
     /// # Examples
     ///
     ///```

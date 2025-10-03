@@ -234,8 +234,8 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 array_counters: Arc::new(AMCounters::new()),
                 team: team.clone(),
                 task_group: Arc::new(task_group),
-                my_pe: my_pe,
-                num_pes: num_pes,
+                my_pe,
+                num_pes,
                 req_cnt: Arc::new(AtomicUsize::new(0)),
             },
             darc_mode,
@@ -245,7 +245,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         .expect("trying to create array on non team member");
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
-                data: data,
+                data,
                 distribution: distribution.clone(),
                 orig_elem_per_pe: elem_per_pe,
                 orig_remaining_elems: remaining_elems,
@@ -1168,7 +1168,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
     fn async_barrier(&self) -> BarrierHandle {
         self.inner.data.team.async_barrier()
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,
@@ -1288,7 +1288,7 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
         inner.size = end - start;
         inner.sub = true;
         UnsafeArray {
-            inner: inner,
+            inner,
             phantom: PhantomData,
         }
     }
@@ -1561,7 +1561,7 @@ impl UnsafeArrayInnerWeak {
     pub(crate) fn upgrade(&self) -> Option<UnsafeArrayInner> {
         if let Some(data) = self.data.upgrade() {
             Some(UnsafeArrayInner {
-                data: data,
+                data,
                 distribution: self.distribution.clone(),
                 orig_elem_per_pe: self.orig_elem_per_pe,
                 orig_remaining_elems: self.orig_remaining_elems,
@@ -1577,7 +1577,7 @@ impl UnsafeArrayInnerWeak {
 }
 
 impl UnsafeArrayInner {
-    pub(crate) fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    pub(crate) fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,

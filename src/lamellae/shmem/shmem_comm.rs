@@ -175,8 +175,8 @@ impl ShmemAlloc {
             },
             // barrier3: unsafe { base_ptr.add(std::mem::size_of::<AtomicUsize>() + std::mem::size_of::<usize>()) as *mut usize + std::mem::size_of::<usize>()*num_pes*2},
             my_pe: pe,
-            num_pes: num_pes,
-            job_id: job_id,
+            num_pes,
+            job_id,
         }
     }
     unsafe fn alloc<I>(&self, size: usize, pes: I) -> (MyShmem, usize, Vec<usize>)
@@ -343,8 +343,8 @@ impl ShmemComm {
             _size: mem_per_pe,
             alloc: RwLock::new(vec![BTreeAlloc::new("shmem".to_string())]),
             _init: AtomicBool::new(true),
-            num_pes: num_pes,
-            my_pe: my_pe,
+            num_pes,
+            my_pe,
             alloc_lock: Arc::new(RwLock::new((allocs_map, alloc))),
         };
         shmem.alloc.write()[0].init(addr, mem_per_pe);
@@ -641,13 +641,13 @@ impl ShmemData {
             (*ref_cnt).store(1, Ordering::SeqCst)
         };
         Ok(ShmemData {
-            addr: addr,
+            addr,
             relative_addr: relative_addr + ref_cnt_size,
             data_start: addr + std::mem::size_of::<AtomicUsize>() + *SERIALIZE_HEADER_LEN,
             len: size, // + std::mem::size_of::<u64>(),
             data_len: size - *SERIALIZE_HEADER_LEN,
-            shmem_comm: shmem_comm,
-            alloc_size: alloc_size,
+            shmem_comm,
+            alloc_size,
         })
     }
 }

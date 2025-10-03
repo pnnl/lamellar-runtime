@@ -92,8 +92,8 @@ impl<T> std::ops::DerefMut for LocalRwDarcWriteGuard<T> {
 ///
 /// Each PE maintains its own local read-write lock associated with the `LocalRwDarc`.
 /// Whenever the interior object is accessed on a PE the local lock is required to be aquired.
-/// When a thread aquires a Write lock it is guaranteed to the only thread with access to
-/// the interior object with respect to the PE it is executing on (no guarantees are made about what is occuring on other PEs).
+/// When a thread acquires a Write lock it is guaranteed to the only thread with access to
+/// the interior object with respect to the PE it is executing on (no guarantees are made about what is occurring on other PEs).
 /// When a thread aquires a Read lock it may be one of many threads on the PE with access, but none of them will have mutable access.
 /// - Contrast with a `GlobalRwDarc`, which has a single global lock.
 /// - Contrast with a `Darc`, which also has local ownership but does not
@@ -198,7 +198,7 @@ impl<T> LocalRwDarc<T> {
 
 impl<T: Sync + Send> LocalRwDarc<T> {
     #[doc(alias("One-sided", "onesided"))]
-    /// Creates a handle for aquiring a reader lock of this LocalRwDarc local to this PE.
+    /// Creates a handle for acquiring a reader lock of this LocalRwDarc local to this PE.
     /// The returned handle must either be await'd `.read().await` within an async context
     /// or it must be blocked on `.read().block()` in a non async context to actually acquire the lock
     ///
@@ -240,7 +240,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     }
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Creates a handle for aquiring a writer lock of this LocalRwDarc local to this PE.
+    /// Creates a handle for acquiring a writer lock of this LocalRwDarc local to this PE.
     /// The returned handle must either be await'd `.write().await` within an async context
     /// or it must be blocked on `.write().block()` in a non async context to actually acquire the lock
     ///
@@ -250,7 +250,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// The calling PE is only aware of its own local lock and does not require coordination with other PEs
     ///
     /// # Note
-    /// the aquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
+    /// the acquired lock is only with respect to this PE, the locks on the other PEs will be in their own states
     ///
     /// # Examples
     ///

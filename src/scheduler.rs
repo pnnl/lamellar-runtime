@@ -77,7 +77,7 @@ pub(crate) struct ReqId {
 /// Indicates the executor backend
 /// Default is a work stealing executor
 /// If the "tokio-executor" feature is enabled,the tokio executor can also be used
-/// allowing seemless integration with tokio based applications
+/// allowing seamless integration with tokio based applications
 #[derive(Debug)]
 pub enum ExecutorType {
     /// The default work stealing executor
@@ -89,6 +89,7 @@ pub enum ExecutorType {
     /// executor provided by the AsyncStd crate
     AsyncStd,
     #[cfg(feature = "tokio-executor")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio-executor")))]
     /// The tokio executor
     Tokio,
     // Dyn(impl LamellarExecutor),
@@ -242,7 +243,7 @@ impl Scheduler {
         panic: Arc<AtomicU8>,
     ) -> Self {
         Self {
-            executor: executor,
+            executor,
             active_message_engine,
             num_ams: Arc::new(AtomicUsize::new(0)),
             max_ams: Arc::new(AtomicUsize::new(0)),
