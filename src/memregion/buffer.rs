@@ -71,6 +71,14 @@ impl<T> BufferInner<T> {
             data,
         }
     }
+
+    // fn as_slice(&self) -> &[T] {
+    //     self.data.as_slice()
+    // }
+
+    // fn as_mut_slice(&mut self) -> &mut [T] {
+    //     self.data.as_mut_slice()
+    // }
 }
 
 pub struct LamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
@@ -115,6 +123,7 @@ impl<T: Remote> LamellarBuffer<T, SharedMemoryRegion<T>> {
     /// while this buffer exists
     pub unsafe fn from_shared_memory_region(mem_region: SharedMemoryRegion<T>) -> Self {
         let len = mem_region.len();
+
         LamellarBuffer {
             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(mem_region))).into())
                 .unwrap(),
@@ -180,8 +189,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
             self.data
                 .as_ref()
                 .cnt
-                .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-        };
+                .fetch_add(2, std::sync::atomic::Ordering::SeqCst)
+        }; //+ 2 as we technically creating two new buffers and dropping this one
         assert!(at <= self.len());
         let left = LamellarBuffer {
             data: self.data.clone(),
@@ -264,6 +273,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Drop for LamellarBuffer<T, B> {
     fn drop(&mut self) {
+        // println!("LamellarBuffer dropped: {:?}", self);
         if unsafe {
             self.data
                 .as_ref()
@@ -271,6 +281,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Drop for LamellarBuffer<T, B> {
                 .fetch_sub(1, std::sync::atomic::Ordering::SeqCst)
         } == 1
         {
+            // println!("Dropping last reference to LamellarBuffer: {:?}", self);
             trace!("Dropping LamellarBuffer: {:?}", self);
             unsafe {
                 let _ = Box::from_raw(self.data.as_ptr());

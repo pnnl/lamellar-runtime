@@ -645,6 +645,7 @@ use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, ReqId};
 use async_trait::async_trait;
 use futures_util::Future;
 use parking_lot::Mutex;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};

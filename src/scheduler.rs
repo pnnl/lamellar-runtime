@@ -263,10 +263,14 @@ impl Scheduler {
             panic,
         }
     }
+
+    pub(crate) fn increment_stall_mark(&self) -> usize {
+        self.am_stall_mark.fetch_add(1, Ordering::SeqCst)
+    }
     pub(crate) fn submit_am(&self, am: Am) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
         let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
@@ -309,7 +313,7 @@ impl Scheduler {
     pub(crate) fn submit_am_thread(&self, am: Am, tid: usize) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
         let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
@@ -324,7 +328,7 @@ impl Scheduler {
     pub(crate) fn submit_am_immediate(&self, am: Am) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
         let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
@@ -358,7 +362,7 @@ impl Scheduler {
     pub(crate) async fn exec_am(&self, am: Am) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         // let am_future = async move {
         // let start_tid = thread::current().id();

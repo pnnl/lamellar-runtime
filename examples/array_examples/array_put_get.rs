@@ -102,10 +102,11 @@ fn main() {
             println!("PE{my_pe}, smr {:?}", shared_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                let buffer =
+                let mut buffer =
                     LamellarBuffer::<usize, SharedMemoryRegion<usize>>::from_shared_memory_region(
                         shared_mem_region.sub_region(0..total_len / 2),
                     );
+                println!("PE{my_pe}, get buffer slice {:?} buffer", buffer.as_mut_slice());
                 block_array.get_into_buffer(0, buffer).await;
             } //uses local data of the shared memregion
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());

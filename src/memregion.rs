@@ -812,6 +812,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
     counters: Vec<Arc<AMCounters>>,
     rdma: Arc<Lamellae>,
     mode: Mode,
+    freeable: bool, //indicates if this object is responsible for freeing the underlying data -- calling as_base creates a new object that shares the same underlying data but we don't want to free it twice
     phantom: PhantomData<T>,
 }
 
@@ -876,6 +877,7 @@ impl<T: Remote> MemoryRegion<T> {
             backend: lamellae.comm().backend(),
             rdma: lamellae.clone(),
             mode: mode,
+            freeable: true,
             phantom: PhantomData,
         };
         trace!("new memregion alloc {:?}", temp.alloc,);
@@ -901,6 +903,7 @@ impl<T: Remote> MemoryRegion<T> {
             backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: Mode::Remote,
+            freeable: true,
             phantom: PhantomData,
         })
     }
@@ -927,21 +930,40 @@ impl<T: Remote> MemoryRegion<T> {
         self.num_elems = self.alloc.num_bytes() / std::mem::size_of::<B>();
         std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
-
-    pub(crate) unsafe fn put<R: Remote>(&self, pe: usize, index: usize, data: R) -> RdmaHandle<R> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+    pub(crate) unsafe fn as_base<B: Remote>(&self) -> MemoryRegion<B> {
+        assert_eq!(
+            self.alloc.num_bytes() % std::mem::size_of::<B>(),
+            0,
+            "Error converting memregion to new base, does not align"
+        );
+        MemoryRegion {
+            alloc: self.alloc.clone(),
+            pe: self.pe,
+            num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
+            scheduler: self.scheduler.clone(),
+            counters: self.counters.clone(),
+            backend: self.backend,
+            rdma: self.rdma.clone(),
+            mode: self.mode,
+            freeable: false,
+            phantom: PhantomData,
         }
+    }
+
+    pub(crate) unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!("put memregion {:?} index: {:?}", self.alloc, index);
         self.alloc
             .inner_alloc
             .put(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
-    pub(crate) unsafe fn put_unmanaged<R: Remote>(&self, pe: usize, index: usize, data: R) {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put unmanaged of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+    pub(crate) unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "put unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -961,15 +983,15 @@ impl<T: Remote> MemoryRegion<T> {
     /// the data buffer may not be safe to upon return from this call, currently the user is responsible for completion detection,
     /// or you may use the similar iput call (with a potential performance penalty);
     #[tracing::instrument(skip(self, data), level = "debug")]
-    pub(crate) unsafe fn put_buffer<R: Remote>(
+    pub(crate) unsafe fn put_buffer(
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInputInner<R>>,
-    ) -> RdmaHandle<R> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     println!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!("put buffer memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
         self.alloc
@@ -977,25 +999,25 @@ impl<T: Remote> MemoryRegion<T> {
             .put_buffer(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
-    pub(crate) unsafe fn put_buffer_unmanaged<R: Remote>(
+    pub(crate) unsafe fn put_buffer_unmanaged(
         &self,
         pe: usize,
         index: usize,
-        data: impl Into<MemregionRdmaInputInner<R>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put unmanaged buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!("put buffer memregion {:?} index: {:?}", self.alloc, index);
         let data = data.into();
         self.alloc.inner_alloc.put_buffer_unmanaged(data, pe, index)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all<R: Remote>(&self, offset: usize, data: R) -> RdmaHandle<R> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put all of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+    pub(crate) unsafe fn put_all(&self, offset: usize, data: T) -> RdmaHandle<T> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!("put all memregion {:?} index: {:?}", self.alloc, offset);
         self.alloc
             .inner_alloc
@@ -1003,10 +1025,10 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all_unmanaged<R: Remote>(&self, offset: usize, data: R) {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put all unmanaged of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+    pub(crate) unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "put all unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1016,14 +1038,14 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all_buffer<R: Remote>(
+    pub(crate) unsafe fn put_all_buffer(
         &self,
         offset: usize,
-        data: impl Into<MemregionRdmaInputInner<R>>,
-    ) -> RdmaHandle<R> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put all buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "put all buffer memregion {:?} index: {:?}",
             self.alloc,
@@ -1037,14 +1059,14 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn put_all_buffer_unmanaged<R: Remote>(
+    pub(crate) unsafe fn put_all_buffer_unmanaged(
         &self,
         offset: usize,
-        data: impl Into<MemregionRdmaInputInner<R>>,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant put all unmanaged buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put buffer of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "put all buffer unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1057,10 +1079,10 @@ impl<T: Remote> MemoryRegion<T> {
             .put_all_buffer_unmanaged(data, offset);
     }
 
-    pub(crate) unsafe fn get<R: Remote>(&self, pe: usize, index: usize) -> RdmaGetHandle<R> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant get of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+    pub(crate) unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant get value of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!("get memregion {:?} index: {:?}", self.alloc, index);
 
         self.alloc
@@ -1078,15 +1100,15 @@ impl<T: Remote> MemoryRegion<T> {
     /// * `pe` - id of remote PE to grab data from
     /// * `index` - offset into the remote memory window
     /// * `data` - address (which is "registered" with network device) of destination buffer to store result of the get
-    pub(crate) unsafe fn get_buffer<R: Remote>(
+    pub(crate) unsafe fn get_buffer(
         &self,
         pe: usize,
         index: usize,
         len: usize,
-    ) -> RdmaGetBufferHandle<R> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant get buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+    ) -> RdmaGetBufferHandle<T> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant get buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "get buffer memregion pe: {:?} index: {:?} num_elems: {:?} alloc {:?}",
             pe,
@@ -1100,15 +1122,15 @@ impl<T: Remote> MemoryRegion<T> {
             .get_buffer(&self.scheduler, self.counters.clone(), pe, index, len)
     }
 
-    pub(crate) unsafe fn get_into_buffer<R: Remote, B: AsLamellarBuffer<R>>(
+    pub(crate) unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
         index: usize,
-        data: LamellarBuffer<R, B>,
-    ) -> RdmaGetIntoBufferHandle<R, B> {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant get into buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+        mut data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant get into buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "get into buffer memregion {:?} index: {:?}",
             self.alloc,
@@ -1124,15 +1146,15 @@ impl<T: Remote> MemoryRegion<T> {
         )
     }
 
-    pub(crate) unsafe fn get_into_buffer_unmanaged<R: Remote, B: AsLamellarBuffer<R>>(
+    pub(crate) unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
         index: usize,
-        data: LamellarBuffer<R, B>,
+        data: LamellarBuffer<T, B>,
     ) {
-        if std::any::type_name::<R>() != std::any::type_name::<T>() {
-            println!("cant get into unmanaged buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        }
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant get into unmanaged buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
         trace!(
             "get into buffer unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1144,18 +1166,13 @@ impl<T: Remote> MemoryRegion<T> {
             .get_into_buffer_unmanaged(pe, index, data);
     }
 
-    pub(crate) fn atomic_op<R: Remote>(
-        &self,
-        pe: usize,
-        index: usize,
-        op: AtomicOp<R>,
-    ) -> AtomicOpHandle<R> {
+    pub(crate) fn atomic_op(&self, pe: usize, index: usize, op: AtomicOp<T>) -> AtomicOpHandle<T> {
         trace!("atomic_op memregion {:?} index: {:?}", self.alloc, index);
         self.alloc
             .inner_alloc
             .atomic_op(&self.scheduler, self.counters.clone(), op, pe, index)
     }
-    pub(crate) fn atomic_op_unmanaged<R: Remote>(&self, pe: usize, index: usize, op: AtomicOp<R>) {
+    pub(crate) fn atomic_op_unmanaged(&self, pe: usize, index: usize, op: AtomicOp<T>) {
         trace!(
             "atomic_op unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1164,11 +1181,7 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.inner_alloc.atomic_op_unmanaged(op, pe, index)
     }
 
-    pub(crate) fn atomic_op_all<R: Remote>(
-        &self,
-        offset: usize,
-        op: AtomicOp<R>,
-    ) -> AtomicOpHandle<R> {
+    pub(crate) fn atomic_op_all(&self, offset: usize, op: AtomicOp<T>) -> AtomicOpHandle<T> {
         trace!(
             "atomic_op_all memregion {:?} index: {:?}",
             self.alloc,
@@ -1178,7 +1191,7 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .atomic_op_all(&self.scheduler, self.counters.clone(), op, offset)
     }
-    pub(crate) fn atomic_op_all_unmanaged<R: Remote>(&self, offset: usize, op: AtomicOp<R>) {
+    pub(crate) fn atomic_op_all_unmanaged(&self, offset: usize, op: AtomicOp<T>) {
         trace!(
             "atomic_op_all unmanaged memregion {:?} index: {:?}",
             self.alloc,
@@ -1187,12 +1200,12 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc.inner_alloc.atomic_op_all_unmanaged(op, offset)
     }
 
-    pub(crate) fn atomic_fetch_op<R: Remote>(
+    pub(crate) fn atomic_fetch_op(
         &self,
         pe: usize,
         index: usize,
-        op: AtomicOp<R>,
-    ) -> AtomicFetchOpHandle<R> {
+        op: AtomicOp<T>,
+    ) -> AtomicFetchOpHandle<T> {
         trace!(
             "atomic_fetch_op memregion {:?} index: {:?}",
             self.alloc,
@@ -1403,11 +1416,12 @@ impl<T: Remote> Drop for MemoryRegion<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("trying to dropping mem region {:?}",self);
-
-        match self.mode {
-            Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
-            Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
-            Mode::Remote => {}
+        if self.freeable {
+            match self.mode {
+                Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
+                Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
+                Mode::Remote => {}
+            }
         }
         // println!("dropping mem region {:?}",self);
     }

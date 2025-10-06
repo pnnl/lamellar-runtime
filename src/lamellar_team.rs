@@ -1331,9 +1331,7 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     // if world_pe != self.world_pe {
                     unsafe {
-                        let _ = self
-                            .dropped
-                            .put_unmanaged::<usize>(world_pe, my_index, 1usize);
+                        let _ = self.dropped.put_unmanaged(world_pe, my_index, 1usize);
                     }
                     // }
                 }
@@ -1347,9 +1345,7 @@ impl LamellarTeamRT {
                 for world_pe in self.arch.team_iter() {
                     // if world_pe != self.world_pe {
                     unsafe {
-                        let _ =
-                            self.dropped
-                                .put_unmanaged::<usize>(world_pe, self.world_pe, 1usize);
+                        let _ = self.dropped.put_unmanaged(world_pe, self.world_pe, 1usize);
                     }
                     // }
                 }
@@ -1680,6 +1676,7 @@ impl LamellarTeamRT {
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec am all num_pes {:?}", self.num_pes);
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
@@ -1749,6 +1746,7 @@ impl LamellarTeamRT {
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
         O: AmDist + 'static,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec am all num_pes {:?}", self.num_pes);
         // trace!("[{:?}] team exec am all request", self.world_pe);
         // event!(Level::TRACE, "team exec am all request");
@@ -1831,6 +1829,7 @@ impl LamellarTeamRT {
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec am pe tg");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_send_req(1);
@@ -1891,6 +1890,7 @@ impl LamellarTeamRT {
     where
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec am pe tg");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_outstanding(1);
@@ -1961,6 +1961,7 @@ impl LamellarTeamRT {
         F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
         O: AmDist + 'static,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec am pe tg");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_send_req(1);
@@ -2037,6 +2038,7 @@ impl LamellarTeamRT {
     where
         F: AmDist,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec arc am pe");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_send_req(1);
@@ -2104,6 +2106,7 @@ impl LamellarTeamRT {
     where
         F: AmDist,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec arc am pe");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_send_req(1);
@@ -2170,6 +2173,7 @@ impl LamellarTeamRT {
     where
         F: AmDist,
     {
+        self.scheduler.increment_stall_mark();
         // println!("team exec arc am pe");
         if let Some(task_group_cnts) = task_group_cnts.as_ref() {
             task_group_cnts.inc_send_req(1);

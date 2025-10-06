@@ -338,14 +338,7 @@ crate::inventory::collect!(multi_val_single_idx_ops);
 
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
-        let slice = self.inner.data.mem_region.as_slice();
-        assert!(slice.len() > 0 && slice.len() % std::mem::size_of::<T>() == 0);
-        unsafe {
-            std::slice::from_raw_parts(
-                slice.as_ptr() as *const T,
-                slice.len() / std::mem::size_of::<T>(),
-            )[0]
-        }
+        unsafe { self.inner.data.mem_region.as_base::<T>() }.as_slice()[0]
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1167,7 +1160,7 @@ impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             unsafe {
-                let handle = self.inner.data.mem_region.get(pe, offset);
+                let handle = self.inner.data.mem_region.as_base::<T>().get(pe, offset);
                 ArrayFetchOpHandle {
                     array: self.clone().into(),
                     state: FetchOpState::Rdma(handle),
@@ -1193,7 +1186,12 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
             //     self.array.team_rt().alloc_one_sided_mem_region(1);
             unsafe {
                 // buf.as_mut_slice()[0] = val;
-                let handle = self.inner.data.mem_region.put::<T>(pe, offset, val);
+                let handle = self
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .put(pe, offset, val);
                 ArrayOpHandle {
                     array: self.clone().into(),
                     state: OpState::Rdma(handle),
@@ -1208,11 +1206,11 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
         // println!("in Network atomic swap");
         //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle =
-                self.inner
-                    .data
-                    .mem_region
-                    .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
+            let handle = self.inner.data.mem_region.as_base::<T>().atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::Write(val),
+            );
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),

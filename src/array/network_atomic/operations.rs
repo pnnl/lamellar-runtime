@@ -11,12 +11,8 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
     fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle =
-                self.array
-                    .inner
-                    .data
-                    .mem_region
-                    .atomic_fetch_op(pe, offset, AtomicOp::Read);
+            let handle = unsafe { self.array.inner.data.mem_region.as_base::<T>() }
+                .atomic_fetch_op(pe, offset, AtomicOp::Read);
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
@@ -32,12 +28,11 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle =
-                self.array
-                    .inner
-                    .data
-                    .mem_region
-                    .atomic_op(pe, offset, AtomicOp::Write(val));
+            let handle = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+                pe,
+                offset,
+                AtomicOp::Write(val),
+            );
             ArrayOpHandle {
                 array: self.clone().into(),
                 state: OpState::Network(handle),
@@ -49,12 +44,8 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle =
-                self.array
-                    .inner
-                    .data
-                    .mem_region
-                    .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
+            let handle = unsafe { self.array.inner.data.mem_region.as_base::<T>() }
+                .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),

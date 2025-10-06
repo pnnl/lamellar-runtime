@@ -130,12 +130,11 @@ impl<T: Dist> NetworkAtomicArray<T> {
 impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
     unsafe fn put(&self, index: usize, data: T) -> ArrayRdmaPutHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let req = self
-                .array
-                .inner
-                .data
-                .mem_region
-                .atomic_op(pe, offset, AtomicOp::Write(data));
+            let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+                pe,
+                offset,
+                AtomicOp::Write(data),
+            );
             ArrayRdmaPutHandle {
                 array: self.as_lamellar_byte_array(),
                 state: ArrayRdmaPutState::AtomicPut(req),
@@ -147,11 +146,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
     }
     unsafe fn put_unmanaged(&self, index: usize, data: T) {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            self.array
-                .inner
-                .data
-                .mem_region
-                .atomic_op_unmanaged(pe, offset, AtomicOp::Write(data));
+            unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op_unmanaged(
+                pe,
+                offset,
+                AtomicOp::Write(data),
+            );
         } else {
             panic!("index out of bounds in LamellarArray put");
         }
@@ -187,12 +186,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
             .spawn();
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
-        let req = self
-            .array
-            .inner
-            .data
-            .mem_region
-            .atomic_op(pe, offset, AtomicOp::Write(data));
+        let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+            pe,
+            offset,
+            AtomicOp::Write(data),
+        );
         ArrayRdmaPutHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayRdmaPutState::AtomicPut(req),
@@ -200,12 +198,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
-        let _ = self
-            .array
-            .inner
-            .data
-            .mem_region
-            .atomic_op(pe, offset, AtomicOp::Write(data));
+        let _ = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+            pe,
+            offset,
+            AtomicOp::Write(data),
+        );
     }
     unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
@@ -243,11 +240,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         );
     }
     unsafe fn put_all(&self, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
-        let req = self
-            .array
-            .inner
-            .data
-            .mem_region
+        let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }
             .atomic_op_all(offset, AtomicOp::Write(data));
         ArrayRdmaPutHandle {
             array: self.as_lamellar_byte_array(),
@@ -256,10 +249,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
-        self.array
-            .inner
-            .data
-            .mem_region
+        unsafe { self.array.inner.data.mem_region.as_base::<T>() }
             .atomic_op_all_unmanaged(offset, AtomicOp::Write(data));
     }
     unsafe fn put_all_buffer<U: Into<MemregionRdmaInputInner<T>>>(
@@ -296,12 +286,11 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
 impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     unsafe fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let req = self
-                .array
-                .inner
-                .data
-                .mem_region
-                .atomic_fetch_op(pe, offset, AtomicOp::Read);
+            let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_fetch_op(
+                pe,
+                offset,
+                AtomicOp::Read,
+            );
             ArrayRdmaGetHandle {
                 array: self.as_lamellar_byte_array(),
                 state: ArrayRdmaGetState::AtomicGet(req),
@@ -348,12 +337,11 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
-        let req = self
-            .array
-            .inner
-            .data
-            .mem_region
-            .atomic_fetch_op(pe, offset, AtomicOp::Read);
+        let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_fetch_op(
+            pe,
+            offset,
+            AtomicOp::Read,
+        );
         ArrayRdmaGetHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayRdmaGetState::AtomicGet(req),

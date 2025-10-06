@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicBool;
+
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
@@ -17,6 +19,7 @@ struct SimpleBatcherInner {
     batch: Arc<Mutex<Vec<(ReqMetaData, LamellarData, usize)>>>, //reqid,data,data size,team addr
     size: Arc<AtomicUsize>,
     batch_id: Arc<AtomicUsize>,
+    in_tx_task: Arc<AtomicBool>,
     pe: Option<usize>,
 }
 
@@ -27,6 +30,7 @@ impl SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
             size: Arc::new(AtomicUsize::new(0)),
             batch_id: Arc::new(AtomicUsize::new(0)),
+            in_tx_task: Arc::new(AtomicBool::new(false)),
             pe: pe,
         }
     }
@@ -94,9 +98,11 @@ impl Batcher for SimpleBatcher {
             am_size,
             *AM_HEADER_LEN,
         );
+        let batch_id = batch.batch_id.load(Ordering::SeqCst);
+        let in_tx_task = batch.in_tx_task.clone();
         if size == 0 {
             //first data in batch, schedule a transfer task
-            let batch_id = batch.batch_id.load(Ordering::SeqCst);
+
             // println!("remote batch_id {batch_id} created ");
             let cur_stall_mark = self.stall_mark.clone();
             // println!(
@@ -108,21 +114,36 @@ impl Batcher for SimpleBatcher {
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
-                    stall_mark = cur_stall_mark.load(Ordering::Relaxed);
+                    stall_mark = cur_stall_mark.load(Ordering::SeqCst);
+                    async_std::task::yield_now().await;
+                }
+                while in_tx_task
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
                     async_std::task::yield_now().await;
                 }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
                     SimpleBatcher::create_tx_task(batch).await;
+                } else {
+                    println!("Someone else is transmitting the batch already");
                 }
+                in_tx_task.store(false, Ordering::SeqCst);
             });
         } else if size >= MAX_BATCH_SIZE {
-            // println!("remote size: {:?} ", size);
-            // println!(
-            //     "[{:?}] add_remote_am_to_batch submit imm task",
-            //     std::thread::current().id()
-            // );
-            SimpleBatcher::create_tx_task(batch).await;
+            while in_tx_task
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            } else {
+                println!("Someone else is transmitting the batch already");
+            }
         }
     }
 
@@ -150,9 +171,10 @@ impl Batcher for SimpleBatcher {
             am_size,
             *AM_HEADER_LEN,
         );
+        let batch_id = batch.batch_id.load(Ordering::SeqCst);
+        let in_tx_task = batch.in_tx_task.clone();
         if size == 0 {
             //first data in batch, schedule a transfer task
-            let batch_id = batch.batch_id.load(Ordering::SeqCst);
             // println!("return batch_id {batch_id} created {dst:?}");
             let cur_stall_mark = self.stall_mark.clone();
             // println!(
@@ -167,18 +189,35 @@ impl Batcher for SimpleBatcher {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
+                while in_tx_task
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    async_std::task::yield_now().await;
+                }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
                     SimpleBatcher::create_tx_task(batch).await;
+                } else {
+                    println!("Someone else is transmitting the batch already");
                 }
+                in_tx_task.store(false, Ordering::SeqCst);
             });
         } else if size >= MAX_BATCH_SIZE {
-            // println!("return size: {:?} {dst:?}",size);
-            // println!(
-            //     "[{:?}] add_return_am_to_batch submit imm task",
-            //     std::thread::current().id()
-            // );
-            SimpleBatcher::create_tx_task(batch).await;
+            while batch
+                .in_tx_task
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            } else {
+                println!("Someone else is transmitting the batch already");
+            }
+            in_tx_task.store(false, Ordering::SeqCst);
         }
     }
 
@@ -208,15 +247,17 @@ impl Batcher for SimpleBatcher {
             data_size,
             darc_list_size + *DATA_HEADER_LEN,
         );
+        let batch_id = batch.batch_id.load(Ordering::SeqCst);
+        let in_tx_task = batch.in_tx_task.clone();
         if size == 0 {
             //first data in batch, schedule a transfer task
-            let batch_id = batch.batch_id.load(Ordering::SeqCst);
             // println!("data batch_id {batch_id} created {dst:?}");
             let cur_stall_mark = self.stall_mark.clone();
             // println!(
             //     "[{:?}] add_data_am_to_batch submit task",
             //     std::thread::current().id()
             // );
+
             self.executor.submit_io_task(async move {
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
@@ -225,18 +266,34 @@ impl Batcher for SimpleBatcher {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
+                while in_tx_task
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    async_std::task::yield_now().await;
+                }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
                     SimpleBatcher::create_tx_task(batch).await;
+                } else {
+                    println!("Someone else is transmitting the batch already");
                 }
+                in_tx_task.store(false, Ordering::SeqCst);
             });
         } else if size >= MAX_BATCH_SIZE {
-            // println!("data size: {:?} {dst:?}",size);
-            // println!(
-            //     "[{:?}] add_data_am_to_batch submit imm task",
-            //     std::thread::current().id()
-            // );
-            SimpleBatcher::create_tx_task(batch).await;
+            while in_tx_task
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            } else {
+                println!("Someone else is transmitting the batch already");
+            }
+            in_tx_task.store(false, Ordering::SeqCst);
         }
     }
 
@@ -252,9 +309,11 @@ impl Batcher for SimpleBatcher {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
         }
         let size = batch.add(req_data, LamellarData::Unit, 0, *UNIT_HEADER_LEN);
+        let batch_id = batch.batch_id.load(Ordering::SeqCst);
+        let in_tx_task = batch.in_tx_task.clone();
         if size == 0 {
             //first data in batch, schedule a transfer task
-            let batch_id = batch.batch_id.load(Ordering::SeqCst);
+
             // println!("unit batch_id {batch_id} created ");
             let cur_stall_mark = self.stall_mark.clone();
             // println!(
@@ -269,18 +328,34 @@ impl Batcher for SimpleBatcher {
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
+                while in_tx_task
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+                {
+                    async_std::task::yield_now().await;
+                }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
                     SimpleBatcher::create_tx_task(batch).await;
+                } else {
+                    println!("Someone else is transmitting the batch already");
                 }
+                in_tx_task.store(false, Ordering::SeqCst);
             });
         } else if size >= MAX_BATCH_SIZE {
-            // println!("unit size: {:?} ", size);
-            // println!(
-            //     "[{:?}] add_unit_am_to_batch submit imm task",
-            //     std::thread::current().id()
-            // );
-            SimpleBatcher::create_tx_task(batch).await;
+            while in_tx_task
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                .is_err()
+            {
+                async_std::task::yield_now().await;
+            }
+            if batch_id == batch.batch_id.load(Ordering::SeqCst) {
+                //this batch is still valid
+                SimpleBatcher::create_tx_task(batch).await;
+            } else {
+                println!("Someone else is transmitting the batch already");
+            }
+            in_tx_task.store(false, Ordering::SeqCst);
         }
     }
 

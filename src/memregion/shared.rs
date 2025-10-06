@@ -520,7 +520,9 @@ impl<T: Remote> AsBase for SharedMemoryRegion<T> {
 
 impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
-        self.mr.put(pe, self.sub_region_offset + index, data)
+        self.mr
+            .as_base::<T>()
+            .put(pe, self.sub_region_offset + index, data)
     }
     unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
         self.mr
@@ -534,7 +536,9 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         index: usize,
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
-        self.mr.put_buffer(pe, self.sub_region_offset + index, data)
+        self.mr
+            .as_base::<T>()
+            .put_buffer(pe, self.sub_region_offset + index, data)
     }
     unsafe fn put_buffer_unmanaged(
         &self,
@@ -548,7 +552,9 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
             .put_buffer_unmanaged(data, pe, self.sub_region_offset + index);
     }
     unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
-        self.mr.put_all(self.sub_region_offset + index, data)
+        self.mr
+            .as_base::<T>()
+            .put_all(self.sub_region_offset + index, data)
     }
     unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
         self.mr
@@ -561,7 +567,9 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         index: usize,
         data: impl Into<MemregionRdmaInputInner<T>>,
     ) -> RdmaHandle<T> {
-        self.mr.put_all_buffer(self.sub_region_offset + index, data)
+        self.mr
+            .as_base::<T>()
+            .put_all_buffer(self.sub_region_offset + index, data)
     }
     unsafe fn put_all_buffer_unmanaged(
         &self,
@@ -575,10 +583,14 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
     }
 
     unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
-        self.mr.get(pe, self.sub_region_offset + index)
+        self.mr
+            .as_base::<T>()
+            .get(pe, self.sub_region_offset + index)
     }
     unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
-        self.mr.get_buffer(pe, self.sub_region_offset + index, len)
+        self.mr
+            .as_base::<T>()
+            .get_buffer(pe, self.sub_region_offset + index, len)
     }
     unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -587,6 +599,7 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         data: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
         self.mr
+            .as_base::<T>()
             .get_into_buffer(pe, self.sub_region_offset + index, data)
     }
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
@@ -596,6 +609,7 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         data: LamellarBuffer<T, B>,
     ) {
         self.mr
+            .as_base::<T>()
             .get_into_buffer_unmanaged(pe, self.sub_region_offset + index, data);
     }
     // unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {

@@ -123,7 +123,7 @@ fn main() {
     // let _guard = setup_global_subscriber();
 
     let mut rng = rand::thread_rng();
-    let pe_rng = Uniform::from(num_pes..num_pes + 1);
+    let pe_rng = Uniform::from(0..num_pes + 1);
     let am_rng = Uniform::from(0..12);
     let buf_rng = Uniform::from(10000..100000);
     world.barrier();
