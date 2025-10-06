@@ -457,27 +457,11 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
-        let executor = match config().executor.as_str(){
-            "tokio" => {
-                #[cfg(not(feature = "tokio-executor"))]
-                {
-                    panic!("[LAMELLAR WARNING]: tokio-executor selected but it is not enabled, either recompile lamellar with --features tokio-executor, or set LAMELLAR_EXECUTOR to one of 'lamellar' or 'async_std'");
-                }
-                #[cfg(feature = "tokio-executor")]
-                ExecutorType::Tokio
-            }
-            "async_std" => ExecutorType::AsyncStd,
-            "lamellar" => ExecutorType::LamellarWorkStealing,
-            "lamellar2" => ExecutorType::LamellarWorkStealing2,
-            "lamellar3" => ExecutorType::LamellarWorkStealing3,
-            _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'async_std', or (if tokio-executor feature is enabled, 'tokio'.")
-        };
-
         let num_threads = config().threads;
         LamellarWorldBuilder {
             primary_lamellae: Default::default(),
             // secondary_lamellae: HashSet::new(),
-            executor: executor,
+            executor: config().executor,
             num_threads: num_threads,
         }
     }

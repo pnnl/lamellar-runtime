@@ -1,5 +1,4 @@
 use crate::active_messaging::Msg;
-use crate::config;
 use crate::lamellar_arch::LamellarArchRT;
 use crate::scheduler::Scheduler;
 use std::sync::Arc;
@@ -36,13 +35,15 @@ lazy_static! {
 
 /// The list of available lamellae backends, used to specify how data is transfered between PEs
 #[derive(
-    serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
+    serde::Serialize, serde::Deserialize, Debug, Default, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
     #[cfg(feature = "rofi")]
+    #[cfg_attr(feature = "rofi", default)]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
     /// The Local backend -- intended for single process environments
+    #[cfg_attr(not(feature = "rofi"), default)]
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
     Shmem,
@@ -55,24 +56,6 @@ pub(crate) enum AllocationType {
     Sub(Vec<usize>),
 }
 
-impl Default for Backend {
-    fn default() -> Self {
-        match config().backend.as_str() {
-            "rofi" => {
-                #[cfg(feature = "rofi")]
-                return Backend::Rofi;
-                #[cfg(not(feature = "rofi"))]
-                panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
-            }
-            "shmem" => {
-                return Backend::Shmem;
-            }
-            _ => {
-                return Backend::Local;
-            }
-        }
-    }
-}
 // fn default_backend() -> Backend {
 //     match std::env::var("LAMELLAE_BACKEND") {
 //         Ok(p) => match p.as_str() {
