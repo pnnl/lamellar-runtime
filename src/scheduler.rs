@@ -31,7 +31,7 @@ use async_std_executor::AsyncStdRt;
 pub(crate) mod tokio_executor;
 #[cfg(feature = "tokio-executor")]
 use tokio_executor::TokioRt;
-
+use crate::Deserialize;
 // ACTIVE ENUM
 // since atomic enums would be another dependecy
 
@@ -78,9 +78,10 @@ pub(crate) struct ReqId {
 /// Default is a work stealing executor
 /// If the "tokio-executor" feature is enabled,the tokio executor can also be used
 /// allowing seemless integration with tokio based applications
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 pub enum ExecutorType {
     /// The default work stealing executor
+    #[default]
     LamellarWorkStealing,
     /// Experimental numa-aware(ish) work stealing executor
     LamellarWorkStealing2,
@@ -88,8 +89,8 @@ pub enum ExecutorType {
     LamellarWorkStealing3,
     /// executor provided by the AsyncStd crate
     AsyncStd,
-    #[cfg(feature = "tokio-executor")]
     /// The tokio executor
+    #[cfg(feature = "tokio-executor")]
     Tokio,
     // Dyn(impl LamellarExecutor),
 }
