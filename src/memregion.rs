@@ -1415,7 +1415,7 @@ pub trait RemoteMemoryRegion {
 impl<T: Remote> Drop for MemoryRegion<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        // println!("trying to dropping mem region {:?}",self);
+        // println!("trying to dropping mem region {:?}", self);
         if self.freeable {
             match self.mode {
                 Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
@@ -1432,11 +1432,11 @@ impl<T: Remote> std::fmt::Debug for MemoryRegion<T> {
         // write!(f, "{:?}", slice)
         write!(
             f,
-            "addr {:#x} size {:?} backend {:?}", // cnt: {:?}",
+            "addr {:#x} size {:?} backend {:?} freeable {:?}", // cnt: {:?}",
             self.alloc.comm_addr(),
             self.alloc.num_bytes(),
             self.backend,
-            // self.cnt.load(Ordering::SeqCst)
+            self.freeable // self.cnt.load(Ordering::SeqCst)
         )
     }
 }

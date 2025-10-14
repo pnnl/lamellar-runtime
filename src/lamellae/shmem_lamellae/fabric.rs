@@ -95,6 +95,11 @@ impl ShmemAlloc {
         }
     }
 
+    pub(crate) unsafe fn zeroize_bytes(&self) {
+        let u8_slice = std::slice::from_raw_parts_mut(self.data, self.len);
+        u8_slice.fill(0);
+    }
+
     pub(crate) fn wait(&self) {
         //shmem is always ready
     }

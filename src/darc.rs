@@ -108,6 +108,12 @@ pub(crate) enum DarcMode {
     RestartDrop,
 }
 
+impl Default for DarcMode {
+    fn default() -> Self {
+        DarcMode::Darc
+    }
+}
+
 #[lamellar_impl::AmDataRT(Debug)]
 struct FinishedAm {
     cnt: usize,

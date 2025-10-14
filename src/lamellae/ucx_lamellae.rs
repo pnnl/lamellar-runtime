@@ -105,6 +105,9 @@ impl Ucx {
     fn cq(&self) -> Arc<CommandQueue> {
         self.cq.clone()
     }
+    pub(crate) fn wait_all_print(&self) {
+        self.cq.wait_all_print();
+    }
     pub(crate) fn comm(&self) -> &Comm {
         &self.ucx_comm
     }

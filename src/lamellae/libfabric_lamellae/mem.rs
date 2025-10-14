@@ -1,7 +1,5 @@
 use std::sync::atomic::Ordering;
 
-use tracing::trace;
-
 use crate::{
     config,
     env_var::HeapMode,
@@ -17,6 +15,8 @@ use crate::{
 
 use super::comm::{LibfabricComm, HEAP_SIZE};
 
+use tracing::{debug, error, info, trace};
+
 impl CommMem for LibfabricComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn alloc(
@@ -26,6 +26,9 @@ impl CommMem for LibfabricComm {
         align: usize,
     ) -> AllocResult<CommAlloc> {
         let inner_alloc = self.ofi.alloc(size, alloc_type)?;
+        // unsafe {
+        //     inner_alloc.zeroize_bytes();
+        // }
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::LibfabricAlloc(inner_alloc),
             alloc_type: CommAllocType::Fabric,
@@ -57,17 +60,21 @@ impl CommMem for LibfabricComm {
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                trace!(
-                    "new rt alloc: {:x} {} {}",
+                let alloc = inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?;
+                info!(
+                    "new rt alloc: 0x{:x}-0x{:x} {} {} {:?} {:#?}",
                     addr,
+                    addr + size,
                     addr - inner_alloc.start(),
-                    size
+                    size,
+                    alloc,
+                    std::backtrace::Backtrace::capture()
                 );
-
+                // unsafe {
+                //     alloc.zeroize_bytes();
+                // }
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(
-                        inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?,
-                    ),
+                    inner_alloc: CommAllocInner::LibfabricAlloc(alloc),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }
@@ -89,30 +96,64 @@ impl CommMem for LibfabricComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_free(&self, alloc: CommAlloc) {
         assert!(alloc.alloc_type == CommAllocType::RtHeap);
-        trace!("rt_free: {:?}", alloc);
+        debug!("rt_free: {:?}", alloc);
         match alloc.inner_alloc {
             CommAllocInner::Raw(addr, _) => {
-                trace!("freeing rt alloc: {:x}", addr);
+                info!(
+                    "freeing rt alloc: {:x} {:#?}",
+                    addr,
+                    std::backtrace::Backtrace::capture()
+                );
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {
                     if let Ok(_) = alloc.free(addr) {
+                        info!(
+                            "freed rt alloc: {:x} {:#?}",
+                            addr,
+                            std::backtrace::Backtrace::capture()
+                        );
                         return;
                     }
                 }
+                error!(
+                    "Error invalid free from addr! {:x} {:#?}",
+                    addr,
+                    std::backtrace::Backtrace::capture()
+                );
+                for (_, alloc) in allocs.iter() {
+                    error!("{:?}", alloc);
+                }
+                panic!("Error invalid free from addr! {:x}", addr);
             }
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                trace!(
-                    "freeing rt alloc: {:?} cnt: {}",
+                info!(
+                    "freeing rt alloc: {:?} cnt: {} {:#?}",
                     inner_alloc,
-                    std::sync::Arc::strong_count(&inner_alloc)
+                    std::sync::Arc::strong_count(&inner_alloc),
+                    std::backtrace::Backtrace::capture()
                 );
                 let allocs = self.runtime_allocs.read();
                 for (_, alloc) in allocs.iter() {
                     if let Ok(_) = alloc.free(inner_alloc.start()) {
+                        info!(
+                            "freed rt alloc: {:?} cnt: {} {:#?}",
+                            inner_alloc,
+                            std::sync::Arc::strong_count(&inner_alloc),
+                            std::backtrace::Backtrace::capture()
+                        );
                         return;
                     }
                 }
-                panic!("Error invalid free! {:?}", inner_alloc);
+                error!(
+                    "Error invalid free from alloc! {:?} {} {:#?}",
+                    inner_alloc,
+                    std::sync::Arc::strong_count(&inner_alloc),
+                    std::backtrace::Backtrace::capture()
+                );
+                for (_, alloc) in allocs.iter() {
+                    error!("{:?}", alloc);
+                }
+                panic!("Error invalid free from alloc! {:?}", inner_alloc);
             }
             _ => panic!(
                 "unexpected allocation type {:?} in rt_free",

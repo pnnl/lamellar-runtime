@@ -33,8 +33,8 @@ use std::{
     task::{Context, Poll},
 };
 
-pub trait Remote: Copy + Sync + Send + 'static {}
-impl<T: Copy + Sync + Send + 'static> Remote for T {}
+pub trait Remote: Copy + Sync + Send + Default + 'static {}
+impl<T: Copy + Sync + Send + Default + 'static> Remote for T {}
 
 /// A task handle for raw RMDA (put/get) operation
 #[must_use = " RdmaHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]

@@ -38,7 +38,7 @@ use std::{
         Arc,
     },
 };
-use tracing::{info, trace};
+use tracing::{debug, error, info, trace};
 
 type WaitableEq = libfabric::eq_caps_type!(EqCaps::WAIT);
 type WaitableCq = libfabric::cq_caps_type!(CqCaps::WAIT);
@@ -615,7 +615,7 @@ impl Ofi {
             size
         };
 
-        println!("Allocating aligned size: {} aligned", aligned_size);
+        trace!("Allocating aligned size: {} aligned", aligned_size);
         // println!("{:?}", std::backtrace::Backtrace::capture());
 
         // Map memory of aligned size
@@ -1166,6 +1166,10 @@ impl LibfabricAlloc {
         }
     }
 
+    pub(crate) unsafe fn zeroize_bytes(&self) {
+        self.as_mut_slice::<u8>().fill(0);
+    }
+
     pub(crate) fn start(&self) -> usize {
         self.range.start
     }
@@ -1232,14 +1236,16 @@ impl LibfabricAlloc {
         ));
 
         let mut remote_dst_addr = remote_alloc_info.mem_address().add(offset);
-        trace!(
-            "Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}",
+        debug!(
+            "Inner Put: Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}-{:?} {} bytes",
             pe,
             remote_alloc_info.mem_address(),
             offset,
             std::mem::size_of::<T>(),
             src_addr.len(),
-            remote_dst_addr.as_ptr()
+            remote_dst_addr,
+            remote_dst_addr.add(std::mem::size_of_val(src_addr)),
+            std::mem::size_of_val(src_addr)
         );
 
         let remote_key = remote_alloc_info.key();
@@ -1262,7 +1268,7 @@ impl LibfabricAlloc {
             while curr_idx < src_addr.len() {
                 let msg_len = std::cmp::min(
                     src_addr.len() - curr_idx,
-                    self.ofi.info_entry.ep_attr().max_msg_size(),
+                    self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
                 );
 
                 self.ofi.post_put(|| unsafe {
@@ -1310,7 +1316,19 @@ impl LibfabricAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
+
         let mut remote_src_addr = remote_alloc_info.mem_address().add(offset);
+        debug!(
+            "Inner Get: Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}-{:?} {} bytes",
+            pe,
+            remote_alloc_info.mem_address(),
+            offset,
+            std::mem::size_of::<T>(),
+            dst_addr.len(),
+            remote_src_addr,
+            remote_src_addr.add(std::mem::size_of_val(dst_addr)),
+            std::mem::size_of_val(dst_addr)
+        );
         let remote_key = remote_alloc_info.key();
 
         let mut curr_idx = 0;
@@ -1318,9 +1336,16 @@ impl LibfabricAlloc {
         while curr_idx < dst_addr.len() {
             let msg_len = std::cmp::min(
                 dst_addr.len() - curr_idx,
-                self.ofi.info_entry.ep_attr().max_msg_size(),
+                self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
             );
             self.ofi.post_get(|| unsafe {
+                error!(
+                    "GET: from PE {} at addr {:?} to local addr {:?} len {}",
+                    pe,
+                    remote_src_addr,
+                    &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
+                    msg_len * std::mem::size_of::<T>()
+                );
                 self.ofi.ep.read_from(
                     &mut dst_addr[curr_idx..curr_idx + msg_len],
                     Some(&self.mr.descriptor()),

@@ -231,7 +231,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
                 .load(std::sync::atomic::Ordering::SeqCst)
         } == 1
         {
-            let data = unsafe { Box::from_raw(self.data.as_ptr()) };
+            let this = std::mem::ManuallyDrop::new(self);
+            let data = unsafe { Box::from_raw(this.data.as_ptr()) };
             Ok(data.data)
         } else {
             Err(self)

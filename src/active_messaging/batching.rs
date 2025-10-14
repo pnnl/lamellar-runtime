@@ -9,6 +9,31 @@ use team_am_batcher::TeamAmBatcher;
 
 use async_trait::async_trait;
 
+lazy_static! {
+    pub(crate) static ref BATCHER_AM_PE_SEND_CNTS: Vec<Vec<AtomicUsize>> = {
+        let mut v = Vec::with_capacity(2);
+        for _ in 0..2 {
+            let mut t = Vec::with_capacity(32);
+            for _ in 0..32 {
+                t.push(AtomicUsize::new(0));
+            }
+            v.push(t);
+        }
+        v
+    };
+    pub(crate) static ref BATCHER_AM_PE_RECV_CNTS: Vec<Vec<AtomicUsize>> = {
+        let mut v = Vec::with_capacity(2);
+        for _ in 0..2 {
+            let mut t = Vec::with_capacity(32);
+            for _ in 0..32 {
+                t.push(AtomicUsize::new(0));
+            }
+            v.push(t);
+        }
+        v
+    };
+}
+
 #[derive(Clone)]
 enum LamellarData {
     Am(LamellarArcAm, AmId, usize),

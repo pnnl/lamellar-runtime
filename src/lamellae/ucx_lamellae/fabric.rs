@@ -502,6 +502,11 @@ impl UcxAlloc {
         }
     }
 
+    pub(crate) unsafe fn zeroize_bytes(&self) {
+        let u8_slice = self.as_mut_slice::<u8>();
+        u8_slice.fill(0);
+    }
+
     pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
     }

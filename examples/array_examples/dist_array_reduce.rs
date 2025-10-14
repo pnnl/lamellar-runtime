@@ -75,8 +75,11 @@ fn main() {
             local_mem_region,
         )
     };
+    println!("after buffer creation");
     let buffer = buffer_handle.split_off(0); // we want to keep an empty buffer handle so that we  can retrieve the mem region later
+    println!("after buffer split");
     unsafe { block_array.get_into_buffer(0, buffer).block() };
+    println!("here");
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     local_mem_region = buffer_handle

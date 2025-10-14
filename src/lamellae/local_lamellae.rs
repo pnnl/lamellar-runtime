@@ -58,6 +58,10 @@ impl Local {
     pub(crate) fn comm(&self) -> &Comm {
         &self.local_comm
     }
+
+    pub(crate) fn wait_all_print(&self) {
+        println!("local lamellae - nothing to print");
+    }
 }
 
 // #[async_trait]

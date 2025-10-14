@@ -1,6 +1,6 @@
 use crate::{
     active_messaging::{
-        batching::{Batcher, BatcherType},
+        batching::{Batcher, BatcherType, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS},
         *,
     },
     config,
@@ -132,6 +132,9 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                                 )
                                 .await;
                         } else {
+                            BATCHER_AM_PE_SEND_CNTS[0].iter().for_each(|c| {
+                                c.fetch_add(1, Ordering::Relaxed);
+                            });
                             // println!(
                             //     "[{:?}] {:?} all {:?}",
                             //     std::thread::current().id(),
@@ -164,6 +167,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                             .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                             .await;
                     } else {
+                        BATCHER_AM_PE_SEND_CNTS[0][req_data.dst.unwrap()]
+                            .fetch_add(1, Ordering::Relaxed);
                         // println!(
                         //     "[{:?}] {:?} pe {:?}",
                         //     std::thread::current().id(),
@@ -188,6 +193,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                         .await;
                 } else {
+                    BATCHER_AM_PE_SEND_CNTS[1][req_data.dst.unwrap()]
+                        .fetch_add(1, Ordering::Relaxed);
                     // println!(
                     //     "[{:?}] {:?} return {:?}",
                     //     std::thread::current().id(),
@@ -206,6 +213,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .add_data_am_to_batch(req_data, data, data_size, stall_mark)
                         .await;
                 } else {
+                    BATCHER_AM_PE_SEND_CNTS[1][req_data.dst.unwrap()]
+                        .fetch_add(1, Ordering::Relaxed);
                     // println!("[{:?}] data {:?}", std::thread::current().id(), data_size);
                     self.send_data_am(req_data, data, data_size).await;
                 }
@@ -216,6 +225,8 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .add_unit_am_to_batch(req_data, stall_mark)
                         .await;
                 } else {
+                    BATCHER_AM_PE_SEND_CNTS[1][req_data.dst.unwrap()]
+                        .fetch_add(1, Ordering::Relaxed);
                     // println!(
                     //     "[{:?}]  unit {:?}",
                     //     std::thread::current().id(),
@@ -235,16 +246,20 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         match msg.cmd {
             Cmd::Am => {
                 self.exec_am(&msg, &ser_data, &mut i, &lamellae).await;
+                BATCHER_AM_PE_RECV_CNTS[1][msg.src as usize].fetch_add(1, Ordering::Relaxed);
             }
             Cmd::ReturnAm => {
                 self.exec_return_am(&msg, &ser_data, &mut i, &lamellae)
                     .await;
+                BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
             }
             Cmd::Data => {
                 self.exec_data_am(&msg, &mut i, &mut ser_data).await;
+                BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
             }
             Cmd::Unit => {
                 self.exec_unit_am(&msg, &ser_data, &mut i).await;
+                BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
             }
             Cmd::BatchedMsg => {
                 self.batcher

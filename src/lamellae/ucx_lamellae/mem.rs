@@ -27,6 +27,9 @@ impl CommMem for UcxComm {
     ) -> AllocResult<CommAlloc> {
         // rucx_c allocs are aligned on page boundaries so no need to pass in alignment constraint
         let inner_alloc = self.ucx.alloc(size, alloc_type);
+        unsafe {
+            inner_alloc.zeroize_bytes();
+        }
         // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
@@ -66,11 +69,13 @@ impl CommMem for UcxComm {
                 //     addr - inner_alloc.start(),
                 //     size
                 // );
+                let alloc = inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?;
+                unsafe {
+                    alloc.zeroize_bytes();
+                }
 
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::UcxAlloc(
-                        inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?,
-                    ),
+                    inner_alloc: CommAllocInner::UcxAlloc(alloc),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }

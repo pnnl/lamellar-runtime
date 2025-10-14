@@ -86,8 +86,16 @@ impl Batcher for SimpleBatcher {
         // println!("add_remote_am_to_batch");
         //let dst =req_data.dst;
         let batch = match req_data.dst {
-            Some(dst) => self.batched_ams[dst].clone(),
-            None => self.batched_ams.last().unwrap().clone(),
+            Some(dst) => {
+                BATCHER_AM_PE_SEND_CNTS[0][dst].fetch_add(1, Ordering::Relaxed);
+                self.batched_ams[dst].clone()
+            }
+            None => {
+                BATCHER_AM_PE_SEND_CNTS[0].iter().for_each(|c| {
+                    c.fetch_add(1, Ordering::Relaxed);
+                });
+                self.batched_ams.last().unwrap().clone()
+            }
         };
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
@@ -159,8 +167,16 @@ impl Batcher for SimpleBatcher {
         // trace!("add_return_am_to_batch");
         //let dst =req_data.dst;
         let batch = match req_data.dst {
-            Some(dst) => self.batched_ams[dst].clone(),
-            None => self.batched_ams.last().unwrap().clone(),
+            Some(dst) => {
+                BATCHER_AM_PE_SEND_CNTS[1][dst].fetch_add(1, Ordering::Relaxed);
+                self.batched_ams[dst].clone()
+            }
+            None => {
+                BATCHER_AM_PE_SEND_CNTS[1].iter().for_each(|c| {
+                    c.fetch_add(1, Ordering::Relaxed);
+                });
+                self.batched_ams.last().unwrap().clone()
+            }
         };
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
@@ -232,8 +248,16 @@ impl Batcher for SimpleBatcher {
         // println!("add_data_am_to_batch");
         //let dst =req_data.dst;
         let batch = match req_data.dst {
-            Some(dst) => self.batched_ams[dst].clone(),
-            None => self.batched_ams.last().unwrap().clone(),
+            Some(dst) => {
+                BATCHER_AM_PE_SEND_CNTS[1][dst].fetch_add(1, Ordering::Relaxed);
+                self.batched_ams[dst].clone()
+            }
+            None => {
+                BATCHER_AM_PE_SEND_CNTS[1].iter().for_each(|c| {
+                    c.fetch_add(1, Ordering::Relaxed);
+                });
+                self.batched_ams.last().unwrap().clone()
+            }
         };
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
@@ -302,8 +326,16 @@ impl Batcher for SimpleBatcher {
         // println!("add_unit_am_to_batch");
         //let dst =req_data.dst;
         let batch = match req_data.dst {
-            Some(dst) => self.batched_ams[dst].clone(),
-            None => self.batched_ams.last().unwrap().clone(),
+            Some(dst) => {
+                BATCHER_AM_PE_SEND_CNTS[1][dst].fetch_add(1, Ordering::Relaxed);
+                self.batched_ams[dst].clone()
+            }
+            None => {
+                BATCHER_AM_PE_SEND_CNTS[1].iter().for_each(|c| {
+                    c.fetch_add(1, Ordering::Relaxed);
+                });
+                self.batched_ams.last().unwrap().clone()
+            }
         };
         if stall_mark == 0 {
             self.stall_mark.fetch_add(1, Ordering::Relaxed);
@@ -384,20 +416,24 @@ impl Batcher for SimpleBatcher {
             match cmd {
                 Cmd::Am => {
                     *cnts.entry(Cmd::Am).or_insert(0) += 1;
-                    self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame)
+                    self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame);
+                    BATCHER_AM_PE_RECV_CNTS[1][msg.src as usize].fetch_add(1, Ordering::Relaxed);
                 }
                 Cmd::ReturnAm => {
                     *cnts.entry(Cmd::ReturnAm).or_insert(0) += 1;
                     self.exec_return_am(&msg, &ser_data, &mut i, &lamellae, ame)
-                        .await
+                        .await;
+                    BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
                 }
                 Cmd::Data => {
                     *cnts.entry(Cmd::Data).or_insert(0) += 1;
-                    ame.exec_data_am(&msg, &mut i, &mut ser_data).await
+                    ame.exec_data_am(&msg, &mut i, &mut ser_data).await;
+                    BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
                 }
                 Cmd::Unit => {
                     *cnts.entry(Cmd::Unit).or_insert(0) += 1;
-                    ame.exec_unit_am(&msg, &ser_data, &mut i).await
+                    ame.exec_unit_am(&msg, &ser_data, &mut i).await;
+                    BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
                 }
                 Cmd::BatchedMsg => {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")

@@ -3,6 +3,7 @@ pub(crate) mod command_queues;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
 
+use crate::lamellae::command_queues::CommandQueue;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 
@@ -10,6 +11,8 @@ pub use comm::atomic::{AtomicFetchOpHandle, AtomicOpHandle};
 pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
+
+use tracing::error;
 
 match_cfg::match_cfg! {
     #[cfg(feature = "rofi-c")] => {
@@ -214,7 +217,7 @@ impl SerializedData {
         unsafe {
             ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
             *ser_data_size = alloc.num_bytes();
-            trace!("creating new serialized data {:?} {:?} {:?} {:?} serialized data offset {:?} ref_cnt_addr {:x} size_addr {:x} size {:?}",
+            debug!("creating new serialized data {:?} {:?} {:?} {:?} serialized data offset {:?} ref_cnt_addr {:x} size_addr {:x} size {:?}",
             alloc,ser_data_bytes,header_bytes,payload_bytes,
             alloc.byte_add(ser_data_offset), alloc.comm_addr(),alloc.byte_add(ref_cnt_size), *ser_data_size);
         }
@@ -377,6 +380,10 @@ impl Drop for SerializedData {
                 .fetch_sub(1, Ordering::SeqCst)
                 == 1
             {
+                debug!(
+                    "freeing serialized data from addr {:x} ",
+                    self.alloc.comm_addr()
+                );
                 self.comm.rt_free(self.alloc.clone());
             }
         }
@@ -434,6 +441,10 @@ impl Drop for SubSerializedData {
                 .fetch_sub(1, Ordering::SeqCst)
                 == 1
             {
+                debug!(
+                    "freeing serialized data from addr {:x} ",
+                    self.alloc.comm_addr()
+                );
                 self.comm.rt_free(self.alloc.clone());
             }
         }
@@ -501,6 +512,10 @@ impl Drop for RemoteSerializedData {
                 .fetch_sub(1, Ordering::SeqCst)
                 == 1
             {
+                debug!(
+                    "freeing serialized data from addr {:x} ",
+                    self.alloc.comm_addr()
+                );
                 self.comm.rt_free(self.alloc.clone());
             }
         }
@@ -591,6 +606,25 @@ impl Lamellae {
             // Lamellae::LibfabricAsync => self.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
             Lamellae::Local(local) => local.comm(),
+        }
+    }
+
+    pub(crate) fn wait_all_print(&self) {
+        match self {
+            #[cfg(feature = "rofi-c")]
+            Lamellae::RofiC(rofi_c) => rofi_c.wait_all_print(),
+            #[cfg(feature = "enable-rofi-rust")]
+            Lamellae::RofiRust => println!("rofi rust - nothing to print"),
+            #[cfg(feature = "enable-rofi-rust")]
+            Lamellae::RofiRustAsync => println!("rofi rust async - nothing to print"),
+            #[cfg(feature = "enable-libfabric")]
+            Lamellae::Libfabric(libfabric) => libfabric.wait_all_print(),
+            #[cfg(feature = "enable-ucx")]
+            Lamellae::Ucx(ucx) => ucx.wait_all_print(),
+            // #[cfg(feature = "enable-libfabric")]
+            // Lamellae::LibfabricAsync => println!("libfabric async - nothing to print"),
+            Lamellae::Shmem(shmem) => shmem.wait_all_print(),
+            Lamellae::Local(local) => local.wait_all_print(),
         }
     }
 }

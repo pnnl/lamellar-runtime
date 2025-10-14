@@ -1,9 +1,11 @@
 // use rand::Rng;
 use rand::distributions::{Distribution, Uniform};
 use std::time::Instant;
-use tracing_subscriber::fmt;
 
 use lamellar::active_messaging::prelude::*;
+
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
 // use lamellar::{Backend, SchedulerType};
 
 // use tracing_flame::FlameLayer;
@@ -56,7 +58,8 @@ struct AmReturnVec {
 impl LamellarAM for AmReturnVec {
     async fn exec(self) -> Vec<usize> {
         // println!("\t{:?} {:?} leaving", self.vec_size,self.data.len());
-        vec![0; self.vec_size]
+        let val = 100 + lamellar::current_pe;
+        vec![val; self.vec_size]
     }
 }
 
@@ -72,10 +75,11 @@ impl LamellarAM for InitialAMVec {
     async fn exec(&self) -> ReturnVecAM {
         let current_hostname = hostname::get().unwrap().to_string_lossy().to_string();
         // println!("{:?}",current_hostname);
+        let val = 1000 + lamellar::current_pe;
         ReturnVecAM {
             val1: self.val1,
             val2: current_hostname,
-            vec: vec![1; self.val1],
+            vec: vec![val; self.val1],
         }
     }
 }
@@ -109,7 +113,16 @@ impl LamellarAM for ReturnVecAM {
 
 fn main() {
     // let _guard = setup_global_subscriber();
-    let subscriber = fmt::init();
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true),
+        )
+        .init();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi, with the default provider
@@ -156,7 +169,7 @@ fn main() {
                         .exec_am_all(AmNoReturn {
                             my_pe: my_pe,
                             index: i,
-                            data: vec![i; 1],
+                            data: vec![my_pe; 1],
                         })
                         .spawn();
                     cnts[2] += 1;
@@ -166,7 +179,7 @@ fn main() {
                         .exec_am_all(AmNoReturn {
                             my_pe: my_pe,
                             index: i,
-                            data: vec![i; len1],
+                            data: vec![my_pe; len1],
                         })
                         .spawn();
                     cnts[3] += 1;
@@ -176,7 +189,7 @@ fn main() {
                         .exec_am_all(AmReturnVec {
                             my_pe: my_pe,
                             vec_size: 1,
-                            data: vec![i; 1],
+                            data: vec![my_pe; 1],
                         })
                         .spawn();
                     cnts[4] += 1;
@@ -186,7 +199,7 @@ fn main() {
                         .exec_am_all(AmReturnVec {
                             my_pe: my_pe,
                             vec_size: 1,
-                            data: vec![i; len1],
+                            data: vec![my_pe; len1],
                         })
                         .spawn();
                     cnts[5] += 1;
@@ -196,7 +209,7 @@ fn main() {
                         .exec_am_all(AmReturnVec {
                             my_pe: my_pe,
                             vec_size: 100000,
-                            data: vec![i; 1],
+                            data: vec![my_pe; 1],
                         })
                         .spawn();
                     cnts[6] += 1;
@@ -206,7 +219,7 @@ fn main() {
                         .exec_am_all(AmReturnVec {
                             my_pe: my_pe,
                             vec_size: 100000,
-                            data: vec![i; len1],
+                            data: vec![my_pe; len1],
                         })
                         .spawn();
                     cnts[7] += 1;
@@ -216,7 +229,7 @@ fn main() {
                         .exec_am_all(InitialAMVec {
                             val1: 1,
                             val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; 1],
+                            vec: vec![my_pe; 1],
                         })
                         .spawn();
                     cnts[8] += 1;
@@ -226,7 +239,7 @@ fn main() {
                         .exec_am_all(InitialAMVec {
                             val1: 1,
                             val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; len1],
+                            vec: vec![my_pe; len1],
                         })
                         .spawn();
                     cnts[9] += 1;
@@ -236,7 +249,7 @@ fn main() {
                         .exec_am_all(InitialAMVec {
                             val1: 100000,
                             val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; 1],
+                            vec: vec![my_pe; 1],
                         })
                         .spawn();
                     cnts[10] += 1;
@@ -246,7 +259,7 @@ fn main() {
                         .exec_am_all(InitialAMVec {
                             val1: 100000,
                             val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                            vec: vec![i; len1],
+                            vec: vec![my_pe; len1],
                         })
                         .spawn();
                     cnts[11] += 1;
@@ -271,7 +284,7 @@ fn main() {
                             AmNoReturn {
                                 my_pe: my_pe,
                                 index: i,
-                                data: vec![i; 1],
+                                data: vec![my_pe; 1],
                             },
                         )
                         .spawn();
@@ -284,7 +297,7 @@ fn main() {
                             AmNoReturn {
                                 my_pe: my_pe,
                                 index: i,
-                                data: vec![i; len1],
+                                data: vec![my_pe; len1],
                             },
                         )
                         .spawn();
@@ -297,7 +310,7 @@ fn main() {
                             AmReturnVec {
                                 my_pe: my_pe,
                                 vec_size: 1,
-                                data: vec![i; 1],
+                                data: vec![my_pe; 1],
                             },
                         )
                         .spawn();
@@ -310,7 +323,7 @@ fn main() {
                             AmReturnVec {
                                 my_pe: my_pe,
                                 vec_size: 1,
-                                data: vec![i; len1],
+                                data: vec![my_pe; len1],
                             },
                         )
                         .spawn();
@@ -323,7 +336,7 @@ fn main() {
                             AmReturnVec {
                                 my_pe: my_pe,
                                 vec_size: len2,
-                                data: vec![i; 1],
+                                data: vec![my_pe; 1],
                             },
                         )
                         .spawn();
@@ -336,7 +349,7 @@ fn main() {
                             AmReturnVec {
                                 my_pe: my_pe,
                                 vec_size: len2,
-                                data: vec![i; len1],
+                                data: vec![my_pe; len1],
                             },
                         )
                         .spawn();
@@ -349,7 +362,7 @@ fn main() {
                             InitialAMVec {
                                 val1: 1,
                                 val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                                vec: vec![i; 1],
+                                vec: vec![my_pe; 1],
                             },
                         )
                         .spawn();
@@ -362,7 +375,7 @@ fn main() {
                             InitialAMVec {
                                 val1: 1,
                                 val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                                vec: vec![i; len1],
+                                vec: vec![my_pe; len1],
                             },
                         )
                         .spawn();
@@ -375,7 +388,7 @@ fn main() {
                             InitialAMVec {
                                 val1: len2,
                                 val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                                vec: vec![i; 1],
+                                vec: vec![my_pe; 1],
                             },
                         )
                         .spawn();
@@ -388,7 +401,7 @@ fn main() {
                             InitialAMVec {
                                 val1: len2,
                                 val2: hostname::get().unwrap().to_string_lossy().to_string(),
-                                vec: vec![i; len1],
+                                vec: vec![my_pe; len1],
                             },
                         )
                         .spawn();

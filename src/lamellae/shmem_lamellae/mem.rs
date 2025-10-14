@@ -41,6 +41,9 @@ impl CommMem for ShmemComm {
             },
             _ => panic!("unexpected allocation type {:?} in rofi_alloc", alloc_type),
         };
+        unsafe {
+            inner_alloc.zeroize_bytes();
+        }
 
         Ok(CommAlloc {
             inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc),
@@ -78,11 +81,13 @@ impl CommMem for ShmemComm {
                     addr - inner_alloc.start(),
                     size
                 );
+                let alloc = inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?;
+                unsafe {
+                    alloc.zeroize_bytes();
+                }
 
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::ShmemAlloc(
-                        inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?,
-                    ),
+                    inner_alloc: CommAllocInner::ShmemAlloc(alloc),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }
