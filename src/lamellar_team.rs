@@ -1129,7 +1129,7 @@ impl LamellarTeamRT {
             .zip(recv_cnts.iter())
             .map(|(s, r)| format!("({:?}/{:?})", s, r))
             .collect::<Vec<String>>();
-        println!("Team Destroyed am send/recv cnts: {:?}", combined);
+        // println!("Team Destroyed am send/recv cnts: {:?}", combined);
 
         // println!("team destroyed")
     }

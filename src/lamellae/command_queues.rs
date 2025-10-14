@@ -773,16 +773,16 @@ impl InnerCQ {
     #[tracing::instrument(skip_all, level = "debug")]
     async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
         PE_SENDS[0][dst].fetch_add(1, Ordering::SeqCst);
-        let tmp_data = data.as_slice().to_vec();
+        // let tmp_data = data.as_slice().to_vec();
         trace!("want to send data {:?} {:?} {:?}", data, dst, hash);
         if hash != calc_hash(data.usize_addr(), data.len())
-            && hash != calc_hash(tmp_data.as_ptr() as usize, tmp_data.len())
+            // && hash != calc_hash(tmp_data.as_ptr() as usize, tmp_data.len())
         {
-            for (i, (tmp, orig)) in tmp_data.iter().zip(data.as_slice().iter()).enumerate() {
-                if tmp != orig {
-                    println!("byte[{i}] data mismatch! {:?} {:?} ", tmp, orig);
-                }
-            }
+            // for (i, (tmp, orig)) in tmp_data.iter().zip(data.as_slice().iter()).enumerate() {
+            //     if tmp != orig {
+            //         println!("byte[{i}] data mismatch! {:?} {:?} ", tmp, orig);
+            //     }
+            // }
             panic!(
                 "0. hash mismatch! {:?} {dst} {:x} {:x} ",
                 data,
@@ -819,13 +819,13 @@ impl InnerCQ {
         }
 
         if hash != calc_hash(data.usize_addr(), data.len())
-            && hash != calc_hash(tmp_data.as_ptr() as usize, tmp_data.len())
+            // && hash != calc_hash(tmp_data.as_ptr() as usize, tmp_data.len())
         {
-            for (i, (tmp, orig)) in tmp_data.iter().zip(data.as_slice().iter()).enumerate() {
-                if tmp != orig {
-                    println!("byte[{i}] data mismatch! {:x} {:x} ", tmp, orig);
-                }
-            }
+            // for (i, (tmp, orig)) in tmp_data.iter().zip(data.as_slice().iter()).enumerate() {
+            //     if tmp != orig {
+            //         println!("byte[{i}] data mismatch! {:x} {:x} ", tmp, orig);
+            //     }
+            // }
             panic!(
                 "1. hash mismatch! {:?} {dst} {:x} {:x} had to wait {had_to_wait}",
                 data,
@@ -870,13 +870,13 @@ impl InnerCQ {
             // std::thread::yield_now();
         }
         if hash != calc_hash(data.usize_addr(), data.len())
-            && hash != calc_hash(tmp_data.as_ptr() as usize, tmp_data.len())
+            // && hash != calc_hash(tmp_data.as_ptr() as usize, tmp_data.len())
         {
-            for (i, (tmp, orig)) in tmp_data.iter().zip(data.as_slice().iter()).enumerate() {
-                if tmp != orig {
-                    println!("byte[{i}] data mismatch! {:x} {:x} ", tmp, orig);
-                }
-            }
+            // for (i, (tmp, orig)) in tmp_data.iter().zip(data.as_slice().iter()).enumerate() {
+            //     if tmp != orig {
+            //         println!("byte[{i}] data mismatch! {:x} {:x} ", tmp, orig);
+            //     }
+            // }
             panic!(
                 "2. hash mismatch! {:x} {:x} im_waiting {im_waiting} had_to_wait {had_to_wait}",
                 hash,
@@ -1070,7 +1070,7 @@ impl InnerCQ {
             local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
         local_daddr_slice
             .put::<Cmd>(&self.scheduler, vec![], self.release_cmd.cmd, dst, 0)
-            .block();
+            .spawn();
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -1307,7 +1307,7 @@ impl InnerCQ {
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
-        error!("getting cmd from {}", src);
+        trace!("getting cmd from {}", src);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut timer = std::time::Instant::now();
         let mut print = true;

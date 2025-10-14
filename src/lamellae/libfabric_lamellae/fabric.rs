@@ -423,10 +423,11 @@ impl Ofi {
         cntr: &Counter<WaitableCntr>,
         dir: &str,
     ) -> Result<(), libfabric::error::Error> {
+        let _guard = self.completion_lock.write();
         let mut prev_expected_cnt = pending.load(Ordering::SeqCst);
         let mut old_cnt = cntr.read();
         if prev_expected_cnt != old_cnt {
-            let _guard = self.completion_lock.read();
+            // let _guard = self.completion_lock.read();
             let mut expected_cnt = pending.load(Ordering::SeqCst);
             // let mut prev_expected_cnt = expected_cnt;
             let mut cur_cnt = cntr.read();
@@ -525,7 +526,8 @@ impl Ofi {
         &self,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
-        let _guard = self.completion_lock.read();
+        // let _guard = self.completion_lock.read();
+        let _guard = self.completion_lock.write();
         loop {
             match fun() {
                 Ok(_) => break,
@@ -547,7 +549,8 @@ impl Ofi {
         &self,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
-        let _guard = self.completion_lock.read();
+        // let _guard = self.completion_lock.read();
+        let _guard = self.completion_lock.write();
         loop {
             match fun() {
                 Ok(_) => break,
@@ -782,7 +785,8 @@ impl Ofi {
                 let num_pes = pes.len();
                 let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
                 let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
-                let _guard = self.completion_lock.read();
+                // let _guard = self.completion_lock.read();
+                let _guard = self.completion_lock.write();
                 for round in 0..num_rounds as usize {
                     for i in 1..=n {
                         let send_pe = euclid_rem(
@@ -1271,17 +1275,19 @@ impl LibfabricAlloc {
                     self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
                 );
 
-                self.ofi.post_put(|| unsafe {
-                    self.ofi.ep.write_to(
-                        &src_addr[curr_idx..curr_idx + msg_len],
-                        Some(&self.mr.descriptor()),
-                        &self.ofi.mapped_addresses[pe],
-                        remote_dst_addr,
-                        &remote_key,
-                    )
-                })?;
+                self.ofi
+                    .post_put(|| unsafe {
+                        self.ofi.ep.write_to(
+                            &src_addr[curr_idx..curr_idx + msg_len],
+                            Some(&self.mr.descriptor()),
+                            &self.ofi.mapped_addresses[pe],
+                            remote_dst_addr,
+                            &remote_key,
+                        )
+                    })
+                    .expect("Error posting put");
 
-                remote_dst_addr = remote_dst_addr.add(msg_len);
+                remote_dst_addr = remote_dst_addr.add(msg_len * std::mem::size_of::<T>());
                 curr_idx += msg_len;
             }
         }
@@ -1338,23 +1344,25 @@ impl LibfabricAlloc {
                 dst_addr.len() - curr_idx,
                 self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
             );
-            self.ofi.post_get(|| unsafe {
-                error!(
-                    "GET: from PE {} at addr {:?} to local addr {:?} len {}",
-                    pe,
-                    remote_src_addr,
-                    &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
-                    msg_len * std::mem::size_of::<T>()
-                );
-                self.ofi.ep.read_from(
-                    &mut dst_addr[curr_idx..curr_idx + msg_len],
-                    Some(&self.mr.descriptor()),
-                    &self.ofi.mapped_addresses[pe],
-                    remote_src_addr,
-                    &remote_key,
-                )
-            })?;
-            remote_src_addr = remote_src_addr.add(msg_len);
+            self.ofi
+                .post_get(|| unsafe {
+                    trace!(
+                        "GET: from PE {} at addr {:?} to local addr {:?} len {}",
+                        pe,
+                        remote_src_addr,
+                        &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
+                        msg_len * std::mem::size_of::<T>()
+                    );
+                    self.ofi.ep.read_from(
+                        &mut dst_addr[curr_idx..curr_idx + msg_len],
+                        Some(&self.mr.descriptor()),
+                        &self.ofi.mapped_addresses[pe],
+                        remote_src_addr,
+                        &remote_key,
+                    )
+                })
+                .expect("Error posting get");
+            remote_src_addr = remote_src_addr.add(msg_len * std::mem::size_of::<T>());
             curr_idx += msg_len;
         }
 
