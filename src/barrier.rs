@@ -1,5 +1,6 @@
 use crate::{
-    active_messaging::batching::{BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS}, env_var::config, lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae}, lamellar_arch::LamellarArchRT, lamellar_request::LamellarRequest, memregion::MemoryRegion, scheduler::Scheduler, warnings::RuntimeWarning
+    utils::{stats, print_stats},
+    active_messaging::batching::{simple_batcher::io_task_stats, StatCmd, StatType, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS}, env_var::config, lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae}, lamellar_arch::LamellarArchRT, lamellar_request::LamellarRequest, memregion::MemoryRegion, scheduler::Scheduler, warnings::RuntimeWarning
 };
 
 use futures_util::Future;
@@ -141,30 +142,9 @@ impl Barrier {
 
         if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
             self.lamellae.wait_all_print();
-            let send_cnts = BATCHER_AM_PE_SEND_CNTS
-                        .iter()
-                        .map(|(v)| {
-                            v.iter()
-                                .map(|e| e.load(Ordering::SeqCst))
-                                .collect::<Vec<usize>>()
-                        })
-                        .collect::<Vec<Vec<usize>>>();
-                    let recv_cnts = BATCHER_AM_PE_RECV_CNTS
-                        .iter()
-                        .map(|(v)| {
-                            v.iter()
-                                .map(|e| e.load(Ordering::SeqCst))
-                                .collect::<Vec<usize>>()
-                        })
-                        .collect::<Vec<Vec<usize>>>();
-
-                    let combined = send_cnts
-                        .iter()
-                        .zip(recv_cnts.iter())
-                        .map(|(s, r)| format!("({:?}/{:?})", s, r))
-                        .collect::<Vec<String>>();
+            
             println!(
-                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?} AM send/recv counts: {:?}",
+                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?} AM send/recv counts: {:?} {:?} {:?}",
                 std::thread::current().id(),
                 self.my_pe,
                 my_index,
@@ -175,9 +155,11 @@ impl Barrier {
                 team_recv_pe,
                 recv_pe,
                 barrier_id,
-                        self.barrier_buf[i - 1]
-                            .as_slice(),
-                        combined
+                    self.barrier_buf[i - 1]
+                        .as_slice(),
+                    print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
+                    print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
+                    io_task_stats(),
                     
             );
             self.print_bar();

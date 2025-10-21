@@ -1,6 +1,9 @@
 use crate::{
     active_messaging::{
-        batching::{Batcher, BatcherType, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS},
+        batching::{
+            Batcher, BatcherType, StatCmd, StatType, BATCHER_AM_PE_RECV_CNTS,
+            BATCHER_AM_PE_SEND_CNTS,
+        },
         *,
     },
     config,
@@ -8,6 +11,7 @@ use crate::{
         comm::error::AllocError, Backend, CommInfo, CommMem, Lamellae, LamellaeUtil, Ser,
         SerializeHeader, SerializedData,
     },
+    utils::stats,
 };
 
 use async_recursion::async_recursion;
@@ -132,9 +136,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                                 )
                                 .await;
                         } else {
-                            BATCHER_AM_PE_SEND_CNTS[0].iter().for_each(|c| {
-                                c.fetch_add(1, Ordering::Relaxed);
-                            });
+                            stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig].iter().for_each(
+                                |(pe, c)| {
+                                    if pe < &req_data_clone.team.lamellae.comm().num_pes()
+                                        && pe != &req_data_clone.src
+                                    {
+                                        c[&StatCmd::Am].fetch_add(1, Ordering::Relaxed);
+                                        c[&StatCmd::Single].fetch_add(1, Ordering::Relaxed);
+                                    }
+                                },
+                            ));
                             // println!(
                             //     "[{:?}] {:?} all {:?}",
                             //     std::thread::current().id(),
@@ -167,8 +178,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                             .add_remote_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                             .await;
                     } else {
-                        BATCHER_AM_PE_SEND_CNTS[0][req_data.dst.unwrap()]
-                            .fetch_add(1, Ordering::Relaxed);
+                        stats!(
+                            BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&req_data.dst.unwrap()]
+                                [&StatCmd::Single]
+                                .fetch_add(1, Ordering::Relaxed)
+                        );
+                        stats!(
+                            BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&req_data.dst.unwrap()]
+                                [&StatCmd::Am]
+                                .fetch_add(1, Ordering::Relaxed)
+                        );
                         // println!(
                         //     "[{:?}] {:?} pe {:?}",
                         //     std::thread::current().id(),
@@ -193,8 +212,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .add_return_am_to_batch(req_data, am, am_id, am_size, stall_mark)
                         .await;
                 } else {
-                    BATCHER_AM_PE_SEND_CNTS[1][req_data.dst.unwrap()]
-                        .fetch_add(1, Ordering::Relaxed);
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&req_data.dst.unwrap()]
+                            [&StatCmd::Single]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&req_data.dst.unwrap()]
+                            [&StatCmd::Return]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
                     // println!(
                     //     "[{:?}] {:?} return {:?}",
                     //     std::thread::current().id(),
@@ -213,8 +240,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .add_data_am_to_batch(req_data, data, data_size, stall_mark)
                         .await;
                 } else {
-                    BATCHER_AM_PE_SEND_CNTS[1][req_data.dst.unwrap()]
-                        .fetch_add(1, Ordering::Relaxed);
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&req_data.dst.unwrap()]
+                            [&StatCmd::Single]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&req_data.dst.unwrap()]
+                            [&StatCmd::Data]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
                     // println!("[{:?}] data {:?}", std::thread::current().id(), data_size);
                     self.send_data_am(req_data, data, data_size).await;
                 }
@@ -225,8 +260,16 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
                         .add_unit_am_to_batch(req_data, stall_mark)
                         .await;
                 } else {
-                    BATCHER_AM_PE_SEND_CNTS[1][req_data.dst.unwrap()]
-                        .fetch_add(1, Ordering::Relaxed);
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&req_data.dst.unwrap()]
+                            [&StatCmd::Single]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
+                    stats!(
+                        BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&req_data.dst.unwrap()]
+                            [&StatCmd::Unit]
+                            .fetch_add(1, Ordering::Relaxed)
+                    );
                     // println!(
                     //     "[{:?}]  unit {:?}",
                     //     std::thread::current().id(),
@@ -243,28 +286,72 @@ impl ActiveMessageEngine for RegisteredActiveMessages {
         trace!("[{:?}] exec_msg {:?}", std::thread::current().id(), msg.cmd);
         // let data = ser_data.data_as_bytes();
         let mut i = 0;
+
         match msg.cmd {
             Cmd::Am => {
                 self.exec_am(&msg, &ser_data, &mut i, &lamellae).await;
-                BATCHER_AM_PE_RECV_CNTS[1][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)][&StatCmd::Am]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)]
+                        [&StatCmd::Single]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
             }
             Cmd::ReturnAm => {
                 self.exec_return_am(&msg, &ser_data, &mut i, &lamellae)
                     .await;
-                BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Return]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Single]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
             }
             Cmd::Data => {
                 self.exec_data_am(&msg, &mut i, &mut ser_data).await;
-                BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)][&StatCmd::Data]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Single]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
             }
             Cmd::Unit => {
                 self.exec_unit_am(&msg, &ser_data, &mut i).await;
-                BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)][&StatCmd::Unit]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Single]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
             }
             Cmd::BatchedMsg => {
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)]
+                        [&StatCmd::Batched]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
                 self.batcher
                     .exec_batched_msg(msg, ser_data, lamellae, &self)
                     .await;
+                stats!(
+                    BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Batched]
+                        .fetch_add(1, Ordering::Relaxed)
+                );
             }
         }
     }

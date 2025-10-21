@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use std::num;
+use std::sync::atomic::AtomicUsize;
+
 use crate::active_messaging::registered_active_message::AmId;
 use crate::active_messaging::*;
 
@@ -9,29 +13,102 @@ use team_am_batcher::TeamAmBatcher;
 
 use async_trait::async_trait;
 
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub(crate) enum StatCmd {
+    Am,
+    Return,
+    Data,
+    Unit,
+    Batched,
+    Single,
+    Multi,
+    MultiBatched,
+}
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub(crate) enum StatType {
+    Orig,
+    Remote,
+}
+
+pub(crate) struct BatcherStatMap(
+    pub(crate) HashMap<StatType, HashMap<usize, HashMap<StatCmd, AtomicUsize>>>,
+);
+
 lazy_static! {
-    pub(crate) static ref BATCHER_AM_PE_SEND_CNTS: Vec<Vec<AtomicUsize>> = {
-        let mut v = Vec::with_capacity(2);
-        for _ in 0..2 {
-            let mut t = Vec::with_capacity(32);
-            for _ in 0..32 {
-                t.push(AtomicUsize::new(0));
+    pub(crate) static ref BATCHER_AM_PE_SEND_CNTS: BatcherStatMap = {
+        let mut m = HashMap::new();
+        for stat_type in &[StatType::Orig, StatType::Remote] {
+            let mut pe_map = HashMap::new();
+            for i in 0..32 {
+                let mut t = HashMap::new();
+                for cmd in &[
+                    StatCmd::Am,
+                    StatCmd::Return,
+                    StatCmd::Data,
+                    StatCmd::Unit,
+                    StatCmd::Batched,
+                    StatCmd::Single,
+                    StatCmd::Multi,
+                    StatCmd::MultiBatched,
+                ] {
+                    t.insert(*cmd, AtomicUsize::new(0));
+                }
+                pe_map.insert(i, t);
             }
-            v.push(t);
+            m.insert(stat_type.clone(), pe_map);
         }
-        v
+        BatcherStatMap(m)
     };
-    pub(crate) static ref BATCHER_AM_PE_RECV_CNTS: Vec<Vec<AtomicUsize>> = {
-        let mut v = Vec::with_capacity(2);
-        for _ in 0..2 {
-            let mut t = Vec::with_capacity(32);
-            for _ in 0..32 {
-                t.push(AtomicUsize::new(0));
+    pub(crate) static ref BATCHER_AM_PE_RECV_CNTS: BatcherStatMap = {
+        let mut m = HashMap::new();
+        for stat_type in &[StatType::Orig, StatType::Remote] {
+            let mut pe_map = HashMap::new();
+            for i in 0..32 {
+                let mut t = HashMap::new();
+                for cmd in &[
+                    StatCmd::Am,
+                    StatCmd::Return,
+                    StatCmd::Data,
+                    StatCmd::Unit,
+                    StatCmd::Batched,
+                    StatCmd::Single,
+                    StatCmd::Multi,
+                    StatCmd::MultiBatched,
+                ] {
+                    t.insert(*cmd, AtomicUsize::new(0));
+                }
+                pe_map.insert(i, t);
             }
-            v.push(t);
+            m.insert(stat_type.clone(), pe_map);
         }
-        v
+        BatcherStatMap(m)
     };
+}
+
+impl std::fmt::Debug for BatcherStatMap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (stat_type, pe_map) in &self.0 {
+            writeln!(f, "{:?}:", stat_type)?;
+            for (pe, cmd_map) in pe_map {
+                if cmd_map
+                    .values()
+                    .map(|cnt| cnt.load(std::sync::atomic::Ordering::Relaxed))
+                    .any(|x| x > 0)
+                {
+                    writeln!(f, "  PE {}:", pe)?;
+                    for (cmd, cnt) in cmd_map {
+                        writeln!(
+                            f,
+                            "    {:?}: {}",
+                            cmd,
+                            cnt.load(std::sync::atomic::Ordering::Relaxed)
+                        )?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

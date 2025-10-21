@@ -1,7 +1,7 @@
 use crate::{
     lamellae::{
         comm::{CommInfo, CommProgress, CommShutdown},
-        AllocError, AllocResult, CommAlloc, CommAllocInner, CommAllocType,
+        AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
     },
     Backend,
 };
@@ -12,7 +12,6 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-
 #[derive(Debug)]
 pub(crate) struct LocalAlloc {
     pub(crate) ptr: *mut u8,
@@ -50,6 +49,10 @@ impl LocalAlloc {
             ptr: new_data,
             layout: std::alloc::Layout::from_size_align(len, self.layout.align()).unwrap(),
         }))
+    }
+
+    pub(crate) fn leak(self: Arc<Self>) -> Option<CommAllocAddr> {
+        None
     }
 
     pub(crate) fn wait(&self) {

@@ -1,3 +1,4 @@
+use crate::active_messaging::batching::simple_batcher::io_task_stats;
 use crate::env_var::config;
 use crate::scheduler::{
     Executor, LamellarExecutor, LamellarTask, LamellarTaskInner, SchedulerStatus,
@@ -11,6 +12,7 @@ use core_affinity::CoreId;
 use crossbeam::deque::Worker;
 use futures_util::Future;
 use rand::prelude::*;
+use std::collections::HashMap;
 use std::panic;
 use std::pin::Pin;
 use std::process;
@@ -23,6 +25,75 @@ use tracing::{trace, trace_span, Instrument};
 use std::thread;
 
 static TASK_ID: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+pub(crate) enum TaskType {
+    Spawn,
+    Submit,
+    IO,
+    Immediate,
+    BlockOn,
+}
+
+lazy_static! {
+    pub(crate) static ref TASKS_LAUNCHED: HashMap<TaskType, AtomicUsize> = {
+        let mut m = HashMap::new();
+        m.insert(TaskType::Spawn, AtomicUsize::new(0));
+        m.insert(TaskType::Submit, AtomicUsize::new(0));
+        m.insert(TaskType::IO, AtomicUsize::new(0));
+        m.insert(TaskType::Immediate, AtomicUsize::new(0));
+        m.insert(TaskType::BlockOn, AtomicUsize::new(0));
+        m
+    };
+    pub(crate) static ref TASKS_FINISHED: HashMap<TaskType, AtomicUsize> = {
+        let mut m = HashMap::new();
+        m.insert(TaskType::Spawn, AtomicUsize::new(0));
+        m.insert(TaskType::Submit, AtomicUsize::new(0));
+        m.insert(TaskType::IO, AtomicUsize::new(0));
+        m.insert(TaskType::Immediate, AtomicUsize::new(0));
+        m.insert(TaskType::BlockOn, AtomicUsize::new(0));
+        m
+    };
+}
+
+pub(crate) fn task_launched_to_string() -> String {
+    let mut s = String::new();
+    for (task_type, counter) in TASKS_LAUNCHED.iter() {
+        let task_type_str = match task_type {
+            TaskType::Spawn => "Spawn",
+            TaskType::Submit => "Submit",
+            TaskType::IO => "IO",
+            TaskType::Immediate => "Immediate",
+            TaskType::BlockOn => "BlockOn",
+        };
+        s.push_str(&format!(
+            "{}: {}, ",
+            task_type_str,
+            counter.load(Ordering::Relaxed)
+        ));
+    }
+    s
+}
+
+pub(crate) fn task_finished_to_string() -> String {
+    let mut s = String::new();
+    for (task_type, counter) in TASKS_FINISHED.iter() {
+        let task_type_str = match task_type {
+            TaskType::Spawn => "Spawn",
+            TaskType::Submit => "Submit",
+            TaskType::IO => "IO",
+            TaskType::Immediate => "Immediate",
+            TaskType::BlockOn => "BlockOn",
+        };
+        s.push_str(&format!(
+            "{}: {}, ",
+            task_type_str,
+            counter.load(Ordering::Relaxed)
+        ));
+    }
+    s
+}
+
 #[derive(Debug)]
 pub(crate) struct WorkStealingThread {
     thread_only_inj: Arc<crossbeam::deque::Injector<Runnable<usize>>>,
@@ -106,9 +177,12 @@ impl WorkStealingThread {
                         {
                             println!("runnable {:?}", runnable);
                             println!(
-                                "work_q size {:?} work inj size {:?}", // num_tasks {:?}",
+                                "work_q size {:?} work inj size {:?} launched_tasks {:?} finished_tasks {:?} {:?}",
                                 worker.work_q.len(),
                                 worker.work_inj.len(),
+                                task_launched_to_string(),
+                                task_finished_to_string(),
+                                io_task_stats(),
                                 // num_tasks.load(Ordering::SeqCst)
                             );
                             timer = std::time::Instant::now();
@@ -120,9 +194,11 @@ impl WorkStealingThread {
                         && (worker.work_q.len() > 0 || worker.work_inj.len() > 0)
                     {
                         println!(
-                            "work_q size {:?} work inj size {:?}", // num_tasks {:?}",
+                            "work_q size {:?} work inj size {:?} launched_tasks {:?} finished_tasks {:?}",
                             worker.work_q.len(),
                             worker.work_inj.len(),
+                            task_launched_to_string(),
+                            task_finished_to_string(),
                             // num_tasks.load(Ordering::SeqCst)
                         );
                         timer = std::time::Instant::now();
@@ -157,6 +233,10 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
+        TASKS_LAUNCHED
+            .get(&TaskType::Spawn)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("spawn_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
@@ -165,6 +245,10 @@ impl LamellarExecutor for WorkStealing {
             move |_task_id| {
                 async move {
                     let res = task.await;
+                    TASKS_FINISHED
+                        .get(&TaskType::Spawn)
+                        .unwrap()
+                        .fetch_add(1, Ordering::Relaxed);
                     res
                 }
                 .instrument(trace_span!("Spawned Task", task_id = task_id))
@@ -184,14 +268,25 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
+        TASKS_LAUNCHED
+            .get(&TaskType::Submit)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("submit_task").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
-                async move { task.await }
-                    .instrument(trace_span!("Submitted Task", task_id = task_id))
+                async move {
+                    let res = task.await;
+                    TASKS_FINISHED
+                        .get(&TaskType::Submit)
+                        .unwrap()
+                        .fetch_add(1, Ordering::Relaxed);
+                    res
+                }
+                .instrument(trace_span!("Submitted Task", task_id = task_id))
             },
             schedule,
         );
@@ -206,14 +301,25 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
+        TASKS_LAUNCHED
+            .get(&TaskType::Submit)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("submit_task_thread").in_scope(|| {
         let work_inj = self.thread_injs[tid].clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
-                async move { task.await }
-                    .instrument(trace_span!("Submitted Task", task_id = task_id))
+                async move {
+                    let res = task.await;
+                    TASKS_FINISHED
+                        .get(&TaskType::Submit)
+                        .unwrap()
+                        .fetch_add(1, Ordering::Relaxed);
+                    res
+                }
+                .instrument(trace_span!("Submitted Task", task_id = task_id))
             },
             schedule,
         );
@@ -228,13 +334,25 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
+        TASKS_LAUNCHED
+            .get(&TaskType::IO)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("submit_io_task:").in_scope(|| {
         let work_inj = self.work_inj.clone();
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
-                async move { task.await }.instrument(trace_span!("IO Task", task_id = task_id))
+                async move {
+                    let res = task.await;
+                    TASKS_FINISHED
+                        .get(&TaskType::IO)
+                        .unwrap()
+                        .fetch_add(1, Ordering::Relaxed);
+                    res
+                }
+                .instrument(trace_span!("IO Task", task_id = task_id))
             },
             schedule,
         );
@@ -249,14 +367,25 @@ impl LamellarExecutor for WorkStealing {
         F: Future + Send + 'static,
         F::Output: Send,
     {
+        TASKS_LAUNCHED
+            .get(&TaskType::Immediate)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("submit_immediate_task").in_scope(|| {
         let imm_inj = self.imm_inj.clone();
         let schedule = move |runnable| imm_inj.push(runnable);
         let (runnable, task) = Builder::new().metadata(task_id).spawn(
             move |_task_id| {
-                async move { task.await }
-                    .instrument(trace_span!("Immediate Task", task_id = task_id))
+                async move {
+                    let res = task.await;
+                    TASKS_FINISHED
+                        .get(&TaskType::Immediate)
+                        .unwrap()
+                        .fetch_add(1, Ordering::Relaxed);
+                    res
+                }
+                .instrument(trace_span!("Immediate Task", task_id = task_id))
             },
             schedule,
         );
@@ -268,6 +397,10 @@ impl LamellarExecutor for WorkStealing {
     }
 
     fn block_on<F: Future>(&self, fut: F) -> F::Output {
+        TASKS_LAUNCHED
+            .get(&TaskType::BlockOn)
+            .unwrap()
+            .fetch_add(1, Ordering::Relaxed);
         let task_id = TASK_ID.fetch_add(1, Ordering::Relaxed);
         // trace_span!("block_on").in_scope(|| {
         let work_inj = self.work_inj.clone();
@@ -277,6 +410,10 @@ impl LamellarExecutor for WorkStealing {
                 move |_task_id| {
                     async move {
                         let res = fut.await;
+                        TASKS_FINISHED
+                            .get(&TaskType::BlockOn)
+                            .unwrap()
+                            .fetch_add(1, Ordering::Relaxed);
                         res
                     }
                     .instrument(trace_span!("Block OnTask", task_id = task_id))

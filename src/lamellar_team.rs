@@ -1,6 +1,9 @@
 use crate::{
     active_messaging::{
-        batching::{BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS},
+        batching::{
+            simple_batcher::io_task_stats, StatCmd, StatType, BATCHER_AM_PE_RECV_CNTS,
+            BATCHER_AM_PE_SEND_CNTS,
+        },
         handle::AmHandleInner,
         *,
     },
@@ -20,7 +23,11 @@ use crate::{
         shared::SharedMemoryRegion,
         Dist, LamellarMemoryRegion, MemoryRegion, RemoteMemoryRegion,
     },
-    scheduler::{LamellarTask, ReqId, Scheduler},
+    scheduler::{
+        work_stealing::{task_finished_to_string, task_launched_to_string},
+        LamellarTask, ReqId, Scheduler,
+    },
+    utils::{print_stats, stats},
     warnings::RuntimeWarning,
 };
 
@@ -1094,7 +1101,7 @@ impl LamellarTeamRT {
         // );
         unsafe {
             let team_ptr: *mut LamellarTeamRT = *self.remote_ptr_alloc.as_ptr();
-            self.lamellae.comm().free(self.remote_ptr_alloc.clone());
+            // self.lamellae.comm().free(self.remote_ptr_alloc.clone());
             (team_ptr).as_mut().unwrap().remote_ptr_alloc = CommAlloc {
                 inner_alloc: CommAllocInner::Raw(0, 0),
                 alloc_type: CommAllocType::Fabric,
@@ -1106,30 +1113,6 @@ impl LamellarTeamRT {
             // println!("arc_team: {:?}", Arc::strong_count(&arc_team));
             Pin::new_unchecked(arc_team); //allows us to get rid of the extra reference created in new
         }
-
-        let send_cnts = BATCHER_AM_PE_SEND_CNTS
-            .iter()
-            .map(|(v)| {
-                v.iter()
-                    .map(|e| e.load(Ordering::SeqCst))
-                    .collect::<Vec<usize>>()
-            })
-            .collect::<Vec<Vec<usize>>>();
-        let recv_cnts = BATCHER_AM_PE_RECV_CNTS
-            .iter()
-            .map(|(v)| {
-                v.iter()
-                    .map(|e| e.load(Ordering::SeqCst))
-                    .collect::<Vec<usize>>()
-            })
-            .collect::<Vec<Vec<usize>>>();
-
-        let combined = send_cnts
-            .iter()
-            .zip(recv_cnts.iter())
-            .map(|(s, r)| format!("({:?}/{:?})", s, r))
-            .collect::<Vec<String>>();
-        // println!("Team Destroyed am send/recv cnts: {:?}", combined);
 
         // println!("team destroyed")
     }
@@ -1503,35 +1486,17 @@ impl LamellarTeamRT {
                     self.scheduler.exec_task()
                 }; //mmight as well do useful work while we wait }
                 if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                    let send_cnts = BATCHER_AM_PE_SEND_CNTS
-                        .iter()
-                        .map(|(v)| {
-                            v.iter()
-                                .map(|e| e.load(Ordering::SeqCst))
-                                .collect::<Vec<usize>>()
-                        })
-                        .collect::<Vec<Vec<usize>>>();
-                    let recv_cnts = BATCHER_AM_PE_RECV_CNTS
-                        .iter()
-                        .map(|(v)| {
-                            v.iter()
-                                .map(|e| e.load(Ordering::SeqCst))
-                                .collect::<Vec<usize>>()
-                        })
-                        .collect::<Vec<Vec<usize>>>();
-
-                    let combined = send_cnts
-                        .iter()
-                        .zip(recv_cnts.iter())
-                        .map(|(s, r)| format!("({:?}/{:?})", s, r))
-                        .collect::<Vec<String>>();
                     println!(
-                        "in team wait_all mype: {:?} cnt: {:?} {:?} {:?} send/recv cnts: {:?} ",
+                        "in team wait_all mype: {:?} cnt: {:?} {:?} {:?} send/recv cnts: {:?} {:?} launched_tasks {:?} finished_tasks {:?} {:?}",
                         self.world_pe,
                         self.team_counters.send_req_cnt.load(Ordering::SeqCst),
                         self.team_counters.outstanding_reqs.load(Ordering::SeqCst),
                         self.team_counters.launched_req_cnt.load(Ordering::SeqCst),
-                        combined
+                        print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
+                        print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
+                        task_launched_to_string(),
+                        task_finished_to_string(),
+                        io_task_stats(),
                     );
                     self.lamellae.wait_all_print();
                     temp_now = Instant::now();

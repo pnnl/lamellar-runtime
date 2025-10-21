@@ -106,6 +106,7 @@ opt-level = 3
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
+enable-stats = []
 enable-rofi-c = ["rofi-c", "rofisys", "libc"]
 enable-rofi-c-shared = ["rofi-c", "rofisys/shared", "libc"]
 rofi-c = []

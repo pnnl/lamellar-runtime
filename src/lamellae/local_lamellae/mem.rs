@@ -35,17 +35,17 @@ impl CommMem for LocalComm {
         })
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::Fabric);
-        let mut allocs = self.allocs.lock();
-        if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
-            trace!("freeing alloc: {:x}", alloc.comm_addr());
-            unsafe {
-                std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
-            };
-        }
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // fn free(&self, alloc: CommAlloc) {
+    //     assert!(alloc.alloc_type == CommAllocType::Fabric);
+    //     let mut allocs = self.allocs.lock();
+    //     if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
+    //         trace!("freeing alloc: {:x}", alloc.comm_addr());
+    //         unsafe {
+    //             std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
+    //         };
+    //     }
+    // }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
@@ -69,17 +69,17 @@ impl CommMem for LocalComm {
         true
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn rt_free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::RtHeap);
-        let mut allocs = self.heap_allocs.lock();
-        if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
-            trace!("freeing alloc: {:x}", alloc.comm_addr());
-            unsafe {
-                std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
-            };
-        }
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // fn rt_free(&self, alloc: CommAlloc) {
+    //     assert!(alloc.alloc_type == CommAllocType::RtHeap);
+    //     let mut allocs = self.heap_allocs.lock();
+    //     if let Some(data_ptr) = allocs.remove(&alloc.comm_addr().into()) {
+    //         trace!("freeing alloc: {:x}", alloc.comm_addr());
+    //         unsafe {
+    //             std::alloc::dealloc(data_ptr.ptr, data_ptr.layout);
+    //         };
+    //     }
+    // }
 
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
@@ -127,6 +127,20 @@ impl CommMem for LocalComm {
             remote_addr
         );
     }
+
+    fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+        let allocs = self.heap_allocs.lock();
+        for (_addr, alloc) in allocs.iter() {
+            if alloc.start() <= addr && addr < alloc.start() + alloc.num_bytes() {
+                return Ok(CommAlloc {
+                    inner_alloc: CommAllocInner::LocalAlloc(alloc.clone()),
+                    alloc_type: CommAllocType::RtHeap,
+                });
+            }
+        }
+        Err(AllocError::LocalNotFound(CommAllocAddr(addr)))
+    }
+
     fn remote_addr(&self, _pe: usize, local_addr: usize) -> CommAllocAddr {
         CommAllocAddr(local_addr)
     }

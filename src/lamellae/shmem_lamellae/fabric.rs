@@ -10,8 +10,9 @@ use parking_lot::RwLock;
 use shared_memory::*;
 use tracing::trace;
 
-use crate::lamellae::{
-    AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
+use crate::{
+    lamellae::{AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType},
+    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
 pub(crate) struct ShmemHandle {
@@ -37,6 +38,7 @@ pub(crate) struct ShmemAlloc {
     pub(crate) my_alloc_pe: usize, //pe id relative to the pes associated with the alloc
     pe_map: HashMap<usize, usize>,
     remote_addrs: Vec<usize>,
+    rt_alloc: Option<(BTreeAlloc, Arc<AtomicUsize>)>,
     _shmem: Arc<ShmemHandle>,
 }
 impl std::fmt::Debug for ShmemAlloc {
@@ -83,7 +85,63 @@ impl ShmemAlloc {
             pe_map: self.pe_map.clone(),
             remote_addrs,
             _shmem: self._shmem.clone(),
+            rt_alloc: self.rt_alloc.clone(),
         }))
+    }
+
+    //we call this function to create a sub-allocation that is tracked as part of a runtime allocation
+    pub(crate) fn rt_alloc(
+        &self,
+        parent_alloc: BTreeAlloc,
+        offset: usize,
+        len: usize,
+    ) -> AllocResult<Arc<Self>> {
+        if offset + len > self.len {
+            return Err(AllocError::InvalidSubAlloc(offset, len));
+        }
+        let new_data = unsafe { self.data.add(offset) };
+
+        let mut remote_addrs = Vec::with_capacity(self.remote_addrs.len());
+        for addr in self.remote_addrs.iter() {
+            remote_addrs.push(addr + offset);
+        }
+        Ok(Arc::new(ShmemAlloc {
+            data: new_data,
+            len,
+            base_ptr: self.base_ptr,
+            base_len: self.base_len,
+            my_alloc_pe: self.my_alloc_pe,
+            pe_map: self.pe_map.clone(),
+            remote_addrs,
+            _shmem: self._shmem.clone(),
+            rt_alloc: Some((parent_alloc, Arc::new(AtomicUsize::new(1)))),
+        }))
+    }
+
+    // This function is used to construct an rt_alloc from a raw sub-allocation
+    // typically paired with a call to leak() we decrement the ref count as this instance recaptures the leaked instance
+    pub(crate) fn as_rt_alloc(self: Arc<Self>) -> AllocResult<Arc<Self>> {
+        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
+            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
+            trace!("as_rt_alloc: {:?} new ref count: {}", self, prev_count - 1);
+            Ok(self)
+        } else {
+            Err(AllocError::NotRTAlloc(self.start()))
+        }
+    }
+
+    pub(crate) fn leak(self: Arc<Self>) -> Option<CommAllocAddr> {
+        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
+            let prev_count = ref_count.fetch_add(1, Ordering::SeqCst);
+            trace!(
+                "Leaking rt_alloc: {:?}  new ref count: {}",
+                self,
+                prev_count + 1
+            );
+            Some(CommAllocAddr(self.start()))
+        } else {
+            None
+        }
     }
 
     pub(crate) fn pe_base_offset(&self, pe: usize) -> usize {
@@ -102,6 +160,23 @@ impl ShmemAlloc {
 
     pub(crate) fn wait(&self) {
         //shmem is always ready
+    }
+}
+
+impl Drop for ShmemAlloc {
+    fn drop(&mut self) {
+        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
+            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
+            trace!(
+                "Dropping rt_alloc: {:?}  new ref count: {}",
+                self,
+                prev_count - 1
+            );
+            if prev_count == 1 {
+                trace!("Freeing parent rt_alloc: {:?}", self);
+                parent_alloc.free(self.start());
+            }
+        }
     }
 }
 
@@ -462,6 +537,7 @@ impl ShmemAllocator {
             my_alloc_pe: sub_alloc_pe_id,
             pe_map,
             remote_addrs: addrs,
+            rt_alloc: None,
             _shmem: Arc::new(shmem),
         });
         allocs.push(alloc.clone());

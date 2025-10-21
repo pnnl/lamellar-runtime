@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::{
     config,
@@ -25,7 +25,7 @@ impl CommMem for LibfabricComm {
         alloc_type: AllocationType,
         align: usize,
     ) -> AllocResult<CommAlloc> {
-        let inner_alloc = self.ofi.alloc(size, alloc_type)?;
+        let inner_alloc = self.ofi.alloc(size, alloc_type, align)?;
         // unsafe {
         //     inner_alloc.zeroize_bytes();
         // }
@@ -37,38 +37,49 @@ impl CommMem for LibfabricComm {
         Ok(comm_alloc)
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
-    fn free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::Fabric);
-        match alloc.inner_alloc {
-            CommAllocInner::Raw(addr, _) => {
-                println!("freeing raw alloc: {:x} should we ever be here?", addr);
-                self.ofi.free_addr(addr).unwrap();
-            }
-            CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                trace!("freeing  inner_alloc: {:?}", inner_alloc);
-                self.ofi.free_alloc(&inner_alloc).unwrap();
-            }
-            _ => {
-                panic!("free should only be called with LibfabricAlloc or Raw addr");
-            }
-        }
-    }
+    // #[tracing::instrument(skip(self), level = "debug")]
+    // fn free(&self, alloc: CommAlloc) {
+    //     assert!(alloc.alloc_type == CommAllocType::Fabric);
+    //     match alloc.inner_alloc {
+    //         CommAllocInner::Raw(addr, _) => {
+    //             println!("freeing raw alloc: {:x} should we ever be here?", addr);
+    //             self.ofi.free_addr(addr).unwrap();
+    //         }
+    //         CommAllocInner::LibfabricAlloc(inner_alloc) => {
+    //             trace!("freeing  inner_alloc: {:?}", inner_alloc);
+    //             self.ofi.free_alloc(&inner_alloc).unwrap();
+    //         }
+    //         _ => {
+    //             panic!("free should only be called with LibfabricAlloc or Raw addr");
+    //         }
+    //     }
+    // }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
+        // add space for ref count
+        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+        let ref_cnt_align = std::mem::align_of::<AtomicUsize>();
+        let padding = (ref_cnt_align - (size % ref_cnt_align)) % ref_cnt_align;
+        let size = size + ref_cnt_size + padding;
+
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                let alloc = inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?;
+                let alloc = inner_alloc.rt_alloc(
+                    alloc.clone(),
+                    addr - inner_alloc.start(),
+                    padding,
+                    size,
+                )?;
                 info!(
-                    "new rt alloc: 0x{:x}-0x{:x} {} {} {:?} {:#?}",
+                    "new rt alloc: 0x{:x}-0x{:x} {} {} {:?}", // {:?}",
                     addr,
                     addr + size,
                     addr - inner_alloc.start(),
                     size,
                     alloc,
-                    std::backtrace::Backtrace::capture()
+                    // std::backtrace::Backtrace::capture()
                 );
                 // unsafe {
                 //     alloc.zeroize_bytes();
@@ -84,6 +95,12 @@ impl CommMem for LibfabricComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+        // add space for ref count
+        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+        let ref_cnt_align = std::mem::align_of::<AtomicUsize>();
+        let padding = (ref_cnt_align - (size % ref_cnt_align)) % ref_cnt_align;
+        let size = size + ref_cnt_size + padding;
+
         let allocs = self.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
             if alloc.fake_malloc(size, align) {
@@ -93,81 +110,85 @@ impl CommMem for LibfabricComm {
         false
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
-    fn rt_free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::RtHeap);
-        debug!("rt_free: {:?}", alloc);
-        match alloc.inner_alloc {
-            CommAllocInner::Raw(addr, _) => {
-                info!(
-                    "freeing rt alloc: {:x} {:#?}",
-                    addr,
-                    std::backtrace::Backtrace::capture()
-                );
-                let allocs = self.runtime_allocs.read();
-                for (_, alloc) in allocs.iter() {
-                    if let Ok(_) = alloc.free(addr) {
-                        info!(
-                            "freed rt alloc: {:x} {:#?}",
-                            addr,
-                            std::backtrace::Backtrace::capture()
-                        );
-                        return;
-                    }
-                }
-                error!(
-                    "Error invalid free from addr! {:x} {:#?}",
-                    addr,
-                    std::backtrace::Backtrace::capture()
-                );
-                for (_, alloc) in allocs.iter() {
-                    error!("{:?}", alloc);
-                }
-                panic!("Error invalid free from addr! {:x}", addr);
-            }
-            CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                info!(
-                    "freeing rt alloc: {:?} cnt: {} {:#?}",
-                    inner_alloc,
-                    std::sync::Arc::strong_count(&inner_alloc),
-                    std::backtrace::Backtrace::capture()
-                );
-                let allocs = self.runtime_allocs.read();
-                for (_, alloc) in allocs.iter() {
-                    if let Ok(_) = alloc.free(inner_alloc.start()) {
-                        info!(
-                            "freed rt alloc: {:?} cnt: {} {:#?}",
-                            inner_alloc,
-                            std::sync::Arc::strong_count(&inner_alloc),
-                            std::backtrace::Backtrace::capture()
-                        );
-                        return;
-                    }
-                }
-                error!(
-                    "Error invalid free from alloc! {:?} {} {:#?}",
-                    inner_alloc,
-                    std::sync::Arc::strong_count(&inner_alloc),
-                    std::backtrace::Backtrace::capture()
-                );
-                for (_, alloc) in allocs.iter() {
-                    error!("{:?}", alloc);
-                }
-                panic!("Error invalid free from alloc! {:?}", inner_alloc);
-            }
-            _ => panic!(
-                "unexpected allocation type {:?} in rt_free",
-                alloc.inner_alloc
-            ),
-        }
-    }
+    // #[tracing::instrument(skip(self), level = "debug")]
+    // fn rt_free(&self, alloc: CommAlloc) {
+    //     assert!(alloc.alloc_type == CommAllocType::RtHeap);
+    //     debug!("rt_free: {:?}", alloc);
+    //     match alloc.inner_alloc {
+    //         CommAllocInner::Raw(addr, _) => {
+    //             info!(
+    //                 "freeing rt alloc: {:x} {:?}",
+    //                 addr,
+    //                 std::backtrace::Backtrace::capture()
+    //             );
+    //             let allocs = self.runtime_allocs.read();
+    //             for (_, alloc) in allocs.iter() {
+    //                 if let Ok(_) = alloc.free(addr) {
+    //                     info!(
+    //                         "freed rt alloc: {:x} {:?}",
+    //                         addr,
+    //                         std::backtrace::Backtrace::capture()
+    //                     );
+    //                     return;
+    //                 }
+    //             }
+    //             error!(
+    //                 "Error invalid free from addr! {:x} {:?}",
+    //                 addr,
+    //                 std::backtrace::Backtrace::capture()
+    //             );
+    //             for (_, alloc) in allocs.iter() {
+    //                 error!("{:?}", alloc);
+    //             }
+    //             panic!("Error invalid free from addr! {:x}", addr);
+    //         }
+    //         CommAllocInner::LibfabricAlloc(inner_alloc) => {
+    //             info!(
+    //                 "freeing rt alloc: {:?} cnt: {} {:?}",
+    //                 inner_alloc,
+    //                 std::sync::Arc::strong_count(&inner_alloc),
+    //                 std::backtrace::Backtrace::capture()
+    //             );
+    //             let allocs = self.runtime_allocs.read();
+    //             for (_, alloc) in allocs.iter() {
+    //                 if let Ok(_) = alloc.free(inner_alloc.start()) {
+    //                     info!(
+    //                         "freed rt alloc: {:?} cnt: {} {:?}",
+    //                         inner_alloc,
+    //                         std::sync::Arc::strong_count(&inner_alloc),
+    //                         std::backtrace::Backtrace::capture()
+    //                     );
+    //                     return;
+    //                 }
+    //             }
+    //             error!(
+    //                 "Error invalid free from alloc! {:?} {} {:?}",
+    //                 inner_alloc,
+    //                 std::sync::Arc::strong_count(&inner_alloc),
+    //                 std::backtrace::Backtrace::capture()
+    //             );
+    //             for (_, alloc) in allocs.iter() {
+    //                 error!("{:?}", alloc);
+    //             }
+    //             panic!("Error invalid free from alloc! {:?}", inner_alloc);
+    //         }
+    //         _ => panic!(
+    //             "unexpected allocation type {:?} in rt_free",
+    //             alloc.inner_alloc
+    //         ),
+    //     }
+    // }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.runtime_allocs.read();
         for alloc in allocs.iter() {
-            occupied += alloc.1.occupied();
+            let tmp = alloc.1.occupied();
+            if tmp > 0 {
+                debug!("alloc {:?} {:?} occupied: {tmp}", alloc.0, alloc.1);
+            }
+            occupied += tmp;
         }
         occupied
     }
@@ -237,6 +258,23 @@ impl CommMem for LibfabricComm {
                 "local_alloc_and_offset_from_addr failed for pe: {} addr: {:x}",
                 remote_pe, remote_addr
             ))
+    }
+
+    fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+        for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
+            if let Some(size) = alloc.find(addr) {
+                let comm_alloc = CommAlloc {
+                    inner_alloc: CommAllocInner::LibfabricAlloc(unsafe {
+                        inner_alloc
+                            .sub_alloc(addr - inner_alloc.start(), size)?
+                            .as_rt_alloc(alloc.clone())?
+                    }),
+                    alloc_type: CommAllocType::RtHeap,
+                };
+                return Ok(comm_alloc);
+            }
+        }
+        Err(AllocError::LocalNotFound(CommAllocAddr(addr.into())))
     }
 
     #[tracing::instrument(skip(self), level = "debug")]

@@ -10,14 +10,20 @@ pub(crate) use endpoint::UcxRequest;
 use memory_region::{MemoryHandle, MemoryHandleInner, RKey};
 use worker::Worker;
 
-use crate::lamellae::{
-    AllocResult, AllocationType, AtomicOp, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
-    CommSlice, FabricError,
+use crate::{
+    lamellae::{
+        AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc, CommAllocAddr,
+        CommAllocInner, CommAllocType, CommSlice, FabricError,
+    },
+    lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 use tracing::trace;
 
 pub(crate) struct UcxWorld {
@@ -167,6 +173,7 @@ impl UcxWorld {
             worker: worker.clone(),
             endpoints: endpoints.clone(),
             remote_keys: buffer_keys.clone(),
+            rt_alloc: None,
         });
         Ok(alloc)
     }
@@ -200,6 +207,7 @@ impl UcxWorld {
             worker: self.worker.clone(),
             endpoints: self.endpoints.clone(),
             remote_keys: buffer_keys.clone(),
+            rt_alloc: None,
         });
         self.mem_handles.lock().unwrap().push(alloc.clone());
         self.remote_keys
@@ -331,6 +339,7 @@ pub struct UcxAlloc {
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
     remote_keys: Vec<(usize, Arc<RKey>)>,
+    rt_alloc: Option<(BTreeAlloc, Arc<AtomicUsize>)>,
 }
 
 impl From<Arc<UcxAlloc>> for CommAlloc {
@@ -377,7 +386,60 @@ impl UcxAlloc {
             worker: self.worker.clone(),
             endpoints: self.endpoints.clone(),
             remote_keys,
+            rt_alloc: self.rt_alloc.clone(),
         }))
+    }
+
+    //we call this function to create a sub-allocation that is tracked as part of a runtime allocation
+    pub(crate) fn rt_alloc(
+        &self,
+        parent_alloc: BTreeAlloc,
+        offset: usize,
+        size: usize,
+    ) -> AllocResult<Arc<Self>> {
+        let remote_keys = self
+            .remote_keys
+            .iter()
+            .map(|(addr, rkey)| (addr + offset, rkey.clone()))
+            .collect();
+        Ok(Arc::new(UcxAlloc {
+            mem: self.mem.sub_alloc(offset, size),
+            total_size: size * self.num_pes,
+            local_size: size,
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            context: self.context.clone(),
+            worker: self.worker.clone(),
+            endpoints: self.endpoints.clone(),
+            remote_keys,
+            rt_alloc: Some((parent_alloc, Arc::new(AtomicUsize::new(1)))),
+        }))
+    }
+
+    // This function is used to construct an rt_alloc from a raw sub-allocation
+    // typically paired with a call to leak() we decrement the ref count as this instance recaptures the leaked instance
+    pub(crate) fn as_rt_alloc(self: Arc<Self>) -> AllocResult<Arc<Self>> {
+        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
+            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
+            trace!("as_rt_alloc: {:?} new ref count: {}", self, prev_count - 1);
+            Ok(self)
+        } else {
+            Err(AllocError::NotRTAlloc(self.start()))
+        }
+    }
+
+    pub(crate) fn leak(self: Arc<Self>) -> Option<CommAllocAddr> {
+        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
+            let prev_count = ref_count.fetch_add(1, Ordering::SeqCst);
+            trace!(
+                "Leaking rt_alloc: {:?}  new ref count: {}",
+                self,
+                prev_count + 1
+            );
+            Some(CommAllocAddr(self.start()))
+        } else {
+            None
+        }
     }
 
     pub(crate) unsafe fn put<T>(
@@ -529,5 +591,19 @@ impl Drop for UcxAlloc {
         // println!("Dropping UcxArray");
         // self.mem_handles.lock().unwrap().remove(&self.mem.inner);
         // self.remote_keys.lock().unwrap().remove(&self.mem.inner);
+        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
+            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
+            trace!(
+                "Dropping rt_alloc: {:?}  new ref count: {}",
+                self,
+                prev_count - 1
+            );
+            if let Ok(_) = parent_alloc.free(self.start()) {
+                trace!(
+                    "Successfully freed sub-allocation from parent rt_alloc: {:?}",
+                    self,
+                );
+            }
+        }
     }
 }

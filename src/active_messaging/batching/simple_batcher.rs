@@ -3,9 +3,10 @@ use std::sync::atomic::AtomicBool;
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
-        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeUtil, Ser,
-        SerializeHeader,
+        comm::{error::AllocError, CommInfo},
+        CommMem, CommSlice, Des, Lamellae, LamellaeUtil, Ser, SerializeHeader,
     },
+    utils::stats,
 };
 use batching::*;
 
@@ -13,6 +14,56 @@ use async_trait::async_trait;
 use tracing::debug;
 
 const MAX_BATCH_SIZE: usize = 1_000_000;
+
+lazy_static! {
+    pub(crate) static ref IO_TASK_SPAWN:  Vec<AtomicUsize> = {
+         let mut v = Vec::new();
+        for _ in 0..4{
+            v.push(AtomicUsize::new(0));
+        }
+        v
+    };
+     pub(crate) static ref IO_TASK_START: Vec<AtomicUsize> = {
+        let mut v = Vec::new();
+        for _ in 0..4{
+            v.push(AtomicUsize::new(0));
+        }
+        v
+    };
+    pub(crate) static ref IO_TASK_FINISH: Vec<AtomicUsize> = {
+        let mut v = Vec::new();
+        for _ in 0..4{
+            v.push(AtomicUsize::new(0));
+        }
+        v
+    };
+    pub(crate) static ref IO_TASK_TOO_BIG: Vec<AtomicUsize> = {
+        let mut v = Vec::new();
+        for _ in 0..4{
+            v.push(AtomicUsize::new(0));
+        }
+        v
+    };
+     pub(crate) static ref IO_TASK_TOO_BIG_FINISH: Vec<AtomicUsize> = {
+        let mut v = Vec::new();
+        for _ in 0..4{
+            v.push(AtomicUsize::new(0));
+        }
+        v
+    };
+}
+
+
+pub(crate) fn io_task_stats() -> String{
+
+    let mut stats = String::new();
+    stats!(
+        for i in 0..4{
+            stats.push_str(&format!("IO Task Type {}: Spawned {}, Started {}, Finished {}, Too Big {}, Too Big Finished {}\n", i, IO_TASK_SPAWN[i].load(std::sync::atomic::Ordering::Relaxed), IO_TASK_START[i].load(std::sync::atomic::Ordering::Relaxed), IO_TASK_FINISH[i].load(std::sync::atomic::Ordering::Relaxed), IO_TASK_TOO_BIG[i].load(std::sync::atomic::Ordering::Relaxed), IO_TASK_TOO_BIG_FINISH[i].load(std::sync::atomic::Ordering::Relaxed)));
+        }
+    );
+    stats
+}
 
 #[derive(Clone, Debug)]
 struct SimpleBatcherInner {
@@ -49,19 +100,19 @@ impl SimpleBatcherInner {
         let size = *CMD_LEN + payload_size + header_size;
         batch.push((req_data, data, size));
         // batch.len() == 1
-        self.size.fetch_add(size, Ordering::Relaxed)
+        self.size.fetch_add(size, Ordering::SeqCst)
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize) {
+    fn swap(&self) -> (Vec<(ReqMetaData, LamellarData, usize)>, usize, usize) {
         let mut batch = self.batch.lock();
-        let size = self.size.load(Ordering::Relaxed);
-        self.size.store(0, Ordering::Relaxed);
-        let _batch_id = self.batch_id.fetch_add(1, Ordering::SeqCst);
+        let size = self.size.load(Ordering::SeqCst);
+        self.size.store(0, Ordering::SeqCst);
+        let batch_id = self.batch_id.fetch_add(1, Ordering::SeqCst);
         // println!("batch_id {_batch_id} swapped");
         let mut new_vec = Vec::new();
         std::mem::swap(&mut *batch, &mut new_vec);
-        (new_vec, size)
+        (new_vec, size, batch_id)
     }
 }
 
@@ -87,13 +138,24 @@ impl Batcher for SimpleBatcher {
         //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => {
-                BATCHER_AM_PE_SEND_CNTS[0][dst].fetch_add(1, Ordering::Relaxed);
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&dst][&StatCmd::Am]
+                    .fetch_add(1, Ordering::Relaxed));
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&dst][&StatCmd::Multi]
+                    .fetch_add(1, Ordering::Relaxed));
                 self.batched_ams[dst].clone()
             }
             None => {
-                BATCHER_AM_PE_SEND_CNTS[0].iter().for_each(|c| {
-                    c.fetch_add(1, Ordering::Relaxed);
-                });
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig]
+                    .iter()
+                    .for_each(|(pe, c)| {
+                        if pe < &req_data.team.lamellae.comm().num_pes()
+                            && pe != &req_data.team.lamellae.comm().my_pe()
+                        {
+                            c[&StatCmd::Am].fetch_add(1, Ordering::Relaxed);
+                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                        }
+                    })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -117,41 +179,92 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_remote_am_to_batch submit task",
             //     std::thread::current().id()
             // );
+            stats!(IO_TASK_SPAWN[0].fetch_add(1, Ordering::Relaxed));
             self.executor.submit_io_task(async move {
+                stats!(IO_TASK_START[0].fetch_add(1, Ordering::Relaxed));
+                let mut timer = std::time::Instant::now();
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
+                    if timer.elapsed().as_secs_f32() > 10.0 {
+                        debug!(
+                            "[{:?}] remote_am waiting to send batch_id {} stall_mark {} cur_stall_mark {} size {}",
+                            std::thread::current().id(),
+                            batch_id,
+                            stall_mark,
+                            cur_stall_mark.load(Ordering::SeqCst),
+                            batch.size.load(Ordering::SeqCst)
+                        );
+                        timer = std::time::Instant::now();
+                    }
                     stall_mark = cur_stall_mark.load(Ordering::SeqCst);
                     async_std::task::yield_now().await;
                 }
-                while in_tx_task
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    async_std::task::yield_now().await;
-                }
+                // while in_tx_task
+                //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                //     .is_err()
+                // {
+                //     if timer.elapsed().as_secs_f32() > 10.0 {
+                //         debug!(
+                //             "[{:?}] remote_am waiting to acquire tx task for batch_id {} size {}",
+                //             std::thread::current().id(),
+                //             batch_id,
+                //             batch.size.load(Ordering::SeqCst)
+                //         );
+                //         timer = std::time::Instant::now();
+                //     }
+                //     async_std::task::yield_now().await;
+                // }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
+                    debug!(
+                        "[{:?}] remote_am spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                     SimpleBatcher::create_tx_task(batch).await;
                 } else {
-                    println!("Someone else is transmitting the batch already");
+                    debug!("remote am Someone else is transmitting the batch {batch_id} already");
                 }
-                in_tx_task.store(false, Ordering::SeqCst);
+                // in_tx_task.store(false, Ordering::SeqCst);
+                stats!(IO_TASK_FINISH[0].fetch_add(1, Ordering::Relaxed));
             });
         } else if size >= MAX_BATCH_SIZE {
-            while in_tx_task
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_err()
-            {
-                async_std::task::yield_now().await;
-            }
+            stats!(IO_TASK_TOO_BIG[0].fetch_add(1, Ordering::Relaxed));
+            let mut timer = std::time::Instant::now();
+            // while in_tx_task
+            //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            //     .is_err()
+            // {
+            //     if timer.elapsed().as_secs_f32() > 10.0 {
+            //         debug!(
+            //             "[{:?}] remote_am too big waiting to acquire tx task for batch_id {} size {}",
+            //             std::thread::current().id(),
+            //             batch_id,
+            //             batch.size.load(Ordering::SeqCst)
+            //         );
+            //         timer = std::time::Instant::now();
+            //     }
+            //     async_std::task::yield_now().await;
+            // }
             if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                 //this batch is still valid
+                 debug!(
+                        "[{:?}] remote_am spawning to big tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                 SimpleBatcher::create_tx_task(batch).await;
             } else {
-                println!("Someone else is transmitting the batch already");
+                debug!("remote am Someone else is transmitting the batch {batch_id} already");
             }
+            // in_tx_task.store(false, Ordering::SeqCst);
+            stats!(IO_TASK_TOO_BIG_FINISH[0].fetch_add(1, Ordering::Relaxed));
         }
     }
 
@@ -168,13 +281,24 @@ impl Batcher for SimpleBatcher {
         //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => {
-                BATCHER_AM_PE_SEND_CNTS[1][dst].fetch_add(1, Ordering::Relaxed);
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&dst][&StatCmd::Return]
+                    .fetch_add(1, Ordering::Relaxed));
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&dst][&StatCmd::Multi]
+                    .fetch_add(1, Ordering::Relaxed));
                 self.batched_ams[dst].clone()
             }
             None => {
-                BATCHER_AM_PE_SEND_CNTS[1].iter().for_each(|c| {
-                    c.fetch_add(1, Ordering::Relaxed);
-                });
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
+                    .iter()
+                    .for_each(|(pe, c)| {
+                        if pe < &req_data.team.lamellae.comm().num_pes()
+                            && pe != &req_data.team.lamellae.comm().my_pe()
+                        {
+                            c[&StatCmd::Return].fetch_add(1, Ordering::Relaxed);
+                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                        }
+                    })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -197,43 +321,93 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_rerturn_am_to_batch submit task",
             //     std::thread::current().id()
             // );
+            stats!(IO_TASK_SPAWN[1].fetch_add(1, Ordering::Relaxed));
             self.executor.submit_io_task(async move {
+                stats!(IO_TASK_START[1].fetch_add(1, Ordering::Relaxed));
+                let mut timer = std::time::Instant::now();
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
+                    if timer.elapsed().as_secs_f32() > 10.0 {
+                        debug!(
+                            "[{:?}] return am waiting to send batch_id {} stall_mark {} cur_stall_mark {} size {}",
+                            std::thread::current().id(),
+                            batch_id,
+                            stall_mark,
+                            cur_stall_mark.load(Ordering::SeqCst),
+                            batch.size.load(Ordering::SeqCst)
+                        );
+                        timer = std::time::Instant::now();
+                    }
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                while in_tx_task
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    async_std::task::yield_now().await;
-                }
+                // while in_tx_task
+                //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                //     .is_err()
+                // {
+                //     if timer.elapsed().as_secs_f32() > 10.0 {
+                //         debug!(
+                //             "[{:?}] return am waiting to acquire tx task for batch_id {} size {}",
+                //             std::thread::current().id(),
+                //             batch_id,
+                //             batch.size.load(Ordering::SeqCst)
+                //         );
+                //         timer = std::time::Instant::now();
+                //     }
+                //     async_std::task::yield_now().await;
+                // }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
+                     debug!(
+                        "[{:?}] return_am spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                     SimpleBatcher::create_tx_task(batch).await;
                 } else {
-                    println!("Someone else is transmitting the batch already");
+                    debug!("return am Someone else is transmitting the batch {batch_id} already");
                 }
-                in_tx_task.store(false, Ordering::SeqCst);
+                // in_tx_task.store(false, Ordering::SeqCst);
+                stats!(IO_TASK_FINISH[1].fetch_add(1, Ordering::Relaxed));
             });
         } else if size >= MAX_BATCH_SIZE {
-            while batch
-                .in_tx_task
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_err()
-            {
-                async_std::task::yield_now().await;
-            }
+            stats!(IO_TASK_TOO_BIG[1].fetch_add(1, Ordering::Relaxed));
+            let mut timer = std::time::Instant::now();
+            // while batch
+            //     .in_tx_task
+            //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            //     .is_err()
+            // {
+            //     if timer.elapsed().as_secs_f32() > 10.0 {
+            //         debug!(
+            //             "[{:?}] return am too big waiting to acquire tx task for batch_id {} size {}",
+            //             std::thread::current().id(),
+            //             batch_id,
+            //             batch.size.load(Ordering::SeqCst)
+            //         );
+            //         timer = std::time::Instant::now();
+            //     }
+            //     async_std::task::yield_now().await;
+            // }
             if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                 //this batch is still valid
+                 debug!(
+                        "[{:?}] return_am too big spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                 SimpleBatcher::create_tx_task(batch).await;
             } else {
-                println!("Someone else is transmitting the batch already");
+               debug!("return am too big Someone else is transmitting the batch {batch_id} already");
             }
-            in_tx_task.store(false, Ordering::SeqCst);
+            // in_tx_task.store(false, Ordering::SeqCst);
+            stats!(IO_TASK_TOO_BIG_FINISH[1].fetch_add(1, Ordering::Relaxed));
         }
     }
 
@@ -249,13 +423,24 @@ impl Batcher for SimpleBatcher {
         //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => {
-                BATCHER_AM_PE_SEND_CNTS[1][dst].fetch_add(1, Ordering::Relaxed);
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&dst][&StatCmd::Data]
+                    .fetch_add(1, Ordering::Relaxed));
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&dst][&StatCmd::Multi]
+                    .fetch_add(1, Ordering::Relaxed));
                 self.batched_ams[dst].clone()
             }
             None => {
-                BATCHER_AM_PE_SEND_CNTS[1].iter().for_each(|c| {
-                    c.fetch_add(1, Ordering::Relaxed);
-                });
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
+                    .iter()
+                    .for_each(|(pe, c)| {
+                        if pe < &req_data.team.lamellae.comm().num_pes()
+                            && pe != &req_data.team.lamellae.comm().my_pe()
+                        {
+                            c[&StatCmd::Data].fetch_add(1, Ordering::Relaxed);
+                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                        }
+                    })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -281,43 +466,93 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_data_am_to_batch submit task",
             //     std::thread::current().id()
             // );
+            stats!(IO_TASK_SPAWN[2].fetch_add(1, Ordering::Relaxed));
 
             self.executor.submit_io_task(async move {
+                    stats!(IO_TASK_START[2].fetch_add(1, Ordering::Relaxed));  
+                let mut timer = std::time::Instant::now();
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
+                    if timer.elapsed().as_secs_f32() > 10.0 {
+                        debug!(
+                            "[{:?}] data am waiting to send batch_id {} stall_mark {} cur_stall_mark {} size {}",
+                            std::thread::current().id(),
+                            batch_id,
+                            stall_mark,
+                            cur_stall_mark.load(Ordering::SeqCst),
+                            batch.size.load(Ordering::SeqCst)
+                        );
+                        timer = std::time::Instant::now();
+                    }
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                while in_tx_task
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    async_std::task::yield_now().await;
-                }
+                // while in_tx_task
+                //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                //     .is_err()
+                // {
+                //     if timer.elapsed().as_secs_f32() > 10.0 {
+                //         debug!(
+                //             "[{:?}] data am waiting to acquire tx task for batch_id {} size {}",
+                //             std::thread::current().id(),
+                //             batch_id,
+                //             batch.size.load(Ordering::SeqCst)
+                //         );
+                //         timer = std::time::Instant::now();
+                //     }
+                //     async_std::task::yield_now().await;
+                // }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
+                     debug!(
+                        "[{:?}] data spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                     SimpleBatcher::create_tx_task(batch).await;
                 } else {
-                    println!("Someone else is transmitting the batch already");
+                   debug!("data am Someone else is transmitting the batch {batch_id} already");
                 }
-                in_tx_task.store(false, Ordering::SeqCst);
+                // in_tx_task.store(false, Ordering::SeqCst);
+                stats!(IO_TASK_FINISH[2].fetch_add(1, Ordering::Relaxed));
             });
         } else if size >= MAX_BATCH_SIZE {
-            while in_tx_task
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_err()
-            {
-                async_std::task::yield_now().await;
-            }
+            stats!(IO_TASK_TOO_BIG[2].fetch_add(1, Ordering::Relaxed));
+            let mut timer = std::time::Instant::now();
+            // while in_tx_task
+            //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            //     .is_err()
+            // {
+            //     if timer.elapsed().as_secs_f32() > 10.0 {
+            //         debug!(
+            //             "[{:?}] data am too big waiting to acquire tx task for batch_id {} size {}",
+            //             std::thread::current().id(),
+            //             batch_id,
+            //             batch.size.load(Ordering::SeqCst)
+            //         );
+            //         timer = std::time::Instant::now();
+            //     }
+            //     async_std::task::yield_now().await;
+            // }
             if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                 //this batch is still valid
+                 debug!(
+                        "[{:?}] data too big spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                 SimpleBatcher::create_tx_task(batch).await;
             } else {
-                println!("Someone else is transmitting the batch already");
+               debug!("data am too big Someone else is transmitting the batch {batch_id} already");
             }
-            in_tx_task.store(false, Ordering::SeqCst);
+            // in_tx_task.store(false, Ordering::SeqCst);
+            stats!(IO_TASK_TOO_BIG_FINISH[2].fetch_add(1, Ordering::Relaxed));
         }
     }
 
@@ -327,13 +562,24 @@ impl Batcher for SimpleBatcher {
         //let dst =req_data.dst;
         let batch = match req_data.dst {
             Some(dst) => {
-                BATCHER_AM_PE_SEND_CNTS[1][dst].fetch_add(1, Ordering::Relaxed);
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&dst][&StatCmd::Unit]
+                    .fetch_add(1, Ordering::Relaxed));
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote][&dst][&StatCmd::Multi]
+                    .fetch_add(1, Ordering::Relaxed));
                 self.batched_ams[dst].clone()
             }
             None => {
-                BATCHER_AM_PE_SEND_CNTS[1].iter().for_each(|c| {
-                    c.fetch_add(1, Ordering::Relaxed);
-                });
+                stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Remote]
+                    .iter()
+                    .for_each(|(pe, c)| {
+                        if pe < &req_data.team.lamellae.comm().num_pes()
+                            && pe != &req_data.team.lamellae.comm().my_pe()
+                        {
+                            c[&StatCmd::Unit].fetch_add(1, Ordering::Relaxed);
+                            c[&StatCmd::Multi].fetch_add(1, Ordering::Relaxed);
+                        }
+                    })
+                );
                 self.batched_ams.last().unwrap().clone()
             }
         };
@@ -352,44 +598,96 @@ impl Batcher for SimpleBatcher {
             //     "[{:?}] add_unit_am_to_batch submit task",
             //     std::thread::current().id()
             // );
+            stats!(IO_TASK_SPAWN[3].fetch_add(1, Ordering::Relaxed));
             self.executor.submit_io_task(async move {
+                stats!(IO_TASK_START[3].fetch_add(1, Ordering::Relaxed));
+                let mut timer = std::time::Instant::now();
                 while stall_mark != cur_stall_mark.load(Ordering::SeqCst)
                     && batch.size.load(Ordering::SeqCst) < MAX_BATCH_SIZE
                     && batch_id == batch.batch_id.load(Ordering::SeqCst)
                 {
+                    if timer.elapsed().as_secs_f32() > 10.0 {
+                        debug!(
+                            "[{:?}] unit am waiting to send batch_id {} stall_mark {} cur_stall_mark {} size {}",
+                            std::thread::current().id(),
+                            batch_id,
+                            stall_mark,
+                            cur_stall_mark.load(Ordering::SeqCst),
+                            batch.size.load(Ordering::SeqCst)
+                        );
+                        timer = std::time::Instant::now();
+                    }
                     stall_mark = cur_stall_mark.load(Ordering::Relaxed);
                     async_std::task::yield_now().await;
                 }
-                while in_tx_task
-                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_err()
-                {
-                    async_std::task::yield_now().await;
-                }
+                // while in_tx_task
+                //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                //     .is_err()
+                // {
+                //     if timer.elapsed().as_secs_f32() > 10.0 {
+                //         debug!(
+                //             "[{:?}] unit am waiting to acquire tx task for batch_id {} size {}",
+                //             std::thread::current().id(),
+                //             batch_id,
+                //             batch.size.load(Ordering::SeqCst)
+                //         );
+                //         timer = std::time::Instant::now();
+                //     }
+                //     async_std::task::yield_now().await;
+                // }
                 if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                     //this batch is still valid
+                     debug!(
+                        "[{:?}] unit spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                     SimpleBatcher::create_tx_task(batch).await;
                 } else {
-                    println!("Someone else is transmitting the batch already");
+                   debug!("unit am Someone else is transmitting the batch {batch_id} already");
                 }
-                in_tx_task.store(false, Ordering::SeqCst);
+                // in_tx_task.store(false, Ordering::SeqCst);
+                stats!(IO_TASK_FINISH[3].fetch_add(1, Ordering::Relaxed ));
             });
         } else if size >= MAX_BATCH_SIZE {
-            while in_tx_task
-                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_err()
-            {
-                async_std::task::yield_now().await;
-            }
+            stats!(IO_TASK_TOO_BIG[3].fetch_add(1, Ordering::Relaxed));
+            // let mut timer = std::time::Instant::now();
+            // while in_tx_task
+            //     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            //     .is_err()
+            // {
+            //     if timer.elapsed().as_secs_f32() > 10.0  {
+            //         debug!(
+            //             "[{:?}] unit am too big waiting to acquire tx task for batch_id {} size {}",
+            //             std::thread::current().id(),
+            //             batch_id,
+            //             batch.size.load(Ordering::SeqCst)
+            //         );
+            //         timer = std::time::Instant::now();
+            //     }
+            //     async_std::task::yield_now().await;
+            // }
             if batch_id == batch.batch_id.load(Ordering::SeqCst) {
                 //this batch is still valid
+                 debug!(
+                        "[{:?}] unit too big spawning tx task {} of size {:?}  to pe {:?} ",
+                        std::thread::current().id(),
+                        batch_id,
+                        size,
+                        batch.pe,
+                    );
                 SimpleBatcher::create_tx_task(batch).await;
             } else {
-                println!("Someone else is transmitting the batch already");
+               debug!("unit am too big Someone else is transmitting the batch {batch_id} already");
             }
-            in_tx_task.store(false, Ordering::SeqCst);
+            // in_tx_task.store(false, Ordering::SeqCst);
+            stats!(IO_TASK_TOO_BIG_FINISH[3].fetch_add(1, Ordering::Relaxed));
         }
     }
+
+    // async fn try_to_sen
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn exec_batched_msg(
@@ -413,27 +711,45 @@ impl Batcher for SimpleBatcher {
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
+
             match cmd {
                 Cmd::Am => {
                     *cnts.entry(Cmd::Am).or_insert(0) += 1;
                     self.exec_am(&msg, &ser_data, &mut i, &lamellae, ame);
-                    BATCHER_AM_PE_RECV_CNTS[1][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)][&StatCmd::Am]
+                        .fetch_add(1, Ordering::Relaxed));
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Remote][&(msg.src as usize)]
+                        [&StatCmd::Multi]
+                        .fetch_add(1, Ordering::Relaxed));
                 }
                 Cmd::ReturnAm => {
                     *cnts.entry(Cmd::ReturnAm).or_insert(0) += 1;
                     self.exec_return_am(&msg, &ser_data, &mut i, &lamellae, ame)
                         .await;
-                    BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Return]
+                        .fetch_add(1, Ordering::Relaxed));
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Multi]
+                        .fetch_add(1, Ordering::Relaxed));
                 }
                 Cmd::Data => {
                     *cnts.entry(Cmd::Data).or_insert(0) += 1;
                     ame.exec_data_am(&msg, &mut i, &mut ser_data).await;
-                    BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)][&StatCmd::Data]
+                        .fetch_add(1, Ordering::Relaxed));
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Multi]
+                        .fetch_add(1, Ordering::Relaxed));
                 }
                 Cmd::Unit => {
                     *cnts.entry(Cmd::Unit).or_insert(0) += 1;
                     ame.exec_unit_am(&msg, &ser_data, &mut i).await;
-                    BATCHER_AM_PE_RECV_CNTS[0][msg.src as usize].fetch_add(1, Ordering::Relaxed);
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)][&StatCmd::Unit]
+                        .fetch_add(1, Ordering::Relaxed));
+                    stats!(BATCHER_AM_PE_RECV_CNTS.0[&StatType::Orig][&(msg.src as usize)]
+                        [&StatCmd::Multi]
+                        .fetch_add(1, Ordering::Relaxed));
                 }
                 Cmd::BatchedMsg => {
                     panic!("should not recieve a batched msg within a Simple Batcher batched msg")
@@ -471,8 +787,11 @@ impl SimpleBatcher {
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn create_tx_task(batch: SimpleBatcherInner) {
-        trace!("[{:?}] create_tx_task", std::thread::current().id());
-        let (buf, size) = batch.swap();
+        let old_batch_id = batch.batch_id.load(Ordering::SeqCst);
+        
+        
+        let (buf, size, batch_id) = batch.swap();
+        debug!("[{:?}] create_tx_task for batch ({}) {} {} {:?}", std::thread::current().id(), old_batch_id, batch_id, size, batch.pe);
 
         if size > 0 {
             let lamellae = buf[0].0.lamellae.clone();
@@ -484,6 +803,7 @@ impl SimpleBatcher {
             let mut cnts = HashMap::new();
 
             let mut i = 0;
+            let batched_cnt = buf.len();
             for (req_data, data, _size) in buf {
                 let req_data_slice = data_slice.sub_slice(i..);
                 match data {
@@ -529,14 +849,41 @@ impl SimpleBatcher {
                 }
             }
             debug!(
-                "[{:?}] sending batch of size {} {:?} to pe {:?} {:?}",
+                "[{:?}] sending batch {batch_id} of size {} {:?} to pe {:?} {:?}",
                 std::thread::current().id(),
                 i,
                 data_buf,
                 batch.pe,
                 cnts
             );
+            match batch.pe {
+                Some(pe) => {
+                    stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&pe][&StatCmd::Batched]
+                        .fetch_add(1, Ordering::Relaxed));
+                    stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig][&pe][&StatCmd::MultiBatched]
+                        .fetch_add(batched_cnt, Ordering::Relaxed));
+                }
+                None => {
+                    stats!(BATCHER_AM_PE_SEND_CNTS.0[&StatType::Orig]
+                        .iter()
+                        .for_each(|(pe, c)| {
+                            if pe < &lamellae.comm().num_pes() && pe != &lamellae.comm().my_pe() {
+                                c[&StatCmd::Batched].fetch_add(1, Ordering::Relaxed);
+                                c[&StatCmd::MultiBatched].fetch_add(batched_cnt, Ordering::Relaxed);
+                            }
+                        })
+                    );
+                }
+            }
+
             lamellae.send_to_pes_async(batch.pe, arch, data_buf).await;
+        }
+        else{
+            debug!(
+                "[{:?}] skipping send of empty batch { }",
+                std::thread::current().id(),
+                batch_id
+            );
         }
     }
 

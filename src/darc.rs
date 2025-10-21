@@ -1566,7 +1566,8 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             darc_temp.assume_init();
             self.team.lamellae.comm().wait();
             // now we can free the alloc
-            self.team.lamellae.comm().free(self.inner.alloc.clone());
+            // self.team.lamellae.comm().free(self.inner.alloc.clone());
+            // in theory this shoudl be done by the drop of CommAlloc
             trace!(
                 "[{:?}]leaving DroppedWaitAM {:?}",
                 std::thread::current().id(),

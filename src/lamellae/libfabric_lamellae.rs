@@ -168,14 +168,13 @@ impl LamellaeUtil for Libfabric {
         team: Arc<LamellarArchRT>,
         data: SerializedData,
     ) {
-        let remote_data = data.into_remote();
         if let Some(pe) = pe {
-            self.cq.send_data(remote_data, pe).await;
+            self.cq.send_data(data, pe).await;
         } else {
             let mut futures = team
                 .team_iter()
                 .filter(|pe| pe != &self.my_pe)
-                .map(|pe| self.cq.send_data(remote_data.clone(), pe))
+                .map(|pe| self.cq.send_data(data.clone(), pe))
                 .collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
             while let Some(_) = futures.next().await {}
         }

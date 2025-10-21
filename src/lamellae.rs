@@ -160,34 +160,35 @@ pub(crate) struct SerializeHeader {
 }
 
 // #[derive(Debug)]
+#[derive(Clone)]
 pub(crate) struct SerializedData {
     pub(crate) alloc: CommAlloc,
-    pub(crate) ref_cnt: *const AtomicUsize,
+    // pub(crate) ref_cnt: *const AtomicUsize,
     pub(crate) ser_data_bytes: CommSlice<u8>,
     pub(crate) header_bytes: CommSlice<u8>,
     pub(crate) payload_bytes: CommSlice<u8>,
-    pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
+    pub(crate) comm: Arc<Comm>,
 }
 
 // #[derive(Debug)]
 pub(crate) struct SubSerializedData {
     pub(crate) alloc: CommAlloc,
-    pub(crate) ref_cnt: *const AtomicUsize,
+    // pub(crate) ref_cnt: *const AtomicUsize,
     pub(crate) _ser_data_bytes: CommSlice<u8>,
     pub(crate) header_bytes: CommSlice<u8>,
     pub(crate) payload_bytes: CommSlice<u8>,
-    pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
+    pub(crate) comm: Arc<Comm>,
 }
 
-// #[derive(Debug)]
-pub(crate) struct RemoteSerializedData {
-    pub(crate) alloc: CommAlloc,
-    pub(crate) ref_cnt: *const AtomicUsize,
-    pub(crate) ser_data_bytes: CommSlice<u8>,
-    pub(crate) header_bytes: CommSlice<u8>,
-    pub(crate) payload_bytes: CommSlice<u8>,
-    pub(crate) comm: Arc<Comm>, //Comm instead of RofiComm because I can't figure out how to make work with Enum_distpatch....
-}
+// // #[derive(Debug)]
+// pub(crate) struct RemoteSerializedData {
+//     pub(crate) alloc: CommAlloc,
+//     pub(crate) ref_cnt: *const AtomicUsize,
+//     pub(crate) ser_data_bytes: CommSlice<u8>,
+//     pub(crate) header_bytes: CommSlice<u8>,
+//     pub(crate) payload_bytes: CommSlice<u8>,
+//     pub(crate) comm: Arc<Comm>,
+// }
 
 // we have allocated this memory out of fabric memory and thus are responsible for managing it,
 // we will not move the underlying data, reallocate it, nor free it until all references are dropped
@@ -197,34 +198,34 @@ unsafe impl Sync for SerializedData {}
 unsafe impl Send for SubSerializedData {}
 unsafe impl Sync for SubSerializedData {}
 
-unsafe impl Send for RemoteSerializedData {}
-unsafe impl Sync for RemoteSerializedData {}
+// unsafe impl Send for RemoteSerializedData {}
+// unsafe impl Sync for RemoteSerializedData {}
 
 impl SerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
-        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
-        let ser_data_size_size = std::mem::size_of::<usize>();
-        let ser_data_offset = ref_cnt_size + ser_data_size_size;
-        let alloc_size = size + ref_cnt_size + ser_data_size_size;
-        let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<AtomicUsize>())?;
-        let ref_cnt = unsafe { alloc.as_ptr::<AtomicUsize>() };
-        let ser_data_size = unsafe { alloc.byte_add(ref_cnt_size).as_mut_ptr::<usize>() };
-        let ser_data_bytes = alloc.comm_slice_at_byte_offset(ser_data_offset, size);
+        // let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+        // let ser_data_size_size = std::mem::size_of::<usize>();
+        // let ser_data_offset = ser_data_size_size;
+        let alloc_size = size; //+ ser_data_size_size;
+        let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
+        // let ref_cnt = unsafe { alloc.as_ptr::<AtomicUsize>() };
+        // let ser_data_size = unsafe { alloc.as_mut_ptr::<usize>() };
+        let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
 
         unsafe {
-            ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
-            *ser_data_size = alloc.num_bytes();
-            debug!("creating new serialized data {:?} {:?} {:?} {:?} serialized data offset {:?} ref_cnt_addr {:x} size_addr {:x} size {:?}",
-            alloc,ser_data_bytes,header_bytes,payload_bytes,
-            alloc.byte_add(ser_data_offset), alloc.comm_addr(),alloc.byte_add(ref_cnt_size), *ser_data_size);
+            // ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
+            // *ser_data_size = alloc.num_bytes();
+            debug!("creating new serialized data {:?} {:?} {:?} {:?}",
+                alloc,ser_data_bytes,header_bytes,payload_bytes
+            );
         }
 
         Ok(SerializedData {
             alloc,
-            ref_cnt,
+            // ref_cnt,
             ser_data_bytes,
             header_bytes,
             payload_bytes,
@@ -232,40 +233,40 @@ impl SerializedData {
         })
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn decrement_cnt_from_addr(comm: &Arc<Comm>, addr: usize) {
-        let alloc_addr = addr - std::mem::size_of::<usize>() - std::mem::size_of::<AtomicUsize>();
-        let alloc_size = (alloc_addr + std::mem::size_of::<AtomicUsize>()) as *const usize;
-        let alloc_size = alloc_size.as_ref().expect("valid serialized data");
-        let ref_cnt = alloc_addr as *const AtomicUsize;
-        let ref_cnt = ref_cnt.as_ref().expect("valid serialized data");
-        trace!(
-            "alloc_addr {:x}  alloc_size {:?} ref_cnt {:?}",
-            alloc_addr,
-            alloc_size,
-            ref_cnt.load(Ordering::SeqCst)
-        );
-        if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
-            debug!("freeing serialized data from addr {:x} ", alloc_addr);
-            comm.rt_free(CommAlloc {
-                inner_alloc: CommAllocInner::Raw(alloc_addr, *alloc_size),
-                alloc_type: CommAllocType::RtHeap,
-            });
-        }
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) unsafe fn decrement_cnt_from_addr(comm: &Arc<Comm>, addr: usize) {
+    //     let alloc_addr = addr - std::mem::size_of::<usize>() - std::mem::size_of::<AtomicUsize>();
+    //     let alloc_size = (alloc_addr + std::mem::size_of::<AtomicUsize>()) as *const usize;
+    //     let alloc_size = alloc_size.as_ref().expect("valid serialized data");
+    //     let ref_cnt = alloc_addr as *const AtomicUsize;
+    //     let ref_cnt = ref_cnt.as_ref().expect("valid serialized data");
+    //     trace!(
+    //         "alloc_addr {:x}  alloc_size {:?} ref_cnt {:?}",
+    //         alloc_addr,
+    //         alloc_size,
+    //         ref_cnt.load(Ordering::SeqCst)
+    //     );
+    //     if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
+    //         debug!("freeing serialized data from addr {:x} ", alloc_addr);
+    //         comm.rt_free(CommAlloc {
+    //             inner_alloc: CommAllocInner::Raw(alloc_addr, *alloc_size),
+    //             alloc_type: CommAllocType::RtHeap,
+    //         });
+    //     }
+    // }
 
-    #[tracing::instrument(level = "debug")]
-    pub(crate) fn into_remote(self) -> RemoteSerializedData {
-        self.increment_cnt();
-        RemoteSerializedData {
-            alloc: self.alloc.clone(),
-            ref_cnt: self.ref_cnt,
-            ser_data_bytes: self.ser_data_bytes.clone(),
-            header_bytes: self.header_bytes.clone(),
-            payload_bytes: self.payload_bytes.clone(),
-            comm: self.comm.clone(),
-        }
-    }
+    // #[tracing::instrument(level = "debug")]
+    // pub(crate) fn into_remote(self) -> RemoteSerializedData {
+    //     self.increment_cnt();
+    //     RemoteSerializedData {
+    //         alloc: self.alloc.clone(),
+    //         ref_cnt: self.ref_cnt,
+    //         ser_data_bytes: self.ser_data_bytes.clone(),
+    //         header_bytes: self.header_bytes.clone(),
+    //         payload_bytes: self.payload_bytes.clone(),
+    //         comm: self.comm.clone(),
+    //     }
+    // }
 }
 
 impl SerializedData {
@@ -277,10 +278,6 @@ impl SerializedData {
     pub(crate) fn header_as_bytes_mut(&mut self) -> CommSlice<u8> {
         self.header_bytes.clone()
     }
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) fn header_len(&self) -> usize {
-    //     self.header_bytes.len()
-    // }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn data_as_bytes(&self) -> CommSlice<u8> {
@@ -301,15 +298,15 @@ impl SerializedData {
         self.ser_data_bytes.clone()
     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn increment_cnt(&self) {
-        unsafe {
-            self.ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .fetch_add(1, Ordering::SeqCst)
-        };
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn increment_cnt(&self) {
+    //     unsafe {
+    //         self.ref_cnt
+    //             .as_ref()
+    //             .expect("valid serialized data")
+    //             .fetch_add(1, Ordering::SeqCst)
+    //     };
+    // }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn len(&self) -> usize {
@@ -320,16 +317,16 @@ impl SerializedData {
     pub(crate) fn print(&self) {
         println!("{:?}", self);
     }
+
+    pub(crate) fn leak_alloc(self) -> CommAlloc {
+        self.alloc
+    }
 }
 
 impl std::fmt::Debug for SerializedData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SeralizedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-            unsafe {self
-                .ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .load(Ordering::SeqCst) },
+        write!(f, "SeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            
             self.alloc.comm_addr(),
             self.ser_data_bytes.as_ptr(),
             self.ser_data_bytes.len(),
@@ -356,10 +353,10 @@ impl SerializedData {
     #[tracing::instrument(level = "debug")]
     pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
         trace!("sub_data start: {} end: {}", start, end);
-        self.increment_cnt();
+        // self.increment_cnt();
         SubSerializedData {
             alloc: self.alloc.clone(),
-            ref_cnt: self.ref_cnt,
+            // ref_cnt: self.ref_cnt,
             _ser_data_bytes: self.ser_data_bytes.clone(),
             header_bytes: self.header_bytes.clone(),
             payload_bytes: self.payload_bytes.sub_slice(start..end),
@@ -368,27 +365,27 @@ impl SerializedData {
     }
 }
 
-impl Drop for SerializedData {
-    #[tracing::instrument(level = "debug")]
-    fn drop(&mut self) {
-        unsafe {
-            trace!("dropping SerializedData {:?} ", self);
-            if self
-                .ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .fetch_sub(1, Ordering::SeqCst)
-                == 1
-            {
-                debug!(
-                    "freeing serialized data from addr {:x} ",
-                    self.alloc.comm_addr()
-                );
-                self.comm.rt_free(self.alloc.clone());
-            }
-        }
-    }
-}
+// impl Drop for SerializedData {
+//     #[tracing::instrument(level = "debug")]
+//     fn drop(&mut self) {
+//         unsafe {
+//             trace!("dropping SerializedData {:?} ", self);
+//             if self
+//                 .ref_cnt
+//                 .as_ref()
+//                 .expect("valid serialized data")
+//                 .fetch_sub(1, Ordering::SeqCst)
+//                 == 1
+//             {
+//                 debug!(
+//                     "freeing serialized data from addr {:x} ",
+//                     self.alloc.comm_addr()
+//                 );
+//                 self.comm.rt_free(self.alloc.clone());
+//             }
+//         }
+//     }
+// }
 
 impl SubSerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
@@ -403,12 +400,8 @@ impl SubSerializedData {
 
 impl std::fmt::Debug for SubSerializedData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "SubSeralizedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-            unsafe {self
-                .ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .load(Ordering::SeqCst) },
+        write!(f, "SubSeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+            
             self.alloc.comm_addr(),
             self._ser_data_bytes.as_ptr(),
             self._ser_data_bytes.len(),
@@ -429,98 +422,98 @@ impl Des for SubSerializedData {
     }
 }
 
-impl Drop for SubSerializedData {
-    #[tracing::instrument(level = "debug")]
-    fn drop(&mut self) {
-        unsafe {
-            trace!("dropping SubSerializedData {:?}", self);
-            if self
-                .ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .fetch_sub(1, Ordering::SeqCst)
-                == 1
-            {
-                debug!(
-                    "freeing serialized data from addr {:x} ",
-                    self.alloc.comm_addr()
-                );
-                self.comm.rt_free(self.alloc.clone());
-            }
-        }
-    }
-}
+// impl Drop for SubSerializedData {
+//     #[tracing::instrument(level = "debug")]
+//     fn drop(&mut self) {
+//         unsafe {
+//             trace!("dropping SubSerializedData {:?}", self);
+//             if self
+//                 .ref_cnt
+//                 .as_ref()
+//                 .expect("valid serialized data")
+//                 .fetch_sub(1, Ordering::SeqCst)
+//                 == 1
+//             {
+//                 debug!(
+//                     "freeing serialized data from addr {:x} ",
+//                     self.alloc.comm_addr()
+//                 );
+//                 self.comm.rt_free(self.alloc.clone());
+//             }
+//         }
+//     }
+// }
 
-impl RemoteSerializedData {
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn increment_cnt(&self) {
-        unsafe {
-            self.ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .fetch_add(1, Ordering::SeqCst)
-        };
-    }
+// impl RemoteSerializedData {
+//     #[tracing::instrument(skip_all, level = "debug")]
+//     pub(crate) fn increment_cnt(&self) {
+//         unsafe {
+//             self.ref_cnt
+//                 .as_ref()
+//                 .expect("valid serialized data")
+//                 .fetch_add(1, Ordering::SeqCst)
+//         };
+//     }
 
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn len(&self) -> usize {
-        self.ser_data_bytes.len()
-    }
-}
+//     #[tracing::instrument(skip_all, level = "debug")]
+//     pub(crate) fn len(&self) -> usize {
+//         self.ser_data_bytes.len()
+//     }
+// }
 
-impl std::fmt::Debug for RemoteSerializedData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "RemoteSerializedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-            unsafe {self
-                .ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .load(Ordering::SeqCst) },
-            self.alloc.comm_addr(),
-            self.ser_data_bytes.as_ptr(),
-            self.ser_data_bytes.len(),
-            self.payload_bytes.as_ptr(),
-            self.payload_bytes.len(),
-            self.alloc.num_bytes())
-    }
-}
+// impl std::fmt::Debug for RemoteSerializedData {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "RemoteSerializedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
+//             unsafe {self
+//                 .ref_cnt
+//                 .as_ref()
+//                 .expect("valid serialized data")
+//                 .load(Ordering::SeqCst) },
+//             self.alloc.comm_addr(),
+//             self.ser_data_bytes.as_ptr(),
+//             self.ser_data_bytes.len(),
+//             self.payload_bytes.as_ptr(),
+//             self.payload_bytes.len(),
+//             self.alloc.num_bytes())
+//     }
+// }
 
-impl Clone for RemoteSerializedData {
-    #[tracing::instrument(level = "debug")]
-    fn clone(&self) -> Self {
-        self.increment_cnt();
-        RemoteSerializedData {
-            alloc: self.alloc.clone(),
-            ref_cnt: self.ref_cnt,
-            ser_data_bytes: self.ser_data_bytes.clone(),
-            header_bytes: self.header_bytes.clone(),
-            payload_bytes: self.payload_bytes.clone(),
-            comm: self.comm.clone(),
-        }
-    }
-}
+// impl Clone for RemoteSerializedData {
+//     #[tracing::instrument(level = "debug")]
+//     fn clone(&self) -> Self {
+//         self.increment_cnt();
+//         RemoteSerializedData {
+//             alloc: self.alloc.clone(),
+//             ref_cnt: self.ref_cnt,
+//             ser_data_bytes: self.ser_data_bytes.clone(),
+//             header_bytes: self.header_bytes.clone(),
+//             payload_bytes: self.payload_bytes.clone(),
+//             comm: self.comm.clone(),
+//         }
+//     }
+// }
 
-impl Drop for RemoteSerializedData {
-    #[tracing::instrument(level = "debug")]
-    fn drop(&mut self) {
-        unsafe {
-            trace!("dropping RemoteSerializedData {:?}", self);
-            if self
-                .ref_cnt
-                .as_ref()
-                .expect("valid serialized data")
-                .fetch_sub(1, Ordering::SeqCst)
-                == 1
-            {
-                debug!(
-                    "freeing serialized data from addr {:x} ",
-                    self.alloc.comm_addr()
-                );
-                self.comm.rt_free(self.alloc.clone());
-            }
-        }
-    }
-}
+// impl Drop for RemoteSerializedData {
+//     #[tracing::instrument(level = "debug")]
+//     fn drop(&mut self) {
+//         unsafe {
+//             trace!("dropping RemoteSerializedData {:?}", self);
+//             if self
+//                 .ref_cnt
+//                 .as_ref()
+//                 .expect("valid serialized data")
+//                 .fetch_sub(1, Ordering::SeqCst)
+//                 == 1
+//             {
+//                 debug!(
+//                     "freeing serialized data from addr {:x} ",
+//                     self.alloc.comm_addr()
+//                 );
+//                 self.comm.rt_free(self.alloc.clone());
+//             }
+//         }
+//     }
+// }
 
 #[enum_dispatch]
 pub(crate) trait Des {

@@ -23,7 +23,7 @@ use tracing::trace;
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricAtomicFuture<T> {
-    pub(crate) alloc: Arc<LibfabricAlloc>,
+    pub(crate) alloc: LibfabricAlloc,
     pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
@@ -40,7 +40,7 @@ impl<T: Send + 'static> LibfabricAtomicFuture<T> {
             self.offset
         );
         for pe in &self.remote_pes {
-            LibfabricAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op).unwrap();
+            LibfabricAlloc::atomic_op_inner(&self.alloc, *pe, self.offset, &self.op).unwrap();
         }
     }
     pub(crate) fn block(mut self) {
@@ -91,7 +91,7 @@ impl<T: Send + 'static> Future for LibfabricAtomicFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricAtomicFetchFuture<T> {
-    pub(crate) alloc: Arc<LibfabricAlloc>,
+    pub(crate) alloc: LibfabricAlloc,
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
@@ -109,7 +109,7 @@ impl<T: Send + 'static> LibfabricAtomicFetchFuture<T> {
             self.offset
         );
         unsafe {
-            LibfabricAlloc::atomic_fetch_op(
+            LibfabricAlloc::atomic_fetch_op_inner(
                 &self.alloc,
                 self.remote_pe,
                 self.offset,
@@ -182,7 +182,7 @@ impl<T: Send + 'static> Future for LibfabricAtomicFetchFuture<T> {
     }
 }
 
-impl CommAllocAtomic for Arc<LibfabricAlloc> {
+impl CommAllocAtomic for LibfabricAlloc {
     fn atomic_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -203,7 +203,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
         .into()
     }
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        LibfabricAlloc::atomic_op(self, pe, offset, &op).unwrap();
+        LibfabricAlloc::atomic_op_inner(self, pe, offset, &op).unwrap();
     }
     fn atomic_op_all<T: Copy>(
         &self,
@@ -225,7 +225,7 @@ impl CommAllocAtomic for Arc<LibfabricAlloc> {
     }
     fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         for pe in 0..self.num_pes() {
-            LibfabricAlloc::atomic_op(self, pe, offset, &op).unwrap();
+            LibfabricAlloc::atomic_op_inner(self, pe, offset, &op).unwrap();
         }
     }
     fn atomic_fetch_op<T: Copy>(

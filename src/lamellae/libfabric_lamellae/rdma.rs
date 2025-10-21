@@ -35,7 +35,7 @@ pub(super) enum AllocOp<T: Remote> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricPutFuture<T: Remote> {
     my_pe: usize,
-    alloc: Arc<LibfabricAlloc>,
+    alloc: LibfabricAlloc,
     offset: usize,
     op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
@@ -46,7 +46,7 @@ pub(crate) struct LibfabricPutFuture<T: Remote> {
 impl<T: Remote> LibfabricPutFuture<T> {
     fn inner_put(&self, pe: usize, src: &T) {
         trace!(
-            "putting src: {:?} dst: {:?} len: {} num bytes {}",
+            "putting src: {:x} dst: {:x} len: {} num bytes {}",
             src as *const T as usize,
             self.alloc.start() + self.offset,
             1,
@@ -169,7 +169,7 @@ impl<T: Remote> Future for LibfabricPutFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricGetFuture<T> {
-    alloc: Arc<LibfabricAlloc>,
+    alloc: LibfabricAlloc,
     pe: usize,
     offset: usize,
     scheduler: Arc<Scheduler>,
@@ -252,7 +252,7 @@ impl<T: Remote> Future for LibfabricGetFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricGetBufferFuture<T> {
-    alloc: Arc<LibfabricAlloc>,
+    alloc: LibfabricAlloc,
     pe: usize,
     offset: usize,
     len: usize,
@@ -341,7 +341,7 @@ impl<T: Remote> Future for LibfabricGetBufferFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     my_pe: usize,
-    alloc: Arc<LibfabricAlloc>,
+    alloc: LibfabricAlloc,
     pe: usize,
     offset: usize,
     dst: LamellarBuffer<T, B>,
@@ -422,7 +422,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricGetIntoBufferFuture<
     }
 }
 
-impl CommAllocRdma for Arc<LibfabricAlloc> {
+impl CommAllocRdma for LibfabricAlloc {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

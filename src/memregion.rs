@@ -812,7 +812,7 @@ pub(crate) struct MemoryRegion<T: Remote> {
     counters: Vec<Arc<AMCounters>>,
     rdma: Arc<Lamellae>,
     mode: Mode,
-    freeable: bool, //indicates if this object is responsible for freeing the underlying data -- calling as_base creates a new object that shares the same underlying data but we don't want to free it twice
+    // freeable: bool, //indicates if this object is responsible for freeing the underlying data -- calling as_base creates a new object that shares the same underlying data but we don't want to free it twice
     phantom: PhantomData<T>,
 }
 
@@ -877,7 +877,7 @@ impl<T: Remote> MemoryRegion<T> {
             backend: lamellae.comm().backend(),
             rdma: lamellae.clone(),
             mode: mode,
-            freeable: true,
+            // freeable: true,
             phantom: PhantomData,
         };
         trace!("new memregion alloc {:?}", temp.alloc,);
@@ -903,7 +903,7 @@ impl<T: Remote> MemoryRegion<T> {
             backend: lamellae.comm().backend(),
             rdma: lamellae,
             mode: Mode::Remote,
-            freeable: true,
+            // freeable: true,
             phantom: PhantomData,
         })
     }
@@ -917,18 +917,20 @@ impl<T: Remote> MemoryRegion<T> {
             0,
             "Error converting memregion to new base, does not align"
         );
-        // MemoryRegion {
-        //     addr: self.addr, //TODO: out of memory...
-        //     pe: self.pe,
-        //     size: self.num_bytes / std::mem::size_of::<B>(),
-        //     num_bytes: self.num_bytes,
-        //     backend: self.backend,
-        //     rdma: self.rdma.comm().clone(),
-        //     mode: self.mode,
-        //     phantom: PhantomData,
-        // }
-        self.num_elems = self.alloc.num_bytes() / std::mem::size_of::<B>();
-        std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
+        MemoryRegion {
+            alloc: self.alloc.clone(),
+            pe: self.pe,
+            num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
+            scheduler: self.scheduler.clone(),
+            counters: self.counters.clone(),
+            backend: self.backend,
+            rdma: self.rdma.clone(),
+            mode: self.mode,
+            // freeable: false,
+            phantom: PhantomData,
+        }
+        // self.num_elems = self.alloc.num_bytes() / std::mem::size_of::<B>();
+        // std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
     pub(crate) unsafe fn as_base<B: Remote>(&self) -> MemoryRegion<B> {
         assert_eq!(
@@ -945,7 +947,7 @@ impl<T: Remote> MemoryRegion<T> {
             backend: self.backend,
             rdma: self.rdma.clone(),
             mode: self.mode,
-            freeable: false,
+            // freeable: false,
             phantom: PhantomData,
         }
     }
@@ -1412,31 +1414,31 @@ pub trait RemoteMemoryRegion {
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error>;
 }
 
-impl<T: Remote> Drop for MemoryRegion<T> {
-    #[tracing::instrument(skip_all, level = "debug")]
-    fn drop(&mut self) {
-        // println!("trying to dropping mem region {:?}", self);
-        if self.freeable {
-            match self.mode {
-                Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
-                Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
-                Mode::Remote => {}
-            }
-        }
-        // println!("dropping mem region {:?}",self);
-    }
-}
+// impl<T: Remote> Drop for MemoryRegion<T> {
+//     #[tracing::instrument(skip_all, level = "debug")]
+//     fn drop(&mut self) {
+//         // println!("trying to dropping mem region {:?}", self);
+//         if self.freeable {
+//             match self.mode {
+//                 Mode::Local => self.rdma.comm().rt_free(self.alloc.clone()),
+//                 Mode::Shared => self.rdma.comm().free(self.alloc.clone()),
+//                 Mode::Remote => {}
+//             }
+//         }
+//         // println!("dropping mem region {:?}",self);
+//     }
+// }
 
 impl<T: Remote> std::fmt::Debug for MemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // write!(f, "{:?}", slice)
         write!(
             f,
-            "addr {:#x} size {:?} backend {:?} freeable {:?}", // cnt: {:?}",
+            "addr {:#x} size {:?} backend {:?}", // cnt: {:?}",
             self.alloc.comm_addr(),
             self.alloc.num_bytes(),
             self.backend,
-            self.freeable // self.cnt.load(Ordering::SeqCst)
+            // self.freeable // self.cnt.load(Ordering::SeqCst)
         )
     }
 }

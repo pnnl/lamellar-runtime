@@ -20,7 +20,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct LibfabricComm {
     pub(crate) ofi: Arc<Ofi>,
-    pub(crate) runtime_allocs: RwLock<Vec<(Arc<LibfabricAlloc>, BTreeAlloc)>>, //runtime allocations
+    pub(crate) runtime_allocs: RwLock<Vec<(LibfabricAlloc, BTreeAlloc)>>, //runtime allocations
     // pub(crate) fabric_allocs: RwLock<HashMap<usize, CommAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -49,7 +49,11 @@ impl LibfabricComm {
         // let mem_per_pe = total_mem; // / num_pes;
 
         let alloc_info = ofi
-            .alloc(total_mem, AllocationType::Global)
+            .alloc(
+                total_mem,
+                AllocationType::Global,
+                std::mem::align_of::<u8>(),
+            )
             .expect("error in ofi alloc");
 
         let lib_fabric_comm = LibfabricComm {

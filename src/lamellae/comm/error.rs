@@ -10,6 +10,7 @@ pub(crate) enum AllocError {
     UnexpectedAllocationType(AllocationType),
     FabricAllocationError(i32),
     InvalidSubAlloc(usize, usize),
+    NotRTAlloc(usize),
 }
 
 impl std::fmt::Display for AllocError {
@@ -47,6 +48,9 @@ impl std::fmt::Display for AllocError {
                     "Invalid sub allocation size {} with alignment {}",
                     size, align
                 )
+            }
+            AllocError::NotRTAlloc(addr) => {
+                write!(f, "Address {:x} is not part of the runtime heap", addr)
             }
         }
     }

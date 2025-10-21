@@ -40,23 +40,23 @@ impl CommMem for UcxComm {
         Ok(comm_alloc)
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
-    fn free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::Fabric);
-        match alloc.inner_alloc {
-            CommAllocInner::Raw(addr, _) => {
-                println!("freeing raw alloc: {:x} should we ever be here?", addr);
-                self.ucx.free_addr(addr);
-            }
-            CommAllocInner::UcxAlloc(inner_alloc) => {
-                // println!("freeing ucx inner_alloc: {:?}", inner_alloc);
-                self.ucx.free_alloc(&inner_alloc);
-            }
-            _ => {
-                panic!("free should only be called with UcxAlloc or Raw addr");
-            }
-        }
-    }
+    // #[tracing::instrument(skip(self), level = "debug")]
+    // fn free(&self, alloc: CommAlloc) {
+    //     assert!(alloc.alloc_type == CommAllocType::Fabric);
+    //     match alloc.inner_alloc {
+    //         CommAllocInner::Raw(addr, _) => {
+    //             println!("freeing raw alloc: {:x} should we ever be here?", addr);
+    //             self.ucx.free_addr(addr);
+    //         }
+    //         CommAllocInner::UcxAlloc(inner_alloc) => {
+    //             // println!("freeing ucx inner_alloc: {:?}", inner_alloc);
+    //             self.ucx.free_alloc(&inner_alloc);
+    //         }
+    //         _ => {
+    //             panic!("free should only be called with UcxAlloc or Raw addr");
+    //         }
+    //     }
+    // }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
@@ -69,7 +69,8 @@ impl CommMem for UcxComm {
                 //     addr - inner_alloc.start(),
                 //     size
                 // );
-                let alloc = inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?;
+                let alloc =
+                    inner_alloc.rt_alloc(alloc.clone(), addr - inner_alloc.start(), size)?;
                 unsafe {
                     alloc.zeroize_bytes();
                 }
@@ -94,35 +95,35 @@ impl CommMem for UcxComm {
         false
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
-    fn rt_free(&self, alloc: CommAlloc) {
-        assert!(alloc.alloc_type == CommAllocType::RtHeap);
-        match alloc.inner_alloc {
-            CommAllocInner::Raw(addr, _) => {
-                trace!("freeing rt alloc: {:x}", addr);
-                let allocs = self.runtime_allocs.read();
-                for (_, alloc) in allocs.iter() {
-                    if let Ok(_) = alloc.free(addr) {
-                        return;
-                    }
-                }
-            }
-            CommAllocInner::UcxAlloc(inner_alloc) => {
-                trace!("freeing rt alloc: {:?}", inner_alloc);
-                let allocs = self.runtime_allocs.read();
-                for (_, alloc) in allocs.iter() {
-                    if let Ok(_) = alloc.free(inner_alloc.start()) {
-                        return;
-                    }
-                }
-                panic!("Error invalid free! {:?}", inner_alloc);
-            }
-            _ => panic!(
-                "unexpected allocation type {:?} in rt_free",
-                alloc.inner_alloc
-            ),
-        }
-    }
+    // #[tracing::instrument(skip(self), level = "debug")]
+    // fn rt_free(&self, alloc: CommAlloc) {
+    //     assert!(alloc.alloc_type == CommAllocType::RtHeap);
+    //     match alloc.inner_alloc {
+    //         CommAllocInner::Raw(addr, _) => {
+    //             trace!("freeing rt alloc: {:x}", addr);
+    //             let allocs = self.runtime_allocs.read();
+    //             for (_, alloc) in allocs.iter() {
+    //                 if let Ok(_) = alloc.free(addr) {
+    //                     return;
+    //                 }
+    //             }
+    //         }
+    //         CommAllocInner::UcxAlloc(inner_alloc) => {
+    //             trace!("freeing rt alloc: {:?}", inner_alloc);
+    //             let allocs = self.runtime_allocs.read();
+    //             for (_, alloc) in allocs.iter() {
+    //                 if let Ok(_) = alloc.free(inner_alloc.start()) {
+    //                     return;
+    //                 }
+    //             }
+    //             panic!("Error invalid free! {:?}", inner_alloc);
+    //         }
+    //         _ => panic!(
+    //             "unexpected allocation type {:?} in rt_free",
+    //             alloc.inner_alloc
+    //         ),
+    //     }
+    // }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
@@ -197,6 +198,23 @@ impl CommMem for UcxComm {
         self.ucx
             .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
             .expect("local_alloc_and_offset_from_addr failed")
+    }
+
+    fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+        for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
+            if let Some(size) = alloc.find(addr) {
+                let comm_alloc = CommAlloc {
+                    inner_alloc: CommAllocInner::UcxAlloc(unsafe {
+                        inner_alloc
+                            .sub_alloc(addr - inner_alloc.start(), size)?
+                            .as_rt_alloc()?
+                    }),
+                    alloc_type: CommAllocType::RtHeap,
+                };
+                return Ok(comm_alloc);
+            }
+        }
+        Err(AllocError::LocalNotFound(CommAllocAddr(addr.into())))
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
