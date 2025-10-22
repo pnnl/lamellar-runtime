@@ -163,12 +163,8 @@ pub(crate) trait CommMem {
         align: usize,
     ) -> error::AllocResult<CommAlloc>;
 
-    // TODO: we probably want the CommAlloc to handle freeing on Drop... do we have the appropriate lifetime info for this?
-    // fn free(&self, alloc: CommAlloc);
     fn rt_alloc(&self, size: usize, align: usize) -> error::AllocResult<CommAlloc>;
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool;
-    // TODO: we probably want the CommAlloc to handle freeing on Drop... do we have the appropriate lifetime info for this?
-    // fn rt_free(&self, alloc: CommAlloc);
     fn mem_occupied(&self) -> usize;
     fn alloc_pool(&self, min_size: usize);
     fn num_pool_allocs(&self) -> usize;

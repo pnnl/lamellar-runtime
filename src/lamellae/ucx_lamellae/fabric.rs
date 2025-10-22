@@ -12,8 +12,8 @@ use worker::Worker;
 
 use crate::{
     lamellae::{
-        AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc, CommAllocAddr,
-        CommAllocInner, CommAllocType, CommSlice, FabricError,
+        comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
+        CommAllocAddr, CommAllocInner, CommAllocType, CommSlice, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -24,7 +24,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
-use tracing::trace;
+use tracing::{debug, trace};
 
 pub(crate) struct UcxWorld {
     pmi: Arc<PmiX>,
@@ -33,30 +33,10 @@ pub(crate) struct UcxWorld {
     context: Arc<Context>,
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
-    mem_handles: Arc<Mutex<Vec<Arc<UcxAlloc>>>>,
-    remote_keys: Arc<Mutex<Vec<(Arc<UcxAlloc>, Vec<(usize, Arc<RKey>)>)>>>,
-    exchange_buffer: Option<Arc<UcxAlloc>>,
+    mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
+    remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    exchange_buffer: Option<UcxAlloc>,
 }
-
-/* need to implement...
-X - alloc(size,alloc_type) need to handle sub_alloc eventually
-X - free_addr(addr)
-X - free_alloc(alloc_info)
-X - local_addr(remote_pe,remote_addr)
-X - remote_addr(pe, local_addr)
-X - get_alloc_from_start_addr(addr)
-X - progress()
-X - wait_all()
-X - barrier()
-X - clear_allocs()
-X - atomic_avail()
-atomic_op()
-atomic_fetch_op()
-put()
-inner_put()
-get()
-inner_get()
- */
 
 impl std::fmt::Debug for UcxWorld {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -89,8 +69,19 @@ impl UcxWorld {
 
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
-        let exchange_buffer =
-            Self::initial_alloc(&context, &endpoints, &worker, &my_pmi, num_pes, my_pe).unwrap();
+        let mem_handles = Arc::new(Mutex::new(Vec::new()));
+        let remote_keys = Arc::new(Mutex::new(Vec::new()));
+        let exchange_buffer = Self::initial_alloc(
+            &context,
+            &endpoints,
+            &worker,
+            &my_pmi,
+            num_pes,
+            my_pe,
+            mem_handles.clone(),
+            remote_keys.clone(),
+        )
+        .unwrap();
         UcxWorld {
             pmi: my_pmi,
             my_pe,
@@ -98,8 +89,8 @@ impl UcxWorld {
             context,
             worker,
             endpoints,
-            mem_handles: Arc::new(Mutex::new(Vec::new())),
-            remote_keys: Arc::new(Mutex::new(Vec::new())),
+            mem_handles,
+            remote_keys,
             exchange_buffer: Some(exchange_buffer),
         }
     }
@@ -147,13 +138,16 @@ impl UcxWorld {
         pmi: &Arc<PmiX>,
         num_pes: usize,
         my_pe: usize,
-    ) -> AllocResult<Arc<UcxAlloc>> {
+        mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
+        remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    ) -> AllocResult<UcxAlloc> {
         let mem_handle = MemoryHandleInner::alloc(context, 1024); //dummy allocation to get the size of the exchange buffer
-        let mut size = mem_handle.addr.to_ne_bytes().len();
-        size += mem_handle.pack().as_ref().len();
-        size = size * num_pes;
+        let mut data_size = mem_handle.addr.to_ne_bytes().len();
+        data_size += mem_handle.pack().as_ref().len();
+        data_size = data_size * num_pes;
         drop(mem_handle);
-        // println!("Initial alloc size: {}", size);
+        let (padding, size, align) = calc_alloc_padding_size_align(data_size, 8);
+        // debug!("Initial alloc size: {}", size);
         let mem_handle = MemoryHandleInner::alloc(context, size * num_pes);
         let buffer_keys = mem_handle.exchange_key_pmi(endpoints, pmi).unwrap();
 
@@ -163,22 +157,36 @@ impl UcxWorld {
             inner: mem_handle.clone(),
         };
 
-        let alloc = Arc::new(UcxAlloc {
+        let alloc = UcxAlloc::new(
             mem,
-            total_size: size * num_pes,
-            local_size: size,
-            my_pe: my_pe,
-            num_pes: num_pes,
-            context: context.clone(),
-            worker: worker.clone(),
-            endpoints: endpoints.clone(),
-            remote_keys: buffer_keys.clone(),
-            rt_alloc: None,
-        });
+            data_size,
+            padding,
+            my_pe,
+            num_pes,
+            context.clone(),
+            worker.clone(),
+            endpoints.clone(),
+            buffer_keys.clone(),
+            mem_handles.clone(),
+            remote_keys.clone(),
+        )?;
+        mem_handles.lock().unwrap().push(alloc.clone());
+        remote_keys
+            .lock()
+            .unwrap()
+            .push((alloc.clone(), buffer_keys));
         Ok(alloc)
     }
 
-    pub(crate) fn alloc(&self, size: usize, _alloc_type: AllocationType) -> Arc<UcxAlloc> {
+    pub(crate) fn alloc(
+        &self,
+        data_size: usize,
+        align: usize,
+        _alloc_type: AllocationType,
+    ) -> UcxAlloc {
+        //add space for ref count and padding to align it
+        let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
+
         let mem_handle = MemoryHandleInner::alloc(&self.context, size);
         let buffer_keys = mem_handle
             .exchange_key_alloc(
@@ -194,21 +202,20 @@ impl UcxWorld {
             inner: mem_handle.clone(),
         };
 
-        // for (i, (addr, key)) in buffer_keys.iter().enumerate() {
-        //     println!("Buffer key for endpoint {}: {:x} {:?}", i, addr, key);
-        // }
-        let alloc = Arc::new(UcxAlloc {
+        let alloc = UcxAlloc::new(
             mem,
-            total_size: size * self.num_pes,
-            local_size: size,
-            my_pe: self.my_pe,
-            num_pes: self.num_pes,
-            context: self.context.clone(),
-            worker: self.worker.clone(),
-            endpoints: self.endpoints.clone(),
-            remote_keys: buffer_keys.clone(),
-            rt_alloc: None,
-        });
+            data_size,
+            padding,
+            self.my_pe,
+            self.num_pes,
+            self.context.clone(),
+            self.worker.clone(),
+            self.endpoints.clone(),
+            buffer_keys.clone(),
+            self.mem_handles.clone(),
+            self.remote_keys.clone(),
+        )
+        .expect("UcxAlloc::new failed");
         self.mem_handles.lock().unwrap().push(alloc.clone());
         self.remote_keys
             .lock()
@@ -217,29 +224,29 @@ impl UcxWorld {
         alloc
     }
 
-    pub(crate) fn free_alloc(&self, alloc: &UcxAlloc) {
-        self.mem_handles
-            .lock()
-            .unwrap()
-            .retain(|a| a.mem.inner.addr != alloc.mem.inner.addr);
-        self.remote_keys
-            .lock()
-            .unwrap()
-            .retain(|(a, _)| a.mem.inner.addr != alloc.mem.inner.addr);
-    }
+    // pub(crate) fn free_alloc(&self, alloc: &UcxAlloc) {
+    //     self.mem_handles
+    //         .lock()
+    //         .unwrap()
+    //         .retain(|a| a.mem.inner.addr != alloc.mem.inner.addr);
+    //     self.remote_keys
+    //         .lock()
+    //         .unwrap()
+    //         .retain(|(a, _)| a.mem.inner.addr != alloc.mem.inner.addr);
+    // }
 
-    pub(crate) fn free_addr(&self, addr: usize) {
-        if let Some(alloc) = self
-            .mem_handles
-            .lock()
-            .unwrap()
-            .iter()
-            .find(|a| a.mem.inner.addr == addr)
-            .clone()
-        {
-            self.free_alloc(alloc);
-        }
-    }
+    // pub(crate) fn free_addr(&self, addr: usize) {
+    //     if let Some(alloc) = self
+    //         .mem_handles
+    //         .lock()
+    //         .unwrap()
+    //         .iter()
+    //         .find(|a| a.mem.inner.addr == addr)
+    //         .clone()
+    //     {
+    //         self.free_alloc(alloc);
+    //     }
+    // }
 
     pub(crate) fn wait_all(&self) {
         self.worker.wait_all();
@@ -261,7 +268,8 @@ impl UcxWorld {
         let allocs = self.remote_keys.lock().unwrap();
         for (alloc, remote_addrs) in allocs.iter() {
             let remote_pe_addr = remote_addrs[remote_pe].0;
-            if remote_pe_addr <= remote_addr && remote_addr < remote_pe_addr + alloc.local_size {
+            if remote_pe_addr <= remote_addr && remote_addr < remote_pe_addr + alloc.data_num_bytes
+            {
                 let offset = remote_addr - remote_pe_addr;
                 return Some(alloc.mem.inner.addr + offset);
             }
@@ -277,7 +285,8 @@ impl UcxWorld {
         let allocs = self.remote_keys.lock().unwrap();
         for (alloc, remote_addrs) in allocs.iter() {
             let remote_pe_addr = remote_addrs[remote_pe].0;
-            if remote_pe_addr <= remote_addr && remote_addr < remote_pe_addr + alloc.local_size {
+            if remote_pe_addr <= remote_addr && remote_addr < remote_pe_addr + alloc.data_num_bytes
+            {
                 let offset = remote_addr - remote_pe_addr;
                 return Some((alloc.clone().into(), offset));
             }
@@ -289,7 +298,7 @@ impl UcxWorld {
         let allocs = self.remote_keys.lock().unwrap();
         for (alloc, remote_addrs) in allocs.iter() {
             if alloc.mem.inner.addr <= local_addr
-                && local_addr < alloc.mem.inner.addr + alloc.local_size
+                && local_addr < alloc.mem.inner.addr + alloc.data_num_bytes
             {
                 let offset = local_addr - alloc.mem.inner.addr;
                 let remote_pe_addr = remote_addrs[pe].0;
@@ -302,7 +311,7 @@ impl UcxWorld {
     pub(crate) fn get_alloc_from_start_addr(
         &self,
         addr: CommAllocAddr,
-    ) -> Result<Arc<UcxAlloc>, String> {
+    ) -> Result<UcxAlloc, String> {
         let allocs = self.mem_handles.lock().unwrap();
         for alloc in allocs.iter() {
             if alloc.mem.inner.addr == *addr {
@@ -313,37 +322,92 @@ impl UcxWorld {
     }
 
     pub(crate) fn clear_allocs(&self) {
-        self.mem_handles.lock().unwrap().clear();
-        self.remote_keys.lock().unwrap().clear();
+        let mut mem_handles = self.mem_handles.lock().unwrap();
+        let temp_handles = mem_handles.drain(..).collect::<Vec<_>>();
+        drop(mem_handles);
+        let mut remote_keys = self.remote_keys.lock().unwrap();
+        let temp_keys = remote_keys.drain(..).collect::<Vec<_>>();
+        drop(remote_keys);
+        for (alloc, rkeys) in temp_keys.into_iter() {
+            for (addr, rkey) in rkeys.into_iter() {
+                let ref_cnt = Arc::strong_count(&rkey);
+                debug!("Clearing rkey for addr {:x}, ref count: {}", addr, ref_cnt);
+            }
+        }
+        debug!("Cleared {} allocations", temp_handles.len());
     }
 }
 
 impl Drop for UcxWorld {
     fn drop(&mut self) {
-        trace!("dropping ucx world");
+        debug!("dropping ucx world");
         self.barrier();
         self.exchange_buffer.take();
-        self.remote_keys.lock().unwrap().clear();
-        self.mem_handles.lock().unwrap().clear();
+        self.clear_allocs();
+        let mem_handles_cnt = Arc::strong_count(&self.mem_handles);
+        let remote_keys_cnt = Arc::strong_count(&self.remote_keys);
+        debug!(
+            "mem handle count: {} remote keys cnt: {}",
+            mem_handles_cnt, remote_keys_cnt
+        );
+        // self.remote_keys.lock().unwrap().clear();
+        // self.mem_handles.lock().unwrap().clear();
         self.barrier();
     }
 }
 
+#[derive(Clone)]
+enum AllocTable {
+    Fabric(
+        Arc<Mutex<Vec<UcxAlloc>>>,
+        Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    ),
+    Runtime(
+        BTreeAlloc,
+        usize,
+        Arc<Mutex<Vec<UcxAlloc>>>,
+        Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    ), //the usize is the offset of the rt_alloc so that we can free it properly if a sub_alloc is the last reference
+}
+
 pub struct UcxAlloc {
     mem: MemoryHandle,
-    total_size: usize,
-    local_size: usize,
+    data_num_bytes: usize,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
+    fabric_ref_cnt_offset: usize,
+    rt_ref_cnt_offset: usize,
     context: Arc<Context>,
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
     remote_keys: Vec<(usize, Arc<RKey>)>,
-    rt_alloc: Option<(BTreeAlloc, Arc<AtomicUsize>)>,
+    alloc_table: AllocTable,
 }
 
-impl From<Arc<UcxAlloc>> for CommAlloc {
-    fn from(alloc: Arc<UcxAlloc>) -> Self {
+impl Clone for UcxAlloc {
+    fn clone(&self) -> Self {
+        let fab_ref_cnt = self.increment_fabric_ref_count();
+        if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
+            self.increment_rt_ref_count();
+        }
+        Self {
+            mem: self.mem.clone(),
+            data_num_bytes: self.data_num_bytes,
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: self.rt_ref_cnt_offset,
+            context: self.context.clone(),
+            worker: self.worker.clone(),
+            endpoints: self.endpoints.clone(),
+            remote_keys: self.remote_keys.clone(),
+            alloc_table: self.alloc_table.clone(),
+        }
+    }
+}
+
+impl From<UcxAlloc> for CommAlloc {
+    fn from(alloc: UcxAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::UcxAlloc(alloc),
             alloc_type: CommAllocType::Fabric,
@@ -353,93 +417,281 @@ impl From<Arc<UcxAlloc>> for CommAlloc {
 
 impl std::fmt::Debug for UcxAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        f.debug_struct("UcxAlloc")
-            .field("addr", &format_args!("{:x}", self.mem.addr))
-            .field("total_size", &self.total_size)
-            .field("local_size", &self.local_size)
-            .field("my_pe", &self.my_pe)
-            .field("num_pes", &self.num_pes)
-            .finish()
+        let fabric_ref_count = unsafe {
+            (&*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize))
+                .load(Ordering::SeqCst)
+        };
+
+        let mut temp = f.debug_struct("UcxAlloc");
+        temp.field(
+            "addr",
+            &format_args!(
+                "{:x} - ({:x}) {:x}",
+                self.mem.addr,
+                self.mem.addr + self.data_num_bytes,
+                self.mem.addr + self.mem.size
+            ),
+        )
+        .field("data_num_bytes", &self.data_num_bytes)
+        .field("my_pe", &self.my_pe)
+        .field("num_pes", &self.num_pes)
+        .field(
+            "fabric_ref_cnt_offset",
+            &format_args!(
+                "{} ({:?}): {}",
+                self.fabric_ref_cnt_offset,
+                unsafe {
+                    self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize
+                },
+                fabric_ref_count
+            ),
+        );
+        if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
+            let rt_ref_count = unsafe {
+                (&*(self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize))
+                    .load(Ordering::SeqCst)
+            };
+            let padding = decode_padding(rt_ref_count);
+            let rt_ref_count = decode_ref_count(rt_ref_count);
+            temp.field(
+                "rt_ref_cnt_offset",
+                &format_args!(
+                    "{} ({:?}): {}, {}",
+                    self.rt_ref_cnt_offset,
+                    unsafe {
+                        self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize
+                    },
+                    rt_ref_count,
+                    padding,
+                ),
+            );
+        }
+        temp.finish()
     }
 }
 
 impl UcxAlloc {
+    pub(crate) fn new(
+        mem: MemoryHandle,
+        data_num_bytes: usize,
+        padding: usize,
+        my_pe: usize,
+        num_pes: usize,
+        context: Arc<Context>,
+        worker: Arc<Worker>,
+        endpoints: Vec<Arc<Endpoint>>,
+        my_remote_keys: Vec<(usize, Arc<RKey>)>,
+        mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
+        remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    ) -> AllocResult<Self> {
+        let start = mem.addr;
+        let end = start + data_num_bytes;
+        let ref_cnt_offset = data_num_bytes + padding;
+        let fabric_ref_cnt_offset = data_num_bytes + padding;
+        let encoded = encode_ref_count_and_padding(1, padding);
+        let alloc = Self {
+            mem,
+            data_num_bytes,
+            my_pe,
+            num_pes,
+            fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
+            context,
+            worker,
+            endpoints,
+            remote_keys: my_remote_keys,
+            alloc_table: AllocTable::Fabric(mem_handles.clone(), remote_keys.clone()),
+        };
+        unsafe {
+            (&*(alloc.mem.inner.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
+        }
+        debug!(target: "ucx", "Created UCX allocation: {:?}", alloc);
+        Ok(alloc)
+    }
     pub(crate) fn start(&self) -> usize {
         self.mem.addr.into()
     }
     pub(crate) fn num_bytes(&self) -> usize {
-        self.local_size
+        self.data_num_bytes
     }
-    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> AllocResult<Arc<Self>> {
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> AllocResult<Self> {
+        if offset + size > self.num_bytes() {
+            return Err(AllocError::InvalidSubAlloc(offset, size));
+        }
         let remote_keys = self
             .remote_keys
             .iter()
             .map(|(addr, rkey)| (addr + offset, rkey.clone()))
             .collect();
-        Ok(Arc::new(UcxAlloc {
+        self.increment_fabric_ref_count();
+        if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
+            self.increment_rt_ref_count();
+        }
+        let alloc = UcxAlloc {
             mem: self.mem.sub_alloc(offset, size),
-            total_size: size * self.num_pes,
-            local_size: size,
+            data_num_bytes: size,
             my_pe: self.my_pe,
             num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             context: self.context.clone(),
             worker: self.worker.clone(),
             endpoints: self.endpoints.clone(),
             remote_keys,
-            rt_alloc: self.rt_alloc.clone(),
-        }))
+            alloc_table: self.alloc_table.clone(),
+        };
+        debug!(target: "ucx", "Created UCX sub-allocation: {:?}", alloc);
+        Ok(alloc)
     }
 
     //we call this function to create a sub-allocation that is tracked as part of a runtime allocation
     pub(crate) fn rt_alloc(
         &self,
-        parent_alloc: BTreeAlloc,
+        alloc_table: BTreeAlloc,
         offset: usize,
+        padding: usize,
         size: usize,
-    ) -> AllocResult<Arc<Self>> {
-        let remote_keys = self
+    ) -> AllocResult<Self> {
+        if offset + size > self.num_bytes() {
+            return Err(AllocError::InvalidSubAlloc(offset, size));
+        }
+        let data_bytes = size - padding - std::mem::size_of::<AtomicUsize>();
+        let my_remote_keys = self
             .remote_keys
             .iter()
             .map(|(addr, rkey)| (addr + offset, rkey.clone()))
             .collect();
-        Ok(Arc::new(UcxAlloc {
-            mem: self.mem.sub_alloc(offset, size),
-            total_size: size * self.num_pes,
-            local_size: size,
+
+        self.increment_fabric_ref_count();
+        let ref_cnt_offset = offset + data_bytes + padding;
+        let encoded = encode_ref_count_and_padding(1, padding);
+
+        let (mem_handles, remote_keys) = match &self.alloc_table {
+            AllocTable::Fabric(mem_handles, remote_keys) => {
+                (mem_handles.clone(), remote_keys.clone())
+            }
+            AllocTable::Runtime(_, _, mem_handles, remote_keys) => {
+                (mem_handles.clone(), remote_keys.clone())
+            }
+        };
+
+        let mem = self.mem.sub_alloc(offset, size);
+        let addr = mem.addr;
+
+        let alloc = UcxAlloc {
+            mem,
+            data_num_bytes: size,
             my_pe: self.my_pe,
             num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
             context: self.context.clone(),
             worker: self.worker.clone(),
             endpoints: self.endpoints.clone(),
-            remote_keys,
-            rt_alloc: Some((parent_alloc, Arc::new(AtomicUsize::new(1)))),
-        }))
+            remote_keys: my_remote_keys,
+            alloc_table: AllocTable::Runtime(
+                alloc_table,
+                addr,
+                mem_handles.clone(),
+                remote_keys.clone(),
+            ),
+        };
+
+        unsafe {
+            (&*(alloc.mem.inner.as_ptr().add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
+        }
+        debug!(target: "ucx", "Created UCX rt-sub-allocation: {:?}", alloc);
+        Ok(alloc)
     }
 
     // This function is used to construct an rt_alloc from a raw sub-allocation
     // typically paired with a call to leak() we decrement the ref count as this instance recaptures the leaked instance
-    pub(crate) fn as_rt_alloc(self: Arc<Self>) -> AllocResult<Arc<Self>> {
-        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
-            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
-            trace!("as_rt_alloc: {:?} new ref count: {}", self, prev_count - 1);
-            Ok(self)
-        } else {
-            Err(AllocError::NotRTAlloc(self.start()))
+    pub(crate) fn as_rt_alloc(self, alloc_table: BTreeAlloc) -> AllocResult<Self> {
+        let (mem_handles, remote_keys) = match &self.alloc_table {
+            AllocTable::Fabric(mem_handles, remote_keys) => {
+                (mem_handles.clone(), remote_keys.clone())
+            }
+            AllocTable::Runtime(_, _, mem_handles, remote_keys) => {
+                (mem_handles.clone(), remote_keys.clone())
+            }
+        };
+
+        //since we are recapturing a leaked alloc, the non-rt sub-allocation we are converting should contain the appropriate ref count space at the end of the allocation
+        let ref_cnt_offset = ((self.start() - self.mem.inner.as_ptr() as usize) + self.num_bytes())
+            - std::mem::size_of::<AtomicUsize>();
+
+        let encoded_ref_count = unsafe {
+            (&*(self.mem.inner.as_ptr().add(ref_cnt_offset) as *const AtomicUsize))
+                .load(Ordering::SeqCst)
+        };
+
+        let (rt_ref_cnt, padding) = decode_ref_count_and_padding(encoded_ref_count);
+
+        let alloc = Self {
+            mem: self.mem.clone(),
+            data_num_bytes: self.data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
+            context: self.context.clone(),
+            worker: self.worker.clone(),
+            endpoints: self.endpoints.clone(),
+            remote_keys: self.remote_keys.clone(),
+            alloc_table: AllocTable::Runtime(
+                alloc_table,
+                self.mem.addr,
+                mem_handles.clone(),
+                remote_keys.clone(),
+            ),
+        };
+
+        get_ref_count(unsafe {
+            (&*(alloc.mem.inner.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize))
+        });
+        debug!(target: "ucx", "Converted UCX alloc to rt-alloc: {:?}", alloc);
+        Ok(alloc)
+    }
+
+    pub(crate) fn leak(self) -> Option<CommAllocAddr> {
+        match self.alloc_table {
+            AllocTable::Fabric(_, _) => None, //only rt_allocs can be leaked
+            AllocTable::Runtime(_, _, _, _) => {
+                self.increment_fabric_ref_count(); //increment the ref count to account for the leaked instance
+                self.increment_rt_ref_count(); //increment the ref count to account for the leaked instance
+                debug!(target: "ucx", "Leaked UCX rt-alloc: {:?}", self);
+                Some(CommAllocAddr(self.start()))
+            }
         }
     }
 
-    pub(crate) fn leak(self: Arc<Self>) -> Option<CommAllocAddr> {
-        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
-            let prev_count = ref_count.fetch_add(1, Ordering::SeqCst);
-            trace!(
-                "Leaking rt_alloc: {:?}  new ref count: {}",
-                self,
-                prev_count + 1
-            );
-            Some(CommAllocAddr(self.start()))
-        } else {
-            None
-        }
+    pub(crate) fn increment_fabric_ref_count(&self) -> usize {
+        let ref_count = unsafe {
+            &*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
+        };
+        increment_ref_count(ref_count)
+    }
+
+    pub(crate) fn decrement_fabric_ref_count(&self) -> usize {
+        let ref_count = unsafe {
+            &*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
+        };
+        decrement_ref_count(ref_count)
+    }
+
+    pub(crate) fn increment_rt_ref_count(&self) -> usize {
+        let ref_count = unsafe {
+            &*(self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize)
+        };
+        increment_ref_count(ref_count)
+    }
+    pub(crate) fn decrement_rt_ref_count(&self) -> usize {
+        let ref_count = unsafe {
+            &*(self.mem.inner.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize)
+        };
+        decrement_ref_count(ref_count)
     }
 
     pub(crate) unsafe fn put<T>(
@@ -521,7 +773,7 @@ impl UcxAlloc {
         )
     }
 
-    pub(crate) fn atomic_op<T: Copy>(
+    pub(crate) fn inner_atomic_op<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
@@ -538,7 +790,7 @@ impl UcxAlloc {
         }
     }
 
-    pub(crate) fn atomic_fetch_op<T: Copy>(
+    pub(crate) fn inner_atomic_fetch_op<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
@@ -582,27 +834,65 @@ impl UcxAlloc {
     }
 
     pub(crate) fn contains(&self, addr: usize) -> bool {
-        self.mem.inner.addr <= addr && addr < self.mem.inner.addr + self.local_size
+        self.mem.inner.addr <= addr && addr < self.mem.inner.addr + self.data_num_bytes
     }
 }
 
 impl Drop for UcxAlloc {
     fn drop(&mut self) {
-        // println!("Dropping UcxArray");
-        // self.mem_handles.lock().unwrap().remove(&self.mem.inner);
-        // self.remote_keys.lock().unwrap().remove(&self.mem.inner);
-        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
-            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
-            trace!(
-                "Dropping rt_alloc: {:?}  new ref count: {}",
-                self,
-                prev_count - 1
-            );
-            if let Ok(_) = parent_alloc.free(self.start()) {
-                trace!(
-                    "Successfully freed sub-allocation from parent rt_alloc: {:?}",
-                    self,
-                );
+        let fabric_ref_count = self.decrement_fabric_ref_count();
+        match &self.alloc_table {
+            AllocTable::Fabric(mem_handles, remote_keys) => {
+                if fabric_ref_count == 3 {
+                    debug!(target: "ucx", "Dropping UCX alloc: {:?}", self);
+                    //last reference, remove from world tracking
+                    mem_handles
+                        .lock()
+                        .unwrap()
+                        .retain(|a| a.mem.inner.addr != self.mem.inner.addr);
+                    remote_keys
+                        .lock()
+                        .unwrap()
+                        .retain(|(a, _)| a.mem.inner.addr != self.mem.inner.addr);
+                }
+                if fabric_ref_count == 1 {
+                    let mem_handles_count = Arc::strong_count(&mem_handles);
+                    let mem_handle_count = Arc::strong_count(&self.mem.inner);
+                    let remote_keys_count = Arc::strong_count(&remote_keys);
+                    debug!("Dropping UCX alloc:  mem_handles_count: {}, mem_handle_count: {}, remote_keys_count: {}",
+                    mem_handles_count, mem_handle_count, remote_keys_count);
+                }
+            }
+            AllocTable::Runtime(rt_alloc_table, addr, mem_handles, remote_keys) => {
+                let rt_ref_cnt = self.decrement_rt_ref_count();
+                if rt_ref_cnt == 1 {
+                    debug!(target: "ucx", "Dropping UCX rt-alloc: {:?}", self);
+                    //last rt reference, free from alloc table
+                    rt_alloc_table.free(*addr).expect(&format!(
+                        "[{:?}] Error removing from runtime alloc table {:x}",
+                        std::thread::current().id(),
+                        addr
+                    ));
+                }
+                if fabric_ref_count == 3 {
+                    debug!(target: "ucx", "Dropping UCX alloc (from RT): {:?}", self);
+                    //last reference, remove from world tracking
+                    mem_handles
+                        .lock()
+                        .unwrap()
+                        .retain(|a| a.mem.inner.addr != self.mem.inner.addr);
+                    remote_keys
+                        .lock()
+                        .unwrap()
+                        .retain(|(a, _)| a.mem.inner.addr != self.mem.inner.addr);
+                }
+                if fabric_ref_count == 1 {
+                    let mem_handles_count = Arc::strong_count(&mem_handles);
+                    let mem_handle_count = Arc::strong_count(&self.mem.inner);
+                    let remote_keys_count = Arc::strong_count(&remote_keys);
+                    debug!("Dropping UCX alloc:  mem_handles_count: {}, mem_handle_count: {}, remote_keys_count: {}",
+                    mem_handles_count, mem_handle_count, remote_keys_count);
+                }
             }
         }
     }

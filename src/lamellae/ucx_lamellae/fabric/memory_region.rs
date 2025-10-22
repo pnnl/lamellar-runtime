@@ -12,6 +12,7 @@ use ucx1_sys::*;
 use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc};
 use pmi::{pmi::Pmi, pmix::PmiX};
 
+#[derive(Debug, Clone)]
 pub struct MemoryHandle {
     pub(crate) inner: Arc<MemoryHandleInner>,
     pub(crate) addr: usize,
@@ -21,6 +22,10 @@ pub struct MemoryHandle {
 static MEMREGION_CNT: AtomicUsize = AtomicUsize::new(0);
 
 impl MemoryHandle {
+    pub fn as_ptr(&self) -> *const u8 {
+        self.addr as *const u8
+    }
+
     pub fn as_slice<T>(&self) -> &[T] {
         unsafe {
             std::slice::from_raw_parts(self.addr as *const T, self.size / std::mem::size_of::<T>())
@@ -76,6 +81,9 @@ impl std::hash::Hash for MemoryHandleInner {
 }
 
 impl MemoryHandleInner {
+    pub(crate) fn as_ptr(&self) -> *const u8 {
+        self.addr as *const u8
+    }
     pub(crate) fn alloc(context: &Arc<Context>, size: usize) -> Arc<Self> {
         let params = ucp_mem_map_params_t {
             field_mask: (ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_LENGTH
@@ -194,7 +202,7 @@ impl MemoryHandleInner {
         &self,
         endpoints: &[Arc<Endpoint>],
         pmi: &Arc<PmiX>,
-        exchange_buffer: &Arc<UcxAlloc>,
+        exchange_buffer: &UcxAlloc,
     ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();

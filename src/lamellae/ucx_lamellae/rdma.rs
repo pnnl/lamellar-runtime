@@ -39,7 +39,7 @@ pub(super) enum AllocOp<T: Remote> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxPutFuture<T: Remote> {
     my_pe: usize,
-    alloc: Arc<UcxAlloc>,
+    alloc: UcxAlloc,
     offset: usize,
     op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
@@ -184,7 +184,7 @@ impl<T: Remote> Future for UcxPutFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxGetFuture<T> {
-    alloc: Arc<UcxAlloc>,
+    alloc: UcxAlloc,
     pe: usize,
     offset: usize,
     scheduler: Arc<Scheduler>,
@@ -276,7 +276,7 @@ impl<T: Remote> Future for UcxGetFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxGetBufferFuture<T> {
-    alloc: Arc<UcxAlloc>,
+    alloc: UcxAlloc,
     pe: usize,
     offset: usize,
     len: usize,
@@ -376,7 +376,7 @@ impl<T: Remote> Future for UcxGetBufferFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     my_pe: usize,
-    alloc: Arc<UcxAlloc>,
+    alloc: UcxAlloc,
     pe: usize,
     offset: usize,
     dst: LamellarBuffer<T, B>,
@@ -474,7 +474,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxGetIntoBufferFuture<T, B> 
     }
 }
 
-impl CommAllocRdma for Arc<UcxAlloc> {
+impl CommAllocRdma for UcxAlloc {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

@@ -26,7 +26,7 @@ use tracing::trace;
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxAtomicFuture<T> {
-    pub(crate) alloc: Arc<UcxAlloc>,
+    pub(crate) alloc: UcxAlloc,
     pub(super) remote_pes: Vec<usize>,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
@@ -44,7 +44,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFuture<T> {
             self.offset
         );
         for pe in &self.remote_pes {
-            UcxAlloc::atomic_op(&self.alloc, *pe, self.offset, &self.op, true);
+            UcxAlloc::inner_atomic_op(&self.alloc, *pe, self.offset, &self.op, true);
         }
     }
     pub(crate) fn block(mut self) {
@@ -100,7 +100,7 @@ impl<T: Copy + Send + 'static> Future for UcxAtomicFuture<T> {
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxAtomicFetchFuture<T> {
-    pub(crate) alloc: Arc<UcxAlloc>,
+    pub(crate) alloc: UcxAlloc,
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
@@ -119,7 +119,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
             self.offset
         );
         self.request = Some(unsafe {
-            UcxAlloc::atomic_fetch_op(
+            UcxAlloc::inner_atomic_fetch_op(
                 &self.alloc,
                 self.remote_pe,
                 self.offset,
@@ -194,7 +194,7 @@ impl<T: Copy + Send + 'static> Future for UcxAtomicFetchFuture<T> {
     }
 }
 
-impl CommAllocAtomic for Arc<UcxAlloc> {
+impl CommAllocAtomic for UcxAlloc {
     fn atomic_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -216,7 +216,7 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
         .into()
     }
     fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        UcxAlloc::atomic_op(self, pe, offset, &op, false);
+        UcxAlloc::inner_atomic_op(self, pe, offset, &op, false);
     }
     fn atomic_op_all<T: Copy>(
         &self,
@@ -240,7 +240,7 @@ impl CommAllocAtomic for Arc<UcxAlloc> {
     }
     fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         for pe in 0..self.num_pes {
-            UcxAlloc::atomic_op(self, pe, offset, &op, false);
+            UcxAlloc::inner_atomic_op(self, pe, offset, &op, false);
         }
     }
 

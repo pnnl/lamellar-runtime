@@ -619,12 +619,9 @@ impl Ofi {
         }
     }
 
-    fn full_alloc(self: &Arc<Ofi>, data_size: usize, _align: usize) -> AllocResult<LibfabricAlloc> {
+    fn full_alloc(self: &Arc<Ofi>, data_size: usize, align: usize) -> AllocResult<LibfabricAlloc> {
         //add space for ref count and padding to align it
-        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
-        let ref_cnt_align = std::mem::align_of::<AtomicUsize>();
-        let padding = (ref_cnt_align - (data_size % ref_cnt_align)) % ref_cnt_align;
-        let size = data_size + padding + ref_cnt_size;
+        let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
 
         // Align to page boundaries
         let aligned_size = if (self.alloc_manager.page_size() - 1) & size != 0 {
@@ -698,17 +695,15 @@ impl Ofi {
         self: &Arc<Ofi>,
         pes: &[usize],
         data_size: usize,
-        _align: usize,
+        align: usize,
     ) -> AllocResult<LibfabricAlloc> {
         //add space for ref count and padding to align it
-        let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
-        let ref_cnt_align = std::mem::align_of::<AtomicUsize>();
-        let padding = (ref_cnt_align - (data_size % ref_cnt_align)) % ref_cnt_align;
+        let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
         // Align to page boundaries
-        let aligned_size = if (self.alloc_manager.page_size() - 1) & data_size != 0 {
-            (data_size + self.alloc_manager.page_size()) & !(self.alloc_manager.page_size() - 1)
+        let aligned_size = if (self.alloc_manager.page_size() - 1) & size != 0 {
+            (size + self.alloc_manager.page_size()) & !(self.alloc_manager.page_size() - 1)
         } else {
-            data_size
+            size
         };
 
         // Map memory of aligned size
@@ -1352,12 +1347,12 @@ impl LibfabricAlloc {
         };
 
         //since we are recapturing a leaked alloc, the non-rt sub-allocation we are converting should contain the appropriate ref count space at the end of the allocation
-        let ref_cnf_offset = ((self.start() - self.mem.as_ptr() as usize) + self.num_bytes())
+        let ref_cnt_offset = ((self.start() - self.mem.as_ptr() as usize) + self.num_bytes())
             - std::mem::size_of::<AtomicUsize>();
 
         trace!(
             "ref count offset for rt_alloc conversion: {:x} = (({:x}-{:?}) + {}) - {} = {:x} - {}",
-            ref_cnf_offset,
+            ref_cnt_offset,
             self.start(),
             self.mem.as_ptr(),
             self.num_bytes(),
@@ -1366,7 +1361,7 @@ impl LibfabricAlloc {
             std::mem::size_of::<AtomicUsize>()
         );
         let encoded_ref_count = unsafe {
-            (&*(self.mem.as_ptr().add(ref_cnf_offset) as *const AtomicUsize)).load(Ordering::SeqCst)
+            (&*(self.mem.as_ptr().add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst)
         };
         let (rt_ref_cnt, padding) = decode_ref_count_and_padding(encoded_ref_count);
 
@@ -1376,7 +1371,7 @@ impl LibfabricAlloc {
             mr: self.mr.clone(),
             range: self.range.start..self.range.end - padding - std::mem::size_of::<AtomicUsize>(),
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
-            rt_ref_cnt_offset: ref_cnf_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
             remote_allocs: self.remote_allocs.clone(),
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),

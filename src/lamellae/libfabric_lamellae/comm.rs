@@ -143,6 +143,7 @@ impl Drop for LibfabricComm {
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
         }
+        self.runtime_allocs.write().clear();
         //maybe we want to implement an ofi finit function which will free all resources or something
         // for (addr, _alloc) in self.fabric_allocs.write().drain(..) {
         //     self.ofi.free(addr).expect("error in ofi free");

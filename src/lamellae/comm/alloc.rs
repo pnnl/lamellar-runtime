@@ -66,6 +66,17 @@ pub(crate) fn get_ref_count(counter: &AtomicUsize) -> usize {
 }
 // --------------------------------------------------------------------
 
+pub(crate) fn calc_alloc_padding_size_align(size: usize, align: usize) -> (usize, usize, usize) {
+    // add space for ref count
+    let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
+    let ref_cnt_align = std::mem::align_of::<AtomicUsize>();
+    let padding = (ref_cnt_align - (size % ref_cnt_align)) % ref_cnt_align;
+    let size = size + ref_cnt_size + padding;
+    let align = std::cmp::max(align, ref_cnt_align);
+    (padding, size, align)
+}
+//
+
 #[derive(Clone, Debug)]
 pub(crate) enum CommAllocInner {
     Raw(usize, usize), //address, size
@@ -74,7 +85,7 @@ pub(crate) enum CommAllocInner {
     #[cfg(feature = "enable-libfabric")]
     LibfabricAlloc(LibfabricAlloc),
     #[cfg(feature = "enable-ucx")]
-    UcxAlloc(Arc<UcxAlloc>),
+    UcxAlloc(UcxAlloc),
 }
 
 impl CommAllocInner {

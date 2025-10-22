@@ -10,7 +10,7 @@ use crate::{
 
 use super::{fabric::*, CommandQueue};
 
-use tracing::trace;
+use tracing::{debug, trace};
 
 use parking_lot::RwLock;
 
@@ -20,7 +20,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct UcxComm {
     pub(crate) ucx: Arc<UcxWorld>,
-    pub(crate) runtime_allocs: RwLock<Vec<(Arc<UcxAlloc>, BTreeAlloc)>>, //runtime allocations
+    pub(crate) runtime_allocs: RwLock<Vec<(UcxAlloc, BTreeAlloc)>>, //runtime allocations
     // pub(crate) fabric_allocs: RwLock<HashMap<usize, CommAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -48,7 +48,11 @@ impl UcxComm {
         let total_mem = cmd_q_mem + RT_MEM + HEAP_SIZE.load(Ordering::SeqCst);
         // let mem_per_pe = total_mem; // / num_pes;
 
-        let alloc_info = ucx.alloc(total_mem, AllocationType::Global);
+        let alloc_info = ucx.alloc(
+            total_mem,
+            std::mem::align_of::<u8>(),
+            AllocationType::Global,
+        );
         // println!("rt alloc info: {:?}", alloc_info);
 
         let ucx_comm = UcxComm {
@@ -119,14 +123,20 @@ impl Drop for UcxComm {
         if self.mem_occupied() > 0 {
             println!("dropping ucx -- memory in use {:?}", self.mem_occupied());
         }
+        // self.exchange_buffer.take();
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
         }
-        for (alloc, _) in self.runtime_allocs.write().drain(..) {
-            self.ucx.free_alloc(&alloc);
-        }
 
-        let _ = self.ucx.clear_allocs();
+        self.runtime_allocs.write().clear();
+
+        // for (alloc, _) in self.runtime_allocs.write().drain(..) {
+        //     self.ucx.free_alloc(&alloc);
+        // }
+
+        // let _ = self.ucx.clear_allocs();
+        let world_ref_count = Arc::strong_count(&self.ucx);
+        debug!("Dropping UcxComm: ucx world ref count: {}", world_ref_count);
         let _ = self.ucx.barrier();
     }
 }

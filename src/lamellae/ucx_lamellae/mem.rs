@@ -7,6 +7,7 @@ use crate::{
     env_var::HeapMode,
     lamellae::{
         comm::{
+            calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
             CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
         },
@@ -25,11 +26,10 @@ impl CommMem for UcxComm {
         alloc_type: AllocationType,
         align: usize,
     ) -> AllocResult<CommAlloc> {
-        // rucx_c allocs are aligned on page boundaries so no need to pass in alignment constraint
-        let inner_alloc = self.ucx.alloc(size, alloc_type);
-        unsafe {
-            inner_alloc.zeroize_bytes();
-        }
+        let inner_alloc = self.ucx.alloc(size, align, alloc_type);
+        // unsafe {
+        //     inner_alloc.zeroize_bytes();
+        // }
         // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
@@ -60,6 +60,9 @@ impl CommMem for UcxComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
@@ -69,11 +72,15 @@ impl CommMem for UcxComm {
                 //     addr - inner_alloc.start(),
                 //     size
                 // );
-                let alloc =
-                    inner_alloc.rt_alloc(alloc.clone(), addr - inner_alloc.start(), size)?;
-                unsafe {
-                    alloc.zeroize_bytes();
-                }
+                let alloc = inner_alloc.rt_alloc(
+                    alloc.clone(),
+                    addr - inner_alloc.start(),
+                    padding,
+                    size,
+                )?;
+                // unsafe {
+                //     alloc.zeroize_bytes();
+                // }
 
                 return Ok(CommAlloc {
                     inner_alloc: CommAllocInner::UcxAlloc(alloc),
@@ -86,6 +93,9 @@ impl CommMem for UcxComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
         let allocs = self.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
             if alloc.fake_malloc(size, align) {
@@ -207,7 +217,7 @@ impl CommMem for UcxComm {
                     inner_alloc: CommAllocInner::UcxAlloc(unsafe {
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
-                            .as_rt_alloc()?
+                            .as_rt_alloc(alloc.clone())?
                     }),
                     alloc_type: CommAllocType::RtHeap,
                 };

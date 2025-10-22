@@ -1278,7 +1278,7 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn get_serialized_data(
+    async fn get_serialized_data(
         &self,
         src: usize,
         cmd: CmdMsg,
@@ -1306,7 +1306,7 @@ impl InnerCQ {
             src,
             offset,
             len,
-        ).block();
+        ).await;
         // let data_slice = buffer.try_unwrap().unwrap();
 
         let data_slice = &tmp_data;
@@ -1346,7 +1346,8 @@ impl InnerCQ {
                 // self.send_print(src, cmd).await;
                 timer = std::time::Instant::now();
             }
-            std::thread::yield_now();
+            // std::thread::yield_now();
+            async_std::task::yield_now().await;
         }
 
         let mut data_slice = ser_data.header_and_data_as_bytes_mut();
@@ -1360,7 +1361,7 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
+    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
         trace!("getting cmd from {}", src);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         let mut timer = std::time::Instant::now();
@@ -1371,13 +1372,13 @@ impl InnerCQ {
                 debug!("msg_id: {msg_id} get cmd buf stuck waiting for alloc");
                 print = false;
             }
-            // async_std::task::yield_now().await;
-            std::thread::yield_now();
+            async_std::task::yield_now().await;
+            // std::thread::yield_now();
             self.send_alloc(cmd.dsize);
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
-        self.get_serialized_data(src, cmd, &mut ser_data, msg_id);
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id).await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         ser_data
     }
@@ -1739,34 +1740,34 @@ impl CommandQueue {
                                         if cmd.dsize != 0 {
                                             let cq = cq.clone();
                                             let lamellae = lamellae.clone();
-                                            // let scheduler2 = scheduler1.clone();
+                                            let scheduler2 = scheduler1.clone();
                                             // cmd_cnt.fetch_add(1,Ordering::SeqCst);
                                             // let cmd_cnt_clone = cmd_cnt.clone();
                                             // let task = async move {
-                                            // debug!(
-                                            //     "msg_id: {msg_id} getting cmd {:?} [{:?}/{:?}]",
-                                            //     cmd, i, len
-                                            // );
-                                            let work_data = cq.get_cmd(src, cmd, msg_id);
+                                                // debug!(
+                                                //     "msg_id: {msg_id} getting cmd {:?} [{:?}/{:?}]",
+                                                //     cmd, i, len
+                                                // );
+                                                let work_data = cq.get_cmd(src, cmd, msg_id).await;
 
-                                            // println!(
-                                            //     "[{:?}] recv_data submitting work",
-                                            //     std::thread::current().id(),
-                                            // );
-                                            debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
-                                            scheduler2
-                                                .submit_remote_am(work_data, lamellae.clone());
-                                            // if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
-                                            // {
-                                            //     debug!(
-                                            //         "done with all cmds for msg_id: {msg_id}"
-                                            //     );
-                                            //     cq.send_free(src, cmd_buf_cmd);
-                                            //     // println!(
-                                            //     //     "sending clear cmd {:?} [{:?}/{:?}]",
-                                            //     //     cmd_buf_cmd.daddr, i, len
-                                            //     // );
-                                            // }
+                                                // println!(
+                                                //     "[{:?}] recv_data submitting work",
+                                                //     std::thread::current().id(),
+                                                // );
+                                                debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
+                                                scheduler2
+                                                    .submit_remote_am(work_data, lamellae.clone());
+                                            //     if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
+                                            //     {
+                                            //     //     debug!(
+                                            //     //         "done with all cmds for msg_id: {msg_id}"
+                                            //     //     );
+                                            //         cq.send_free(src, cmd_buf_cmd);
+                                            //     //     // println!(
+                                            //     //     //     "sending clear cmd {:?} [{:?}/{:?}]",
+                                            //     //     //     cmd_buf_cmd.daddr, i, len
+                                            //     //     // );
+                                            //     }
                                             // };
                                             // println!(
                                             //     "[{:?}] recv_data submitting get command task",
@@ -1860,8 +1861,8 @@ impl Drop for CommandQueue {
         //     }
         // }
 
-        println!("sends {:?}", print_stats!(PE_SENDS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
-        println!("recvs {:?}", print_stats!(PE_RECVS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
+        debug!("sends {:?}", print_stats!(PE_SENDS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
+        debug!("recvs {:?}", print_stats!(PE_RECVS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
         // println!("rofi command queue dropped");
     }
 }
