@@ -81,7 +81,7 @@ pub(crate) fn calc_alloc_padding_size_align(size: usize, align: usize) -> (usize
 pub(crate) enum CommAllocInner {
     Raw(usize, usize), //address, size
     LocalAlloc(Arc<LocalAlloc>),
-    ShmemAlloc(Arc<ShmemAlloc>),
+    ShmemAlloc(ShmemAlloc),
     #[cfg(feature = "enable-libfabric")]
     LibfabricAlloc(LibfabricAlloc),
     #[cfg(feature = "enable-ucx")]

@@ -11,7 +11,10 @@ use shared_memory::*;
 use tracing::trace;
 
 use crate::{
-    lamellae::{AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType},
+    lamellae::{
+        decode_padding, decrement_ref_count, encode_ref_count_and_padding, increment_ref_count,
+        AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
+    },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
@@ -30,16 +33,24 @@ impl ShmemHandle {
     }
 }
 
+#[derive(Clone)]
+enum AllocTable {
+    Fabric(Arc<RwLock<Vec<ShmemAlloc>>>),
+    Runtime(BTreeAlloc, usize, Arc<RwLock<Vec<ShmemAlloc>>>),
+}
+
 pub(crate) struct ShmemAlloc {
     pub(crate) data: *mut u8,
-    pub(crate) len: usize,
+    pub(crate) data_num_bytes: usize,
     pub(crate) base_ptr: *mut u8,
     pub(crate) base_len: usize,
     pub(crate) my_alloc_pe: usize, //pe id relative to the pes associated with the alloc
+    fabric_ref_cnt_offset: usize,
+    rt_ref_cnt_offset: usize,
     pe_map: HashMap<usize, usize>,
     remote_addrs: Vec<usize>,
-    rt_alloc: Option<(BTreeAlloc, Arc<AtomicUsize>)>,
-    _shmem: Arc<ShmemHandle>,
+    alloc_table: AllocTable,
+    shmem: Arc<ShmemHandle>,
 }
 impl std::fmt::Debug for ShmemAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -52,10 +63,65 @@ impl std::fmt::Debug for ShmemAlloc {
     }
 }
 
+impl Clone for ShmemAlloc {
+    fn clone(&self) -> Self {
+        let fab_ref_cnt = self.increment_fabric_ref_count();
+        if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
+            self.increment_rt_ref_count();
+        }
+        Self {
+            data: self.data,
+            data_num_bytes: self.data_num_bytes,
+            base_ptr: self.base_ptr,
+            base_len: self.base_len,
+            my_alloc_pe: self.my_alloc_pe,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: self.rt_ref_cnt_offset,
+            pe_map: self.pe_map.clone(),
+            remote_addrs: self.remote_addrs.clone(),
+            alloc_table: self.alloc_table.clone(),
+            shmem: self.shmem.clone(),
+        }
+    }
+}
+
 unsafe impl Sync for ShmemAlloc {}
 unsafe impl Send for ShmemAlloc {}
 
 impl ShmemAlloc {
+    pub(crate) fn new(
+        data: *mut u8,
+        data_num_bytes: usize,
+        padding: usize,
+        base_ptr: *mut u8,
+        base_len: usize,
+        my_alloc_pe: usize, //pe id relative to the pes associated with the alloc
+        pe_map: HashMap<usize, usize>,
+        remote_addrs: Vec<usize>,
+        alloc_table: Arc<RwLock<Vec<ShmemAlloc>>>,
+        shmem: Arc<ShmemHandle>,
+    ) {
+        let ref_cnt_offset = data_num_bytes + padding;
+        let encoded = encode_ref_count_and_padding(1, padding);
+        let alloc = Self {
+            data,
+            data_num_bytes,
+            base_ptr,
+            base_len,
+            my_alloc_pe,
+            fabric_ref_cnt_offset: ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
+            pe_map,
+            remote_addrs,
+            alloc_table: AllocTable::Fabric(alloc_table),
+            shmem,
+        };
+        unsafe {
+            (&*(alloc.base_ptr.add(ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
+        }
+        Ok(alloc)
+    }
     pub(crate) fn num_pes(&self) -> usize {
         self.pe_map.len()
     }
@@ -66,8 +132,8 @@ impl ShmemAlloc {
     pub(crate) fn num_bytes(&self) -> usize {
         self.len
     }
-    pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<Arc<ShmemAlloc>> {
-        if offset + len > self.len {
+    pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<ShmemAlloc> {
+        if offset + len > self.data_num_bytes {
             return Err(AllocError::InvalidSubAlloc(offset, len));
         }
         let new_data = unsafe { self.data.add(offset) };
@@ -76,72 +142,135 @@ impl ShmemAlloc {
         for addr in self.remote_addrs.iter() {
             remote_addrs.push(addr + offset);
         }
-        Ok(Arc::new(ShmemAlloc {
+        self.increment_fabric_ref_count();
+        if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
+            self.increment_rt_ref_count();
+        }
+        let alloc = ShmemAlloc {
             data: new_data,
-            len,
+            data_num_bytes: len,
             base_ptr: self.base_ptr,
             base_len: self.base_len,
             my_alloc_pe: self.my_alloc_pe,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             pe_map: self.pe_map.clone(),
             remote_addrs,
-            _shmem: self._shmem.clone(),
-            rt_alloc: self.rt_alloc.clone(),
-        }))
+            alloc_table: self.alloc_table.clone(),
+            shmem: self.shmem.clone(),
+        };
+        Ok(alloc)
     }
 
     //we call this function to create a sub-allocation that is tracked as part of a runtime allocation
     pub(crate) fn rt_alloc(
         &self,
-        parent_alloc: BTreeAlloc,
+        alloc_table: BTreeAlloc,
         offset: usize,
+        padding: usize,
         len: usize,
-    ) -> AllocResult<Arc<Self>> {
-        if offset + len > self.len {
+    ) -> AllocResult<Self> {
+        if offset + len > self.data_num_bytes {
             return Err(AllocError::InvalidSubAlloc(offset, len));
         }
+        let new_data_bytes = len - padding - std::mem::size_of::<AtomicUsize>();
         let new_data = unsafe { self.data.add(offset) };
 
         let mut remote_addrs = Vec::with_capacity(self.remote_addrs.len());
         for addr in self.remote_addrs.iter() {
             remote_addrs.push(addr + offset);
         }
-        Ok(Arc::new(ShmemAlloc {
+        self.increment_fabric_ref_count();
+        let ref_cnt_offset = offset + new_data_bytes + padding;
+        let encoded = encode_ref_count_and_padding(1, padding);
+
+        let allocs = match &self.alloc_table {
+            AllocTable::Fabric(at) => at.clone(),
+            AllocTable::Runtime(_, _, at) => at.clone(),
+        };
+
+        let alloc = ShmemAlloc {
             data: new_data,
-            len,
+            data_num_bytes: new_data_bytes,
             base_ptr: self.base_ptr,
             base_len: self.base_len,
             my_alloc_pe: self.my_alloc_pe,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             pe_map: self.pe_map.clone(),
             remote_addrs,
-            _shmem: self._shmem.clone(),
-            rt_alloc: Some((parent_alloc, Arc::new(AtomicUsize::new(1)))),
-        }))
+            alloc_table: AllocTable::Runtime(alloc_table, new_data as usize, allocs),
+            shmem: self.shmem.clone(),
+        };
+        unsafe {
+            (&*(alloc.base_ptr.add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
+        }
+        Ok(alloc)
     }
 
     // This function is used to construct an rt_alloc from a raw sub-allocation
     // typically paired with a call to leak() we decrement the ref count as this instance recaptures the leaked instance
-    pub(crate) fn as_rt_alloc(self: Arc<Self>) -> AllocResult<Arc<Self>> {
-        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
-            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
-            trace!("as_rt_alloc: {:?} new ref count: {}", self, prev_count - 1);
-            Ok(self)
-        } else {
-            Err(AllocError::NotRTAlloc(self.start()))
+    pub(crate) fn as_rt_alloc(self, alloc_table: BTreeAlloc) -> AllocResult<Self> {
+        let allocs = match &self.alloc_table {
+            AllocTable::Fabric(allocs) => allocs.clone(),
+            AllocTable::Runtime(_, _, allocs) => allocs.clone(),
+        };
+        let ref_cnt_offset = ((self.start() - self.base_ptr as usize) + self.num_bytes())
+            - std::mem::size_of::<AtomicUsize>();
+        let encoded_ref_count = unsafe {
+            (&*(self.base_ptr.add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst)
+        };
+        let padding = decode_padding(encoded_ref_count);
+
+        let alloc = ShmemAlloc {
+            data: self.data,
+            data_num_bytes: self.data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
+            base_ptr: self.base_ptr,
+            base_len: self.base_len,
+            my_alloc_pe: self.my_alloc_pe,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
+            pe_map: self.pe_map.clone(),
+            remote_addrs: self.remote_addrs,
+            alloc_table: AllocTable::Runtime(alloc_table, self.data as usize, allocs),
+            shmem: self.shmem.clone(),
+        };
+        Ok(alloc)
+    }
+
+    pub(crate) fn leak(self) -> Option<CommAllocAddr> {
+        match self.alloc_table {
+            AllocTable::Fabric(_) => None, //only rt_allocs can be leaked
+            AllocTable::Runtime(_, _, _) => {
+                let fabric_ref_cnt = self.increment_fabric_ref_count(); //increment the ref count to account for the leaked instance
+                let ret_ref_cnt = self.increment_rt_ref_count(); //increment the ref count to account for the leaked instance
+                Some(CommAllocAddr(self.start()))
+            }
         }
     }
 
-    pub(crate) fn leak(self: Arc<Self>) -> Option<CommAllocAddr> {
-        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
-            let prev_count = ref_count.fetch_add(1, Ordering::SeqCst);
-            trace!(
-                "Leaking rt_alloc: {:?}  new ref count: {}",
-                self,
-                prev_count + 1
-            );
-            Some(CommAllocAddr(self.start()))
-        } else {
-            None
-        }
+    pub(crate) fn increment_fabric_ref_count(&self) -> usize {
+        let ref_count =
+            unsafe { &*(self.base_ptr.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+        increment_ref_count(ref_count)
+    }
+
+    pub(crate) fn decrement_fabric_ref_count(&self) -> usize {
+        let ref_count =
+            unsafe { &*(self.base_ptr.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+        decrement_ref_count(ref_count)
+    }
+
+    pub(crate) fn increment_rt_ref_count(&self) -> usize {
+        let ref_count =
+            unsafe { &*(self.base_ptr.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+        increment_ref_count(ref_count)
+    }
+    pub(crate) fn decrement_rt_ref_count(&self) -> usize {
+        let ref_count =
+            unsafe { &*(self.base_ptr.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+        decrement_ref_count(ref_count)
     }
 
     pub(crate) fn pe_base_offset(&self, pe: usize) -> usize {
@@ -165,23 +294,44 @@ impl ShmemAlloc {
 
 impl Drop for ShmemAlloc {
     fn drop(&mut self) {
-        if let Some((parent_alloc, ref_count)) = &self.rt_alloc {
-            let prev_count = ref_count.fetch_sub(1, Ordering::SeqCst);
-            trace!(
-                "Dropping rt_alloc: {:?}  new ref count: {}",
-                self,
-                prev_count - 1
-            );
-            if prev_count == 1 {
-                trace!("Freeing parent rt_alloc: {:?}", self);
-                parent_alloc.free(self.start());
+        let fabric_ref_count = self.decrement_fabric_ref_count();
+
+        match &self.alloc_table {
+            AllocTable::Fabric(allocs) => {
+                if fabric_ref_count == 2 {
+                    let mut allocs = allocs.write();
+                    let len = allocs.len();
+                    allocs.retain(|a| a.data != self.data);
+                    if len == allocs.len() {
+                        panic!("failed to free alloc: {:?}", self);
+                    }
+                }
+            }
+            AllocTable::Runtime(rt_alloc_table, addr, allocs) => {
+                let rt_ref_count = self.decrement_rt_ref_count();
+
+                if rt_ref_count == 1 {
+                    rt_alloc_table.free(*addr).expect(&format!(
+                        "[{:?}] Error removing from runtime alloc table {:x}",
+                        std::thread::current().id(),
+                        addr
+                    ));
+                }
+                if fabric_ref_count == 2 {
+                    let mut allocs = allocs.write();
+                    let len = allocs.len();
+                    allocs.retain(|a| a.data != self.data);
+                    if len == allocs.len() {
+                        panic!("failed to free alloc: {:?}", self);
+                    }
+                }
             }
         }
     }
 }
 
-impl From<Arc<ShmemAlloc>> for CommAlloc {
-    fn from(alloc: Arc<ShmemAlloc>) -> Self {
+impl From<ShmemAlloc> for CommAlloc {
+    fn from(alloc: ShmemAlloc) -> Self {
         CommAlloc {
             inner_alloc: CommAllocInner::ShmemAlloc(alloc),
             alloc_type: CommAllocType::Fabric,
@@ -323,7 +473,7 @@ pub(crate) struct ShmemAllocator {
     my_pe: usize,
     num_pes: usize,
     job_id: usize,
-    allocs: RwLock<Vec<Arc<ShmemAlloc>>>,
+    allocs: Arc<RwLock<Vec<ShmemAlloc>>>,
 }
 
 unsafe impl Sync for ShmemAllocator {}
@@ -434,7 +584,7 @@ impl ShmemAllocator {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn alloc(&self, size: usize, align: usize, pes: &[usize]) -> Arc<ShmemAlloc> {
+    pub(crate) unsafe fn alloc(&self, size: usize, align: usize, pes: &[usize]) -> ShmemAlloc {
         let mut allocs = self.allocs.write();
         let barrier1 = std::slice::from_raw_parts_mut(self.barrier1, self.num_pes);
         let barrier2 = std::slice::from_raw_parts_mut(self.barrier2, self.num_pes);
@@ -529,17 +679,18 @@ impl ShmemAllocator {
             self.mutex.as_ref().unwrap().store(0, Ordering::SeqCst);
         }
 
-        let alloc = Arc::new(ShmemAlloc {
-            data: my_base_ptr,
-            len: size,
-            base_ptr: my_base_ptr,
-            base_len: size,
-            my_alloc_pe: sub_alloc_pe_id,
+        let alloc = ShmemAlloc::new(
+            my_base_ptr,
+            size,
+            0,
+            shmem.base_ptr(),
+            size * pes.len(),
+            sub_alloc_pe_id,
             pe_map,
-            remote_addrs: addrs,
-            rt_alloc: None,
-            _shmem: Arc::new(shmem),
-        });
+            addrs,
+            self.allocs.clone(),
+            Arc::new(shmem),
+        );
         allocs.push(alloc.clone());
         alloc
         // println!("{:?} {:?} {:?}",self./my_pe, barrier1,barrier2);
@@ -555,7 +706,7 @@ impl ShmemAllocator {
         }
     }
 
-    pub(crate) fn free_alloc(&self, alloc: &Arc<ShmemAlloc>) {
+    pub(crate) fn free_alloc(&self, alloc: &ShmemAlloc) {
         let mut allocs = self.allocs.write();
         let len = allocs.len();
         allocs.retain(|a| !Arc::ptr_eq(a, alloc));
@@ -567,7 +718,7 @@ impl ShmemAllocator {
     pub(crate) fn get_alloc_from_start_addr(
         &self,
         mem_addr: CommAllocAddr,
-    ) -> AllocResult<Arc<ShmemAlloc>> {
+    ) -> AllocResult<ShmemAlloc> {
         let allocs = self.allocs.read();
         for alloc in allocs.iter() {
             if alloc.start() == mem_addr.0 {

@@ -72,6 +72,9 @@ impl CommMem for ShmemComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
@@ -81,8 +84,12 @@ impl CommMem for ShmemComm {
                     addr - inner_alloc.start(),
                     size
                 );
-                let alloc =
-                    inner_alloc.rt_alloc(alloc.clone(), addr - inner_alloc.start(), size)?;
+                let alloc = inner_alloc.rt_alloc(
+                    alloc.clone(),
+                    addr - inner_alloc.start(),
+                    padding,
+                    size,
+                )?;
                 unsafe {
                     alloc.zeroize_bytes();
                 }
@@ -98,6 +105,7 @@ impl CommMem for ShmemComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
         let allocs = self.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
             if alloc.fake_malloc(size, align) {
@@ -220,7 +228,7 @@ impl CommMem for ShmemComm {
                     inner_alloc: CommAllocInner::ShmemAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
-                            .as_rt_alloc()?,
+                            .as_rt_alloc(alloc.clone())?,
                     ),
                     alloc_type: CommAllocType::RtHeap,
                 });

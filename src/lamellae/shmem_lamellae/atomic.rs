@@ -159,7 +159,7 @@ impl<T: Send + 'static> Future for ShmemAtomicFetchFuture<T> {
     }
 }
 
-impl CommAllocAtomic for Arc<ShmemAlloc> {
+impl CommAllocAtomic for ShmemAlloc {
     fn atomic_op<T: Copy>(
         &self,
         scheduler: &Arc<Scheduler>,

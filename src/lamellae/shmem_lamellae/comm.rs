@@ -19,7 +19,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub(crate) struct ShmemComm {
     //size of my segment
-    pub(crate) runtime_allocs: RwLock<Vec<(Arc<ShmemAlloc>, BTreeAlloc)>>, //runtime allocations
+    pub(crate) runtime_allocs: RwLock<Vec<(ShmemAlloc, BTreeAlloc)>>, //runtime allocations
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,

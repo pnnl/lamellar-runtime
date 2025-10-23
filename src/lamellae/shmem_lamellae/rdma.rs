@@ -334,7 +334,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemGetIntoBufferFuture<T, B
     }
 }
 
-impl CommAllocRdma for Arc<ShmemAlloc> {
+impl CommAllocRdma for ShmemAlloc {
     fn put<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

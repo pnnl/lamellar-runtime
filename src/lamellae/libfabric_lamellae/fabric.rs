@@ -1215,7 +1215,7 @@ impl LibfabricAlloc {
             fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
-            alloc_table: AllocTable::Fabric(alloc_table.clone()),
+            alloc_table: AllocTable::Fabric(alloc_table),
         };
         //initialize ref count to 1
         // let encoded = encode_ref_count_and_padding(1, padding);
