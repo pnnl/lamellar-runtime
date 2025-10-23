@@ -585,11 +585,11 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// The user is responsible for transmission termination detection
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Examples
     ///```
@@ -634,10 +634,10 @@ pub trait MemoryRegionRDMA<T: Dist> {
     /// After calling this function, the data is guaranteed to be placed in the data buffer
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Examples
     ///```
@@ -771,13 +771,13 @@ impl<T: Dist> MemoryRegion<T> {
             // return Err(anyhow::anyhow!("cant have negative sized memregion"));
         };
         let temp = MemoryRegion {
-            addr: addr,
+            addr,
             pe: lamellae.my_pe(),
-            size: size,
+            size,
             num_bytes: size * std::mem::size_of::<T>(),
             backend: lamellae.backend(),
             rdma: lamellae,
-            mode: mode,
+            mode,
             phantom: PhantomData,
         };
         // println!(
@@ -795,9 +795,9 @@ impl<T: Dist> MemoryRegion<T> {
         lamellae: Arc<Lamellae>,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         Ok(MemoryRegion {
-            addr: addr,
-            pe: pe,
-            size: size,
+            addr,
+            pe,
+            size,
             num_bytes: size * std::mem::size_of::<T>(),
             backend: lamellae.backend(),
             rdma: lamellae,

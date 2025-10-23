@@ -87,6 +87,11 @@ codegen-units=1
 debug = true
 
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+
 [lib]
 doctest = false
 name="lamellar"

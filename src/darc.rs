@@ -6,11 +6,11 @@
 //! - `Darc`'s have global lifetime tracking and management, meaning that the pointed to objects remain valid and accessible
 //!   as long as one reference exists on any PE.
 //! - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-//! types. Alternatively you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
+//!   types. Alternatively, you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
 //!
 //! `Darc`'s are intended to be passed via active messages.
 //! - They allow distributed
-//!   accesss to and manipulation of generic Rust objects.  The inner object can exist
+//!   access to and manipulation of generic Rust objects.  The inner object can exist
 //!   on the Rust heap or in a registered memory region.
 //! - They are instantiated in registered memory regions.
 //! # Examples
@@ -158,11 +158,11 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 /// - `Darc`'s have global lifetime, meaning that the pointed to objects remain valid and accessible
 ///   as long as one reference exists on any PE.
 /// - Inner mutability is disallowed by default. If you need to mutate through a Darc use [`Mutex`][std::sync::Mutex], [`RwLock`][std::sync::RwLock], or one of the [`Atomic`][std::sync::atomic]
-/// types. Alternatively you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
+///   types. Alternatively you can also use a [`LocalRwDarc`][crate::darc::local_rw_darc::LocalRwDarc] or [`GlobalRwDarc`][crate::darc::global_rw_darc::GlobalRwDarc].
 ///
 /// `Darc`'s are intended to be passed via active messages.
 /// - They allow distributed
-///   accesss to and manipulation of generic Rust objects.  The inner object can exist
+///   access to and manipulation of generic Rust objects.  The inner object can exist
 ///   on the Rust heap or in a registered memory region.
 /// - They are instantiated in registered memory regions.
 ///
@@ -436,7 +436,7 @@ impl<T: 'static> DarcInner<T> {
                     team.spawn_am_pe_tg(
                         pe,
                         FinishedAm {
-                            cnt: cnt,
+                            cnt,
                             src_pe: pe,
                             inner_addr: pe_addr,
                         },
@@ -1199,7 +1199,7 @@ impl<T: Send + Sync> Darc<T> {
         let barrier_ptr = Box::into_raw(barrier);
         let darc_temp = DarcInner {
             id: DARC_ID.fetch_add(1, Ordering::Relaxed),
-            my_pe: my_pe,
+            my_pe,
             num_pes: team_rt.num_pes,
             local_cnt: AtomicUsize::new(1),
             total_local_cnt: AtomicUsize::new(1),
@@ -1235,7 +1235,7 @@ impl<T: Send + Sync> Darc<T> {
             am_counters: am_counters_ptr,
             team: team_ptr, //&team_rt, //Arc::into_raw(temp_team),
             item: Box::into_raw(Box::new(item)),
-            drop: drop,
+            drop,
             valid: AtomicBool::new(true),
         };
         unsafe {

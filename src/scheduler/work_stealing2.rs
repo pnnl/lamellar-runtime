@@ -409,10 +409,10 @@ impl WorkStealing2 {
             work_injs: Vec::new(),
             work_stealers: Vec::new(),
             work_flag: Arc::new(AtomicU8::new(0)),
-            status: status,
+            status,
             active_cnt: Arc::new(AtomicUsize::new(0)),
-            panic: panic,
-            num_threads_per_group: num_threads_per_group,
+            panic,
+            num_threads_per_group,
             cur_inj: Arc::new(AtomicU8::new(0)),
             inj_map: HashMap::new(),
         };
@@ -482,7 +482,7 @@ impl WorkStealing2 {
 
                 let worker = WorkStealingThread {
                     imm_inj: self.imm_inj.clone(),
-                    group_queue: group_queue,
+                    group_queue,
                     global_injs: work_injs,
                     status: self.status.clone(),
                     panic: self.panic.clone(),

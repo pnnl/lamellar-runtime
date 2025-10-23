@@ -900,7 +900,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     pub fn sub_data(&self, start_index: usize, end_index: usize) -> NativeAtomicLocalData<T> {
         NativeAtomicLocalData {
             array: self.array.clone(),
-            start_index: start_index,
+            start_index,
             end_index: std::cmp::min(end_index, self.array.num_elems_local()),
         }
     }
@@ -1068,7 +1068,7 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NativeAtomicArray<T> {
             .await;
 
         NativeAtomicArray {
-            array: array,
+            array,
             orig_t: NativeAtomicType::of::<T>(),
         }
     }
@@ -1205,7 +1205,7 @@ impl<T: Dist> ActiveMessaging for NativeAtomicArray<T> {
     fn async_barrier(&self) -> BarrierHandle {
         self.array.async_barrier()
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,

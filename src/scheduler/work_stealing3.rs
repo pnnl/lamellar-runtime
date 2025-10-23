@@ -340,9 +340,9 @@ impl WorkStealing3 {
             work_inj: Arc::new(Injector::new()),
             work_stealers: Vec::new(),
             work_flag: Arc::new(AtomicU8::new(0)),
-            status: status,
+            status,
             active_cnt: Arc::new(AtomicUsize::new(0)),
-            panic: panic,
+            panic,
         };
         ws.init();
         ws

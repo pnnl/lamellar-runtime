@@ -1,6 +1,8 @@
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 #![doc(test(attr(deny(unused_must_use))))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
 //!
 //! # Some Nomenclature
@@ -86,7 +88,7 @@
 //!         .build();
 //! }
 //! ```
-//! or by setting the following envrionment variable:
+//! or by setting the following environment variable:
 //!```LAMELLAE_BACKEND="lamellae"``` where lamellae is one of `local`, `shmem`, or `rofi`.
 //!
 //! # Creating and executing a Registered Active Message
@@ -99,7 +101,7 @@
 //!     my_pe: usize, // "pe" is processing element == a node
 //! }
 //!
-//! #[lamellar::am] // at a highlevel registers this LamellarAM implemenatation with the runtime for remote execution
+//! #[lamellar::am] // at a highlevel registers this LamellarAM implementation with the runtime for remote execution
 //! impl LamellarAM for HelloWorld {
 //!     async fn exec(&self) {
 //!         println!(
@@ -135,10 +137,10 @@
 //!     let world = lamellar::LamellarWorldBuilder::new().build();
 //!     let my_pe = world.my_pe();
 //!     let block_array = AtomicArray::<usize>::new(&world, 1000, Distribution::Block).block(); //we also support Cyclic distribution.
-//!     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)).block(); //simultaneosuly initialize array accross all PEs, each pe only updates its local data
+//!     let _ =block_array.dist_iter_mut().enumerate().for_each(move |(i,elem)| elem.store(i)).block(); //simultaneously initialize array across all PEs, each pe only updates its local data
 //!     block_array.barrier();
 //!     if my_pe == 0{
-//!         for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transfering remote data)
+//!         for (i,elem) in block_array.onesided_iter().into_iter().enumerate(){ //iterate through entire array on pe 0 (automatically transferring remote data)
 //!             println!("i: {} = {})",i,elem);
 //!         }
 //!     }
@@ -157,7 +159,7 @@
 //!     cnt: Darc<AtomicUsize>, // count how many times each PE executes an active message
 //! }
 //!
-//! #[lamellar::am] // at a highlevel registers this LamellarAM implemenatation with the runtime for remote execution
+//! #[lamellar::am] // at a highlevel registers this LamellarAM implementation with the runtime for remote execution
 //! impl LamellarAM for DarcAm {
 //!     async fn exec(&self) {
 //!         self.cnt.fetch_add(1,Ordering::SeqCst);
@@ -190,7 +192,7 @@
 //! ``` lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi"]}```
 //!
 //! NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
-//! If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
+//! If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR environment variable.
 //!
 //!
 //! For both environments, build your application as normal
@@ -333,7 +335,7 @@ lazy_static! {
 // }
 
 /// Wrapper function for serializing data
-pub fn serialize<T: ?Sized>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
+pub fn serialize<T>(obj: &T, var: bool) -> Result<Vec<u8>, anyhow::Error>
 where
     T: serde::Serialize,
 {
@@ -353,7 +355,7 @@ where
 }
 
 /// Wrapper function for getting the size of serialized data
-pub fn serialized_size<T: ?Sized>(obj: &T, var: bool) -> usize
+pub fn serialized_size<T>(obj: &T, var: bool) -> usize
 where
     T: serde::Serialize,
 {
@@ -373,9 +375,9 @@ where
 }
 
 /// Wrapper function for serializing an object into a buffer
-pub fn serialize_into<T: ?Sized>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
+pub fn serialize_into<T>(buf: &mut [u8], obj: &T, var: bool) -> Result<(), anyhow::Error>
 where
-    T: serde::Serialize,
+    T: serde::Serialize
 {
     // let start = std::time::Instant::now();
     let mut cursor = Cursor::new(buf);

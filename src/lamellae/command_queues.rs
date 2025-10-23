@@ -268,7 +268,7 @@ impl CmdMsgBuffer {
             waiting_bufs: HashMap::new(),
             cur_buf: None,
             num_bufs: addrs.len(),
-            pe: pe,
+            pe,
             // base_addr: base_addr,
         }
     }
@@ -574,14 +574,14 @@ impl InnerCQ {
             free_buffer: Arc::new(Mutex::new(free_buffer)),
             alloc_buffer: Arc::new(Mutex::new(alloc_buffer)),
             panic_buffer: Arc::new(Mutex::new(panic_buffer)),
-            cmd_buffers: cmd_buffers,
+            cmd_buffers,
             release_cmd: Arc::new(release_cmd),
             clear_cmd: Arc::new(clear_cmd),
             free_cmd: Arc::new(free_cmd),
-            comm: comm,
-            my_pe: my_pe,
-            num_pes: num_pes,
-            send_waiting: send_waiting,
+            comm,
+            my_pe,
+            num_pes,
+            send_waiting,
             pending_cmds: Arc::new(AtomicUsize::new(0)),
             _active_cnt: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
@@ -589,7 +589,7 @@ impl InnerCQ {
             put_amt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
             alloc_id: Arc::new(AtomicUsize::new(0)),
-            active: active,
+            active,
         }
     }
 
@@ -1304,17 +1304,17 @@ impl CommandQueue {
         );
         CommandQueue {
             cq: Arc::new(cq),
-            send_buffer_addr: send_buffer_addr,
-            recv_buffer_addr: recv_buffer_addr,
-            free_buffer_addr: free_buffer_addr,
-            alloc_buffer_addr: alloc_buffer_addr,
-            panic_buffer_addr: panic_buffer_addr,
-            release_cmd_addr: release_cmd_addr,
-            clear_cmd_addr: clear_cmd_addr,
-            free_cmd_addr: free_cmd_addr,
-            cmd_buffers_addrs: cmd_buffers_addrs,
-            comm: comm,
-            active: active,
+            send_buffer_addr,
+            recv_buffer_addr,
+            free_buffer_addr,
+            alloc_buffer_addr,
+            panic_buffer_addr,
+            release_cmd_addr,
+            clear_cmd_addr,
+            free_cmd_addr,
+            cmd_buffers_addrs,
+            comm,
+            active,
         }
     }
 

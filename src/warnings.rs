@@ -61,8 +61,8 @@ impl<'a> RuntimeWarning<'a> {
         match self {
             RuntimeWarning::BarrierTimeout(_) => {}
             _ => panic!("{msg}
-                Note this warning causes a panic because you have comilpiled lamellar with the `runtime-warnings-panic` feature.
-                Recompile without this feauture to only print warnings, rather than panic.
+                Note this warning causes a panic because you have compiled lamellar with the `runtime-warnings-panic` feature.
+                Recompile without this feature to only print warnings, rather than panic.
                 To disable runtime warnings completely, recompile lamellar with the `disable-runtime-warnings` feature.
                 To view backtrace set RUST_LIB_BACKTRACE=1.
                 {}",
@@ -93,7 +93,7 @@ impl<'a> RuntimeWarning<'a> {
                     If this is not the case, please file an issue on github. Set LAMELLAR_BLOCKING_CALL_WARNING=0 to disable this warning.")
                 }
                 RuntimeWarning::BarrierTimeout(_) => {
-                    format!("[LAMELLAR WARNING][{:?}] You have encoutered a barrier timeout. Potential deadlock detected.
+                    format!("[LAMELLAR WARNING][{:?}] You have encountered a barrier timeout. Potential deadlock detected.
                     Barrier is a collective operation requiring all PEs associated with the distributed object to enter the barrier call. 
                     Please refer to https://docs.rs/lamellar/latest/lamellar/index.html?search=barrier for more information.
                     Note that barriers are often called internally for many collective operations, including constructing new LamellarTeams, LamellarArrays, and Darcs, as well as distributed iteration. 

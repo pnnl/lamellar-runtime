@@ -33,7 +33,7 @@ lazy_static! {
                 duplicates.push(am);
             }
         }
-        if duplicates.len() > 0 {
+        if !duplicates.is_empty() {
             panic!(
                 "duplicate registered active message {:?}, AMs must have unique names",
                 duplicates
@@ -276,7 +276,7 @@ impl RegisteredActiveMessages {
         let data_slice = data_buf.data_as_bytes();
 
         let am_header = AmHeader {
-            am_id: am_id,
+            am_id,
             req_id: req_data.id,
             team_addr: req_data.team_addr,
         };
@@ -313,7 +313,7 @@ impl RegisteredActiveMessages {
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
-            darc_list_size: darc_list_size,
+            darc_list_size,
         };
 
         let data_buf = self
@@ -362,9 +362,9 @@ impl RegisteredActiveMessages {
     fn create_header(&self, req_data: &ReqMetaData, cmd: Cmd) -> SerializeHeader {
         let msg = Msg {
             src: req_data.team.world_pe as u16,
-            cmd: cmd,
+            cmd,
         };
-        SerializeHeader { msg: msg }
+        SerializeHeader { msg }
     }
 
     //#[tracing::instrument(skip_all)]
