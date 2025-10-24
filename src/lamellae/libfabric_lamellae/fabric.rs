@@ -1115,17 +1115,54 @@ pub(crate) struct LibfabricAlloc {
 
 impl std::fmt::Debug for LibfabricAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "LibfabricAlloc: id:[{}] 0x{:x}-0x{:x}, num_bytes: {}  ofi cnt: {} mem cnt: {}  mem: {:?}",
-            self.id,
-            self.range.start,
-            self.range.end,
-            self.num_bytes(),
-            Arc::strong_count(&self.ofi),
-            Arc::strong_count(&self.mem),
-            self.mem.as_ptr()
+        let fabric_ref_count = unsafe {
+            (&*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize))
+                .load(Ordering::SeqCst)
+        };
+
+        let mut temp = f.debug_struct("LibfabricAlloc");
+        temp.field("id", &self.id);
+        temp.field(
+            "addr",
+            &format_args!("{:x} - {:x}", self.range.start, self.range.end),
         )
+        .field(
+            "mem",
+            &format_args!("{:?}-{:?}", self.mem.as_ptr(), unsafe {
+                self.mem.as_ptr().add(self.mem.len())
+            }),
+        )
+        .field("data_num_bytes", &self.num_bytes())
+        .field("my_pe", &self.ofi.my_pe)
+        .field("num_pes", &self.ofi.num_pes)
+        .field(
+            "fabric_ref_cnt_offset",
+            &format_args!(
+                "{} ({:?}): {}",
+                self.fabric_ref_cnt_offset,
+                unsafe { self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize },
+                fabric_ref_count
+            ),
+        );
+        if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
+            let rt_ref_count = unsafe {
+                (&*(self.mem.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize))
+                    .load(Ordering::SeqCst)
+            };
+            let padding = decode_padding(rt_ref_count);
+            let rt_ref_count = decode_ref_count(rt_ref_count);
+            temp.field(
+                "rt_ref_cnt_offset",
+                &format_args!(
+                    "{} ({:?}): {}, {}",
+                    self.rt_ref_cnt_offset,
+                    unsafe { self.mem.as_ptr().add(self.rt_ref_cnt_offset) as *const AtomicUsize },
+                    rt_ref_count,
+                    padding,
+                ),
+            );
+        }
+        temp.finish()
     }
 }
 
@@ -1138,20 +1175,6 @@ impl Clone for LibfabricAlloc {
         let ref_cnt = get_ref_count(unsafe {
             &*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
         });
-        trace!(
-            "Cloned LibfabricAlloc[{}]: 0x{:x}-0x{:x}, num_bytes: {} fabric_ref_cnt_offset: {} ({:?}) prev fabric_ref_cnt: {}  cur: {} ofi cnt: {} mem cnt: {}  mem: {:?}",
-            self.id,
-            self.range.start,
-            self.range.end,
-            self.num_bytes(),
-            self.fabric_ref_cnt_offset,
-            unsafe{self.mem.as_ptr().add(self.fabric_ref_cnt_offset)},
-            fab_ref_cnt,
-            ref_cnt,
-            Arc::strong_count(&self.ofi),
-            Arc::strong_count(&self.mem),
-            self.mem.as_ptr(),
-        );
         Self {
             ofi: self.ofi.clone(),
             mem: self.mem.clone(),
@@ -1192,20 +1215,7 @@ impl LibfabricAlloc {
         let ref_cnt_offset = num_bytes + padding;
         let fabric_ref_cnt_offset = num_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
-        trace!(
-            "Created LibfabricAlloc[{}]: 0x{:x}-0x{:x}, num_bytes: {} padding: {} ref_cnt_offset: {} ({:?}) ofi cnt: {} mem cnt: {}  mem: {:?} encoded ref count: {:x}",
-            id,
-            start,
-            end,
-            num_bytes,
-            padding,
-            ref_cnt_offset,
-             unsafe{mem.as_ptr().add(ref_cnt_offset)},
-            Arc::strong_count(&ofi) + 1,
-            Arc::strong_count(&mem) + 1,
-            mem.as_ptr(),
-            encoded,
-        );
+
         let alloc = Self {
             ofi: ofi.clone(),
             mem: mem.clone(),
@@ -1223,6 +1233,7 @@ impl LibfabricAlloc {
             (&*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
         }
+        debug!(target: "libfabric", "Created Libfabric allocation: {:?}", alloc);
 
         Ok(alloc)
     }
@@ -1246,22 +1257,7 @@ impl LibfabricAlloc {
             rt_ref_cnt = self.increment_rt_ref_count();
         }
 
-        trace!(
-            "Created LibfabricAlloc sub_alloc[{}]: 0x{:x}-0x{:x}, num_bytes: {} ref_cnt_offset: {} ({:?}) ofi cnt: {} mem cnt: {}  mem: {:?} fabric ref count: {} rt ref count: {}",
-            id,
-            self.range.start + offset,
-            self.range.start + offset + len,
-            len,
-            self.rt_ref_cnt_offset,
-            unsafe{self.mem.as_ptr().add(self.rt_ref_cnt_offset)},
-            Arc::strong_count(&self.ofi) + 1,
-            Arc::strong_count(&self.mem) + 1,
-            self.mem.as_ptr(),
-            fabric_ref_cnt + 1,
-            rt_ref_cnt + 1,
-        );
-
-        Ok(Self {
+        let alloc = Self {
             ofi: self.ofi.clone(),
             mem: self.mem.clone(),
             mr: self.mr.clone(),
@@ -1271,7 +1267,9 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             id,
             alloc_table: self.alloc_table.clone(),
-        })
+        };
+        debug!(target: "libfabric", "Created Libfabric sub-allocation: {:?}", alloc);
+        Ok(alloc)
     }
 
     // we call this function to create a sub-allocation that is tracked as part of a runtime allocation
@@ -1296,23 +1294,6 @@ impl LibfabricAlloc {
         let fabric_ref_cnt = self.increment_fabric_ref_count();
         let ref_cnt_offset = offset + data_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
-        debug!(
-            "Created LibfabricAlloc rt_sub_alloc[{}]: 0x{:x}-0x{:x} (data: 0x{:x}), num_bytes: {} padding: {} data_len: {} ref_cnt_offset: {} ({:?}) ofi cnt: {} mem cnt: {}  mem: {:?} fabric ref count: {} rt ref count: 1, encoded ref count: {:x}",
-            id,
-            self.range.start + offset,
-            self.range.start + offset + len,
-            self.range.start + offset + data_bytes,
-            len,
-            padding,
-            data_bytes,
-            ref_cnt_offset,
-             unsafe{self.mem.as_ptr().add(ref_cnt_offset)},
-            Arc::strong_count(&self.ofi) + 1,
-            Arc::strong_count(&self.mem) + 1,
-            self.mem.as_ptr(),
-            fabric_ref_cnt + 1,
-            encoded,
-        );
 
         let alloc_manager = match &self.alloc_table {
             AllocTable::Fabric(alloc_manager) => alloc_manager.clone(),
@@ -1335,6 +1316,8 @@ impl LibfabricAlloc {
             (&*(alloc.mem.as_ptr().add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
         }
+
+        debug!(target: "libfabric", "Created Libfabric rt-allocation: {:?}", alloc);
         Ok(alloc)
     }
 
@@ -1350,16 +1333,6 @@ impl LibfabricAlloc {
         let ref_cnt_offset = ((self.start() - self.mem.as_ptr() as usize) + self.num_bytes())
             - std::mem::size_of::<AtomicUsize>();
 
-        trace!(
-            "ref count offset for rt_alloc conversion: {:x} = (({:x}-{:?}) + {}) - {} = {:x} - {}",
-            ref_cnt_offset,
-            self.start(),
-            self.mem.as_ptr(),
-            self.num_bytes(),
-            std::mem::size_of::<AtomicUsize>(),
-            (self.start() - self.mem.as_ptr() as usize) + self.num_bytes(),
-            std::mem::size_of::<AtomicUsize>()
-        );
         let encoded_ref_count = unsafe {
             (&*(self.mem.as_ptr().add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst)
         };
@@ -1379,28 +1352,7 @@ impl LibfabricAlloc {
         let fabric_ref_cnt = get_ref_count(unsafe {
             (&*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize))
         });
-
-        debug!(
-            "Converting LibfabricAlloc[{}]: orig 0x{:x}-0x{:x} rt  0x{:x}-0x{:x}, orig num_bytes: {} rt num_bytes: {}, orig ref_cnt_offset {} ({:?})  rt ref_cnt_offset {} ({:?}) padding: {} ofi cnt: {} mem cnt: {}  mem: {:?} to rt_alloc, fabric ref count: {} rt ref count: {}, encoded ref count: {:x}",
-            self.id,
-            self.range.start,
-            self.range.end,
-            alloc.range.start,
-            alloc.range.end,
-            self.num_bytes(),
-            alloc.num_bytes(),
-            self.rt_ref_cnt_offset,
-            unsafe{self.mem.as_ptr().add(self.rt_ref_cnt_offset)},
-            alloc.rt_ref_cnt_offset,
-            unsafe{alloc.mem.as_ptr().add(alloc.rt_ref_cnt_offset)},
-            padding,
-            Arc::strong_count(&self.ofi) + 1,
-            Arc::strong_count(&self.mem) + 1,
-            self.mem.as_ptr(),
-            fabric_ref_cnt + 1,
-            rt_ref_cnt,
-            encoded_ref_count
-        );
+        debug!(target: "libfabric", "Converted Libfabric alloc to rt-alloc: {:?}", alloc);
         Ok(alloc)
     }
 
@@ -1408,21 +1360,9 @@ impl LibfabricAlloc {
         match self.alloc_table {
             AllocTable::Fabric(_) => None, //only rt_allocs can be leaked
             AllocTable::Runtime(_, _, _) => {
-                let fabric_ref_cnt = self.increment_fabric_ref_count(); //increment the ref count to account for the leaked instance
-                let ret_ref_cnt = self.increment_rt_ref_count(); //increment the ref count to account for the leaked instance
-                debug!("leaking LibfabricAlloc[{}]: 0x{:x}-0x{:x}, num_bytes: {} ref_cnt_offset: {} ({:?}) ofi cnt: {} mem cnt: {}  mem: {:?} fabric ref count: {} rt ref count: {}",
-                    self.id,
-                    self.range.start,
-                    self.range.end,
-                    self.num_bytes(),
-                    self.rt_ref_cnt_offset,
-                    unsafe{self.mem.as_ptr().add(self.rt_ref_cnt_offset)},
-                    Arc::strong_count(&self.ofi),
-                    Arc::strong_count(&self.mem),
-                    self.mem.as_ptr(),
-                    fabric_ref_cnt,
-                    ret_ref_cnt
-                );
+                self.increment_fabric_ref_count(); //increment the ref count to account for the leaked instance
+                self.increment_rt_ref_count(); //increment the ref count to account for the leaked instance
+                debug!(target: "libfabric", "Leaking Libfabric rt-allocation: {:?}", self);
                 Some(CommAllocAddr(self.start()))
             }
         }
@@ -1828,44 +1768,15 @@ impl Drop for LibfabricAlloc {
 
         match &self.alloc_table {
             AllocTable::Fabric(alloc_table) => {
-                trace!(
-                    "Fabric: Dropping Fabric LibfabricAlloc[{}]: {:?} mem: {:?} ofi strong count: {} mem strong count: {} fabric ref count: {}",
-                    self.id,
-                    self,
-                    self.mem.as_ptr(),
-                    ofi_cnt,
-                    mem_cnt,
-                    fabric_ref_count
-                );
                 if fabric_ref_count == 2 {
-                    debug!(
-                        "  removing from fabric alloc table {:?}",
-                        self,
-                        // std::backtrace::Backtrace::capture()
-                    );
-
+                    debug!(target: "libfabric", "Dropping fabric LibfabricAlloc: {:?}", self);
                     alloc_table.remove_from_alloc(self);
                 }
             }
             AllocTable::Runtime(rt_alloc_table, addr, fabric_alloc_table) => {
                 let rt_ref_count = self.decrement_rt_ref_count();
-                trace!(
-                    "Dropping Runtime LibfabricAlloc[{}]: {:?} mem: {:?} ofi strong count: {} mem strong count: {} fabric ref count: {} rt ref count: {} rt_alloc addr {:x}",
-                    self.id,
-                    self,
-                    self.mem.as_ptr(),
-                    ofi_cnt,
-                    mem_cnt,
-                    fabric_ref_count,
-                    rt_ref_count,
-                    addr,
-                );
                 if rt_ref_count == 1 {
-                    debug!(
-                        "  removing from runtime alloc table my addr {:x} rt_alloc addr {:x}",
-                        self.start(),
-                        addr
-                    );
+                    debug!(target: "libfabric", "Freeing runtime LibfabricAlloc: {:?}",  self);
                     rt_alloc_table.free(*addr).expect(&format!(
                         "[{:?}] Error removing from runtime alloc table {:x}",
                         std::thread::current().id(),
@@ -1873,10 +1784,7 @@ impl Drop for LibfabricAlloc {
                     ));
                 }
                 if fabric_ref_count == 2 {
-                    debug!(
-                        " Runtime removing from fabric alloc table {:?} rt_alloc addr {:x}",
-                        self, addr
-                    );
+                    debug!(target: "libfabric", "Dropping fabric LibfabricAlloc from rt LibfabricAlloc: {:?}", self);
                     fabric_alloc_table.remove_from_alloc(self);
                 }
             }

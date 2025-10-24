@@ -623,24 +623,24 @@ impl CommAllocAtomic for CommAllocInner {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct CommAlloc {
     // pub(crate) addr: usize,
     // pub(crate) size: usize,
     pub(crate) inner_alloc: CommAllocInner,
     pub(crate) alloc_type: CommAllocType,
 }
-impl std::fmt::Debug for CommAlloc {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "CommAlloc {{ addr: {:x}, size: {:?}, alloc_type: {:?} }}",
-            self.inner_alloc.addr(),
-            self.num_bytes(),
-            self.alloc_type
-        )
-    }
-}
+// impl std::fmt::Debug for CommAlloc {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         write!(
+//             f,
+//             "CommAlloc {{ addr: {:x}, size: {:?}, alloc_type: {:?} }}",
+//             self.inner_alloc.addr(),
+//             self.num_bytes(),
+//             self.alloc_type
+//         )
+//     }
+// }
 
 // unsafe impl Send for CommAlloc {}
 // unsafe impl Sync for CommAlloc {}

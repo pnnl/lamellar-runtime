@@ -804,7 +804,7 @@ pub(crate) enum Mode {
 // to different nodes, in local its wrapped in Arc (we dont currently support sending to other nodes)
 // for local we would probably need to develop something like a one-sided initiated darc...
 pub(crate) struct MemoryRegion<T: Remote> {
-    alloc: CommAlloc,
+    pub(crate) alloc: CommAlloc,
     num_elems: usize,
     pe: usize,
     backend: Backend,

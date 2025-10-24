@@ -499,7 +499,7 @@ impl InnerCQ {
             pe += 1;
         }
         trace!("cmd_buffers {:?}", cmd_buffers);
-        let mut send_buffer: CommSlice<CmdMsg> = send_buffer_alloc.as_comm_slice();
+        let  send_buffer: CommSlice<CmdMsg> = send_buffer_alloc.as_comm_slice();
         let mut send_buffers = vec![];
 
         // here we split the send buffers by PE so each PE has its own send buffer to avoid locking
@@ -514,7 +514,7 @@ impl InnerCQ {
         }
         trace!("send_buffer init {:?}", send_buffer);
 
-        let mut recv_buffer: CommSlice<CmdMsg> = recv_buffer_alloc.as_comm_slice();
+        let  recv_buffer: CommSlice<CmdMsg> = recv_buffer_alloc.as_comm_slice();
         let mut recv_buffers = vec![];
 
         //for recv buffers we lock each PE's buffer when we read from it, and we lock our own buffer when we are sending data to a remote PE
@@ -538,7 +538,7 @@ impl InnerCQ {
         // }
         // trace!("free_buffer init {:?}", free_buffer);
 
-        let mut alloc_buffer: CommSlice<CmdMsg> = alloc_buffer_alloc.as_comm_slice();
+        let  alloc_buffer: CommSlice<CmdMsg> = alloc_buffer_alloc.as_comm_slice();
         let mut alloc_buffers = vec![];
         for (i, cmd) in alloc_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
@@ -550,8 +550,8 @@ impl InnerCQ {
         }
         trace!("alloc_buffer init {:?}", alloc_buffer);
 
-        let mut panic_buffer: CommSlice<CmdMsg> = panic_buffer_alloc.as_comm_slice();
-        for (i, cmd) in panic_buffer.clone().iter_mut().enumerate() {
+        let  panic_buffer: CommSlice<CmdMsg> = panic_buffer_alloc.as_comm_slice();
+        for (_, cmd) in panic_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
             (*cmd).cmd = Cmd::Clear;
@@ -1241,7 +1241,7 @@ impl InnerCQ {
             .block(); //maybe we do a block here?
         let mut timer = std::time::Instant::now();
         while calc_hash(
-            unsafe { data.as_ptr() } as usize,
+            data.as_ptr()  as usize,
             data.len() * std::mem::size_of::<CmdMsg>(),
         ) != cmd.msg_hash
         {
@@ -1253,7 +1253,7 @@ impl InnerCQ {
                     data.len()*std::mem::size_of::<CmdMsg>(),
                     unsafe{ std::slice::from_raw_parts(data.as_ptr() as *const u8, data.len()*std::mem::size_of::<CmdMsg>()) },
                     calc_hash(
-                        unsafe { data.as_ptr()} as usize,
+                       data.as_ptr() as usize,
                         data.len()*std::mem::size_of::<CmdMsg>()
                     ),
                     cmd.msg_hash,

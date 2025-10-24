@@ -61,7 +61,7 @@ impl Barrier {
 
                 let mem_region =
                     MemoryRegion::new(num_rounds * n, &scheduler, vec![], &lamellae, alloc.clone());
-                let mem_region_comm_slice = unsafe { mem_region.as_comm_slice().expect(
+                    let mem_region_comm_slice = unsafe { mem_region.as_comm_slice().expect(
                     "MemoryRegion should be registered and able to be converted to CommSlice",
                 ) };
                 let mut buffs = vec![];
@@ -73,7 +73,9 @@ impl Barrier {
                     buffs.push(
                         mem_region_comm_slice.sub_slice(r * num_rounds.. (r + 1) * num_rounds),
                     );
+
                 }
+                
 
                 // let send_buf = MemoryRegion::new(1, &scheduler, vec![], &lamellae, alloc);
 
@@ -91,6 +93,7 @@ impl Barrier {
         } else {
             (None, vec![])
         };
+
 
         let bar = Barrier {
             my_pe,

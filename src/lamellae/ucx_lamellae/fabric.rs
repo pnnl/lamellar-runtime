@@ -627,7 +627,7 @@ impl UcxAlloc {
                 .load(Ordering::SeqCst)
         };
 
-        let (rt_ref_cnt, padding) = decode_ref_count_and_padding(encoded_ref_count);
+        let padding = decode_padding(encoded_ref_count);
 
         let alloc = Self {
             mem: self.mem.clone(),
@@ -648,9 +648,6 @@ impl UcxAlloc {
             ),
         };
 
-        get_ref_count(unsafe {
-            (&*(alloc.mem.inner.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize))
-        });
         debug!(target: "ucx", "Converted UCX alloc to rt-alloc: {:?}", alloc);
         Ok(alloc)
     }
@@ -711,7 +708,7 @@ impl UcxAlloc {
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
-        trace!(
+        trace!(target: "ucx",
             "put_inner pe {} offset {} src_addr len {} * size_of T {} total bytes {}, alloc local size {}",
             pe,
             offset,
@@ -722,7 +719,7 @@ impl UcxAlloc {
         );
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
-        trace!(
+        trace!(target: "ucx",
             "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x}",
             pe,
             remote_addr,
@@ -754,7 +751,7 @@ impl UcxAlloc {
         dst_addr: &mut [T],
     ) -> UcxRequest {
         let offset = offset * std::mem::size_of::<T>();
-        trace!(
+        trace!(target: "ucx",
             "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
             pe,
             offset,
@@ -886,13 +883,13 @@ impl Drop for UcxAlloc {
                         .unwrap()
                         .retain(|(a, _)| a.mem.inner.addr != self.mem.inner.addr);
                 }
-                if fabric_ref_count == 1 {
-                    let mem_handles_count = Arc::strong_count(&mem_handles);
-                    let mem_handle_count = Arc::strong_count(&self.mem.inner);
-                    let remote_keys_count = Arc::strong_count(&remote_keys);
-                    debug!("Dropping UCX alloc:  mem_handles_count: {}, mem_handle_count: {}, remote_keys_count: {}",
-                    mem_handles_count, mem_handle_count, remote_keys_count);
-                }
+                // if fabric_ref_count == 1 {
+                //     let mem_handles_count = Arc::strong_count(&mem_handles);
+                //     let mem_handle_count = Arc::strong_count(&self.mem.inner);
+                //     let remote_keys_count = Arc::strong_count(&remote_keys);
+                //     debug!("Dropping UCX alloc:  mem_handles_count: {}, mem_handle_count: {}, remote_keys_count: {}",
+                //     mem_handles_count, mem_handle_count, remote_keys_count);
+                // }
             }
         }
     }

@@ -6,6 +6,7 @@ use crate::{
     config,
     env_var::HeapMode,
     lamellae::{
+        calc_alloc_padding_size_align,
         comm::{
             error::{AllocError, AllocResult},
             CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
