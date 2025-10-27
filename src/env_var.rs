@@ -44,6 +44,7 @@
 
 use serde::Deserialize;
 use std::sync::OnceLock;
+use crate::ExecutorType;
 
 fn default_deadlock_warning_timeout() -> f64 {
     600.0
@@ -55,20 +56,6 @@ fn default_am_group_batch_size() -> usize {
 
 fn default_dissemination_factor() -> usize {
     2
-}
-
-fn default_backend() -> String {
-    #[cfg(feature = "rofi")]
-    return "rofi".to_owned();
-    #[cfg(not(feature = "rofi"))]
-    return "local".to_owned();
-}
-
-fn default_executor() -> String {
-    #[cfg(feature = "tokio-executor")]
-    return "tokio".to_owned();
-    #[cfg(not(feature = "tokio-executor"))]
-    return "lamellar".to_owned();
 }
 
 fn default_batcher() -> String {
@@ -109,14 +96,13 @@ fn default_alloc() -> Alloc {
 }
 
 #[doc(hidden)]
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Debug, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum IndexType {
     Static,
+
+    #[default]
     Dynamic,
-}
-fn default_array_dynamic_index() -> IndexType {
-    IndexType::Dynamic
 }
 
 fn default_cmd_buf_len() -> usize {
@@ -156,6 +142,23 @@ where
     }
 }
 
+/// The lamellae backend to use
+#[doc(hidden)]
+#[derive(Deserialize, Debug, Default)]
+pub enum Backend {
+    /// multi pe distributed execution, default if rofi feature is turned on
+    #[cfg(feature = "rofi")]
+    #[cfg_attr(feature = "rofi", default)]
+    Rofi,
+
+    /// Single pe execution, default if rofi feature is turned off
+    #[cfg_attr(not(feature = "rofi"), default)]
+    Shmem,
+
+    /// Multi pe single node execution
+    Local
+}
+
 #[doc(hidden)]
 #[derive(Deserialize, Debug)]
 pub struct Config {
@@ -187,12 +190,10 @@ pub struct Config {
     /// rofi -- multi pe distributed execution, default if rofi feature is turned on
     /// local -- single pe execution, default if rofi feature is turned off
     /// shmem -- multi pe single node execution
-    #[serde(default = "default_backend")]
-    pub backend: String, //rofi,shmem,local
+    pub backend: Backend,
 
     /// The executor (thread scheduler) to use, default: 'lamellar' unless the tokio feature is turned on
-    #[serde(default = "default_executor")]
-    pub executor: String, //lamellar,tokio,async_std
+    pub executor: ExecutorType,
 
     /// The batcher to use, default: 'simple'
     #[serde(default = "default_batcher")]
@@ -205,7 +206,6 @@ pub struct Config {
     pub heap_mode: HeapMode,
     #[serde(default = "default_alloc")]
     pub alloc: Alloc,
-    #[serde(default = "default_array_dynamic_index")]
     pub index_size: IndexType,
 
     //used internally by the command queues
