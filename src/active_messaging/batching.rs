@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::num;
 use std::sync::atomic::AtomicUsize;
 
 use crate::active_messaging::registered_active_message::AmId;

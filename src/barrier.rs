@@ -1,6 +1,6 @@
 use crate::{
-    utils::{stats, print_stats},
-    active_messaging::batching::{simple_batcher::io_task_stats, StatCmd, StatType, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS}, env_var::config, lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae}, lamellar_arch::LamellarArchRT, lamellar_request::LamellarRequest, memregion::MemoryRegion, scheduler::Scheduler, warnings::RuntimeWarning
+    utils::{ print_stats},
+    active_messaging::batching::{simple_batcher::io_task_stats, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS}, env_var::config, lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae}, lamellar_arch::LamellarArchRT, lamellar_request::LamellarRequest, memregion::MemoryRegion, scheduler::Scheduler, warnings::RuntimeWarning
 };
 
 use futures_util::Future;

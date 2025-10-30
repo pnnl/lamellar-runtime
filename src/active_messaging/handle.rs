@@ -12,7 +12,7 @@ use std::{
 use futures_util::Future;
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
-use tracing::{debug, trace, warn};
+use tracing::{trace, warn};
 
 use crate::{
     lamellae::Des,

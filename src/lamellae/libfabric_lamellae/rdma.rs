@@ -23,7 +23,10 @@ use crate::{
     LamellarTask,
 };
 
-use super::{fabric::LibfabricAlloc, Scheduler};
+use super::{
+    fabric::{LibfabricAlloc, OneSidedLibfabricAlloc},
+    Scheduler,
+};
 
 pub(super) enum AllocOp<T: Remote> {
     Put(usize, T),
@@ -666,5 +669,203 @@ impl CommAllocRdma for LibfabricAlloc {
         //             .copy_from_slice(&self.as_mut_slice::<T>()[offset..offset + len]);
         //     }
         // }
+    }
+}
+
+impl CommAllocRdma for OneSidedLibfabricAlloc {
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+
+        LibfabricPutFuture {
+            my_pe: self.alloc.ofi.my_pe,
+            alloc: self.alloc.clone(),
+            offset: offset,
+            op: AllocOp::Put(pe, src),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_unmanaged called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        if pe != self.alloc.ofi.my_pe {
+            unsafe {
+                LibfabricAlloc::inner_put(
+                    &self.alloc,
+                    pe,
+                    offset,
+                    std::slice::from_ref(&src),
+                    false,
+                )
+            };
+        } else {
+            unsafe { self.alloc.as_mut_slice::<T>()[offset] = src };
+        }
+    }
+    fn put_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+
+        LibfabricPutFuture {
+            my_pe: self.alloc.ofi.my_pe,
+            alloc: self.alloc.clone(),
+            offset,
+            op: AllocOp::PutBuf(pe, src.into()),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_buffer_unmanaged called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let src = src.into();
+        unsafe { LibfabricAlloc::inner_put(&self.alloc, pe, offset, src.as_slice(), false) };
+    }
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.put(scheduler, counters, src, self.remote_pe, offset)
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        self.put_unmanaged(src, self.remote_pe, offset);
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.put_buffer(scheduler, counters, src, self.remote_pe, offset)
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        self.put_buffer_unmanaged(src, self.remote_pe, offset);
+    }
+
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaGetHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricGetFuture {
+            alloc: self.alloc.clone(),
+            pe,
+            offset,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+        }
+        .into()
+    }
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> RdmaGetBufferHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricGetBufferFuture {
+            alloc: self.alloc.clone(),
+            pe,
+            offset,
+            len,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+        }
+        .into()
+    }
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_into_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricGetIntoBufferFuture {
+            my_pe: self.alloc.ofi.my_pe,
+            alloc: self.alloc.clone(),
+            pe,
+            offset,
+            dst,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
+        unsafe { LibfabricAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), false) };
     }
 }

@@ -31,7 +31,8 @@ libfabric = { path = "../rofi-junction/libfabric", features = [
 pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
     "with-pmix",
 ], optional = true }
-ucx1-sys = { path = "/scratch/frie869/async-ucx/ucx1-sys", version = "0.1.0", optional = true }
+lamellar-ucx-sys = { path = "lamellar-ucx-sys", version = "0.1.0", optional = true }
+# ucx1-sys = { path = "/scratch/frie869/async-ucx/ucx1-sys", version = "0.1.0", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 rofisys = { version = "0.4", optional = true }
@@ -98,7 +99,7 @@ tracing-subscriber = { version = "0.3", features = [
 #packed_simd = { version = "0.3.4", package = "packed_simd_2" } #uncomment if using nightly tool chain and want to run the am_flops example
 
 [workspace]
-members = ["impl"]
+members = ["impl", "lamellar-ucx-sys"]
 
 # Set the settings for build scripts and proc-macros.
 [profile.dev.build-override]
@@ -115,7 +116,7 @@ rofi-c = []
 enable-rofi-rust = []
 enable-libfabric = ["libfabric", "pmi"]
 # enable-ucx = []
-enable-ucx = ["ucx1-sys", "pmi", "thiserror"]
+enable-ucx = ["lamellar-ucx-sys", "pmi", "thiserror"]
 # enable-ucx = ["pmi", "thiserror"]
 # enable-rofi-rust = ["rofi-rust", "pmi"]
 tokio-executor = ["tokio"]

@@ -342,17 +342,17 @@ impl<T: Remote> SharedMemoryRegion<T> {
     pub unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_all_unmanaged(self, index, data)
     }
-    pub unsafe fn put_all_buffer(
+    pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
-        data: impl Into<MemregionRdmaInputInner<T>>,
+        data: U,
     ) -> RdmaHandle<T> {
         RTMemoryRegionRDMA::<T>::put_all_buffer(self, index, data.into())
     }
-    pub unsafe fn put_all_buffer_unmanaged(
+    pub unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
-        data: impl Into<MemregionRdmaInputInner<T>>,
+        data: U,
     ) {
         RTMemoryRegionRDMA::<T>::put_all_buffer_unmanaged(self, index, data.into());
     }
@@ -380,29 +380,34 @@ impl<T: Remote> SharedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::get_into_buffer_unmanaged(self, pe, index, data);
     }
 
-    // pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
-    //     self.mr
-    //         .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
-    // }
-    // pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
-    //     //we need to do the offsetting here since we are going directly through the inner alloc
+    pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
+    }
+    pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
+        //we need to do the offsetting here since we are going directly through the inner alloc
 
-    //     self.mr.alloc.inner_alloc.atomic_op_unmanaged(
-    //         AtomicOp::Write(val),
-    //         pe,
-    //         (self.sub_region_offset + index) * std::mem::size_of::<T>(),
-    //     )
-    // }
-    // pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
-    //     // let res = MaybeUninit::uninit().assume_init();
-    //     self.mr
-    //         .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read)
-    // }
-    // pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
-    //     // let res = MaybeUninit::uninit().assume_init();
-    //     self.mr
-    //         .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
-    // }
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(val),
+        );
+    }
+    pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
+        // let res = MaybeUninit::uninit().assume_init();
+        self.mr
+            .as_base::<T>()
+            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read)
+    }
+    pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        // let res = MaybeUninit::uninit().assume_init();
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(val),
+        )
+    }
     pub fn wait_all(&self) {
         self.mr.wait_all();
     }

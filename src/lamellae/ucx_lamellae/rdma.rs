@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{UcxAlloc, UcxRequest},
+    fabric::{OneSidedUcxAlloc, UcxAlloc, UcxRequest},
     Scheduler,
 };
 
@@ -748,6 +748,223 @@ impl CommAllocRdma for UcxAlloc {
             let len = dst.len();
             dst.as_mut_slice()
                 .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
+        }
+    }
+}
+
+impl CommAllocRdma for OneSidedUcxAlloc {
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+
+        UcxPutFuture {
+            my_pe: self.alloc.my_pe,
+            alloc: self.alloc.clone(),
+            offset,
+            op: AllocOp::Put(pe, src.into()),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_unmanaged called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        if pe != self.alloc.my_pe {
+            // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
+            // not that the operation has completed on the remote side
+            unsafe {
+                UcxAlloc::put_inner(&self.alloc, pe, offset, std::slice::from_ref(&src), false)
+            };
+        } else {
+            self.alloc.as_mut_slice()[offset] = src;
+        }
+    }
+    fn put_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_buffer called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+
+        UcxPutFuture {
+            my_pe: self.alloc.my_pe,
+            alloc: self.alloc.clone(),
+            offset,
+            op: AllocOp::PutBuf(pe, src.into()),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn put_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_buffer_unmanaged called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let src = src.into();
+        if pe != self.alloc.my_pe {
+            // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
+            // not that the operation has completed on the remote side
+            unsafe { UcxAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false) };
+        } else {
+            self.alloc.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
+        }
+    }
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.put(scheduler, counters, src, self.remote_pe, offset)
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        self.put_unmanaged(src, self.remote_pe, offset)
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.put_buffer(scheduler, counters, src, self.remote_pe, offset)
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        self.put_buffer_unmanaged(src, self.remote_pe, offset)
+    }
+
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaGetHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxGetFuture {
+            alloc: self.alloc.clone(),
+            pe,
+            offset,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+            request: None,
+        }
+        .into()
+    }
+
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> RdmaGetBufferHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_buffer called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxGetBufferFuture {
+            alloc: self.alloc.clone(),
+            pe,
+            offset,
+            len,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+            request: None,
+        }
+        .into()
+    }
+
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_into_buffer called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxGetIntoBufferFuture {
+            my_pe: self.alloc.my_pe,
+            alloc: self.alloc.clone(),
+            pe,
+            offset,
+            dst,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_into_buffer_unmanaged called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        if pe != self.alloc.my_pe {
+            let _ = unsafe { UcxAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice()) };
+        } else {
+            let len = dst.len();
+            dst.as_mut_slice()
+                .copy_from_slice(&self.alloc.as_mut_slice()[offset..(offset + len)]);
         }
     }
 }

@@ -105,7 +105,24 @@ impl CommMem for LocalComm {
         CommAllocAddr(remote_addr)
     }
 
-    fn local_alloc_and_offset_from_addr(
+    fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        let (alloc, offset) =
+            self.local_alloc_and_offset_from_remote_pe_and_addr(remote_pe, remote_addr);
+        assert!(
+            offset + num_bytes <= alloc.num_bytes(),
+            "one sided alloc from remote pe and addr requested num_bytes: {} exceeds local alloc size: {}",
+            num_bytes,
+            alloc.num_bytes() - offset
+        );
+        alloc.sub_alloc(offset, num_bytes)
+    }
+
+    fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         _remote_pe: usize,
         remote_addr: usize,

@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::Ordering;
 
 use crate::{
     config,
@@ -16,7 +16,7 @@ use crate::{
 
 use super::comm::{LibfabricComm, HEAP_SIZE};
 
-use tracing::{debug, error, info, trace};
+use tracing::{debug, info, trace};
 
 impl CommMem for LibfabricComm {
     #[tracing::instrument(skip(self), level = "debug")]
@@ -242,15 +242,25 @@ impl CommMem for LibfabricComm {
         self.ofi.local_addr(remote_pe, remote_addr).into()
     }
 
-    fn local_alloc_and_offset_from_addr(
+    fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        self.ofi
+            .one_sided_alloc_from_remote_pe_and_addr(remote_pe, remote_addr, num_bytes)
+    }
+
+    fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,
     ) -> (CommAlloc, usize) {
         self.ofi
-            .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
+            .local_alloc_and_offset_from_remote_pe_and_addr(remote_pe, remote_addr)
             .expect(&format!(
-                "local_alloc_and_offset_from_addr failed for pe: {} addr: {:x}",
+                "local_alloc_and_offset_from_remote_pe_and_addr failed for pe: {} addr: {:x}",
                 remote_pe, remote_addr
             ))
     }

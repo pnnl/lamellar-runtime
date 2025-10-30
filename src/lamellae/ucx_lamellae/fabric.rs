@@ -277,7 +277,36 @@ impl UcxWorld {
         None
     }
 
-    pub(crate) fn local_alloc_and_offset_from_addr(
+    pub(crate) fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        let allocs = self.remote_keys.lock().unwrap();
+        for (alloc, remote_addrs) in allocs.iter() {
+            let remote_pe_addr = remote_addrs[remote_pe].0;
+            if remote_pe_addr <= remote_addr
+                && remote_addr + num_bytes <= remote_pe_addr + alloc.data_num_bytes
+            {
+                let offset = remote_addr - remote_pe_addr;
+                return OneSidedUcxAlloc {
+                    alloc: alloc
+                        .clone()
+                        .sub_alloc(offset, num_bytes)
+                        .expect("one_sided_alloc_from_remote_pe_and_addr failed"),
+                    remote_pe,
+                }
+                .into();
+            }
+        }
+        panic!(
+            "unable to find allocation for remote pe: {} addr: {:x} num_bytes: {}",
+            remote_pe, remote_addr, num_bytes
+        );
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,
@@ -777,6 +806,7 @@ impl UcxAlloc {
         op: &AtomicOp<T>,
         managed: bool,
     ) -> Option<UcxRequest> {
+        let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         match op {
             AtomicOp::Write(val) => {
@@ -794,6 +824,7 @@ impl UcxAlloc {
         op: &AtomicOp<T>,
         result: &mut [T],
     ) -> UcxRequest {
+        let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         match op {
             AtomicOp::Read => {
@@ -837,6 +868,11 @@ impl UcxAlloc {
 
 impl Drop for UcxAlloc {
     fn drop(&mut self) {
+        trace!(target: "ucx", "Dropping UcxAlloc mem: {:x} - ({:x}) {:x}",
+                self.mem.addr,
+                self.mem.addr + self.data_num_bytes,
+                self.mem.addr + self.mem.size);
+        trace!(target: "ucx", "Dropping UCX alloc: {:?}", self);
         let fabric_ref_count = self.decrement_fabric_ref_count();
         match &self.alloc_table {
             AllocTable::Fabric(mem_handles, remote_keys) => {
@@ -891,6 +927,36 @@ impl Drop for UcxAlloc {
                 //     mem_handles_count, mem_handle_count, remote_keys_count);
                 // }
             }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OneSidedUcxAlloc {
+    pub(crate) remote_pe: usize,
+    pub(crate) alloc: UcxAlloc,
+}
+
+impl OneSidedUcxAlloc {
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.alloc.num_bytes()
+    }
+    pub(crate) fn start(&self) -> usize {
+        self.alloc.start()
+    }
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> AllocResult<Self> {
+        Ok(OneSidedUcxAlloc {
+            remote_pe: self.remote_pe,
+            alloc: self.alloc.sub_alloc(offset, size)?,
+        })
+    }
+}
+
+impl From<OneSidedUcxAlloc> for CommAlloc {
+    fn from(alloc: OneSidedUcxAlloc) -> Self {
+        CommAlloc {
+            inner_alloc: CommAllocInner::OneSidedUcxAlloc(alloc),
+            alloc_type: CommAllocType::Remote,
         }
     }
 }

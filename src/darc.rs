@@ -54,7 +54,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, trace};
+use tracing::trace;
 // use std::time::Instant;
 
 // //use tracing::*;
@@ -968,7 +968,7 @@ impl<T: Send + Sync> Darc<T> {
         state: DarcMode,
         drop: Option<fn(&mut T) -> bool>,
     ) -> Result<Darc<T>, IdError> {
-        // let mut timer = Instant::now();
+        let timer = Instant::now();
         let team_rt = team.into().team.clone();
         let my_pe = team_rt.team_pe?;
 
@@ -1014,7 +1014,7 @@ impl<T: Send + Sync> Darc<T> {
         // println!("creating new darc");
 
         team_rt.async_barrier().await;
-        // println!("Darc::new after barrier time: {:?}", timer.elapsed());
+        trace!("Darc::new after barrier time: {:?}", timer.elapsed());
         // timer = Instant::now();
         // println!("creating new darc after barrier");
         let darc_alloc = team_rt
@@ -1022,7 +1022,7 @@ impl<T: Send + Sync> Darc<T> {
             .comm()
             .alloc(size, alloc, std::mem::align_of::<DarcInner<T>>())
             .expect("out of memory");
-        // println!("Darc::new after alloc time: {:?}", timer.elapsed());
+        trace!("Darc::new after alloc time: {:?}", timer.elapsed());
         // timer = Instant::now();
         trace!(
             "[{:?}] creating new darc[{:?}] {:?} alloc: {:?}",
@@ -1037,7 +1037,7 @@ impl<T: Send + Sync> Darc<T> {
             let pinned_team = Pin::into_inner_unchecked(team_rt.clone());
             Arc::into_raw(pinned_team)
         };
-        // println!("Darc::new after team_ptr time: {:?}", timer.elapsed());
+        trace!("Darc::new after team_ptr time: {:?}", timer.elapsed());
         // timer = Instant::now();
         // team_rt.print_cnt();
         let am_counters = Arc::new(AMCounters::new());
@@ -1053,21 +1053,62 @@ impl<T: Send + Sync> Darc<T> {
             team_rt.panic.clone(),
         ));
         let barrier_ptr = Box::into_raw(barrier);
-        // println!("Darc::new after barrier_creation {:?}", timer.elapsed());
+        trace!("Darc::new after barrier_creation {:?}", timer.elapsed());
         // timer = Instant::now();
+
+        //all the commslices are assumed init so on reassignment the get dropped leading to error...
         unsafe {
             let darc_temp_ptr = darc_alloc.as_mut_ptr::<DarcInner<T>>();
             // let darc_temp = DarcInner {
+            trace!("id ptr: {:?}", darc_temp_ptr);
             (*darc_temp_ptr).id = DARC_ID.fetch_add(1, Ordering::Relaxed);
+            trace!("my_pe ptr: {:?}", &(*darc_temp_ptr).my_pe as *const usize);
             (*darc_temp_ptr).my_pe = my_pe;
+            trace!(
+                "num_pes ptr: {:?}",
+                &(*darc_temp_ptr).num_pes as *const usize
+            );
             (*darc_temp_ptr).num_pes = team_rt.num_pes;
+            trace!(
+                "local_cnt ptr: {:?}",
+                &(*darc_temp_ptr).local_cnt as *const AtomicUsize
+            );
             (*darc_temp_ptr).local_cnt = AtomicUsize::new(1);
+            trace!(
+                "total_local_cnt ptr: {:?}",
+                &(*darc_temp_ptr).total_local_cnt as *const AtomicUsize
+            );
             (*darc_temp_ptr).total_local_cnt = AtomicUsize::new(1);
+            trace!(
+                "weak_local_cnt ptr: {:?}",
+                &(*darc_temp_ptr).weak_local_cnt as *const AtomicUsize
+            );
             (*darc_temp_ptr).weak_local_cnt = AtomicUsize::new(0);
+            trace!(
+                "dist_cnt ptr: {:?}",
+                &(*darc_temp_ptr).dist_cnt as *const AtomicUsize
+            );
             (*darc_temp_ptr).dist_cnt = AtomicUsize::new(0);
+            trace!(
+                "total_dist_cnt ptr: {:?}",
+                &(*darc_temp_ptr).total_dist_cnt as *const AtomicUsize
+            );
             (*darc_temp_ptr).total_dist_cnt = AtomicUsize::new(0);
-            (*darc_temp_ptr).ref_cnt_slice =
-                darc_alloc.comm_slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes);
+            trace!(
+                "am_counters ptr: {:?}",
+                &(*darc_temp_ptr).am_counters as *const *const AMCounters
+            );
+            (*darc_temp_ptr).am_counters = std::ptr::null();
+            trace!("going to create slices");
+            trace!(
+                "ref_cnt_slice ptr: {:?}",
+                &(*darc_temp_ptr).ref_cnt_slice as *const CommSlice<usize>
+            );
+            std::ptr::write(
+                &mut (*darc_temp_ptr).ref_cnt_slice,
+                darc_alloc.comm_slice_at_byte_offset(ref_cnt_offset, team_rt.num_pes),
+            );
+            trace!("done ref_cnt_slice ptr");
             trace!(
                 "ref cnt slice {:?} padding: {:?}",
                 (*darc_temp_ptr).ref_cnt_slice,
@@ -1076,8 +1117,10 @@ impl<T: Send + Sync> Darc<T> {
                     std::mem::align_of::<usize>()
                 )
             );
-            (*darc_temp_ptr).total_ref_cnt_slice =
-                darc_alloc.comm_slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes);
+            std::ptr::write(
+                &mut (*darc_temp_ptr).total_ref_cnt_slice,
+                darc_alloc.comm_slice_at_byte_offset(total_ref_cnt_offset, team_rt.num_pes),
+            );
             trace!(
                 "total ref cnt slice {:?} padding: {:?}",
                 (*darc_temp_ptr).total_ref_cnt_slice,
@@ -1086,8 +1129,10 @@ impl<T: Send + Sync> Darc<T> {
                     std::mem::align_of::<usize>()
                 )
             );
-            (*darc_temp_ptr).mode_slice =
-                darc_alloc.comm_slice_at_byte_offset(mode_offset, team_rt.num_pes);
+            std::ptr::write(
+                &mut (*darc_temp_ptr).mode_slice,
+                darc_alloc.comm_slice_at_byte_offset(mode_offset, team_rt.num_pes),
+            );
             trace!(
                 "mode slice {:?} padding: {:?}",
                 (*darc_temp_ptr).mode_slice,
@@ -1096,8 +1141,10 @@ impl<T: Send + Sync> Darc<T> {
                     std::mem::align_of::<DarcMode>()
                 )
             );
-            (*darc_temp_ptr).mode_ref_cnt_slice =
-                darc_alloc.comm_slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes);
+            std::ptr::write(
+                &mut (*darc_temp_ptr).mode_ref_cnt_slice,
+                darc_alloc.comm_slice_at_byte_offset(mode_ref_cnt_offset, team_rt.num_pes),
+            );
             trace!(
                 "mode ref cnt slice {:?} padding: {:?}",
                 (*darc_temp_ptr).mode_ref_cnt_slice,
@@ -1106,8 +1153,10 @@ impl<T: Send + Sync> Darc<T> {
                     std::mem::align_of::<usize>()
                 )
             );
-            (*darc_temp_ptr).mode_barrier_slice =
-                darc_alloc.comm_slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes);
+            std::ptr::write(
+                &mut (*darc_temp_ptr).mode_barrier_slice,
+                darc_alloc.comm_slice_at_byte_offset(mode_barrier_offset, team_rt.num_pes),
+            );
             trace!(
                 "mode barrier slice {:?} padding: {:?}",
                 (*darc_temp_ptr).mode_barrier_slice,
@@ -1126,6 +1175,8 @@ impl<T: Send + Sync> Darc<T> {
         }
         // println!("Darc::new after init time: {:?}", timer.elapsed());
         // timer = Instant::now();
+
+        darc_alloc.clone().leak(); //we dont want darc_alloc to be dropped and deallocated
 
         let d = Darc {
             inner: DarcCommPtr {
@@ -1565,6 +1616,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
 
             darc_temp.assume_init();
             self.team.lamellae.comm().wait();
+
             // now we can free the alloc
             // self.team.lamellae.comm().free(self.inner.alloc.clone());
             // in theory this shoudl be done by the drop of CommAlloc

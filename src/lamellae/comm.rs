@@ -12,8 +12,6 @@ pub(crate) use slice::*;
 
 pub use rdma::Remote;
 
-use tracing::trace;
-
 use super::Backend;
 
 // use crate::LamellarMemoryRegion;
@@ -24,7 +22,7 @@ use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 //     libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibfabricAsyncData,
 // };
 #[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_lamellae::{comm::LibfabricComm, fabric::LibfabricAlloc};
+use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
 // #[cfg(feature = "enable-rofi-rust")]
 // use crate::lamellae::{
 //     rofi_rust::rofi_rust_comm::*, rofi_rust_async::rofi_rust_async_comm::*, RofiRustAsyncData,
@@ -32,20 +30,12 @@ use crate::lamellae::libfabric_lamellae::{comm::LibfabricComm, fabric::Libfabric
 // };
 
 #[cfg(feature = "enable-ucx")]
-use crate::lamellae::ucx_lamellae::{comm::UcxComm, fabric::UcxAlloc};
-use crate::{
-    active_messaging::AMCounters,
-    lamellae::{
-        local_lamellae::comm::{LocalAlloc, LocalComm},
-        shmem_lamellae::{comm::ShmemComm, fabric::ShmemAlloc},
-        AllocationType, SerializedData,
-    },
-    memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
-    scheduler::Scheduler,
-    Deserialize, Serialize,
+use crate::lamellae::ucx_lamellae::comm::UcxComm;
+use crate::lamellae::{
+    local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
+    SerializedData,
 };
 
-use derive_more::{Add, Into, Sub};
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
 
@@ -172,9 +162,18 @@ pub(crate) trait CommMem {
     // this translates a remote address to a local address
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr;
 
+    // this creates a CommAlloc from a remote PE and remote address that represents a one-sided allocation
+    // we can only perform rdma operations to remote_pe using this allocation
+    fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc;
+
     // this translates a remote address to its local allocation + offset within that allocation
     // we need this to support onesided allocations that arrive at remote node
-    fn local_alloc_and_offset_from_addr(
+    fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,

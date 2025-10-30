@@ -1,6 +1,6 @@
 use std::{ffi::CString, mem::MaybeUninit, sync::Arc};
 
-use ucx1_sys::*;
+use lamellar_ucx_sys::*;
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 

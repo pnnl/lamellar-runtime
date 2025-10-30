@@ -1,8 +1,7 @@
 use crate::{
     active_messaging::{
         batching::{
-            simple_batcher::io_task_stats, StatCmd, StatType, BATCHER_AM_PE_RECV_CNTS,
-            BATCHER_AM_PE_SEND_CNTS,
+            simple_batcher::io_task_stats, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS,
         },
         handle::AmHandleInner,
         *,
@@ -27,7 +26,7 @@ use crate::{
         work_stealing::{task_finished_to_string, task_launched_to_string},
         LamellarTask, ReqId, Scheduler,
     },
-    utils::{print_stats, stats},
+    utils::print_stats,
     warnings::RuntimeWarning,
 };
 

@@ -8,7 +8,10 @@ use crate::{
     LamellarTask,
 };
 
-use super::{fabric::LibfabricAlloc, Scheduler};
+use super::{
+    fabric::{LibfabricAlloc, OneSidedLibfabricAlloc},
+    Scheduler,
+};
 
 use pin_project::{pin_project, pinned_drop};
 use std::{
@@ -238,6 +241,78 @@ impl CommAllocAtomic for LibfabricAlloc {
     ) -> AtomicFetchOpHandle<T> {
         LibfabricAtomicFetchFuture {
             alloc: self.clone(),
+            remote_pe: pe,
+            offset,
+            op: op,
+            result: MaybeUninit::uninit(),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+}
+
+impl CommAllocAtomic for OneSidedLibfabricAlloc {
+    fn atomic_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricAtomicFuture {
+            alloc: self.alloc.clone(),
+            remote_pes: vec![pe],
+            offset,
+            op,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricAlloc::atomic_op_inner(&self.alloc, pe, offset, &op).unwrap();
+    }
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        self.atomic_op(scheduler, counters, op, self.remote_pe, offset)
+    }
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        self.atomic_op_unmanaged(op, self.remote_pe, offset);
+    }
+    fn atomic_fetch_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicFetchOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic fetch op called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricAtomicFetchFuture {
+            alloc: self.alloc.clone(),
             remote_pe: pe,
             offset,
             op: op,

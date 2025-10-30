@@ -66,11 +66,11 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                 mrh.clone()
             }
             None => {
-                let local_mem_region_addr =
-                    lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle)
+                // let local_mem_region_addr =
+                //     lamellae.comm().local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle)
                 let team: Pin<Arc<LamellarTeamRT>> = net_handle.team.into();
                 let mem_region = MemoryRegion::from_remote_addr(
-                    local_mem_region_addr,
+                    net_handle.mr_addr,
                     net_handle.mr_pe,
                     net_handle.mr_size,
                     team.clone(),

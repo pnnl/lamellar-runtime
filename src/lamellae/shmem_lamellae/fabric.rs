@@ -6,7 +6,6 @@ use std::{
     },
 };
 
-use bincode::de;
 use parking_lot::RwLock;
 use shared_memory::*;
 use tracing::{debug, trace};
@@ -424,6 +423,50 @@ impl From<ShmemAlloc> for CommAlloc {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct OneSidedShmemAlloc {
+    pub(crate) data: *mut u8, // this is the actual address to the data on the remote PE (since we are in shared memory this is directly accessible)
+    pub(crate) data_num_bytes: usize,
+    pub(crate) remote_pe: usize,
+}
+
+//safety is managed via higher level abstractions or marked unsafe
+unsafe impl Sync for OneSidedShmemAlloc {}
+unsafe impl Send for OneSidedShmemAlloc {}
+
+impl OneSidedShmemAlloc {
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.data_num_bytes
+    }
+    pub(crate) fn start(&self) -> usize {
+        self.data as usize
+    }
+    pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<OneSidedShmemAlloc> {
+        if offset + len > self.data_num_bytes {
+            return Err(AllocError::InvalidSubAlloc(offset, len));
+        }
+        let new_data = unsafe { self.data.add(offset) };
+        let alloc = OneSidedShmemAlloc {
+            data: new_data,
+            data_num_bytes: len,
+            remote_pe: self.remote_pe,
+        };
+        Ok(alloc)
+    }
+    pub(crate) fn wait(&self) {
+        //shmem is always ready
+    }
+}
+
+impl From<OneSidedShmemAlloc> for CommAlloc {
+    fn from(alloc: OneSidedShmemAlloc) -> Self {
+        CommAlloc {
+            inner_alloc: CommAllocInner::OneSidedShmemAlloc(alloc),
+            alloc_type: CommAllocType::Remote,
+        }
+    }
+}
+
 #[tracing::instrument(skip_all, level = "debug")]
 fn attach_to_shmem(
     _num_pes: usize,
@@ -829,7 +872,34 @@ impl ShmemAllocator {
         }
         None
     }
-    pub(crate) fn local_alloc_and_offset_from_addr(
+
+    pub(crate) fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        let allocs = self.allocs.read();
+        for alloc in allocs.iter() {
+            let remote_start = alloc.remote_addrs[remote_pe];
+            if remote_start <= remote_addr && remote_addr < remote_start + alloc.data_num_bytes {
+                let remote_src_addr =
+                    alloc.pe_base_offset(remote_pe) + (remote_addr - remote_start);
+                return OneSidedShmemAlloc {
+                    data: (remote_src_addr) as *mut u8,
+                    data_num_bytes: num_bytes,
+                    remote_pe,
+                }
+                .into();
+            }
+        }
+        panic!(
+            "failed to find remote addr {:x} on pe {}",
+            remote_addr, remote_pe
+        );
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,

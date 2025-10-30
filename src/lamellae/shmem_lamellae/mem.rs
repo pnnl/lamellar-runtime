@@ -210,13 +210,23 @@ impl CommMem for ShmemComm {
             .into()
     }
 
-    fn local_alloc_and_offset_from_addr(
+    fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        self.allocator
+            .one_sided_alloc_from_remote_pe_and_addr(remote_pe, remote_addr, num_bytes)
+    }
+
+    fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,
     ) -> (CommAlloc, usize) {
         self.allocator
-            .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
+            .local_alloc_and_offset_from_remote_pe_and_addr(remote_pe, remote_addr)
             .expect("remote addr doesnt correspnd to local alloc")
     }
 

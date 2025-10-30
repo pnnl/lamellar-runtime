@@ -7,7 +7,7 @@ use super::{
     AllocationType, Comm, CommInfo, Lamellae, LamellaeInit, LamellaeShutdown, LamellaeUtil, Ser,
     SerializeHeader, SerializedData,
 };
-use crate::{config, env_var::HeapMode, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
+use crate::{lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 use comm::LocalComm;
 
 use async_trait::async_trait;

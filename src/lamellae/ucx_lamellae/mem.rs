@@ -200,14 +200,24 @@ impl CommMem for UcxComm {
             .into()
     }
 
-    fn local_alloc_and_offset_from_addr(
+    fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        self.ucx
+            .one_sided_alloc_from_remote_pe_and_addr(remote_pe, remote_addr, num_bytes)
+    }
+
+    fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,
     ) -> (CommAlloc, usize) {
         self.ucx
-            .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
-            .expect("local_alloc_and_offset_from_addr failed")
+            .local_alloc_and_offset_from_remote_pe_and_addr(remote_pe, remote_addr)
+            .expect("local_alloc_and_offset_from_remote_pe_and_addr failed")
     }
 
     fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {

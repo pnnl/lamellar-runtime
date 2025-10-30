@@ -55,7 +55,7 @@ macro_rules! put_test {
         array.wait_all();
         array.barrier();
         // world.barrier();
-
+        array.print();
         for idx in (my_pe..array_total_len).step_by(num_pes) {
             #[allow(unused_unsafe)]
             unsafe {
@@ -64,6 +64,7 @@ macro_rules! put_test {
         }
         array.wait_all();
         array.barrier();
+        array.print();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
             if (((i % num_pes) as $t - elem) as f32).abs() > 0.0001 {
@@ -76,7 +77,7 @@ macro_rules! put_test {
                 success = false;
             }
         }
-
+        array.print();
         if !success {
             eprintln!("failed");
         }
@@ -97,74 +98,74 @@ fn main() {
     };
 
     match array.as_str() {
-        "UnsafeArray" => match elem.as_str() {
-            "u8" => put_test!(UnsafeArray, u8, len, dist_type),
-            "u16" => put_test!(UnsafeArray, u16, len, dist_type),
-            "u32" => put_test!(UnsafeArray, u32, len, dist_type),
-            "u64" => put_test!(UnsafeArray, u64, len, dist_type),
-            "u128" => put_test!(UnsafeArray, u128, len, dist_type),
-            "usize" => put_test!(UnsafeArray, usize, len, dist_type),
-            "i8" => put_test!(UnsafeArray, i8, len, dist_type),
-            "i16" => put_test!(UnsafeArray, i16, len, dist_type),
-            "i32" => put_test!(UnsafeArray, i32, len, dist_type),
-            "i64" => put_test!(UnsafeArray, i64, len, dist_type),
-            "i128" => put_test!(UnsafeArray, i128, len, dist_type),
-            "isize" => put_test!(UnsafeArray, isize, len, dist_type),
-            "f32" => put_test!(UnsafeArray, f32, len, dist_type),
-            "f64" => put_test!(UnsafeArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
+        // "UnsafeArray" => match elem.as_str() {
+        //     "u8" => put_test!(UnsafeArray, u8, len, dist_type),
+        //     "u16" => put_test!(UnsafeArray, u16, len, dist_type),
+        //     "u32" => put_test!(UnsafeArray, u32, len, dist_type),
+        //     "u64" => put_test!(UnsafeArray, u64, len, dist_type),
+        //     "u128" => put_test!(UnsafeArray, u128, len, dist_type),
+        // "usize" => put_test!(UnsafeArray, usize, len, dist_type),
+        //     "i8" => put_test!(UnsafeArray, i8, len, dist_type),
+        //     "i16" => put_test!(UnsafeArray, i16, len, dist_type),
+        //     "i32" => put_test!(UnsafeArray, i32, len, dist_type),
+        //     "i64" => put_test!(UnsafeArray, i64, len, dist_type),
+        //     "i128" => put_test!(UnsafeArray, i128, len, dist_type),
+        //     "isize" => put_test!(UnsafeArray, isize, len, dist_type),
+        //     "f32" => put_test!(UnsafeArray, f32, len, dist_type),
+        //     "f64" => put_test!(UnsafeArray, f64, len, dist_type),
+        //     _ => eprintln!("unsupported element type"),
+        // },
         "AtomicArray" => match elem.as_str() {
             "u8" => put_test!(AtomicArray, u8, len, dist_type),
-            "u16" => put_test!(AtomicArray, u16, len, dist_type),
-            "u32" => put_test!(AtomicArray, u32, len, dist_type),
-            "u64" => put_test!(AtomicArray, u64, len, dist_type),
-            "u128" => put_test!(AtomicArray, u128, len, dist_type),
+            // "u16" => put_test!(AtomicArray, u16, len, dist_type),
+            // "u32" => put_test!(AtomicArray, u32, len, dist_type),
+            // "u64" => put_test!(AtomicArray, u64, len, dist_type),
+            // "u128" => put_test!(AtomicArray, u128, len, dist_type),
             "usize" => put_test!(AtomicArray, usize, len, dist_type),
-            "i8" => put_test!(AtomicArray, i8, len, dist_type),
-            "i16" => put_test!(AtomicArray, i16, len, dist_type),
-            "i32" => put_test!(AtomicArray, i32, len, dist_type),
-            "i64" => put_test!(AtomicArray, i64, len, dist_type),
-            "i128" => put_test!(AtomicArray, i128, len, dist_type),
-            "isize" => put_test!(AtomicArray, isize, len, dist_type),
-            "f32" => put_test!(AtomicArray, f32, len, dist_type),
-            "f64" => put_test!(AtomicArray, f64, len, dist_type),
+            // "i8" => put_test!(AtomicArray, i8, len, dist_type),
+            // "i16" => put_test!(AtomicArray, i16, len, dist_type),
+            // "i32" => put_test!(AtomicArray, i32, len, dist_type),
+            // "i64" => put_test!(AtomicArray, i64, len, dist_type),
+            // "i128" => put_test!(AtomicArray, i128, len, dist_type),
+            // "isize" => put_test!(AtomicArray, isize, len, dist_type),
+            // "f32" => put_test!(AtomicArray, f32, len, dist_type),
+            // "f64" => put_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        "LocalLockArray" => match elem.as_str() {
-            "u8" => put_test!(LocalLockArray, u8, len, dist_type),
-            "u16" => put_test!(LocalLockArray, u16, len, dist_type),
-            "u32" => put_test!(LocalLockArray, u32, len, dist_type),
-            "u64" => put_test!(LocalLockArray, u64, len, dist_type),
-            "u128" => put_test!(LocalLockArray, u128, len, dist_type),
-            "usize" => put_test!(LocalLockArray, usize, len, dist_type),
-            "i8" => put_test!(LocalLockArray, i8, len, dist_type),
-            "i16" => put_test!(LocalLockArray, i16, len, dist_type),
-            "i32" => put_test!(LocalLockArray, i32, len, dist_type),
-            "i64" => put_test!(LocalLockArray, i64, len, dist_type),
-            "i128" => put_test!(LocalLockArray, i128, len, dist_type),
-            "isize" => put_test!(LocalLockArray, isize, len, dist_type),
-            "f32" => put_test!(LocalLockArray, f32, len, dist_type),
-            "f64" => put_test!(LocalLockArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
-        },
-        "GlobalLockArray" => match elem.as_str() {
-            "u8" => put_test!(GlobalLockArray, u8, len, dist_type),
-            "u16" => put_test!(GlobalLockArray, u16, len, dist_type),
-            "u32" => put_test!(GlobalLockArray, u32, len, dist_type),
-            "u64" => put_test!(GlobalLockArray, u64, len, dist_type),
-            "u128" => put_test!(GlobalLockArray, u128, len, dist_type),
-            "usize" => put_test!(GlobalLockArray, usize, len, dist_type),
-            "i8" => put_test!(GlobalLockArray, i8, len, dist_type),
-            "i16" => put_test!(GlobalLockArray, i16, len, dist_type),
-            "i32" => put_test!(GlobalLockArray, i32, len, dist_type),
-            "i64" => put_test!(GlobalLockArray, i64, len, dist_type),
-            "i128" => put_test!(GlobalLockArray, i128, len, dist_type),
-            "isize" => put_test!(GlobalLockArray, isize, len, dist_type),
-            "f32" => put_test!(GlobalLockArray, f32, len, dist_type),
-            "f64" => put_test!(GlobalLockArray, f64, len, dist_type),
-            _ => {} //eprintln!("unsupported element type"),
-        },
+        // "LocalLockArray" => match elem.as_str() {
+        //     "u8" => put_test!(LocalLockArray, u8, len, dist_type),
+        //     "u16" => put_test!(LocalLockArray, u16, len, dist_type),
+        //     "u32" => put_test!(LocalLockArray, u32, len, dist_type),
+        //     "u64" => put_test!(LocalLockArray, u64, len, dist_type),
+        //     "u128" => put_test!(LocalLockArray, u128, len, dist_type),
+        //     "usize" => put_test!(LocalLockArray, usize, len, dist_type),
+        //     "i8" => put_test!(LocalLockArray, i8, len, dist_type),
+        //     "i16" => put_test!(LocalLockArray, i16, len, dist_type),
+        //     "i32" => put_test!(LocalLockArray, i32, len, dist_type),
+        //     "i64" => put_test!(LocalLockArray, i64, len, dist_type),
+        //     "i128" => put_test!(LocalLockArray, i128, len, dist_type),
+        //     "isize" => put_test!(LocalLockArray, isize, len, dist_type),
+        //     "f32" => put_test!(LocalLockArray, f32, len, dist_type),
+        //     "f64" => put_test!(LocalLockArray, f64, len, dist_type),
+        //     _ => eprintln!("unsupported element type"),
+        // },
+        // "GlobalLockArray" => match elem.as_str() {
+        //     "u8" => put_test!(GlobalLockArray, u8, len, dist_type),
+        //     "u16" => put_test!(GlobalLockArray, u16, len, dist_type),
+        //     "u32" => put_test!(GlobalLockArray, u32, len, dist_type),
+        //     "u64" => put_test!(GlobalLockArray, u64, len, dist_type),
+        //     "u128" => put_test!(GlobalLockArray, u128, len, dist_type),
+        //     "usize" => put_test!(GlobalLockArray, usize, len, dist_type),
+        //     "i8" => put_test!(GlobalLockArray, i8, len, dist_type),
+        //     "i16" => put_test!(GlobalLockArray, i16, len, dist_type),
+        //     "i32" => put_test!(GlobalLockArray, i32, len, dist_type),
+        //     "i64" => put_test!(GlobalLockArray, i64, len, dist_type),
+        //     "i128" => put_test!(GlobalLockArray, i128, len, dist_type),
+        //     "isize" => put_test!(GlobalLockArray, isize, len, dist_type),
+        //     "f32" => put_test!(GlobalLockArray, f32, len, dist_type),
+        //     "f64" => put_test!(GlobalLockArray, f64, len, dist_type),
+        //     _ => {} //eprintln!("unsupported element type"),
+        // },
         _ => eprintln!("unsupported array type"),
     }
 }

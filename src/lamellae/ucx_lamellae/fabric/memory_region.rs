@@ -7,9 +7,8 @@ use std::{
     },
 };
 
-use ucx1_sys::*;
-
 use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc};
+use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 #[derive(Debug, Clone)]

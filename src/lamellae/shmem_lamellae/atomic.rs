@@ -5,7 +5,7 @@ use crate::{
             AtomicFetchOpFuture, AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
         },
         net_atomic_fetch_op, net_atomic_op,
-        shmem_lamellae::fabric::ShmemAlloc,
+        shmem_lamellae::fabric::{OneSidedShmemAlloc, ShmemAlloc},
         CommAllocAddr, CommAllocAtomic,
     },
     warnings::RuntimeWarning,
@@ -168,6 +168,7 @@ impl CommAllocAtomic for ShmemAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
+        println!("atomic_op called on ShmemAlloc for pe: {} {:?}", pe, self);
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
@@ -232,6 +233,86 @@ impl CommAllocAtomic for ShmemAlloc {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        ShmemAtomicFetchFuture {
+            op,
+            dst: CommAllocAddr(remote_dst_addr),
+            result: MaybeUninit::uninit(),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+}
+
+impl CommAllocAtomic for OneSidedShmemAlloc {
+    fn atomic_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.start();
+        let remote_dst_addr = remote_dst_base + offset;
+        ShmemAtomicFuture {
+            op: op,
+            dst: vec![CommAllocAddr(remote_dst_addr)],
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.start();
+        let remote_dst_addr = remote_dst_base + offset;
+        net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+    }
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        self.atomic_op(scheduler, counters, op, self.remote_pe, offset)
+    }
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        self.atomic_op_unmanaged(op, self.remote_pe, offset)
+    }
+    fn atomic_fetch_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicFetchOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic fetch op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.start();
         let remote_dst_addr = remote_dst_base + offset;
         ShmemAtomicFetchFuture {
             op,

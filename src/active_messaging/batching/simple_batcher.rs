@@ -4,7 +4,7 @@ use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
         comm::{error::AllocError, CommInfo},
-        CommMem, CommSlice, Des, Lamellae, LamellaeUtil, Ser, SerializeHeader,
+        CommSlice, Des, Lamellae, LamellaeUtil, Ser, SerializeHeader,
     },
     utils::stats,
 };

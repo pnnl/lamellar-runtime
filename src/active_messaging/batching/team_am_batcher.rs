@@ -1,8 +1,7 @@
 use crate::{
     active_messaging::{registered_active_message::*, *},
     lamellae::{
-        comm::error::AllocError, CommMem, CommSlice, Des, Lamellae, LamellaeUtil, Ser,
-        SerializeHeader,
+        comm::error::AllocError, CommSlice, Des, Lamellae, LamellaeUtil, Ser, SerializeHeader,
     },
     lamellar_arch::LamellarArchRT,
     LamellarTeam,

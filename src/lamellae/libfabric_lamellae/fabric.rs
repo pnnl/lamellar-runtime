@@ -2,7 +2,7 @@ use libfabric::{
     av::{AddressVector, AddressVectorBuilder, AddressVectorSetBuilder, AvInAddress},
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
-        atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
+        atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp, MulticastGroupCollective},
         rma::{ReadEp, WriteEp},
     },
@@ -44,7 +44,7 @@ use std::{
         Arc,
     },
 };
-use tracing::{debug, error, info, trace};
+use tracing::{debug, trace};
 
 type WaitableEq = libfabric::eq_caps_type!(EqCaps::WAIT);
 type WaitableCq = libfabric::cq_caps_type!(CqCaps::WAIT);
@@ -947,13 +947,26 @@ impl Ofi {
             ))
     }
 
-    pub(crate) fn local_alloc_and_offset_from_addr(
+    pub(crate) fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        self.alloc_manager.one_sided_alloc_from_remote_pe_and_addr(
+            remote_pe,
+            remote_addr,
+            num_bytes,
+        )
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,
     ) -> Option<(CommAlloc, usize)> {
         self.alloc_manager
-            .local_alloc_and_offset_from_addr(remote_pe, remote_addr)
+            .local_alloc_and_offset_from_remote_pe_and_addr(remote_pe, remote_addr)
     }
 
     pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> usize {
@@ -1053,7 +1066,30 @@ impl AllocInfoManager {
         Some(alloc_info.start() + remote_offset)
     }
 
-    pub(crate) fn local_alloc_and_offset_from_addr(
+    pub(crate) fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        let table = self.mr_info_table.read();
+        let alloc_info = table
+            .iter()
+            .find(|x| x.remote_contains(&remote_pe, &remote_addr))
+            .expect("Remote address not found in any allocation");
+        let remote_alloc_info = alloc_info
+            .remote_allocs
+            .get(&remote_pe)
+            .expect("Remote PE not part of the allocation");
+        let remote_offset = remote_addr - remote_alloc_info.mem_address().as_ptr() as usize;
+        let alloc = alloc_info
+            .clone()
+            .sub_alloc(remote_offset, num_bytes)
+            .expect("Failed to create one-sided allocation from remote PE and address");
+        OneSidedLibfabricAlloc { alloc, remote_pe }.into()
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
         &self,
         remote_pe: usize,
         remote_addr: usize,
@@ -1350,7 +1386,7 @@ impl LibfabricAlloc {
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
         };
         let fabric_ref_cnt = get_ref_count(unsafe {
-            (&*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize))
+            &*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize)
         });
         debug!(target: "libfabric", "Converted Libfabric alloc to rt-alloc: {:?}", alloc);
         Ok(alloc)
@@ -1788,6 +1824,37 @@ impl Drop for LibfabricAlloc {
                     fabric_alloc_table.remove_from_alloc(self);
                 }
             }
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct OneSidedLibfabricAlloc {
+    pub(crate) remote_pe: usize,
+    pub(crate) alloc: LibfabricAlloc,
+}
+
+impl OneSidedLibfabricAlloc {
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.alloc.num_bytes()
+    }
+    pub(crate) fn start(&self) -> usize {
+        self.alloc.start()
+    }
+    pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<Self> {
+        let sub_alloc = self.alloc.sub_alloc(offset, len)?;
+        Ok(OneSidedLibfabricAlloc {
+            remote_pe: self.remote_pe,
+            alloc: sub_alloc,
+        })
+    }
+}
+
+impl From<OneSidedLibfabricAlloc> for CommAlloc {
+    fn from(alloc: OneSidedLibfabricAlloc) -> Self {
+        CommAlloc {
+            inner_alloc: CommAllocInner::OneSidedLibfabricAlloc(alloc),
+            alloc_type: CommAllocType::Remote,
         }
     }
 }

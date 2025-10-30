@@ -1,5 +1,5 @@
 /// UCX error code.
-use ucx1_sys::*;
+use lamellar_ucx_sys::*;
 
 #[allow(missing_docs)]
 #[repr(i8)]

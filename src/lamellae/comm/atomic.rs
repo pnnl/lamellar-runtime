@@ -5,15 +5,15 @@ use crate::lamellae::libfabric_lamellae::atomic::{
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
 use crate::{
+    active_messaging::AMCounters,
     lamellae::{
         local_lamellae::atomic::{LocalAtomicFetchFuture, LocalAtomicFuture},
         shmem_lamellae::atomic::{ShmemAtomicFetchFuture, ShmemAtomicFuture},
         CommAllocAddr,
     },
+    scheduler::Scheduler,
     LamellarTask,
 };
-
-use super::{AMCounters, Scheduler};
 
 use futures_util::Future;
 use pin_project::pin_project;
@@ -301,19 +301,19 @@ pub(crate) trait CommAllocAtomic {
     ) -> AtomicFetchOpHandle<T>;
 }
 
-pub(crate) trait AsAtomic: Copy {
+pub(crate) trait AsAtomic: Copy + std::fmt::Debug {
     fn load(&self) -> Self;
-    fn store(&self, val: Self);
-    fn swap(&self, val: Self) -> Self;
-    fn fetch_add(&self, val: Self) -> Self;
-    fn fetch_sub(&self, val: Self) -> Self;
-    fn fetch_and(&self, val: Self) -> Self;
-    fn fetch_nand(&self, val: Self) -> Self;
-    fn fetch_or(&self, val: Self) -> Self;
-    fn fetch_xor(&self, val: Self) -> Self;
-    fn fetch_max(&self, val: Self) -> Self;
-    fn fetch_min(&self, val: Self) -> Self;
-    fn compare_exchange(&self, current: Self, new: Self) -> Result<Self, Self>
+    fn store(&mut self, val: Self);
+    fn swap(&mut self, val: Self) -> Self;
+    fn fetch_add(&mut self, val: Self) -> Self;
+    fn fetch_sub(&mut self, val: Self) -> Self;
+    fn fetch_and(&mut self, val: Self) -> Self;
+    fn fetch_nand(&mut self, val: Self) -> Self;
+    fn fetch_or(&mut self, val: Self) -> Self;
+    fn fetch_xor(&mut self, val: Self) -> Self;
+    fn fetch_max(&mut self, val: Self) -> Self;
+    fn fetch_min(&mut self, val: Self) -> Self;
+    fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>
     where
         Self: Sized;
 }
@@ -324,40 +324,53 @@ macro_rules! impl_as_atomic {
         $(
             impl AsAtomic for $t {
                 fn load(&self) -> Self {
-                   unsafe{ (*(self as *const $t as *const $a)).load(Ordering::SeqCst) }
+                    let atomic = unsafe { &*(self as *const $t as *const $a) };
+                    atomic.load(Ordering::SeqCst)
                 }
-                fn store(&self, val: Self) {
-                    unsafe{ (*(self as *const $t as *const $a)).store(val, Ordering::SeqCst) }
+                fn store(&mut self, val: Self) {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.store(val, Ordering::SeqCst);
+                    // println!("store called {:?} {:?}", val, atomic as *const $a);
                 }
-                fn swap(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).swap(val, Ordering::SeqCst) }
+                fn swap(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.swap(val, Ordering::SeqCst)
                 }
-                fn fetch_add(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).fetch_add(val, Ordering::SeqCst) }
+                fn fetch_add(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_add(val, Ordering::SeqCst)
                 }
-                fn fetch_sub(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).fetch_sub(val, Ordering::SeqCst) }
+                fn fetch_sub(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_sub(val, Ordering::SeqCst)
                 }
-                fn fetch_and(&self, val: Self) -> Self {
-                   unsafe{ (*(self as *const $t as *const $a)).fetch_and(val, Ordering::SeqCst) }
+                fn fetch_and(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_and(val, Ordering::SeqCst)
                 }
-                fn fetch_nand(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).fetch_nand(val, Ordering::SeqCst) }
+                fn fetch_nand(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_nand(val, Ordering::SeqCst)
                 }
-                fn fetch_or(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).fetch_or(val, Ordering::SeqCst) }
+                fn fetch_or(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_or(val, Ordering::SeqCst)
                 }
-                fn fetch_xor(&self, val: Self) -> Self {
-                   unsafe{ (*(self as *const $t as *const $a)).fetch_xor(val, Ordering::SeqCst) }
+                fn fetch_xor(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_xor(val, Ordering::SeqCst)
                 }
-                fn fetch_max(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).fetch_max(val, Ordering::SeqCst) }
+                fn fetch_max(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_max(val, Ordering::SeqCst)
                 }
-                fn fetch_min(&self, val: Self) -> Self {
-                    unsafe{ (*(self as *const $t as *const $a)).fetch_min(val, Ordering::SeqCst) }
+                fn fetch_min(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_min(val, Ordering::SeqCst)
                 }
-                fn compare_exchange(&self, current: Self, new: Self) -> Result<Self, Self> {
-                    unsafe{ (*(self as *const $t as *const $a)).compare_exchange(current, new, Ordering::SeqCst , Ordering::Relaxed) }
+                fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self> {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.compare_exchange(current, new, Ordering::SeqCst , Ordering::Relaxed)
                 }
             }
         )*
@@ -377,11 +390,16 @@ impl_as_atomic!(
     (isize, AtomicIsize)
 );
 
+//TODO maybe I need to change this to mutable reference? so that the compiler knows we are changing the data?
+
 pub(crate) fn net_atomic_op<T: 'static>(op: &AtomicOp<T>, dst_addr: &CommAllocAddr) {
+    println!("net_atomic_op called dst_addr: {:x}", dst_addr);
     unsafe {
         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+            // println!("im here u8");
             typed_atomic_op::<u8, T>(op, &*(dst_addr.as_ptr() as *const u8))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+            // println!("im here u16");
             typed_atomic_op::<u16, T>(op, &*(dst_addr.as_ptr() as *const u16))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
             typed_atomic_op::<u32, T>(op, &*(dst_addr.as_ptr() as *const u32))
@@ -392,10 +410,12 @@ pub(crate) fn net_atomic_op<T: 'static>(op: &AtomicOp<T>, dst_addr: &CommAllocAd
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
             typed_atomic_op::<i8, T>(op, &*(dst_addr.as_ptr() as *const i8))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+            // println!("im here i16");
             typed_atomic_op::<i16, T>(op, &*(dst_addr.as_ptr() as *const i16))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
             typed_atomic_op::<i32, T>(op, &*(dst_addr.as_ptr() as *const i32))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+            // println!("im here i64");
             typed_atomic_op::<i64, T>(op, &*(dst_addr.as_ptr() as *const i64))
         } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
             typed_atomic_op::<isize, T>(op, &*(dst_addr.as_ptr() as *const isize))
@@ -438,11 +458,13 @@ pub(crate) fn net_atomic_fetch_op<T: 'static>(
     }
 }
 
-unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: &A) {
+unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     match op {
         AtomicOp::Write(val) => {
-            dst.store(*val);
+            // let dst = std::mem::transmute::<&A, &mut A>(dst);
+            // println!("storing value {:?} {:?}", *val, dst as *const A);
+            (&mut *(dst as *mut A)).store(*val);
         }
         _ => {
             unimplemented!()
@@ -450,11 +472,14 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: &A) {
     }
 }
 
-unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: &A, result: *mut T) {
+unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A, result: *mut T) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     let res = match op {
-        AtomicOp::Read => dst.load(),
-        AtomicOp::Write(val) => dst.swap(*val),
+        AtomicOp::Read => (&*dst).load(),
+        AtomicOp::Write(val) => {
+            // let dst = std::mem::transmute::<&A, &mut A>(dst);
+            (&mut *(dst as *mut A)).swap(*val)
+        }
         _ => {
             unimplemented!()
         }

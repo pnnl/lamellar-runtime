@@ -81,8 +81,7 @@ async fn get_sub_mat(mat: &SubMatrix, sub_mat: &OneSidedMemoryRegion<f32>) {
     let mut buffer = unsafe { LamellarBuffer::from_one_sided_memory_region(sub_mat.clone()) };
     for row in 0..mat.block_size {
         let offset = (row + start_row) * mat.cols + (start_col);
-        // let data = sub_mat.sub_region(row * mat.block_size..(row + 1) * mat.block_size);
-        let remaining_buffer = buffer.split_off((row + 1) * mat.block_size);
+        let remaining_buffer = buffer.split_off(mat.block_size);
         DATA_CNT.fetch_add(buffer.len() * std::mem::size_of::<f32>(), Ordering::Relaxed);
         unsafe {
             mat.mat.get_into_buffer_unmanaged(mat.pe, offset, buffer);

@@ -9,7 +9,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{UcxAlloc, UcxRequest},
+    fabric::{OneSidedUcxAlloc, UcxAlloc, UcxRequest},
     Scheduler,
 };
 
@@ -254,6 +254,81 @@ impl CommAllocAtomic for UcxAlloc {
     ) -> AtomicFetchOpHandle<T> {
         UcxAtomicFetchFuture {
             alloc: self.clone(),
+            remote_pe: pe,
+            offset,
+            op: op,
+            result: MaybeUninit::uninit(),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+}
+
+impl CommAllocAtomic for OneSidedUcxAlloc {
+    fn atomic_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxAtomicFuture {
+            alloc: self.alloc.clone(),
+            remote_pes: vec![pe],
+            offset,
+            op,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxAlloc::inner_atomic_op(&self.alloc, pe, offset, &op, false);
+    }
+    fn atomic_op_all<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
+    ) -> AtomicOpHandle<T> {
+        self.atomic_op(scheduler, counters, op, self.remote_pe, offset)
+    }
+    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+        self.atomic_op_unmanaged(op, self.remote_pe, offset);
+    }
+
+    fn atomic_fetch_op<T: Copy>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicFetchOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic fetch op called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxAtomicFetchFuture {
+            alloc: self.alloc.clone(),
             remote_pe: pe,
             offset,
             op: op,

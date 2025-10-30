@@ -1,5 +1,5 @@
+use lamellar_ucx_sys::*;
 use std::{mem::MaybeUninit, sync::Arc};
-use ucx1_sys::*;
 
 use super::{context::Context, error::Error};
 

@@ -46,8 +46,8 @@ for pe in $(seq 0 $ENDPE); do
     exit
   fi
   # LAMELLAR_BACKEND="libfab" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) srun -N ${NUMPES} --output=%t_out.txt $bin  "${@:2}" 
-  RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  taskset -c $S_CORE-$((E_CORE-1)) $bin  "${@:2}" &
-  # RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((4*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  taskset -c $S_CORE-$((E_CORE-1)) gdb --ex run --ex "thread apply all where"  --ex quit --args $bin  "${@:2}" >&  ./outputs/lamellar_${pe}.out& 
+  # LD_LIBRARY_PATH=/people/frie869/pmix/lib RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  taskset -c $S_CORE-$((E_CORE-1)) $bin  "${@:2}"  >& ./outputs/lamellar_${pe}.out &
+  LD_LIBRARY_PATH=/people/frie869/pmix/lib RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((4*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  taskset -c $S_CORE-$((E_CORE-1)) gdb --ex run --ex "thread apply all where"  --ex quit --args $bin  "${@:2}" >&  ./outputs/lamellar_${pe}.out& 
   S_CORE=$(($E_CORE ))
   E_CORE=$(($S_CORE + $THREADS))
 done

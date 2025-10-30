@@ -13,9 +13,8 @@ use crate::{
     },
     lamellae::{
         AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc,
-        CommAllocAddr, CommAllocAtomic, CommAllocInner, CommAllocRdma, CommAllocType, CommInfo,
-        CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle,
-        RdmaGetIntoBufferHandle, RdmaHandle, Remote,
+        CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice,
+        Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote,
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -885,17 +884,18 @@ impl<T: Remote> MemoryRegion<T> {
     }
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn from_remote_addr(
-        addr: CommAllocAddr,
+        addr: usize,
         pe: usize,
         num_elems: usize,
         team: Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         Ok(MemoryRegion {
-            alloc: CommAlloc {
-                inner_alloc: CommAllocInner::Raw(addr.into(), num_elems * std::mem::size_of::<T>()),
-                alloc_type: CommAllocType::Remote,
-            },
+            alloc: lamellae.comm().one_sided_alloc_from_remote_pe_and_addr(
+                pe,
+                addr.into(),
+                num_elems * std::mem::size_of::<T>(),
+            ),
             pe: pe,
             num_elems,
             scheduler: team.scheduler.clone(),

@@ -3,7 +3,6 @@ pub(crate) mod command_queues;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
 
-use crate::lamellae::command_queues::CommandQueue;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 
@@ -12,7 +11,6 @@ pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
 
-use tracing::error;
 
 match_cfg::match_cfg! {
     #[cfg(feature = "rofi-c")] => {
@@ -59,7 +57,6 @@ use {
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
 };
 use tracing::{debug, trace};

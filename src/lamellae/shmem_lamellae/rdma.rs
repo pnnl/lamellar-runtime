@@ -13,7 +13,7 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::{
         comm::rdma::{RdmaHandle, RdmaPutFuture, Remote},
-        shmem_lamellae::fabric::ShmemAlloc,
+        shmem_lamellae::fabric::{OneSidedShmemAlloc, ShmemAlloc},
         CommAllocAddr, CommAllocRdma, RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture,
         RdmaGetHandle, RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle,
     },
@@ -557,6 +557,215 @@ impl CommAllocRdma for ShmemAlloc {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let src_slice =
+            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
+
+        dst.as_mut_slice().copy_from_slice(src_slice);
+    }
+}
+
+impl CommAllocRdma for OneSidedShmemAlloc {
+    fn put<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        ShmemFuture {
+            op: Op::Put(src.into(), CommAllocAddr(self.start() + offset)),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_unmanaged called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let dst = CommAllocAddr(self.start() + offset);
+        unsafe {
+            dst.as_mut_ptr::<T>().write(src);
+        }
+    }
+    fn put_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_buffer called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        ShmemFuture {
+            op: Op::PutBuf(src, CommAllocAddr(self.start() + offset)),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn put_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
+        assert_eq!(pe, self.remote_pe, "put_buffer_unmanaged called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
+        let offset = offset * std::mem::size_of::<T>();
+        let src = src.into();
+        assert!(offset + src.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let dst = CommAllocAddr(self.start() + offset);
+        if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
+            unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst.as_mut_ptr(), src.len()) };
+        } else {
+            unsafe {
+                std::ptr::copy(src.as_ptr(), dst.as_mut_ptr(), src.len());
+            }
+        }
+    }
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.put(scheduler, counters, src, self.remote_pe, offset)
+    }
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
+        self.put_unmanaged(src, self.remote_pe, offset);
+    }
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
+        self.put_buffer(scheduler, counters, src, self.remote_pe, offset)
+    }
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
+        self.put_buffer_unmanaged(src, self.remote_pe, offset);
+    }
+
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaGetHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemGetFuture {
+            src: remote_src_addr,
+
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+        }
+        .into()
+    }
+
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> RdmaGetBufferHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_buffer called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemGetBufferFuture {
+            src: remote_src_addr,
+            len,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            result: MaybeUninit::uninit(),
+        }
+        .into()
+    }
+
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "get_into_buffer called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        ShmemGetIntoBufferFuture {
+            src: remote_src_addr,
+            buffer: dst,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
         let remote_src_addr = CommAllocAddr(remote_src_base + offset);
         let src_slice =
             unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };

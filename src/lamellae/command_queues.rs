@@ -3,17 +3,16 @@ use super::{
     Comm, Lamellae, SerializedData,
 };
 use crate::{
-    env_var::config, lamellae::CommAllocRdma, memregion::LamellarBuffer, print_stats, scheduler::Scheduler, stats
+    env_var::config, lamellae::CommAllocRdma,  print_stats, scheduler::Scheduler, stats
 };
 use core::panic;
 // use parking_lot::Mutex;
 use async_lock::{Mutex, RwLock};
-use bincode::de;
 use std::collections::HashMap;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug,  info, trace, warn};
 
 static MSG_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -1098,7 +1097,7 @@ impl InnerCQ {
     //     // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
 
     //     // let (local_daddr_alloc, offset) =
-    //     //     self.comm.local_alloc_and_offset_from_addr(dst, cmd.daddr);
+    //     //     self.comm.local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
     //     // let local_daddr_slice =
     //     //     local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
     //     // local_daddr_slice
@@ -1139,7 +1138,7 @@ impl InnerCQ {
         // //     )
         // //     .spawn();
         let (local_daddr_alloc, offset) =
-            self.comm.local_alloc_and_offset_from_addr(dst, cmd.daddr);
+            self.comm.local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
         let local_daddr_slice =
             local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
         let _ = local_daddr_slice.put_unmanaged::<Cmd>(
@@ -1152,7 +1151,7 @@ impl InnerCQ {
 
     #[tracing::instrument(skip_all, level = "debug")]
     async fn send_print(&self, dst: usize, cmd: CmdMsg) {
-        let mut timer = std::time::Instant::now();
+        // let mut timer = std::time::Instant::now();
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
                 let mut send_buf = self.send_buffer[dst].lock().await;
@@ -1199,7 +1198,7 @@ impl InnerCQ {
     // #[tracing::instrument(skip(self), level = "debug")]
     fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> Vec<CmdMsg> {
         let (local_daddr_alloc, offset) =
-            self.comm.local_alloc_and_offset_from_addr(src, cmd.daddr);
+            self.comm.local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
 
         // let mut data = self
         //     .comm
@@ -1293,7 +1292,7 @@ impl InnerCQ {
         // };
         trace!("get_serialized_data {:?} {:?} {:x}", src, cmd, cmd.daddr);
         let (local_daddr_alloc, offset) =
-            self.comm.local_alloc_and_offset_from_addr(src, cmd.daddr);
+            self.comm.local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
         // local_daddr_alloc
         //     .get_into_buffer(&self.scheduler, vec![], src, offset, unsafe {
         //         buffer.split_off(0)
@@ -1312,11 +1311,11 @@ impl InnerCQ {
         let data_slice = &tmp_data;
         let mut timer = std::time::Instant::now();
         trace!(
-            "msg_id: {msg_id} calced hash: {:x} cmd msg hash {:x} [{:?}..{:?}]",
+            "msg_id: {msg_id} calced hash: {:x} cmd msg hash {:x} ",
             calc_hash(data_slice.as_ptr() as usize, len),
             cmd.msg_hash,
-            &data_slice.as_slice()[0..32],
-            &data_slice.as_slice()[len.saturating_sub(32)..len],
+            // &data_slice.as_slice()[0..32],
+            // &data_slice.as_slice()[len.saturating_sub(32)..len],
         );
         
         while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
@@ -1364,7 +1363,7 @@ impl InnerCQ {
     async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
         trace!("getting cmd from {}", src);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
-        let mut timer = std::time::Instant::now();
+        // let mut timer = std::time::Instant::now();
         let mut print = true;
 
         while ser_data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
@@ -1731,10 +1730,10 @@ impl CommandQueue {
                                     // println!("cmd_buf {:?}", cmd_buf);
                                     let mut i = 0;
                                     let len = data.len();
-                                    let cmd_cnt = Arc::new(AtomicUsize::new(len));
+                                    // let cmd_cnt: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(len));
 
                                     // debug!("src: {:?} cmd_buf len {:?} msg_id: {msg_id}", src, len);
-                                    let scheduler2 = scheduler1.clone();
+                                    // let scheduler2 = scheduler1.clone();
                                     // let task = async move {
                                     for cmd in data.into_iter() {
                                         if cmd.dsize != 0 {

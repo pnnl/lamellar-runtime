@@ -8,8 +8,8 @@ use crate::{
     },
     config,
     lamellae::{
-        comm::error::AllocError, Backend, CommInfo, CommMem, Lamellae, LamellaeUtil, Ser,
-        SerializeHeader, SerializedData,
+        comm::error::AllocError, Backend, CommInfo, Lamellae, LamellaeUtil, Ser, SerializeHeader,
+        SerializedData,
     },
     utils::stats,
 };
