@@ -12,7 +12,7 @@ use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
 #[derive(Debug, Clone)]
-pub struct MemoryHandle {
+pub(crate) struct MemoryHandle {
     pub(crate) inner: Arc<MemoryHandleInner>,
     pub(crate) addr: usize,
     pub(crate) size: usize,
@@ -21,17 +21,7 @@ pub struct MemoryHandle {
 static MEMREGION_CNT: AtomicUsize = AtomicUsize::new(0);
 
 impl MemoryHandle {
-    pub fn as_ptr(&self) -> *const u8 {
-        self.addr as *const u8
-    }
-
-    pub fn as_slice<T>(&self) -> &[T] {
-        unsafe {
-            std::slice::from_raw_parts(self.addr as *const T, self.size / std::mem::size_of::<T>())
-        }
-    }
-
-    pub fn as_mut_slice<T>(&self) -> &mut [T] {
+    pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
         unsafe {
             std::slice::from_raw_parts_mut(
                 self.addr as *mut T,
@@ -40,7 +30,7 @@ impl MemoryHandle {
         }
     }
 
-    pub fn sub_alloc(&self, offset: usize, size: usize) -> Self {
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> Self {
         assert!(offset + size <= self.size);
         MemoryHandle {
             inner: self.inner.clone(),
@@ -53,7 +43,7 @@ impl MemoryHandle {
 /// A memory region allocated through UCP library,
 /// which is optimized for remote memory access operations.
 #[derive(Debug)]
-pub struct MemoryHandleInner {
+pub(crate) struct MemoryHandleInner {
     handle: ucp_mem_h,
     pub(crate) addr: usize,
     context: Arc<Context>,
@@ -99,7 +89,6 @@ impl MemoryHandleInner {
         let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
         assert_eq!(status, ucs_status_t::UCS_OK);
         let handle = unsafe { handle.assume_init() };
-        // println!("handle: {:?}", handle);
         let mut attr = ucp_mem_attr_t {
             field_mask: (ucp_mem_attr_field::UCP_MEM_ATTR_FIELD_ADDRESS
                 | ucp_mem_attr_field::UCP_MEM_ATTR_FIELD_LENGTH)
@@ -110,36 +99,10 @@ impl MemoryHandleInner {
         };
         let status = unsafe { ucp_mem_query(handle, &mut attr) };
         assert_eq!(status, ucs_status_t::UCS_OK);
-        // println!("attr: {:?} {}", attr.address, attr.length);
 
         Arc::new(MemoryHandleInner {
             handle,
             addr: attr.address as _,
-            context: context.clone(),
-        })
-    }
-
-    /// Register memory region.
-    pub(crate) fn register<T>(context: &Arc<Context>, region: &mut [T]) -> Arc<Self> {
-        #[allow(invalid_value)]
-        #[allow(clippy::uninit_assumed_init)]
-        let params = ucp_mem_map_params_t {
-            field_mask: (ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_ADDRESS
-                | ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_LENGTH)
-                .0 as u64,
-            address: region.as_ptr() as _,
-            length: (region.len() * std::mem::size_of::<T>()) as _,
-            flags: 0 as _,
-            prot: 0 as _,
-            memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
-            exported_memh_buffer: std::ptr::null_mut(),
-        };
-        let mut handle = MaybeUninit::uninit();
-        let status = unsafe { ucp_mem_map(context.handle, &params, handle.as_mut_ptr()) };
-        assert_eq!(status, ucs_status_t::UCS_OK);
-        Arc::new(MemoryHandleInner {
-            handle: unsafe { handle.assume_init() },
-            addr: region.as_ptr() as usize,
             context: context.clone(),
         })
     }
@@ -212,7 +175,7 @@ impl MemoryHandleInner {
         // );
         // println!("[exchange_key_alloc] len: {}", address_and_key.len());
 
-        pmi.barrier(false);
+        pmi.barrier(false).expect("PMI Barrier failed");
         for pe in 0..exchange_buffer.num_pes {
             unsafe {
                 exchange_buffer.put_inner(
@@ -225,7 +188,7 @@ impl MemoryHandleInner {
         }
 
         exchange_buffer.wait_all();
-        pmi.barrier(false);
+        pmi.barrier(false).expect("PMI Barrier failed");
         let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
         // println!("[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
         let mut all_rkeys = Vec::new();
@@ -253,7 +216,7 @@ impl Drop for MemoryHandleInner {
 
 /// An owned buffer containing remote access key.
 #[derive(Debug)]
-pub struct RKeyBuffer {
+pub(crate) struct RKeyBuffer {
     buf: *mut c_void,
     len: usize,
 }
@@ -272,7 +235,7 @@ impl Drop for RKeyBuffer {
 
 /// Remote access key.
 #[derive(Debug)]
-pub struct RKey {
+pub(crate) struct RKey {
     pub(crate) handle: ucp_rkey_h,
 }
 
@@ -281,7 +244,7 @@ unsafe impl Sync for RKey {}
 
 impl RKey {
     /// Create remote access key from packed buffer.
-    pub fn unpack(endpoint: &Endpoint, rkey_buffer: &[u8]) -> Self {
+    pub(crate) fn unpack(endpoint: &Endpoint, rkey_buffer: &[u8]) -> Self {
         let mut handle = MaybeUninit::uninit();
         let status = unsafe {
             ucp_ep_rkey_unpack(

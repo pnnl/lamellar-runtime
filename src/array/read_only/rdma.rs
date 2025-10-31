@@ -1,5 +1,8 @@
 use crate::{
-    array::*,
+    array::{
+        rdma::private::{LamellarRdmaGet, Sealed},
+        *,
+    },
     memregion::{AsLamellarBuffer, LamellarBuffer},
 };
 
@@ -129,28 +132,30 @@ impl<T: Dist> ReadOnlyArray<T> {
     // }
 
     pub fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
-        unsafe { <Self as LamellarRdmaGet<T>>::get(self, index) }
+        unsafe { <Self as LamellarRdmaGet<T>>::get(self, index, Sealed) }
     }
     pub fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
-        unsafe { <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems) }
+        unsafe { <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed) }
     }
     pub fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
-        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data) }
+        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed) }
     }
     pub fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
     ) {
-        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged(self, index, data) }
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged(self, index, data, Sealed)
+        }
     }
 
     pub fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
-        unsafe { <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset) }
+        unsafe { <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed) }
     }
     pub fn get_buffer_pe(
         &self,
@@ -158,7 +163,7 @@ impl<T: Dist> ReadOnlyArray<T> {
         offset: usize,
         num_elems: usize,
     ) -> ArrayRdmaGetBufferHandle<T> {
-        unsafe { <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems) }
+        unsafe { <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed) }
     }
     pub fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
@@ -166,7 +171,7 @@ impl<T: Dist> ReadOnlyArray<T> {
         offset: usize,
         data: LamellarBuffer<T, B>,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
-        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data) }
+        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed) }
     }
     pub fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
         &self,
@@ -175,58 +180,70 @@ impl<T: Dist> ReadOnlyArray<T> {
         data: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged_pe(self, pe, offset, data)
+            <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged_pe(
+                self, pe, offset, data, Sealed,
+            )
         }
     }
 }
 
 impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
-    unsafe fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
-        self.array.get(index)
+    unsafe fn get(&self, index: usize, s: Sealed) -> ArrayRdmaGetHandle<T> {
+        self.array.get(index, s)
     }
-    unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
-        self.array.get_buffer(index, num_elems)
+    unsafe fn get_buffer(
+        &self,
+        index: usize,
+        num_elems: usize,
+        s: Sealed,
+    ) -> ArrayRdmaGetBufferHandle<T> {
+        self.array.get_buffer(index, num_elems, s)
     }
     unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
+        s: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
-        self.array.get_into_buffer(index, data)
+        self.array.get_into_buffer(index, data, s)
     }
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
+        s: Sealed,
     ) {
-        self.array.get_into_buffer_unmanaged(index, data)
+        self.array.get_into_buffer_unmanaged(index, data, s)
     }
 
-    unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
-        self.array.get_pe(pe, offset)
+    unsafe fn get_pe(&self, pe: usize, offset: usize, s: Sealed) -> ArrayRdmaGetHandle<T> {
+        self.array.get_pe(pe, offset, s)
     }
     unsafe fn get_buffer_pe(
         &self,
         pe: usize,
         offset: usize,
         num_elems: usize,
+        s: Sealed,
     ) -> ArrayRdmaGetBufferHandle<T> {
-        self.array.get_buffer_pe(pe, offset, num_elems)
+        self.array.get_buffer_pe(pe, offset, num_elems, s)
     }
     unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
+        s: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
-        self.array.get_into_buffer_pe(pe, offset, data)
+        self.array.get_into_buffer_pe(pe, offset, data, s)
     }
     unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
+        s: Sealed,
     ) {
-        self.array.get_into_buffer_unmanaged_pe(pe, offset, data)
+        self.array.get_into_buffer_unmanaged_pe(pe, offset, data, s)
     }
 }

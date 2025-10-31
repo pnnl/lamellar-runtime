@@ -21,16 +21,12 @@ use crate::{
 
 pub(crate) struct ShmemHandle {
     base_addr: *mut u8,
-    num_bytes: usize,
     _shmem: Shmem,
 }
 
 impl ShmemHandle {
     pub(crate) fn base_ptr(&self) -> *mut u8 {
         self.base_addr
-    }
-    pub(crate) fn num_bytes(&self) -> usize {
-        self.num_bytes
     }
 }
 
@@ -586,7 +582,6 @@ fn attach_to_shmem(
     unsafe {
         ShmemHandle {
             base_addr: m.as_ptr().add(std::mem::size_of::<usize>() + padding),
-            num_bytes: size,
             _shmem: m,
         }
     }
@@ -827,26 +822,6 @@ impl ShmemAllocator {
         allocs.push(alloc.clone());
         trace!(target: "shmem","current allocs: {:?}", allocs);
         alloc
-        // println!("{:?} {:?} {:?}",self./my_pe, barrier1,barrier2);
-        // (shmem, sub_alloc_pe_id, addrs)
-    }
-
-    pub(crate) fn free_addr(&self, addr: usize) {
-        let mut allocs = self.allocs.write();
-        let len = allocs.len();
-        allocs.retain(|alloc| alloc.base_ptr as usize != addr);
-        if len == allocs.len() {
-            panic!("failed to free addr: {:x}", addr);
-        }
-    }
-
-    pub(crate) fn free_alloc(&self, alloc: &ShmemAlloc) {
-        let mut allocs = self.allocs.write();
-        let len = allocs.len();
-        allocs.retain(|a| a.base_ptr != alloc.base_ptr);
-        if len == allocs.len() {
-            panic!("failed to free alloc: {:?}", alloc);
-        }
     }
 
     pub(crate) fn get_alloc_from_start_addr(

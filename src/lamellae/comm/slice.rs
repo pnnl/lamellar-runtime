@@ -77,9 +77,7 @@ impl<T> CommSlice<T> {
     pub(crate) fn len(&self) -> usize {
         self.inner_alloc.size() / std::mem::size_of::<T>()
     }
-    pub(crate) fn num_bytes(&self) -> usize {
-        self.inner_alloc.size()
-    }
+
     pub(crate) fn usize_addr(&self) -> usize {
         self.inner_alloc.addr().into()
     }
@@ -94,10 +92,6 @@ impl<T> CommSlice<T> {
             inner_alloc: CommAllocInner::Raw(data as usize, len * std::mem::size_of::<T>()),
             _phantom: std::marker::PhantomData,
         }
-    }
-
-    pub(crate) unsafe fn from_slice(slice: &[T]) -> Self {
-        CommSlice::from_raw_parts(slice.as_ptr(), slice.len())
     }
 
     pub(crate) fn contains(&self, addr: &usize) -> bool {

@@ -13,7 +13,7 @@ use worker::Worker;
 use crate::{
     lamellae::{
         comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        CommAllocAddr, CommAllocInner, CommAllocType, CommSlice, FabricError,
+        CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -95,14 +95,6 @@ impl UcxWorld {
         }
     }
 
-    pub(crate) fn my_pe(&self) -> usize {
-        self.my_pe
-    }
-
-    pub(crate) fn num_pes(&self) -> usize {
-        self.num_pes
-    }
-
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
         let id = std::any::TypeId::of::<T>();
 
@@ -146,7 +138,7 @@ impl UcxWorld {
         data_size += mem_handle.pack().as_ref().len();
         data_size = data_size * num_pes;
         drop(mem_handle);
-        let (padding, size, align) = calc_alloc_padding_size_align(data_size, 8);
+        let (padding, size, _align) = calc_alloc_padding_size_align(data_size, 8);
         // debug!("Initial alloc size: {}", size);
         let mem_handle = MemoryHandleInner::alloc(context, size * num_pes);
         let buffer_keys = mem_handle.exchange_key_pmi(endpoints, pmi).unwrap();
@@ -224,39 +216,13 @@ impl UcxWorld {
         alloc
     }
 
-    // pub(crate) fn free_alloc(&self, alloc: &UcxAlloc) {
-    //     self.mem_handles
-    //         .lock()
-    //         .unwrap()
-    //         .retain(|a| a.mem.inner.addr != alloc.mem.inner.addr);
-    //     self.remote_keys
-    //         .lock()
-    //         .unwrap()
-    //         .retain(|(a, _)| a.mem.inner.addr != alloc.mem.inner.addr);
-    // }
-
-    // pub(crate) fn free_addr(&self, addr: usize) {
-    //     if let Some(alloc) = self
-    //         .mem_handles
-    //         .lock()
-    //         .unwrap()
-    //         .iter()
-    //         .find(|a| a.mem.inner.addr == addr)
-    //         .clone()
-    //     {
-    //         self.free_alloc(alloc);
-    //     }
-    // }
-
     pub(crate) fn wait_all(&self) {
-        self.worker.wait_all();
+        self.worker
+            .wait_all()
+            .expect("UcxWorld::wait_all failed waiting on UCX requests");
     }
 
     pub(crate) fn progress(&self) {
-        self.worker.progress();
-    }
-
-    pub(crate) fn flush(&self) {
         self.worker.progress();
     }
 
@@ -357,7 +323,7 @@ impl UcxWorld {
         let mut remote_keys = self.remote_keys.lock().unwrap();
         let temp_keys = remote_keys.drain(..).collect::<Vec<_>>();
         drop(remote_keys);
-        for (alloc, rkeys) in temp_keys.into_iter() {
+        for (_alloc, rkeys) in temp_keys.into_iter() {
             for (addr, rkey) in rkeys.into_iter() {
                 let ref_cnt = Arc::strong_count(&rkey);
                 debug!("Clearing rkey for addr {:x}, ref count: {}", addr, ref_cnt);
@@ -399,7 +365,7 @@ enum AllocTable {
     ), //the usize is the offset of the rt_alloc so that we can free it properly if a sub_alloc is the last reference
 }
 
-pub struct UcxAlloc {
+pub(crate) struct UcxAlloc {
     mem: MemoryHandle,
     data_num_bytes: usize,
     pub(crate) my_pe: usize,
@@ -415,7 +381,7 @@ pub struct UcxAlloc {
 
 impl Clone for UcxAlloc {
     fn clone(&self) -> Self {
-        let fab_ref_cnt = self.increment_fabric_ref_count();
+        self.increment_fabric_ref_count();
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
             self.increment_rt_ref_count();
         }
@@ -513,8 +479,6 @@ impl UcxAlloc {
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
         remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ) -> AllocResult<Self> {
-        let start = mem.addr;
-        let end = start + data_num_bytes;
         let ref_cnt_offset = data_num_bytes + padding;
         let fabric_ref_cnt_offset = data_num_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
@@ -720,15 +684,6 @@ impl UcxAlloc {
         decrement_ref_count(ref_count)
     }
 
-    pub(crate) unsafe fn put<T>(
-        &self,
-        pe: usize,
-        offset: usize, //with respect to T
-        src_addr: &CommSlice<T>,
-        managed: bool,
-    ) -> Option<UcxRequest> {
-        self.put_inner(pe, offset, src_addr.as_ref(), managed)
-    }
     pub(crate) unsafe fn put_inner<T>(
         &self,
         pe: usize,
@@ -762,15 +717,6 @@ impl UcxAlloc {
             &rkey,
             managed,
         )
-    }
-
-    pub(crate) unsafe fn get<T: Copy>(
-        &self,
-        pe: usize,
-        offset: usize,
-        dst_addr: &mut CommSlice<T>,
-    ) -> UcxRequest {
-        self.inner_get(pe, offset, dst_addr)
     }
 
     pub(crate) unsafe fn inner_get<T: Copy>(
@@ -844,25 +790,20 @@ impl UcxAlloc {
         }
     }
 
-    pub(crate) unsafe fn zeroize_bytes(&self) {
-        let u8_slice = self.as_mut_slice::<u8>();
-        u8_slice.fill(0);
-    }
-
     pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
     }
 
     pub(crate) fn wait_all(&self) {
-        self.worker.wait_all();
+        self.worker
+            .wait_all()
+            .expect("UcxAlloc::wait_all failed waiting on UCX requests");
     }
 
     pub(crate) fn wait(&self) {
-        self.worker.wait_all();
-    }
-
-    pub(crate) fn contains(&self, addr: usize) -> bool {
-        self.mem.inner.addr <= addr && addr < self.mem.inner.addr + self.data_num_bytes
+        self.worker
+            .wait_all()
+            .expect("UcxAlloc::wait failed waiting on UCX requests");
     }
 }
 

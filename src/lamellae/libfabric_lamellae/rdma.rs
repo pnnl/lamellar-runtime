@@ -55,7 +55,6 @@ impl<T: Remote> LibfabricPutFuture<T> {
             1,
             std::mem::size_of::<T>()
         );
-        // if pe != self.my_pe {
         unsafe {
             LibfabricAlloc::inner_put(
                 &self.alloc,
@@ -64,32 +63,14 @@ impl<T: Remote> LibfabricPutFuture<T> {
                 std::slice::from_ref(src),
                 false,
             )
+            .expect("error in put")
         };
-        // } else {
-        //     unsafe {
-        //         self.alloc.as_mut_slice()[self.offset] = *src;
-        //     }
-        //     // let dst = CommAllocAddr(self.alloc.start() + self.offset* std::mem::size_of::<T>());
-        //     // unsafe { dst.as_mut_ptr::<T>().write(*src) };
-        // }
     }
     fn inner_put_buf(&self, pe: usize, src: &MemregionRdmaInputInner<T>) {
-        // if pe != self.my_pe {
-        unsafe { LibfabricAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice(), false) };
-        // } else {
-        //     unsafe {
-        //         self.alloc.as_mut_slice()[self.offset..self.offset + src.len()]
-        //             .copy_from_slice(src.as_slice());
-        //     }
-        //     // let dst = self.alloc.start() + self.offset * std::mem::size_of::<T>();
-        //     // if !(src.contains(&dst) || src.contains(&(dst + src.num_bytes()))) {
-        //     //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
-        //     // } else {
-        //     //     unsafe {
-        //     //         std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-        //     //     }
-        //     // }
-        // }
+        unsafe {
+            LibfabricAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice(), false)
+                .expect("error in put_buf")
+        };
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
@@ -274,10 +255,12 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
             // let dst_mut_slice = std::slice::from_raw_parts_mut(dst.as_mut_ptr(), self.len);
 
             // dst.set_len(self.len);
-            self.alloc.inner_get(self.pe, self.offset, &mut dst, false);
+            self.alloc
+                .inner_get(self.pe, self.offset, &mut dst, false)
+                .expect("error in get_buffer");
             // dst.set_len(self.len);
             // let dst = std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(dst);
-            let dst = self.result.write(dst);
+            self.result.write(dst);
         }
     }
 
@@ -364,15 +347,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
                 self.dst.as_mut_slice(),
                 false,
             )
+            .expect("error in get_into_buffer");
         };
-        // } else {
-        //     let len = self.dst.len();
-        //     unsafe {
-        //         self.dst
-        //             .as_mut_slice()
-        //             .copy_from_slice(&self.alloc.as_mut_slice()[self.offset..self.offset + len])
-        //     };
-        // }
     }
 
     pub(crate) fn block(mut self) {
@@ -434,9 +410,6 @@ impl CommAllocRdma for LibfabricAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
-        // self.put_amt
-        //     .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
-
         LibfabricPutFuture {
             my_pe: self.ofi.my_pe,
             alloc: self.clone(),
@@ -449,9 +422,6 @@ impl CommAllocRdma for LibfabricAlloc {
         .into()
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
-        // self.put_amt
-        //     .fetch_add(std::mem::size_of::<T>(), Ordering::SeqCst);
-
         trace!(
             "put unamanaged dst: {pe}  offset: {offset} size_of<T> {}",
             std::mem::size_of::<T>()
@@ -459,6 +429,7 @@ impl CommAllocRdma for LibfabricAlloc {
         if pe != self.ofi.my_pe {
             unsafe {
                 LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
+                    .expect("error in put_unmanaged")
             };
         } else {
             unsafe {
@@ -469,8 +440,6 @@ impl CommAllocRdma for LibfabricAlloc {
                 )
             };
             unsafe { self.as_mut_slice::<T>()[offset] = src };
-            // let dst = CommAllocAddr(self.start() + offset);
-            // unsafe { dst.as_mut_ptr::<T>().write(src) };
         }
     }
     fn put_buffer<T: Remote>(
@@ -481,9 +450,6 @@ impl CommAllocRdma for LibfabricAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
-        //  self.put_amt
-        //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-
         LibfabricPutFuture {
             my_pe: self.ofi.my_pe,
             alloc: self.clone(),
@@ -503,23 +469,10 @@ impl CommAllocRdma for LibfabricAlloc {
     ) {
         let src = src.into();
 
-        // self.put_amt
-        //     .fetch_add(src.len() * std::mem::size_of::<T>(), Ordering::SeqCst);
-        // if pe != self.ofi.my_pe {
-        unsafe { LibfabricAlloc::inner_put(&self, pe, offset, src.as_slice(), false) };
-        // } else {
-        //     unsafe {
-        //         self.as_mut_slice::<T>()[offset..offset + src.len()].copy_from_slice(src.as_slice())
-        //     };
-        // let dst = self.start() + offset;
-        // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
-        //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
-        // } else {
-        //     unsafe {
-        //         std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-        //     }
-        // }
-        // }
+        unsafe {
+            LibfabricAlloc::inner_put(&self, pe, offset, src.as_slice(), false)
+                .expect("error in put_buffer_unmanaged")
+        };
     }
     fn put_all<T: Remote>(
         &self,
@@ -545,6 +498,7 @@ impl CommAllocRdma for LibfabricAlloc {
             if pe != self.ofi.my_pe {
                 unsafe {
                     LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
+                        .expect("error in put_all_unmanaged")
                 };
             } else {
                 let dst = CommAllocAddr(self.start() + offset);
@@ -579,7 +533,10 @@ impl CommAllocRdma for LibfabricAlloc {
         let src = src.into();
         for pe in 0..self.num_pes() {
             if pe != self.ofi.my_pe {
-                unsafe { LibfabricAlloc::inner_put(&self, pe, offset, src.as_slice(), false) };
+                unsafe {
+                    LibfabricAlloc::inner_put(&self, pe, offset, src.as_slice(), false)
+                        .expect("error in put_all_buffer_unmanaged")
+                };
             } else {
                 let dst = self.start() + offset;
 
@@ -660,15 +617,10 @@ impl CommAllocRdma for LibfabricAlloc {
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
     ) {
-        // if pe != self.ofi.my_pe {
-        unsafe { LibfabricAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), false) };
-        // } else {
-        //     let len = dst.len();
-        //     unsafe {
-        //         dst.as_mut_slice()
-        //             .copy_from_slice(&self.as_mut_slice::<T>()[offset..offset + len]);
-        //     }
-        // }
+        unsafe {
+            LibfabricAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), false)
+                .expect("error in get_into_buffer_unmanaged")
+        };
     }
 }
 
@@ -713,6 +665,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
                     std::slice::from_ref(&src),
                     false,
                 )
+                .expect("error in put_unmanaged")
             };
         } else {
             unsafe { self.alloc.as_mut_slice::<T>()[offset] = src };
@@ -755,7 +708,10 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             pe, self.remote_pe
         );
         let src = src.into();
-        unsafe { LibfabricAlloc::inner_put(&self.alloc, pe, offset, src.as_slice(), false) };
+        unsafe {
+            LibfabricAlloc::inner_put(&self.alloc, pe, offset, src.as_slice(), false)
+                .expect("error in put_buffer_unmanaged")
+        };
     }
     fn put_all<T: Remote>(
         &self,
@@ -866,6 +822,9 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
-        unsafe { LibfabricAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), false) };
+        unsafe {
+            LibfabricAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), false)
+                .expect("error in get_into_buffer_unmanaged")
+        };
     }
 }

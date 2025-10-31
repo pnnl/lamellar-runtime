@@ -26,9 +26,9 @@ pub(crate) struct LibfabricComm {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     pub(crate) put_amt: Arc<AtomicUsize>,
-    pub(crate) put_cnt: Arc<AtomicUsize>,
+    // pub(crate) put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
-    pub(crate) get_cnt: Arc<AtomicUsize>,
+    // pub(crate) get_cnt: Arc<AtomicUsize>,
 }
 
 pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
@@ -67,21 +67,13 @@ impl LibfabricComm {
             num_pes: num_pes,
             my_pe: ofi.my_pe,
             put_amt: Arc::new(AtomicUsize::new(0)),
-            put_cnt: Arc::new(AtomicUsize::new(0)),
+            // put_cnt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
-            get_cnt: Arc::new(AtomicUsize::new(0)),
+            // get_cnt: Arc::new(AtomicUsize::new(0)),
         };
         lib_fabric_comm.runtime_allocs.write()[0]
             .1
             .init(alloc_info.start(), total_mem);
-        // lib_fabric_comm.fabric_allocs.write().insert(
-        //     addr,
-        //     CommAlloc {
-        //         addr,
-        //         size: mem_per_pe,
-        //         alloc_type: CommAllocType::Fabric,
-        //     },
-        // );
         lib_fabric_comm
     }
 
@@ -142,6 +134,7 @@ impl Drop for LibfabricComm {
         }
         if self.runtime_allocs.read().len() > 1 {
             println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
+            self.print_pools();
         }
         self.runtime_allocs.write().clear();
         //maybe we want to implement an ofi finit function which will free all resources or something

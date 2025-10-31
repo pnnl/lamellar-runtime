@@ -32,7 +32,6 @@ pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
     "with-pmix",
 ], optional = true }
 lamellar-ucx-sys = { path = "lamellar-ucx-sys", version = "0.1.0", optional = true }
-# ucx1-sys = { path = "/scratch/frie869/async-ucx/ucx1-sys", version = "0.1.0", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 rofisys = { version = "0.4", optional = true }
@@ -80,7 +79,6 @@ tracing-futures = "0.2.5"
 match_cfg = "0.1.0"
 bytemuck = "1.23.2"
 thiserror = { version = "2.0.16", optional = true }
-#crabgrind = "0.1"
 
 [dev-dependencies]
 
@@ -112,13 +110,9 @@ enable-stats = []
 enable-rofi-c = ["rofi-c", "rofisys", "libc"]
 enable-rofi-c-shared = ["rofi-c", "rofisys/shared", "libc"]
 rofi-c = []
-# enable-libfabric = []
 enable-rofi-rust = []
 enable-libfabric = ["libfabric", "pmi"]
-# enable-ucx = []
 enable-ucx = ["lamellar-ucx-sys", "pmi", "thiserror"]
-# enable-ucx = ["pmi", "thiserror"]
-# enable-rofi-rust = ["rofi-rust", "pmi"]
 tokio-executor = ["tokio"]
 disable-runtime-warnings = []
 runtime-warnings-panic = []

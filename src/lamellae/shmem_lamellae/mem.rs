@@ -106,7 +106,7 @@ impl CommMem for ShmemComm {
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
-        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+        let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
         let allocs = self.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
             if alloc.fake_malloc(size, align) {
@@ -191,14 +191,7 @@ impl CommMem for ShmemComm {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
         for (_, alloc) in allocs.iter() {
-            println!(
-                // "{:x} {:?} {:?} {:?}",
-                "{:x} {:?}",
-                alloc.start_addr,
-                alloc.max_size,
-                // alloc.occupied(),
-                // alloc.space_avail()
-            );
+            println!("{:x} {:?}", alloc.start_addr, alloc.max_size,);
         }
     }
 

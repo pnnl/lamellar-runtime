@@ -94,7 +94,7 @@ impl CommMem for LibfabricComm {
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
         // add space for ref count
-        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+        let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
 
         let allocs = self.runtime_allocs.read();
         for (_, alloc) in allocs.iter() {
@@ -226,14 +226,7 @@ impl CommMem for LibfabricComm {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
         for (_info, alloc) in allocs.iter() {
-            println!(
-                // "{:x} {:?} {:?} {:?}",
-                "{:x} {:?}",
-                alloc.start_addr,
-                alloc.max_size,
-                // alloc.occupied(),
-                // alloc.space_avail()
-            );
+            println!("{:x} {:?}", alloc.start_addr, alloc.max_size,);
         }
     }
 
@@ -269,11 +262,11 @@ impl CommMem for LibfabricComm {
         for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
-                    inner_alloc: CommAllocInner::LibfabricAlloc(unsafe {
+                    inner_alloc: CommAllocInner::LibfabricAlloc(
                         inner_alloc
                             .sub_alloc(addr - inner_alloc.start(), size)?
-                            .as_rt_alloc(alloc.clone())?
-                    }),
+                            .as_rt_alloc(alloc.clone())?,
+                    ),
                     alloc_type: CommAllocType::RtHeap,
                 };
                 return Ok(comm_alloc);

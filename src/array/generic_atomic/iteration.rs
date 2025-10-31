@@ -1,18 +1,20 @@
-use crate::array::generic_atomic::*;
-
-use crate::array::iterator::distributed_iterator::*;
-use crate::array::iterator::local_iterator::*;
-use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{private::*, LamellarArrayIterators, LamellarArrayMutIterators};
-use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::*;
-use crate::memregion::Dist;
-
-use self::iterator::IterLockFuture;
-// use parking_lot::{
-//     lock_api::{RwLockReadGuardArc, RwLockWriteGuardArc},
-//     RawRwLock,
-// };
+use crate::{
+    array::{
+        generic_atomic::GenericAtomicElement,
+        iterator::{
+            distributed_iterator::DistIteratorLauncher,
+            local_iterator::LocalIteratorLauncher,
+            one_sided_iterator::OneSidedIter,
+            private::{InnerIter, Sealed},
+            IterLockFuture,
+        },
+        r#unsafe::private::UnsafeArrayInner,
+        InnerArray,
+    },
+    memregion::Dist,
+    DistributedIterator, GenericAtomicArray, IndexedDistributedIterator, LamellarArray,
+    LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator,
+};
 
 impl<T> InnerArray for GenericAtomicArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
@@ -115,14 +117,6 @@ impl<T: Dist> DistributedIterator for GenericAtomicDistIter<T> {
     fn elems(&self, in_elems: usize) -> usize {
         in_elems
     }
-    // fn global_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.global_index_from_local(index, 1);
-    //     g_index
-    // }
-    // fn subarray_index(&self, index: usize) -> Option<usize> {
-    //     let g_index = self.data.subarray_index_from_local(index, 1);
-    //     g_index
-    // }
     fn advance_index(&mut self, count: usize) {
         self.cur_i = std::cmp::min(self.cur_i + count, self.end_i);
     }

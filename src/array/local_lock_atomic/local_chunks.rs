@@ -1,13 +1,20 @@
-use crate::array::iterator::local_iterator::{IndexedLocalIterator, LocalIterator};
-use crate::array::iterator::private::*;
-use crate::array::local_lock_atomic::*;
-use crate::array::LamellarArray;
-use crate::darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard};
-use crate::memregion::Dist;
+use crate::{
+    array::{
+        iterator::{
+            private::{InnerIter, Sealed},
+            IterLockFuture,
+        },
+        local_lock_atomic::handle::{LocalLockLocalChunksHandle, LocalLockLocalChunksMutHandle},
+        LocalLockLocalData,
+    },
+    darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard},
+    Dist, IndexedLocalIterator, LamellarArray, LocalIterator, LocalLockArray,
+};
 
-use std::sync::Arc;
-
-use self::iterator::IterLockFuture;
+use std::{
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 /// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of a [LocalLockArray]
 /// This struct is created by awaiting or blocking on the handle returned by [LocalLockArray::read_local_chunks]

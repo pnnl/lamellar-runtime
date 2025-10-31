@@ -27,10 +27,7 @@ use crate::{
     lamellae::{
         comm::alloc::*,
         comm::error::{AllocError, AllocResult, FabricError, FabricResult},
-        AllocationType,
-        AtomicOp as LamellarAtomicOp,
-        // CommAlloc, CommAllocAddr, CommAllocInner,CommAllocType,
-        CommSlice,
+        AllocationType, AtomicOp as LamellarAtomicOp,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -514,7 +511,7 @@ impl Ofi {
                 let rem_mem_info = mem_info
                     .into_remote_info(&self.domain)
                     .expect("Failed to convert MemAddressInfo to RemoteMemAddressInfo");
-                trace!(
+                trace!(target: "libfabric",
                     "PE {}: RemoteMemAddressInfo: {:?} {:?} ",
                     pes[pe],
                     rem_mem_info.mem_address(),
@@ -630,7 +627,7 @@ impl Ofi {
             size
         };
 
-        trace!("Allocating aligned size: {} aligned", aligned_size);
+        trace!(target: "libfabric", "Full Allocating aligned size: {} aligned", aligned_size);
         // println!("{:?}", std::backtrace::Backtrace::capture());
 
         // Map memory of aligned size
@@ -706,6 +703,8 @@ impl Ofi {
             size
         };
 
+        trace!(target: "libfabric", "Sub Allocating aligned size: {} aligned pes: {:?}", aligned_size, pes);
+
         // Map memory of aligned size
         let mut mem = memmap::MmapOptions::new()
             .len(aligned_size)
@@ -766,19 +765,6 @@ impl Ofi {
         addr: CommAllocAddr,
     ) -> AllocResult<LibfabricAlloc> {
         self.alloc_manager.get_alloc_from_start_addr(addr)
-    }
-
-    pub(crate) fn free_alloc(
-        &self,
-        inner_alloc: &LibfabricAlloc,
-    ) -> Result<(), libfabric::error::Error> {
-        self.alloc_manager.remove_from_alloc(inner_alloc);
-        Ok(())
-    }
-
-    pub(crate) fn free_addr(&self, addr: usize) -> Result<(), libfabric::error::Error> {
-        self.alloc_manager.remove_from_addr(&addr);
-        Ok(())
     }
 
     pub(crate) fn clear_allocs(&self) -> Result<(), libfabric::error::Error> {
@@ -850,16 +836,6 @@ impl Ofi {
                 Ok(())
             }
         }
-    }
-
-    pub(crate) unsafe fn put<T: Copy>(
-        &self,
-        pe: usize,
-        src_addr: &CommSlice<T>,
-        dst_addr: &CommAllocAddr,
-        sync: bool,
-    ) -> Result<(), libfabric::error::Error> {
-        self.inner_put(pe, src_addr.as_ref(), *(dst_addr as &usize), sync)
     }
 
     pub(crate) unsafe fn inner_put<T: Copy>(
@@ -1019,15 +995,6 @@ impl AllocInfoManager {
         }
     }
 
-    pub(crate) fn remove_from_addr(&self, mem_addr: &usize) {
-        let mut table = self.mr_info_table.write();
-        let idx = table
-            .iter()
-            .position(|e| e.start() == *mem_addr)
-            .expect("Error! Invalid memory address");
-
-        table.remove(idx);
-    }
     pub(crate) fn remove_from_alloc(&self, mem_addr: &LibfabricAlloc) {
         let mut table = self.mr_info_table.write();
         if !table.is_empty() {
@@ -1038,11 +1005,6 @@ impl AllocInfoManager {
             table.remove(idx);
         }
     }
-
-    // pub(crate) fn get_alloc(&self, mem_addr: CommAllocAddr) -> Option<LibfabricAlloc> {
-    //     let table = self.mr_info_table.read();
-    //     table.iter().find(|e| e.contains(&mem_addr.0)).cloned()
-    // }
 
     pub(crate) fn get_alloc_from_start_addr(
         &self,
@@ -1072,6 +1034,11 @@ impl AllocInfoManager {
         remote_addr: usize,
         num_bytes: usize,
     ) -> CommAlloc {
+        trace!(target: "libfabric",
+            "looking for remote_addr: {:x} on pe {:x}",
+            remote_pe,
+            remote_addr
+        );
         let table = self.mr_info_table.read();
         let alloc_info = table
             .iter()
@@ -1204,13 +1171,14 @@ impl std::fmt::Debug for LibfabricAlloc {
 
 impl Clone for LibfabricAlloc {
     fn clone(&self) -> Self {
-        let fab_ref_cnt = self.increment_fabric_ref_count();
+        self.increment_fabric_ref_count();
         if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
             self.increment_rt_ref_count();
         }
-        let ref_cnt = get_ref_count(unsafe {
+        get_ref_count(unsafe {
             &*(self.mem.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize)
         });
+        trace!(target: "libfabric", "Cloned LibfabricAlloc: {:?}", self);
         Self {
             ofi: self.ofi.clone(),
             mem: self.mem.clone(),
@@ -1287,10 +1255,9 @@ impl LibfabricAlloc {
         }
         let id = ALLOC_ID.fetch_add(1, Ordering::SeqCst);
 
-        let fabric_ref_cnt = self.increment_fabric_ref_count();
-        let mut rt_ref_cnt = 0;
+        self.increment_fabric_ref_count();
         if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
-            rt_ref_cnt = self.increment_rt_ref_count();
+            self.increment_rt_ref_count();
         }
 
         let alloc = Self {
@@ -1327,7 +1294,7 @@ impl LibfabricAlloc {
             remote_allocs.insert(*pe, new_remote_info);
         }
         let id = ALLOC_ID.fetch_add(1, Ordering::SeqCst);
-        let fabric_ref_cnt = self.increment_fabric_ref_count();
+        self.increment_fabric_ref_count();
         let ref_cnt_offset = offset + data_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
 
@@ -1372,7 +1339,7 @@ impl LibfabricAlloc {
         let encoded_ref_count = unsafe {
             (&*(self.mem.as_ptr().add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst)
         };
-        let (rt_ref_cnt, padding) = decode_ref_count_and_padding(encoded_ref_count);
+        let (_rt_ref_cnt, padding) = decode_ref_count_and_padding(encoded_ref_count);
 
         let alloc = Self {
             ofi: self.ofi.clone(),
@@ -1385,7 +1352,7 @@ impl LibfabricAlloc {
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
         };
-        let fabric_ref_cnt = get_ref_count(unsafe {
+        get_ref_count(unsafe {
             &*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize)
         });
         debug!(target: "libfabric", "Converted Libfabric alloc to rt-alloc: {:?}", alloc);
@@ -1436,10 +1403,6 @@ impl LibfabricAlloc {
         }
     }
 
-    pub(crate) unsafe fn zeroize_bytes(&self) {
-        self.as_mut_slice::<u8>().fill(0);
-    }
-
     pub(crate) fn start(&self) -> usize {
         self.range.start
     }
@@ -1448,19 +1411,39 @@ impl LibfabricAlloc {
     }
 
     pub(crate) fn contains(&self, addr: &usize) -> bool {
+        trace!(target: "libfabric",
+            "Checking if address {:x} is contained in allocation range {:x}-{:x}",
+            addr,
+            self.range.start,
+            self.range.end
+        );
         self.range.contains(addr)
     }
 
     pub(crate) fn remote_contains(&self, remote_id: &usize, addr: &usize) -> bool {
+        trace!(target: "libfabric",
+            "Checking if remote address {:x} on PE {} is contained in remote allocation for {:?}",
+            addr,
+            remote_id,
+            self,
+        );
         match self.remote_allocs.get(remote_id) {
-            Some(remote_info) => remote_info.contains(&addr),
+            Some(remote_info) => {
+                trace!(target: "libfabric",
+                    "Remote PE {} allocation info: {:?} {:?}",
+                    remote_id,
+                    remote_info.mem_address(),
+                    unsafe{remote_info.mem_address().add(remote_info.mem_len())}
+                );
+                remote_info.contains(&addr)
+            }
             None => {
-                trace!(
+                trace!(target: "libfabric",
                     "Remote PE {} is not part of the sub allocation group",
                     remote_id
                 );
                 for (pe, remote_info) in self.remote_allocs.iter() {
-                    trace!(
+                    trace!(target: "libfabric",
                         "  PE {}: {:?} {:?}",
                         pe,
                         remote_info.mem_address(),
@@ -1468,7 +1451,6 @@ impl LibfabricAlloc {
                     );
                 }
                 false
-                // panic!(" {:?}", self)
             }
         }
     }
@@ -1479,16 +1461,6 @@ impl LibfabricAlloc {
 
     pub(crate) fn mr(&self) -> MemoryRegion {
         self.mr.clone()
-    }
-
-    pub(crate) unsafe fn put<T: Copy>(
-        &self,
-        pe: usize,
-        offset: usize, //T-sized offset
-        src_addr: &CommSlice<T>,
-        sync: bool,
-    ) -> Result<(), libfabric::error::Error> {
-        self.inner_put(pe, offset, src_addr.as_ref(), sync)
     }
 
     pub(crate) unsafe fn inner_put<T: Copy>(
@@ -1563,16 +1535,6 @@ impl LibfabricAlloc {
         }
         // trace!("Done putting");
         Ok(())
-    }
-
-    pub(crate) unsafe fn get<T: Copy>(
-        &self,
-        pe: usize,
-        offset: usize,
-        dst_addr: &mut CommSlice<T>,
-        sync: bool,
-    ) -> Result<(), libfabric::error::Error> {
-        self.inner_get(pe, offset, dst_addr, sync)
     }
 
     pub(crate) unsafe fn inner_get<T: Copy>(
@@ -1798,8 +1760,7 @@ impl LibfabricAlloc {
 
 impl Drop for LibfabricAlloc {
     fn drop(&mut self) {
-        let ofi_cnt = Arc::strong_count(&self.ofi);
-        let mem_cnt = Arc::strong_count(&self.mem);
+        debug!(target: "libfabric", "Dropping LibfabricAlloc: {:x} - {:x}", self.range.start,self.range.end);
         let fabric_ref_count = self.decrement_fabric_ref_count();
 
         match &self.alloc_table {
@@ -1875,10 +1836,10 @@ impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
             LamellarAtomicOp::Min(_) => AtomicOp::Min,
             LamellarAtomicOp::Max(_) => AtomicOp::Max,
             LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
-            LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
-            LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
-            LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
-            LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
+            // LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
+            // LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
+            // LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
+            // LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
             LamellarAtomicOp::BitOr(_) => AtomicOp::Bor,
             LamellarAtomicOp::BitXor(_) => AtomicOp::Bxor,
             LamellarAtomicOp::BitAnd(_) => AtomicOp::Band,
@@ -1894,10 +1855,10 @@ impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::Min(_) => FetchAtomicOp::Min,
             LamellarAtomicOp::Max(_) => FetchAtomicOp::Max,
             LamellarAtomicOp::Sum(_) => FetchAtomicOp::Sum,
-            LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
-            LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
-            LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
-            LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,
+            // LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
+            // LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
+            // LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
+            // LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,
             LamellarAtomicOp::BitOr(_) => FetchAtomicOp::Bor,
             LamellarAtomicOp::BitXor(_) => FetchAtomicOp::Bxor,
             LamellarAtomicOp::BitAnd(_) => FetchAtomicOp::Band,

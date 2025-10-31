@@ -10,25 +10,11 @@ pub(crate) use error::*;
 pub(crate) use rdma::*;
 pub(crate) use slice::*;
 
+use super::Backend;
 pub use rdma::Remote;
 
-use super::Backend;
-
-// use crate::LamellarMemoryRegion;
-#[cfg(feature = "rofi-c")]
-use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
-// #[cfg(feature = "enable-libfabric")]
-// use crate::lamellae::{
-//     libfabric::libfabric_comm::*, libfabric_async::libfabric_async_comm::*, LibfabricAsyncData,
-// };
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
-// #[cfg(feature = "enable-rofi-rust")]
-// use crate::lamellae::{
-//     rofi_rust::rofi_rust_comm::*, rofi_rust_async::rofi_rust_async_comm::*, RofiRustAsyncData,
-//     RofiRustData,
-// };
-
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
 use crate::lamellae::{
@@ -38,8 +24,6 @@ use crate::lamellae::{
 
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
-
-// use super::LamellaeRDMA;
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,8 +41,6 @@ pub(crate) enum Comm {
     Libfabric(LibfabricComm),
     #[cfg(feature = "enable-ucx")]
     Ucx(UcxComm),
-    // #[cfg(feature = "enable-libfabric")]
-    // LibfabricAsync(LibfabricAsyncComm),
     Shmem(ShmemComm),
     Local(LocalComm),
 }
@@ -73,71 +55,6 @@ impl Comm {
         SerializedData::new(self.clone(), size)
     }
 }
-
-// impl CommAtomic for Comm {
-//     fn atomic_avail<T: 'static>(&self) -> bool {
-//         match self {
-//             #[cfg(feature = "rofi-c")]
-//             Comm::RofiC(comm) => comm.atomic_avail::<T>(),
-//             Comm::Shmem(comm) => comm.atomic_avail::<T>(),
-//             Comm::Local(comm) => comm.atomic_avail::<T>(),
-//             #[cfg(feature = "enable-libfabric")]
-//             Comm::Libfabric(comm) => comm.atomic_avail::<T>(),
-//             #[cfg(feature = "enable-ucx")]
-//             Comm::Ucx(comm) => comm.atomic_avail::<T>(),
-//         }
-//     }
-//     fn atomic_op<T: Copy>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         op: AtomicOp<T>,
-//         pe: usize,
-//         remote_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> AtomicOpHandle<T> {
-//         match self {
-//             #[cfg(feature = "rofi-c")]
-//             Comm::RofiC(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc),
-//             Comm::Shmem(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset),
-//             Comm::Local(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset),
-//             #[cfg(feature = "enable-libfabric")]
-//             Comm::Libfabric(comm) => {
-//                 comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset)
-//             }
-//             #[cfg(feature = "enable-ucx")]
-//             Comm::Ucx(comm) => comm.atomic_op(scheduler, counters, op, pe, remote_alloc, offset),
-//         }
-//     }
-//     fn atomic_fetch_op<T: Copy>(
-//         &self,
-//         scheduler: &Arc<Scheduler>,
-//         counters: Vec<Arc<AMCounters>>,
-//         op: AtomicOp<T>,
-//         pe: usize,
-//         remote_alloc: CommAllocInner,
-//         offset: usize,
-//     ) -> AtomicFetchOpHandle<T> {
-//         match self {
-//             #[cfg(feature = "rofi-c")]
-//             Comm::RofiC(comm) => comm.atomic_fetch_op(scheduler, counters, op, pe, remote_addr),
-//             Comm::Shmem(comm) => {
-//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
-//             }
-//             Comm::Local(comm) => {
-//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
-//             }
-//             #[cfg(feature = "enable-libfabric")]
-//             Comm::Libfabric(comm) => {
-//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
-//             }
-//             #[cfg(feature = "enable-ucx")]
-//             Comm::Ucx(comm) => {
-//                 comm.atomic_fetch_op(scheduler, counters, op, pe, remote_alloc, offset)
-//             }
-//         }
-//     }
-// }
 
 #[enum_dispatch]
 pub(crate) trait CommShutdown {
@@ -161,7 +78,6 @@ pub(crate) trait CommMem {
     fn print_pools(&self);
     // this translates a remote address to a local address
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr;
-
     // this creates a CommAlloc from a remote PE and remote address that represents a one-sided allocation
     // we can only perform rdma operations to remote_pe using this allocation
     fn one_sided_alloc_from_remote_pe_and_addr(
@@ -207,31 +123,3 @@ pub(crate) trait CommInfo {
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
 }
-
-// pub(crate) struct CommOpHandle<'a, T = ()> {
-//     fut: Pin<Box<dyn Future<Output =T> + Send + 'a> >
-// }
-
-// impl<'a, T> CommOpHandle<'a, T> {
-//     pub(crate) fn new(fut: impl Future<Output =T> + Send + 'a) -> Self {
-//         Self {
-//             fut: Box::pin(fut)
-//         }
-//     }
-
-//     pub(crate) fn block(self) -> T{
-//         #[cfg(feature="tokio-executor")]
-//         return Handle::current().block_on(async {self.fut.await});
-//         #[cfg(not(feature="tokio-executor"))]
-//         return block_on(async {self.fut.await});
-//     }
-// }
-
-// impl<'a, T> Future for CommOpHandle<'a, T> {
-//         type Output = T;
-//     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-//         let mut this = self.get_mut();
-//         let guard = ready!(this.fut.as_mut().poll(cx));
-//         Poll::Ready(guard)
-//     }
-// }

@@ -219,10 +219,9 @@ impl Barrier {
                                     i,
                                     team_send_pe,
                                     barrier_id,
-                                    unsafe {
                                         self.barrier_buf[i - 1]
                                             .as_slice()
-                                    }
+                                    
                                 );
                             if team_send_pe != my_index {
                                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
@@ -423,9 +422,9 @@ impl BarrierHandle {
             let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-                unsafe {
+                
                     self.barrier_buf[i - 1].put_unmanaged(self.barrier_id, send_pe, round);
-                }
+                
             }
         }
         // for req in reqs.into_iter() {

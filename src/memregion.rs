@@ -353,28 +353,6 @@ pub(crate) trait RegisteredMemoryRegion<T: Remote> {
     unsafe fn as_slice(&self) -> &[T];
 
     #[doc(alias("One-sided", "onesided"))]
-    /// Return a reference to the local (to the calling PE) element located by the provided index
-    ///
-    /// Returns an error if the index is out of bounds or the PE does not contain any local data associated with this memory region
-    ///
-    /// # Safety
-    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
-    ///
-    /// # One-sided Operation
-    /// the result is returned only on the calling PE
-    ///
-    /// # Examples
-    ///```
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    ///
-    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
-    /// let val = unsafe{mem_region.at(999).expect("PE is part of the world team")};
-    ///```
-    unsafe fn at(&self, index: usize) -> MemResult<&T>;
-
-    #[doc(alias("One-sided", "onesided"))]
     /// Return a mutable slice of the local (to the calling PE) data of the memory region
     ///
     /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
@@ -439,8 +417,6 @@ pub(crate) trait RegisteredMemoryRegion<T: Remote> {
     /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
     ///```
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T>;
-    unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>>;
-    unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr>;
 }
 
 #[enum_dispatch]
@@ -480,10 +456,10 @@ pub trait SubRegion<T: Remote> {
     fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self;
 }
 
-#[enum_dispatch]
-pub(crate) trait AsBase {
-    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B>;
-}
+// #[enum_dispatch]
+// pub(crate) trait AsBase {
+//     unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B>;
+// }
 
 // #[enum_dispatch]
 // pub trait MemoryRegionRDMA<T: Remote> {
@@ -804,7 +780,6 @@ pub(crate) enum Mode {
 // for local we would probably need to develop something like a one-sided initiated darc...
 pub(crate) struct MemoryRegion<T: Remote> {
     pub(crate) alloc: CommAlloc,
-    num_elems: usize,
     pe: usize,
     backend: Backend,
     scheduler: Arc<Scheduler>,
@@ -870,7 +845,6 @@ impl<T: Remote> MemoryRegion<T> {
         let temp = MemoryRegion {
             alloc,
             pe: lamellae.comm().my_pe(),
-            num_elems,
             scheduler: scheduler.clone(),
             counters: counters,
             backend: lamellae.comm().backend(),
@@ -886,18 +860,24 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) fn from_remote_addr(
         addr: usize,
         pe: usize,
-        num_elems: usize,
+        num_bytes: usize,
         team: Pin<Arc<LamellarTeamRT>>,
         lamellae: Arc<Lamellae>,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
+        trace!(
+            "creating new lamellar memory region from remote addr: {:?} pe: {:?} num_bytes: {:?}",
+            addr,
+            pe,
+            num_bytes
+        );
         Ok(MemoryRegion {
             alloc: lamellae.comm().one_sided_alloc_from_remote_pe_and_addr(
                 pe,
                 addr.into(),
-                num_elems * std::mem::size_of::<T>(),
+                num_bytes,
             ),
             pe: pe,
-            num_elems,
+            // num_elems,
             scheduler: team.scheduler.clone(),
             counters: team.counters(),
             backend: lamellae.comm().backend(),
@@ -910,7 +890,7 @@ impl<T: Remote> MemoryRegion<T> {
 
     #[allow(dead_code)]
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) unsafe fn to_base<B: Dist>(mut self) -> MemoryRegion<B> {
+    pub(crate) unsafe fn to_base<B: Dist>(self) -> MemoryRegion<B> {
         //this is allowed as we consume the old object..
         assert_eq!(
             self.alloc.num_bytes() % std::mem::size_of::<B>(),
@@ -920,17 +900,13 @@ impl<T: Remote> MemoryRegion<T> {
         MemoryRegion {
             alloc: self.alloc.clone(),
             pe: self.pe,
-            num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
             scheduler: self.scheduler.clone(),
             counters: self.counters.clone(),
             backend: self.backend,
             rdma: self.rdma.clone(),
             mode: self.mode,
-            // freeable: false,
             phantom: PhantomData,
         }
-        // self.num_elems = self.alloc.num_bytes() / std::mem::size_of::<B>();
-        // std::mem::transmute(self) //we do this because other wise self gets dropped and frees the underlying data (we could also set addr to 0 in self)
     }
     pub(crate) unsafe fn as_base<B: Remote>(&self) -> MemoryRegion<B> {
         assert_eq!(
@@ -941,7 +917,7 @@ impl<T: Remote> MemoryRegion<T> {
         MemoryRegion {
             alloc: self.alloc.clone(),
             pe: self.pe,
-            num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
+            // num_elems: self.alloc.num_bytes() / std::mem::size_of::<B>(),
             scheduler: self.scheduler.clone(),
             counters: self.counters.clone(),
             backend: self.backend,
@@ -1128,11 +1104,8 @@ impl<T: Remote> MemoryRegion<T> {
         &self,
         pe: usize,
         index: usize,
-        mut data: LamellarBuffer<T, B>,
+        data: LamellarBuffer<T, B>,
     ) -> RdmaGetIntoBufferHandle<T, B> {
-        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
-        //     panic!("[LAMELLAR INTERNAL ERROR]: cant get into buffer of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
-        // }
         trace!(
             "get into buffer memregion {:?} index: {:?}",
             self.alloc,
@@ -1235,30 +1208,10 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn casted_at<R: Remote>(&self, index: usize) -> MemResult<&R> {
-        if self.mode == Mode::Remote {
-            return Err(MemRegionError::MemNotLocalError);
-        }
-        let num_bytes = self.alloc.num_bytes();
-        assert_eq!(
-            num_bytes % std::mem::size_of::<R>(),
-            0,
-            "Error converting memregion to new base, does not align"
-        );
-        Ok(unsafe {
-            &std::slice::from_raw_parts(self.alloc.as_ptr(), num_bytes / std::mem::size_of::<R>())
-                [index]
-        })
-    }
-
-    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_slice(&self) -> &[T] {
         unsafe { self.as_mut_slice() }
     }
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn as_casted_slice<R: Remote>(&self) -> MemResult<&[R]> {
-        unsafe { Ok(self.as_casted_mut_slice()?) }
-    }
+
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn as_mut_slice(&self) -> &mut [T] {
         if self.mode == Mode::Remote {
@@ -1289,17 +1242,7 @@ impl<T: Remote> MemoryRegion<T> {
             self.alloc.num_bytes() / std::mem::size_of::<R>(),
         ))
     }
-    // #[allow(dead_code)]
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) fn as_ptr(&self) -> MemResult<*const T> {
-    //     Ok(self.addr as *const T)
-    // }
-    // #[allow(dead_code)]
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) fn as_casted_ptr<R: Remote>(&self) -> MemResult<*const R> {
-    //     Ok(self.addr as *const R)
-    // }
-    // #[allow(dead_code)]
+
     // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
         if self.mode == Mode::Remote {
@@ -1307,7 +1250,7 @@ impl<T: Remote> MemoryRegion<T> {
         }
         unsafe { Ok(self.alloc.as_mut_ptr()) }
     }
-    // #[allow(dead_code)]
+
     // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_casted_mut_ptr<R: Remote>(&self) -> MemResult<*mut R> {
         if self.mode == Mode::Remote {
@@ -1321,18 +1264,6 @@ impl<T: Remote> MemoryRegion<T> {
             return Err(MemRegionError::MemNotLocalError);
         }
         Ok(self.alloc.as_comm_slice())
-    }
-    pub(crate) unsafe fn as_casted_comm_slice<R: Remote>(&self) -> MemResult<CommSlice<R>> {
-        if self.mode == Mode::Remote {
-            return Err(MemRegionError::MemNotLocalError);
-        }
-        Ok(self.alloc.as_comm_slice())
-    }
-    pub(crate) unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr> {
-        if self.mode == Mode::Remote {
-            return Err(MemRegionError::MemNotLocalError);
-        }
-        Ok(self.alloc.comm_addr())
     }
 }
 

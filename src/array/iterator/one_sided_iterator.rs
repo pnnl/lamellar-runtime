@@ -25,6 +25,7 @@ use zip::*;
 // mod buffered;
 // use buffered::*;
 
+use crate::array::rdma::private::Sealed;
 use crate::array::LamellarArray;
 use crate::memregion::Dist;
 use crate::warnings::RuntimeWarning;
@@ -37,7 +38,7 @@ use std::task::{Context, Poll};
 //TODO: Think about an active message based method for transfering data that performs data reducing iterators before sending
 // i.e. for something like step_by(N) we know that only every N elements actually needs to get sent...
 pub(crate) mod private {
-    use crate::array::LamellarRdmaGet;
+    use crate::array::rdma::private::LamellarRdmaGet;
     use crate::memregion::Dist;
     use crate::{LamellarArray, LamellarEnv};
     use std::pin::Pin;
@@ -412,7 +413,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
         //     self.array.len()
         // );
         // let temp_buf = self.buf_0.split(0);
-        let req = unsafe { self.array.get_buffer(self.index, self.buf_size) };
+        let req = unsafe { self.array.get_buffer(self.index, self.buf_size, Sealed) };
         // req.launch();
         self.state = State::Pending(req.spawn());
     }
@@ -446,7 +447,11 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             // let temp_buf = self.buf_0.split(0);
 
-                            unsafe { self.array.get_buffer(self.index, self.buf_size).block() }
+                            unsafe {
+                                self.array
+                                    .get_buffer(self.index, self.buf_size, Sealed)
+                                    .block()
+                            }
                             // if self.buf_0.try_reset() != true {
                             //     panic!("Cannot reset buffer as it is shared");
                             // }
@@ -457,7 +462,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
 
                             unsafe {
                                 self.array
-                                    .get_buffer(self.index, self.array.len() - self.index)
+                                    .get_buffer(self.index, self.array.len() - self.index, Sealed)
                                     .block()
                             }
                         };
@@ -500,11 +505,15 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                         //need to get new data
                         *this.buf_index = 0;
                         let req = if *this.index + *this.buf_size < this.array.len() {
-                            unsafe { this.array.get_buffer(*this.index, *this.buf_size).spawn() }
+                            unsafe {
+                                this.array
+                                    .get_buffer(*this.index, *this.buf_size, Sealed)
+                                    .spawn()
+                            }
                         } else {
                             unsafe {
                                 this.array
-                                    .get_buffer(*this.index, this.array.len() - *this.index)
+                                    .get_buffer(*this.index, this.array.len() - *this.index, Sealed)
                                     .spawn()
                             }
                         };
@@ -543,7 +552,11 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                 // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
                 // let temp_buf = self.buf_0.split(0);
-                let req = unsafe { self.array.get_buffer(self.index, self.buf_size).spawn() };
+                let req = unsafe {
+                    self.array
+                        .get_buffer(self.index, self.buf_size, Sealed)
+                        .spawn()
+                };
                 // req.launch();
                 self.state = State::Pending(req);
             } else {
@@ -554,7 +567,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 // let _ = temp_buf.split(self.array.len() - self.index);
                 let req = unsafe {
                     self.array
-                        .get_buffer(self.index, self.array.len() - self.index)
+                        .get_buffer(self.index, self.array.len() - self.index, Sealed)
                         .spawn()
                 };
                 // req.launch();

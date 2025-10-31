@@ -1,10 +1,12 @@
-use crate::array::iterator::local_iterator::{IndexedLocalIterator, LocalIterator};
-use crate::array::iterator::private::*;
-use crate::array::read_only::*;
-use crate::array::LamellarArray;
+use crate::array::{
+    iterator::{
+        local_iterator::{IndexedLocalIterator, LocalIterator},
+        private::{InnerIter, Sealed},
+        IterLockFuture,
+    },
+    LamellarArray, ReadOnlyArray,
+};
 use crate::memregion::Dist;
-
-use self::iterator::IterLockFuture;
 
 /// An iterator over immutable (nonoverlapping) local chunks (of size chunk_size) of an [ReadOnlyArray]
 /// This struct is created by calling [ReadOnlyArray::local_chunks]

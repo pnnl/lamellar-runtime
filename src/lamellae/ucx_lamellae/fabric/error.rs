@@ -4,7 +4,7 @@ use lamellar_ucx_sys::*;
 #[allow(missing_docs)]
 #[repr(i8)]
 #[derive(thiserror::Error, Debug, PartialEq, Eq)]
-pub enum Error {
+pub(crate) enum Error {
     #[error("Operation in progress")]
     Inprogress,
     #[error("No pending message")]
@@ -117,7 +117,7 @@ impl Error {
     }
 
     #[inline]
-    pub fn from_status(status: ucs_status_t) -> Result<(), Self> {
+    pub(crate) fn from_status(status: ucs_status_t) -> Result<(), Self> {
         if status == ucs_status_t::UCS_OK {
             Ok(())
         } else {
@@ -127,7 +127,7 @@ impl Error {
 
     #[inline]
     #[allow(dead_code)]
-    pub fn from_ptr(ptr: ucs_status_ptr_t) -> Result<(), Self> {
+    pub(crate) fn from_ptr(ptr: ucs_status_ptr_t) -> Result<(), Self> {
         if UCS_PTR_IS_ERR(ptr) {
             Err(Self::from_error(UCS_PTR_RAW_STATUS(ptr)))
         } else {

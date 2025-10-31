@@ -301,7 +301,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
     ///
     /// let sub_region = mem_region.sub_region(30..70);
     ///```
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         SubRegion::sub_region(self, range)
     }
 
@@ -432,9 +432,6 @@ impl<T: Remote> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
         let addr = self.mr.addr()?;
         Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
     }
-    unsafe fn at(&self, index: usize) -> MemResult<&T> {
-        self.mr.casted_at::<T>(index)
-    }
     unsafe fn as_slice(&self) -> &[T] {
         self.as_mut_slice()
     }
@@ -454,21 +451,6 @@ impl<T: Remote> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     }
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         self.addr().map(|addr| addr.as_mut_ptr())
-    }
-    unsafe fn as_comm_slice(&self) -> MemResult<CommSlice<T>> {
-        let slice = self.mr.as_casted_comm_slice()?;
-        Ok(
-            slice
-                .sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)),
-        )
-    }
-    // unsafe fn as_casted_comm_slice<R:Dist>(&self) -> MemResult<CommSlice<R>> {
-    //     let mut slice = self.mr.as_casted_comm_slice()?;
-    //     Ok(slice.sub_slice(self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)))
-    // }
-    unsafe fn comm_addr(&self) -> MemResult<CommAllocAddr> {
-        let addr = self.mr.comm_addr()?;
-        Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
     }
 }
 
@@ -505,21 +487,6 @@ impl<T: Remote> SubRegion<T> for SharedMemoryRegion<T> {
             sub_region_size: (end - start),
             phantom: PhantomData,
         }
-    }
-}
-
-impl<T: Remote> AsBase for SharedMemoryRegion<T> {
-    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
-        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
-        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
-        // println!("to_base");
-        SharedMemoryRegion {
-            mr: self.mr.clone(),
-            sub_region_offset: u8_offset / std::mem::size_of::<B>(),
-            sub_region_size: u8_size / std::mem::size_of::<B>(),
-            phantom: PhantomData,
-        }
-        .into()
     }
 }
 

@@ -6,11 +6,11 @@ pub(crate) enum AllocError {
     OutOfMemoryError(usize),
     IdError(usize),
     LocalNotFound(CommAllocAddr),
-    RemoteNotFound(CommAllocAddr),
+    // RemoteNotFound(CommAllocAddr),
     UnexpectedAllocationType(AllocationType),
     FabricAllocationError(i32),
     InvalidSubAlloc(usize, usize),
-    NotRTAlloc(usize),
+    // NotRTAlloc(usize),
 }
 
 impl std::fmt::Display for AllocError {
@@ -29,13 +29,13 @@ impl std::fmt::Display for AllocError {
                     addr
                 )
             }
-            AllocError::RemoteNotFound(addr) => {
-                write!(
-                    f,
-                    "Allocation not found remotely for given address {:x}",
-                    addr
-                )
-            }
+            // AllocError::RemoteNotFound(addr) => {
+            //     write!(
+            //         f,
+            //         "Allocation not found remotely for given address {:x}",
+            //         addr
+            //     )
+            // }
             AllocError::UnexpectedAllocationType(alloc_type) => {
                 write!(f, "Unexpected allocation type {:?}", alloc_type)
             }
@@ -48,10 +48,9 @@ impl std::fmt::Display for AllocError {
                     "Invalid sub allocation size {} with alignment {}",
                     size, align
                 )
-            }
-            AllocError::NotRTAlloc(addr) => {
-                write!(f, "Address {:x} is not part of the runtime heap", addr)
-            }
+            } // AllocError::NotRTAlloc(addr) => {
+              //     write!(f, "Address {:x} is not part of the runtime heap", addr)
+              // }
         }
     }
 }
@@ -64,7 +63,7 @@ pub(crate) type AllocResult<T> = Result<T, AllocError>;
 pub(crate) enum FabricError {
     InitError(u32),
     BarrierError(u32),
-    FabricError(u32),
+    // FabricError(u32),
 }
 
 impl std::fmt::Display for FabricError {
@@ -75,10 +74,9 @@ impl std::fmt::Display for FabricError {
             }
             FabricError::BarrierError(err_no) => {
                 write!(f, "Barrier error: {}", err_no)
-            }
-            FabricError::FabricError(err_no) => {
-                write!(f, "Fabric error: {}", err_no)
-            }
+            } // FabricError::FabricError(err_no) => {
+              //     write!(f, "Fabric error: {}", err_no)
+              // }
         }
     }
 }
@@ -87,45 +85,45 @@ impl std::error::Error for FabricError {}
 
 pub(crate) type FabricResult<T> = Result<T, FabricError>;
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum RdmaError {
-    FabricPutError(i32),
-    FabricGetError(i32),
-}
+// #[derive(Debug, Clone, Copy)]
+// pub(crate) enum RdmaError {
+//     FabricPutError(i32),
+//     FabricGetError(i32),
+// }
 
-pub(crate) type RdmaResult = Result<(), RdmaError>;
+// pub(crate) type RdmaResult = Result<(), RdmaError>;
 
-impl std::fmt::Display for RdmaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            RdmaError::FabricPutError(err_no) => {
-                write!(f, "Fabric put error: {}", err_no)
-            }
-            RdmaError::FabricGetError(err_no) => {
-                write!(f, "Fabric get error: {}", err_no)
-            }
-        }
-    }
-}
+// impl std::fmt::Display for RdmaError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         match self {
+//             RdmaError::FabricPutError(err_no) => {
+//                 write!(f, "Fabric put error: {}", err_no)
+//             }
+//             RdmaError::FabricGetError(err_no) => {
+//                 write!(f, "Fabric get error: {}", err_no)
+//             }
+//         }
+//     }
+// }
 
-impl std::error::Error for RdmaError {}
+// impl std::error::Error for RdmaError {}
 
-#[cfg(feature = "rofi-c")]
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum TxError {
-    GetError,
-}
-#[cfg(feature = "rofi-c")]
-impl std::fmt::Display for TxError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TxError::GetError => {
-                write!(f, "error performing get")
-            }
-        }
-    }
-}
-#[cfg(feature = "rofi-c")]
-impl std::error::Error for TxError {}
-#[cfg(feature = "rofi-c")]
-pub(crate) type TxResult<T> = Result<T, TxError>;
+// #[cfg(feature = "rofi-c")]
+// #[derive(Debug, Clone, Copy)]
+// pub(crate) enum TxError {
+//     GetError,
+// }
+// #[cfg(feature = "rofi-c")]
+// impl std::fmt::Display for TxError {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         match self {
+//             TxError::GetError => {
+//                 write!(f, "error performing get")
+//             }
+//         }
+//     }
+// }
+// #[cfg(feature = "rofi-c")]
+// impl std::error::Error for TxError {}
+// #[cfg(feature = "rofi-c")]
+// pub(crate) type TxResult<T> = Result<T, TxError>;

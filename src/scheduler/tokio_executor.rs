@@ -1,6 +1,4 @@
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
-
-use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::runtime::Runtime;
 
 use futures_util::Future;

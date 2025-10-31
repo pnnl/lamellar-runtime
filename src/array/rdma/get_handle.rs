@@ -13,7 +13,7 @@ use pin_project::pin_project;
 
 use crate::{
     active_messaging::LocalAmHandle,
-    array::{operations::handle::ArrayFetchOpHandle, LamellarByteArray},
+    array::LamellarByteArray,
     lamellae::{RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle},
     memregion::{AsLamellarBuffer, LamellarBuffer},
     warnings::RuntimeWarning,
@@ -29,7 +29,7 @@ pub struct ArrayRdmaGetHandle<T: Dist> {
 pub(crate) enum ArrayRdmaGetState<T: Dist> {
     LocalAmGet(LocalAmHandle<T>),   //Am is initiated as a local am
     RemoteAmGet(AmHandle<Vec<u8>>), //Am is initiated as a remote am
-    LoadOp(ArrayFetchOpHandle<T>),
+    // LoadOp(ArrayFetchOpHandle<T>),
     RdmaGet(RdmaGetHandle<T>),
     AtomicGet(AtomicFetchOpHandle<T>),
 }
@@ -54,7 +54,7 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
                     unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
                 })
             }
-            ArrayRdmaGetState::LoadOp(req) => req.spawn(),
+            // ArrayRdmaGetState::LoadOp(req) => req.spawn(),
             ArrayRdmaGetState::RdmaGet(req) => req.spawn(),
             ArrayRdmaGetState::AtomicGet(req) => req.spawn(),
         };
@@ -77,7 +77,7 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
                 }
                 unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
             }
-            ArrayRdmaGetState::LoadOp(req) => req.block(),
+            // ArrayRdmaGetState::LoadOp(req) => req.block(),
             ArrayRdmaGetState::RdmaGet(req) => req.block(),
             ArrayRdmaGetState::AtomicGet(req) => req.block(),
         }
@@ -101,7 +101,7 @@ impl<T: Dist> Future for ArrayRdmaGetHandle<T> {
                 }
                 Poll::Pending => Poll::Pending,
             },
-            ArrayRdmaGetState::LoadOp(req) => Pin::new(req).poll(cx),
+            // ArrayRdmaGetState::LoadOp(req) => Pin::new(req).poll(cx),
             ArrayRdmaGetState::RdmaGet(req) => Pin::new(req).poll(cx),
             ArrayRdmaGetState::AtomicGet(req) => Pin::new(req).poll(cx),
         };

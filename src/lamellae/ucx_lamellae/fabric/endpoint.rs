@@ -35,7 +35,9 @@ impl UcxRequest {
     }
     pub(crate) fn wait(mut self) -> Result<(), Error> {
         if self.managed_put {
-            self.worker.wait_all();
+            self.worker
+                .wait_all()
+                .expect("Failed to wait for all requests");
             Ok(())
         } else {
             if self.request.is_null() {
@@ -72,20 +74,18 @@ impl Drop for UcxRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct Endpoint {
+pub(crate) struct Endpoint {
     pub(crate) worker: Arc<Worker>,
     pub(crate) handle: ucp_ep_h,
-    request_size: usize,
 }
 
 unsafe impl Send for Endpoint {}
 unsafe impl Sync for Endpoint {}
 
 static ATOMIC_PUT_TMP: AtomicUsize = AtomicUsize::new(0);
-static ATOMIC_GET_TMP: AtomicUsize = AtomicUsize::new(0);
 
 impl Endpoint {
-    pub fn new(worker: Arc<Worker>, remote_address: &[u8]) -> Result<Arc<Endpoint>, Error> {
+    pub(crate) fn new(worker: Arc<Worker>, remote_address: &[u8]) -> Result<Arc<Endpoint>, Error> {
         let params = ucp_ep_params {
             field_mask: (ucp_ep_params_field::UCP_EP_PARAM_FIELD_REMOTE_ADDRESS).0 as u64,
             address: remote_address.as_ptr() as *const _ as *mut _,
@@ -111,17 +111,19 @@ impl Endpoint {
         // let lock_handle = worker.lock.lock();
         let status = unsafe { ucp_ep_create(worker.handle, &params, handle.as_mut_ptr()) };
         Error::from_status(status)?;
-        let request_size = worker.request_size();
+        // let request_size = worker.request_size();
         // drop(lock_handle);
 
         Ok(Arc::new(Endpoint {
             worker,
-            request_size,
+            // request_size,
             handle: unsafe { handle.assume_init() },
         }))
     }
 
-    pub fn ep_wait_all(&self) -> Result<(), Error> {
+    // When to use ep_wait_all vs worker wait all?
+    #[allow(dead_code)]
+    pub(crate) fn ep_wait_all(&self) -> Result<(), Error> {
         let params = ucp_request_param_t {
             op_attr_mask: 0,
             flags: 0,
@@ -143,7 +145,7 @@ impl Endpoint {
     /// Stores a contiguous block of data into remote memory.
     /// blocking here means until the input buffer would be reusable
     /// not until the put has completed remotely
-    pub fn put(
+    pub(crate) fn put(
         &self,
         buf: *const u8,
         size: usize,
@@ -180,7 +182,9 @@ impl Endpoint {
             )
         };
         // println!("after inner put");
-        UcxRequest::new(request, self.worker.clone(), false).wait(); //ensures local buffer can be reused
+        UcxRequest::new(request, self.worker.clone(), false)
+            .wait()
+            .expect("Failed to wait for UcxRequest"); //ensures local buffer can be reused
         if managed {
             Some(UcxRequest::new(
                 std::ptr::null_mut(),
@@ -194,7 +198,13 @@ impl Endpoint {
         // UcxRequest::new(request, self.worker.clone(), managed)
     }
 
-    pub fn get(&self, buf: *const u8, size: usize, remote_addr: usize, rkey: &RKey) -> UcxRequest {
+    pub(crate) fn get(
+        &self,
+        buf: *const u8,
+        size: usize,
+        remote_addr: usize,
+        rkey: &RKey,
+    ) -> UcxRequest {
         // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
         //     let request = &mut *(request as *mut Request);
         //     request.waker.wake();
@@ -225,7 +235,7 @@ impl Endpoint {
         UcxRequest::new(request, self.worker.clone(), false)
     }
 
-    pub fn atomic_put<T>(
+    pub(crate) fn atomic_put<T>(
         &self,
         value: T,
         remote_addr: usize,
@@ -299,7 +309,12 @@ impl Endpoint {
         // }
     }
 
-    pub fn atomic_get<T>(&self, reply_buf: *mut T, remote_addr: usize, rkey: &RKey) -> UcxRequest {
+    pub(crate) fn atomic_get<T>(
+        &self,
+        reply_buf: *mut T,
+        remote_addr: usize,
+        rkey: &RKey,
+    ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
         let zero: MaybeUninit<T> = MaybeUninit::uninit();
@@ -331,7 +346,7 @@ impl Endpoint {
         UcxRequest::new(request, self.worker.clone(), false)
     }
 
-    pub fn atomic_swap<T>(
+    pub(crate) fn atomic_swap<T>(
         &self,
         // buf: *const u8,
         value: T,
@@ -414,9 +429,9 @@ impl Drop for Endpoint {
     }
 }
 
-unsafe extern "C" fn cb(request: *mut std::ffi::c_void, _status: ucs_status_t) {
-    // This is a placeholder for the callback function.
-    // In practice, you would implement the logic to handle the completion of the request.
-    // For example, you might wake up a thread or signal an event.
-    unsafe { ucp_request_free(request as _) };
-}
+// unsafe extern "C" fn cb(request: *mut std::ffi::c_void, _status: ucs_status_t) {
+//     // This is a placeholder for the callback function.
+//     // In practice, you would implement the logic to handle the completion of the request.
+//     // For example, you might wake up a thread or signal an event.
+//     unsafe { ucp_request_free(request as _) };
+// }

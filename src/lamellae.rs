@@ -23,35 +23,14 @@ match_cfg::match_cfg! {
 pub(crate) mod libfabric_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
-// #[cfg(feature = "enable-libfabric")]
-// pub(crate) mod libfabasync_lamellae;
-// #[cfg(feature = "rofi-c")]
-// {
-// pub(crate) mod rofi_c_lamellae;
-// use rofi_c_lamellae::{RofiC, RofiCBuilder};
-// }
-// #[cfg(feature = "enable-rofi-rust")]
-// pub(crate) mod rofi_rust_async_lamellae;
-// #[cfg(feature = "enable-rofi-rust")]
-// pub(crate) mod rofi_rust_lamellae;
 
-// #[cfg(feature = "rofi-c")]
-// use rofi_c_lamellae::{RofiC, RofiCBuilder};
-// #[cfg(feature = "enable-rofi-rust")]
-// use {
-//     rofi_rust_async_lamellae::{RofiRustAsync, RofiRustAsyncBuilder},
-//     rofi_rust_lamellae::{RofiRust, RofiRustBuilder},
-// };
 #[cfg(feature = "enable-libfabric")]
 use {
     libfabric_lamellae::{Libfabric, LibfabricBuilder},
-    // libfabasync_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
 };
-
 #[cfg(feature = "enable-ucx")]
 use {
     ucx_lamellae::{Ucx, UcxBuilder},
-    // libfabasync_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
 };
 
 use async_trait::async_trait;
@@ -71,19 +50,10 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
-    #[cfg(feature = "rofi-c")]
-    /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
-    RofiC,
-    // #[cfg(feature = "enable-rofi-rust")]
-    // RofiRust,
-    // #[cfg(feature = "enable-rofi-rust")]
-    // RofiRustAsync,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
     #[cfg(feature = "enable-ucx")]
     Ucx,
-    // #[cfg(feature = "enable-libfabric")]
-    // LibfabricAsync,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -132,12 +102,6 @@ impl Default for Backend {
                 #[cfg(not(feature = "enable-ucx"))]
                 panic!("unable to set ucx backend, recompile with 'enable-ucx' feature")
             }
-            // "libfabasync" => {
-            //     #[cfg(feature = "enable-libfabric")]
-            //     return Backend::LibfabricAsync;
-            //     #[cfg(not(feature = "enable-libfabric"))]
-            //     panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
-            // }
             "shmem" => {
                 return Backend::Shmem;
             }
@@ -160,32 +124,20 @@ pub(crate) struct SerializeHeader {
 #[derive(Clone)]
 pub(crate) struct SerializedData {
     pub(crate) alloc: CommAlloc,
-    // pub(crate) ref_cnt: *const AtomicUsize,
     pub(crate) ser_data_bytes: CommSlice<u8>,
     pub(crate) header_bytes: CommSlice<u8>,
     pub(crate) payload_bytes: CommSlice<u8>,
-    pub(crate) comm: Arc<Comm>,
 }
 
 // #[derive(Debug)]
 pub(crate) struct SubSerializedData {
     pub(crate) alloc: CommAlloc,
-    // pub(crate) ref_cnt: *const AtomicUsize,
     pub(crate) _ser_data_bytes: CommSlice<u8>,
     pub(crate) header_bytes: CommSlice<u8>,
     pub(crate) payload_bytes: CommSlice<u8>,
-    pub(crate) comm: Arc<Comm>,
 }
 
-// // #[derive(Debug)]
-// pub(crate) struct RemoteSerializedData {
-//     pub(crate) alloc: CommAlloc,
-//     pub(crate) ref_cnt: *const AtomicUsize,
-//     pub(crate) ser_data_bytes: CommSlice<u8>,
-//     pub(crate) header_bytes: CommSlice<u8>,
-//     pub(crate) payload_bytes: CommSlice<u8>,
-//     pub(crate) comm: Arc<Comm>,
-// }
+
 
 // we have allocated this memory out of fabric memory and thus are responsible for managing it,
 // we will not move the underlying data, reallocate it, nor free it until all references are dropped
@@ -195,75 +147,28 @@ unsafe impl Sync for SerializedData {}
 unsafe impl Send for SubSerializedData {}
 unsafe impl Sync for SubSerializedData {}
 
-// unsafe impl Send for RemoteSerializedData {}
-// unsafe impl Sync for RemoteSerializedData {}
 
 impl SerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
-        // let ref_cnt_size = std::mem::size_of::<AtomicUsize>();
-        // let ser_data_size_size = std::mem::size_of::<usize>();
-        // let ser_data_offset = ser_data_size_size;
         let alloc_size = size; //+ ser_data_size_size;
         let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
-        // let ref_cnt = unsafe { alloc.as_ptr::<AtomicUsize>() };
-        // let ser_data_size = unsafe { alloc.as_mut_ptr::<usize>() };
         let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
 
-        unsafe {
-            // ref_cnt.as_ref().unwrap().store(1, Ordering::SeqCst);
-            // *ser_data_size = alloc.num_bytes();
             debug!("creating new serialized data {:?} {:?} {:?} {:?}",
                 alloc,ser_data_bytes,header_bytes,payload_bytes
             );
-        }
+        
 
         Ok(SerializedData {
             alloc,
-            // ref_cnt,
             ser_data_bytes,
             header_bytes,
             payload_bytes,
-            comm,
         })
     }
-
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) unsafe fn decrement_cnt_from_addr(comm: &Arc<Comm>, addr: usize) {
-    //     let alloc_addr = addr - std::mem::size_of::<usize>() - std::mem::size_of::<AtomicUsize>();
-    //     let alloc_size = (alloc_addr + std::mem::size_of::<AtomicUsize>()) as *const usize;
-    //     let alloc_size = alloc_size.as_ref().expect("valid serialized data");
-    //     let ref_cnt = alloc_addr as *const AtomicUsize;
-    //     let ref_cnt = ref_cnt.as_ref().expect("valid serialized data");
-    //     trace!(
-    //         "alloc_addr {:x}  alloc_size {:?} ref_cnt {:?}",
-    //         alloc_addr,
-    //         alloc_size,
-    //         ref_cnt.load(Ordering::SeqCst)
-    //     );
-    //     if ref_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
-    //         debug!("freeing serialized data from addr {:x} ", alloc_addr);
-    //         comm.rt_free(CommAlloc {
-    //             inner_alloc: CommAllocInner::Raw(alloc_addr, *alloc_size),
-    //             alloc_type: CommAllocType::RtHeap,
-    //         });
-    //     }
-    // }
-
-    // #[tracing::instrument(level = "debug")]
-    // pub(crate) fn into_remote(self) -> RemoteSerializedData {
-    //     self.increment_cnt();
-    //     RemoteSerializedData {
-    //         alloc: self.alloc.clone(),
-    //         ref_cnt: self.ref_cnt,
-    //         ser_data_bytes: self.ser_data_bytes.clone(),
-    //         header_bytes: self.header_bytes.clone(),
-    //         payload_bytes: self.payload_bytes.clone(),
-    //         comm: self.comm.clone(),
-    //     }
-    // }
 }
 
 impl SerializedData {
@@ -294,16 +199,6 @@ impl SerializedData {
     pub(crate) fn header_and_data_as_bytes_mut(&mut self) -> CommSlice<u8> {
         self.ser_data_bytes.clone()
     }
-
-    // #[tracing::instrument(skip_all, level = "debug")]
-    // pub(crate) fn increment_cnt(&self) {
-    //     unsafe {
-    //         self.ref_cnt
-    //             .as_ref()
-    //             .expect("valid serialized data")
-    //             .fetch_add(1, Ordering::SeqCst)
-    //     };
-    // }
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn len(&self) -> usize {
@@ -350,39 +245,14 @@ impl SerializedData {
     #[tracing::instrument(level = "debug")]
     pub(crate) fn sub_data(&mut self, start: usize, end: usize) -> SubSerializedData {
         trace!("sub_data start: {} end: {}", start, end);
-        // self.increment_cnt();
         SubSerializedData {
             alloc: self.alloc.clone(),
-            // ref_cnt: self.ref_cnt,
             _ser_data_bytes: self.ser_data_bytes.clone(),
             header_bytes: self.header_bytes.clone(),
             payload_bytes: self.payload_bytes.sub_slice(start..end),
-            comm: self.comm.clone(),
         }
     }
 }
-
-// impl Drop for SerializedData {
-//     #[tracing::instrument(level = "debug")]
-//     fn drop(&mut self) {
-//         unsafe {
-//             trace!("dropping SerializedData {:?} ", self);
-//             if self
-//                 .ref_cnt
-//                 .as_ref()
-//                 .expect("valid serialized data")
-//                 .fetch_sub(1, Ordering::SeqCst)
-//                 == 1
-//             {
-//                 debug!(
-//                     "freeing serialized data from addr {:x} ",
-//                     self.alloc.comm_addr()
-//                 );
-//                 self.comm.rt_free(self.alloc.clone());
-//             }
-//         }
-//     }
-// }
 
 impl SubSerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
@@ -418,100 +288,6 @@ impl Des for SubSerializedData {
         Ok(crate::deserialize(&self.data_as_bytes(), true)?)
     }
 }
-
-// impl Drop for SubSerializedData {
-//     #[tracing::instrument(level = "debug")]
-//     fn drop(&mut self) {
-//         unsafe {
-//             trace!("dropping SubSerializedData {:?}", self);
-//             if self
-//                 .ref_cnt
-//                 .as_ref()
-//                 .expect("valid serialized data")
-//                 .fetch_sub(1, Ordering::SeqCst)
-//                 == 1
-//             {
-//                 debug!(
-//                     "freeing serialized data from addr {:x} ",
-//                     self.alloc.comm_addr()
-//                 );
-//                 self.comm.rt_free(self.alloc.clone());
-//             }
-//         }
-//     }
-// }
-
-// impl RemoteSerializedData {
-//     #[tracing::instrument(skip_all, level = "debug")]
-//     pub(crate) fn increment_cnt(&self) {
-//         unsafe {
-//             self.ref_cnt
-//                 .as_ref()
-//                 .expect("valid serialized data")
-//                 .fetch_add(1, Ordering::SeqCst)
-//         };
-//     }
-
-//     #[tracing::instrument(skip_all, level = "debug")]
-//     pub(crate) fn len(&self) -> usize {
-//         self.ser_data_bytes.len()
-//     }
-// }
-
-// impl std::fmt::Debug for RemoteSerializedData {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "RemoteSerializedData ref_cnt: {:?} addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-//             unsafe {self
-//                 .ref_cnt
-//                 .as_ref()
-//                 .expect("valid serialized data")
-//                 .load(Ordering::SeqCst) },
-//             self.alloc.comm_addr(),
-//             self.ser_data_bytes.as_ptr(),
-//             self.ser_data_bytes.len(),
-//             self.payload_bytes.as_ptr(),
-//             self.payload_bytes.len(),
-//             self.alloc.num_bytes())
-//     }
-// }
-
-// impl Clone for RemoteSerializedData {
-//     #[tracing::instrument(level = "debug")]
-//     fn clone(&self) -> Self {
-//         self.increment_cnt();
-//         RemoteSerializedData {
-//             alloc: self.alloc.clone(),
-//             ref_cnt: self.ref_cnt,
-//             ser_data_bytes: self.ser_data_bytes.clone(),
-//             header_bytes: self.header_bytes.clone(),
-//             payload_bytes: self.payload_bytes.clone(),
-//             comm: self.comm.clone(),
-//         }
-//     }
-// }
-
-// impl Drop for RemoteSerializedData {
-//     #[tracing::instrument(level = "debug")]
-//     fn drop(&mut self) {
-//         unsafe {
-//             trace!("dropping RemoteSerializedData {:?}", self);
-//             if self
-//                 .ref_cnt
-//                 .as_ref()
-//                 .expect("valid serialized data")
-//                 .fetch_sub(1, Ordering::SeqCst)
-//                 == 1
-//             {
-//                 debug!(
-//                     "freeing serialized data from addr {:x} ",
-//                     self.alloc.comm_addr()
-//                 );
-//                 self.comm.rt_free(self.alloc.clone());
-//             }
-//         }
-//     }
-// }
-
 #[enum_dispatch]
 pub(crate) trait Des {
     fn deserialize_header(&self) -> Option<SerializeHeader>;
@@ -520,18 +296,10 @@ pub(crate) trait Des {
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder {
-    #[cfg(feature = "rofi-c")]
-    RofiCBuilder,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustBuilder,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsyncBuilder,
     #[cfg(feature = "enable-libfabric")]
     LibfabricBuilder,
     #[cfg(feature = "enable-ucx")]
     UcxBuilder,
-    // #[cfg(feature = "enable-libfabric")]
-    // LibfabricAsyncBuilder,
     ShmemBuilder,
     LocalBuilder,
 }
@@ -563,12 +331,6 @@ pub(crate) trait Ser {
 #[enum_dispatch(Ser, LamellaeUtil, LamellaeShutdown)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
-    #[cfg(feature = "rofi-c")]
-    RofiC,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRust,
-    #[cfg(feature = "enable-rofi-rust")]
-    RofiRustAsync,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
     #[cfg(feature = "enable-ucx")]
@@ -582,12 +344,6 @@ pub(crate) enum Lamellae {
 impl Lamellae {
     pub(crate) fn comm(&self) -> &Comm {
         match self {
-            #[cfg(feature = "rofi-c")]
-            Lamellae::RofiC(rofi_c) => rofi_c.comm(),
-            #[cfg(feature = "enable-rofi-rust")]
-            Lamellae::RofiRust => self.comm(),
-            #[cfg(feature = "enable-rofi-rust")]
-            Lamellae::RofiRustAsync => self.comm(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.comm(),
             #[cfg(feature = "enable-ucx")]
@@ -601,12 +357,6 @@ impl Lamellae {
 
     pub(crate) fn wait_all_print(&self) {
         match self {
-            #[cfg(feature = "rofi-c")]
-            Lamellae::RofiC(rofi_c) => rofi_c.wait_all_print(),
-            #[cfg(feature = "enable-rofi-rust")]
-            Lamellae::RofiRust => println!("rofi rust - nothing to print"),
-            #[cfg(feature = "enable-rofi-rust")]
-            Lamellae::RofiRustAsync => println!("rofi rust async - nothing to print"),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.wait_all_print(),
             #[cfg(feature = "enable-ucx")]
@@ -636,24 +386,6 @@ pub(crate) trait LamellaeUtil: Send {
 #[tracing::instrument(skip_all, level = "debug")]
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
-        #[cfg(feature = "rofi-c")]
-        Backend::RofiC => {
-            let provider = config().rofi_provider.clone();
-            let domain = config().rofi_domain.clone();
-            LamellaeBuilder::RofiCBuilder(RofiCBuilder::new(&provider, &domain))
-        }
-        // #[cfg(feature = "enable-rofi-rust")]
-        // Backend::RofiRust => {
-        //     let provider = config().rofi_provider.clone();
-        //     let domain = config().rofi_domain.clone();
-        //     LamellaeBuilder::RofiRustBuilder(RofiRustBuilder::new(&provider, &domain))
-        // }
-        // #[cfg(feature = "enable-rofi-rust")]
-        // Backend::RofiRustAsync => {
-        //     let provider = config().rofi_provider.clone();
-        //     let domain = config().rofi_domain.clone();
-        //     LamellaeBuilder::RofiRustAsyncBuilder(RofiRustAsyncBuilder::new(&provider, &domain))
-        // }
         #[cfg(feature = "enable-libfabric")]
         Backend::Libfabric => {
             let provider = config().rofi_provider.clone();
@@ -662,12 +394,6 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
         }
         #[cfg(feature = "enable-ucx")]
         Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
-        // #[cfg(feature = "enable-libfabric")]
-        // Backend::LibfabricAsync => {
-        //     let provider = config().rofi_provider.clone();
-        //     let domain = config().rofi_domain.clone();
-        //     LamellaeBuilder::LibfabricAsyncBuilder(LibfabricAsyncBuilder::new(&provider, &domain))
-        // }
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }

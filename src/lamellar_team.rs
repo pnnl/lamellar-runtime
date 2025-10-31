@@ -28,6 +28,7 @@ use crate::{
     },
     utils::print_stats,
     warnings::RuntimeWarning,
+    Darc,
 };
 
 // #[cfg(feature = "nightly")]
@@ -766,6 +767,21 @@ impl From<LamellarWorld> for ArcLamellarTeam {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub(crate) enum LamellarTeamRemote {
+    World(LamellarTeamRemotePtr),
+    SubTeam(Darc<Pin<Arc<LamellarTeamRT>>>),
+}
+
+impl From<LamellarTeamRemote> for Pin<Arc<LamellarTeamRT>> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn from(remote: LamellarTeamRemote) -> Self {
+        match remote {
+            LamellarTeamRemote::World(remote_ptr) => remote_ptr.into(),
+            LamellarTeamRemote::SubTeam(darc_team) => darc_team.clone(),
+        }
+    }
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub(crate) struct LamellarTeamRemotePtr {
     pub(crate) addr: usize,
     pub(crate) pe: usize,
@@ -786,7 +802,9 @@ impl From<LamellarTeamRemotePtr> for Pin<Arc<LamellarTeamRT>> {
             let team_ptr = *local_team_addr.as_ptr::<*const LamellarTeamRT>();
             trace!("team_ptr from local_team_addr {:?}", team_ptr);
             Arc::increment_strong_count(team_ptr);
-            Pin::new_unchecked(Arc::from_raw(team_ptr))
+            let team = Pin::new_unchecked(Arc::from_raw(team_ptr));
+            trace!("team from remote ptr {:?}", team.dropped);
+            team
         }
     }
 }
@@ -1147,13 +1165,13 @@ impl LamellarTeamRT {
             arch.hash(&mut hasher);
             let hash = hasher.finish();
             let archrt = Arc::new(LamellarArchRT::new(parent.arch.clone(), arch));
-            trace!("arch: {:?}", archrt);
+            trace!("subteam arch: {:?}", archrt);
             parent.barrier();
             // ------ ensure team is being constructed synchronously and in order across all pes in parent ------ //
             let parent_alloc = AllocationType::Sub(parent.arch.team_iter().collect::<Vec<usize>>());
 
             let team_counters = Arc::new(AMCounters::new());
-            // println!("allocating hash_buf");
+            trace!("subteam allocating hash_buf");
             let dropped = MemoryRegion::<usize>::new(
                 parent.num_pes,
                 &parent.scheduler,
@@ -1168,7 +1186,7 @@ impl LamellarTeamRT {
             // println!("barrier done in {:?}", s.elapsed());
             let timeout = Instant::now() - s;
 
-            trace!("putting hash vals {:?}", hash);
+            trace!("subteam putting hash vals {:?}", hash);
             if let Ok(parent_world_pe) = parent.arch.team_pe(parent.world_pe) {
                 for world_pe in parent.arch.team_iter() {
                     unsafe {
@@ -1178,9 +1196,9 @@ impl LamellarTeamRT {
                     }
                 }
             }
-            trace!("done putting hash, now gonna check hash vals");
+            trace!("subteam done putting hash, now gonna check hash vals");
             parent.check_hash_vals(hash as usize, &dropped, timeout);
-            trace!("passed check hash vals");
+            trace!("subteam passed check hash vals");
 
             let remote_ptr_alloc = parent
                 .lamellae
@@ -1192,10 +1210,10 @@ impl LamellarTeamRT {
                 )
                 .expect("alloc failed creating LamellarTeam");
             // ------------------------------------------------------------------------------------------------- //
-            trace!("passed remote_ptr_alloc");
+            trace!("subteam passed remote_ptr_alloc");
             let num_pes = archrt.num_pes();
             parent.barrier();
-            trace!("passed barrier, creating RT team");
+            trace!("subteam passed barrier, creating RT team");
             let team = LamellarTeamRT {
                 world: Some(world.clone()),
                 parent: Some(parent.clone()),

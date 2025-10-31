@@ -79,14 +79,6 @@ impl<T: Remote> UcxPutFuture<T> {
         } else {
             self.alloc.as_mut_slice()[self.offset..self.offset + src.len()]
                 .copy_from_slice(src.as_slice());
-            // let dst = self.alloc.start() + self.offset;
-            // if !(src.contains(&dst) || src.contains(&(dst + src.len()))) {
-            //     unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) };
-            // } else {
-            //     unsafe {
-            //         std::ptr::copy(src.as_ptr(), dst as *mut T, src.len());
-            //     }
-            // }
         }
     }
 
@@ -123,7 +115,7 @@ impl<T: Remote> UcxPutFuture<T> {
     pub(crate) fn block(mut self) {
         self.exec_op();
         if let Some(request) = self.request.take() {
-            request.wait();
+            request.wait().expect("ucx put failed");
         } else {
             self.alloc.wait_all();
         }
@@ -137,7 +129,7 @@ impl<T: Remote> UcxPutFuture<T> {
         self.scheduler.clone().spawn_task(
             async move {
                 if let Some(request) = self.request.take() {
-                    request.wait();
+                    request.wait().expect("ucx put failed");
                 } else {
                     self.alloc.wait_all();
                 }
@@ -173,7 +165,7 @@ impl<T: Remote> Future for UcxPutFuture<T> {
         let this = self.project();
         *this.spawned = true;
         if let Some(request) = this.request.take() {
-            let _ = request.wait();
+            let _ = request.wait().expect("ucx put failed");
         } else {
             this.alloc.wait_all();
         }
@@ -210,7 +202,7 @@ impl<T: Remote> UcxGetFuture<T> {
         self.exec_at();
         self.spawned = true;
         if let Some(request) = self.request.take() {
-            request.wait();
+            request.wait().expect("ucx get failed");
         } else {
             self.alloc.wait_all();
         }
@@ -224,7 +216,7 @@ impl<T: Remote> UcxGetFuture<T> {
         self.scheduler.clone().spawn_task(
             async move {
                 if let Some(request) = self.request.take() {
-                    request.wait();
+                    request.wait().expect("ucx get failed");
                 } else {
                     self.alloc.wait_all();
                 }
@@ -261,7 +253,7 @@ impl<T: Remote> Future for UcxGetFuture<T> {
         let this = self.project();
         *this.spawned = true;
         if let Some(request) = this.request.take() {
-            request.wait();
+            request.wait().expect("ucx get failed");
         } else {
             this.alloc.wait_all();
         }
@@ -305,7 +297,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
         self.exec_get();
         self.spawned = true;
         if let Some(request) = self.request.take() {
-            request.wait();
+            request.wait().expect("ucx get buffer failed");
         } else {
             self.alloc.wait_all();
         }
@@ -321,7 +313,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
         self.scheduler.clone().spawn_task(
             async move {
                 if let Some(request) = self.request.take() {
-                    request.wait();
+                    request.wait().expect("ucx get buffer failed");
                 } else {
                     self.alloc.wait_all();
                 }
@@ -360,7 +352,7 @@ impl<T: Remote> Future for UcxGetBufferFuture<T> {
         let this = self.project();
         *this.spawned = true;
         if let Some(request) = this.request.take() {
-            request.wait();
+            request.wait().expect("ucx get buffer failed");
         } else {
             this.alloc.wait_all();
         }
@@ -397,22 +389,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> UcxGetIntoBufferFuture<T, B> {
             self.dst
                 .as_mut_slice()
                 .copy_from_slice(&self.alloc.as_mut_slice()[self.offset..(self.offset + len)])
-            // let src = self.alloc.start() + self.offset;
-            // if !(dst.contains(&src) || dst.contains(&(src + dst.len()))) {
-            //     unsafe {
-            //         std::ptr::copy_nonoverlapping(src as *const T, dst.as_mut_ptr(), dst.len());
-            //     }
-            // } else {
-            //     unsafe {
-            //         std::ptr::copy(src as *const T, dst.as_mut_ptr(), dst.len());
-            //     }
-            // }
         }
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
         if let Some(request) = self.request.take() {
-            request.wait();
+            request.wait().expect("ucx get into buffer failed");
         } else {
             self.alloc.wait_all();
         }
@@ -465,7 +447,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxGetIntoBufferFuture<T, B> 
         let this = self.project();
         *this.spawned = true;
         if let Some(request) = this.request.take() {
-            request.wait();
+            request.wait().expect("ucx get into buffer failed");
         } else {
             this.alloc.wait_all();
         }

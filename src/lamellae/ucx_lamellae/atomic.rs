@@ -50,7 +50,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFuture<T> {
     pub(crate) fn block(mut self) {
         self.exec_op();
         let request = self.request.take().expect("ucx request doesnt exist");
-        request.wait();
+        request.wait().expect("Failed to wait for UcxRequest");
         self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -61,7 +61,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFuture<T> {
         let request = self.request.take().expect("ucx request doesnt exist");
         self.scheduler.clone().spawn_task(
             async move {
-                request.wait();
+                request.wait().expect("Failed to wait for UcxRequest");
             },
             counters,
         )
@@ -93,7 +93,7 @@ impl<T: Copy + Send + 'static> Future for UcxAtomicFuture<T> {
             self.spawned = true;
         }
         let request = self.request.take().expect("ucx request doesnt exist");
-        request.wait();
+        request.wait().expect("Failed to wait for UcxRequest");
         Poll::Ready(())
     }
 }
@@ -131,7 +131,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
         let request = self.request.take().expect("ucx request doesnt exist");
-        request.wait();
+        request.wait().expect("Failed to wait for UcxRequest");
         self.spawned = true;
         unsafe {
             let mut res = MaybeUninit::uninit();
@@ -148,7 +148,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
         self.scheduler.clone().spawn_task(
             async move {
                 let request = self.request.take().expect("ucx request doesnt exist");
-                request.wait();
+                request.wait().expect("Failed to wait for UcxRequest");
                 unsafe {
                     let mut res = MaybeUninit::uninit();
                     std::mem::swap(&mut self.result, &mut res);
@@ -185,7 +185,7 @@ impl<T: Copy + Send + 'static> Future for UcxAtomicFetchFuture<T> {
             self.spawned = true;
         }
         let request = self.request.take().expect("ucx request doesnt exist");
-        request.wait();
+        request.wait().expect("Failed to wait for UcxRequest");
         Poll::Ready(unsafe {
             let mut res = MaybeUninit::uninit();
             std::mem::swap(&mut self.result, &mut res);

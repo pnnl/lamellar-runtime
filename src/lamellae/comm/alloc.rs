@@ -57,9 +57,9 @@ pub(crate) fn decrement_ref_count(counter: &AtomicUsize) -> usize {
     decode_ref_count(counter.fetch_sub(1, Ordering::SeqCst))
 }
 
-pub(crate) fn get_padding(counter: &AtomicUsize) -> usize {
-    decode_padding(counter.load(Ordering::SeqCst))
-}
+// pub(crate) fn get_padding(counter: &AtomicUsize) -> usize {
+//     decode_padding(counter.load(Ordering::SeqCst))
+// }
 
 pub(crate) fn get_ref_count(counter: &AtomicUsize) -> usize {
     decode_ref_count(counter.load(Ordering::SeqCst))
@@ -118,19 +118,19 @@ impl CommAllocInner {
             CommAllocInner::Raw(_, _) => None,
             CommAllocInner::LocalAlloc(inner_alloc) => inner_alloc.leak(),
             CommAllocInner::ShmemAlloc(inner_alloc) => inner_alloc.leak(),
-            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+            CommAllocInner::OneSidedShmemAlloc(_inner_alloc) => {
                 panic!("OneSidedShmemAlloc cannot be leaked")
             }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => inner_alloc.leak(),
             #[cfg(feature = "enable-libfabric")]
-            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+            CommAllocInner::OneSidedLibfabricAlloc(_inner_alloc) => {
                 panic!("OneSidedLibfabricAlloc cannot be leaked")
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => inner_alloc.leak(),
             #[cfg(feature = "enable-ucx")]
-            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+            CommAllocInner::OneSidedUcxAlloc(_inner_alloc) => {
                 panic!("OneSidedUcxAlloc cannot be leaked")
             }
         }
@@ -218,11 +218,16 @@ impl CommAllocInner {
             }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.wait();
+                inner_alloc
+                    .wait()
+                    .expect("error waiting on libfabric alloc");
             }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
-                inner_alloc.alloc.wait();
+                inner_alloc
+                    .alloc
+                    .wait()
+                    .expect("error waiting on onesided libfabric alloc");
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
@@ -870,31 +875,11 @@ impl CommAllocAtomic for CommAllocInner {
 
 #[derive(Clone, Debug)]
 pub(crate) struct CommAlloc {
-    // pub(crate) addr: usize,
-    // pub(crate) size: usize,
     pub(crate) inner_alloc: CommAllocInner,
     pub(crate) alloc_type: CommAllocType,
 }
-// impl std::fmt::Debug for CommAlloc {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(
-//             f,
-//             "CommAlloc {{ addr: {:x}, size: {:?}, alloc_type: {:?} }}",
-//             self.inner_alloc.addr(),
-//             self.num_bytes(),
-//             self.alloc_type
-//         )
-//     }
-// }
-
-// unsafe impl Send for CommAlloc {}
-// unsafe impl Sync for CommAlloc {}
 
 impl CommAlloc {
-    pub(crate) fn byte_add(&self, offset: usize) -> CommAllocAddr {
-        assert!(offset < self.num_bytes());
-        self.inner_alloc.addr() + offset
-    }
     #[tracing::instrument(skip(self), level = "debug")]
     pub(crate) fn as_comm_slice<T>(&self) -> CommSlice<T> {
         CommSlice {
@@ -933,10 +918,6 @@ impl CommAlloc {
     pub(crate) unsafe fn as_ref<T>(&self) -> Option<&T> {
         self.as_ptr::<T>().as_ref()
     }
-
-    // pub(crate) unsafe fn as_mut<T>(&self) -> Option<&mut T> {
-    //     self.as_mut_ptr::<T>().as_mut()
-    // }
     pub(crate) fn comm_addr(&self) -> CommAllocAddr {
         self.inner_alloc.addr()
     }
@@ -952,12 +933,6 @@ impl CommAlloc {
     pub(crate) fn leak(self) -> Option<CommAllocAddr> {
         self.inner_alloc.leak()
     }
-    // pub(crate) fn contains(&self, addr: &usize) -> bool {
-    //     self.inner_alloc.contains(addr)
-    // }
-    // pub(crate) fn calc_offset(&self, addr: &usize) -> CommAllocAddr {
-    //     CommAllocAddr(*addr - *self.inner_alloc.addr())
-    // }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> CommAlloc {
         CommAlloc {
             inner_alloc: self.inner_alloc.sub_alloc(offset, size),

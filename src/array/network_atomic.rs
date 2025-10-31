@@ -1028,7 +1028,7 @@ impl<T: Dist + ArrayOps + std::default::Default> NetworkAtomicArray<T> {
 
 #[doc(hidden)]
 impl<T: Dist> NetworkAtomicArray<T> {
-    pub fn Network_type(&self) -> NetworkAtomicType {
+    pub fn network_type(&self) -> NetworkAtomicType {
         self.orig_t
     }
     pub(crate) fn get_element(&self, index: usize) -> Option<NetworkAtomicElement<T>> {

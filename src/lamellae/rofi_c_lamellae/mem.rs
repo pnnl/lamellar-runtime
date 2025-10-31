@@ -134,14 +134,7 @@ impl CommMem for RofiCComm {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
         for alloc in allocs.iter() {
-            println!(
-                // "{:x} {:?} {:?} {:?}",
-                "{:x} {:?}",
-                alloc.start_addr,
-                alloc.max_size,
-                // alloc.occupied(),
-                // alloc.space_avail()
-            );
+            println!(alloc.start_addr, alloc.max_size,);
         }
     }
 

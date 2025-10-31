@@ -207,7 +207,7 @@ impl LamellarWorld {
     }
 
     // #[doc(hidden)]
-    // #[allow(non_snake_case)]
+    #[allow(non_snake_case)]
     // #[tracing::instrument(skip_all, level = "debug")]
     pub fn MB_sent(&self) -> f64 {
         let mut sent = vec![];

@@ -22,65 +22,65 @@ use std::{
     sync::{atomic::*, Arc},
     task::{Context, Poll},
 };
-pub(crate) trait NetworkAtomic {
-    fn supported() -> bool {
-        false
-    }
-}
-impl NetworkAtomic for u8 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for u16 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for u32 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for u64 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for usize {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for i8 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for i16 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for i32 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for i64 {
-    fn supported() -> bool {
-        true
-    }
-}
-impl NetworkAtomic for isize {
-    fn supported() -> bool {
-        true
-    }
-}
+// pub(crate) trait NetworkAtomic {
+//     fn supported() -> bool {
+//         false
+//     }
+// }
+// impl NetworkAtomic for u8 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for u16 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for u32 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for u64 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for usize {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for i8 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for i16 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for i32 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for i64 {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
+// impl NetworkAtomic for isize {
+//     fn supported() -> bool {
+//         true
+//     }
+// }
 
-impl NetworkAtomic for () {}
+// impl NetworkAtomic for () {}
 
-impl<T> NetworkAtomic for &T {}
+// impl<T> NetworkAtomic for &T {}
 
 /// A task handle for raw RMDA (put/get) operation
 #[must_use = " AtomicOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
@@ -214,13 +214,10 @@ pub(crate) enum AtomicOp<T> {
     Min(T),
     Max(T),
     Sum(T),
-    Prod(T),
-    LogicalOr(T),
-    LogicalXor(T),
-    LogicalAnd(T),
     BitOr(T),
     BitXor(T),
     BitAnd(T),
+    BitNand(T),
     Read,
     Write(T),
     Cas(T, T),
@@ -232,13 +229,10 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
             AtomicOp::Min(_) => write!(f, "Min"),
             AtomicOp::Max(_) => write!(f, "Max"),
             AtomicOp::Sum(_) => write!(f, "Sum"),
-            AtomicOp::Prod(_) => write!(f, "Prod"),
-            AtomicOp::LogicalOr(_) => write!(f, "LogicalOr"),
-            AtomicOp::LogicalXor(_) => write!(f, "LogicalXor"),
-            AtomicOp::LogicalAnd(_) => write!(f, "LogicalAnd"),
             AtomicOp::BitOr(_) => write!(f, "BitOr"),
             AtomicOp::BitXor(_) => write!(f, "BitXor"),
             AtomicOp::BitAnd(_) => write!(f, "BitAnd"),
+            AtomicOp::BitNand(_) => write!(f, "BitNand"),
             AtomicOp::Read => write!(f, "Read"),
             AtomicOp::Write(_) => write!(f, "Write"),
             AtomicOp::Cas(_, _) => write!(f, "Cas"),
@@ -252,23 +246,13 @@ impl<T> AtomicOp<T> {
             AtomicOp::Min(slice)
             | AtomicOp::Max(slice)
             | AtomicOp::Sum(slice)
-            | AtomicOp::Prod(slice)
-            | AtomicOp::LogicalOr(slice)
-            | AtomicOp::LogicalXor(slice)
-            | AtomicOp::LogicalAnd(slice)
             | AtomicOp::BitOr(slice)
             | AtomicOp::BitXor(slice)
             | AtomicOp::BitAnd(slice)
+            | AtomicOp::BitNand(slice)
             | AtomicOp::Write(slice)
             | AtomicOp::Cas(slice, _) => Some(slice),
             AtomicOp::Read => None,
-        }
-    }
-
-    pub(crate) fn dst(&self) -> Option<&T> {
-        match self {
-            AtomicOp::Cas(_, slice) => Some(slice),
-            _ => None,
         }
     }
 }
@@ -306,16 +290,16 @@ pub(crate) trait AsAtomic: Copy + std::fmt::Debug {
     fn store(&mut self, val: Self);
     fn swap(&mut self, val: Self) -> Self;
     fn fetch_add(&mut self, val: Self) -> Self;
-    fn fetch_sub(&mut self, val: Self) -> Self;
+    // fn fetch_sub(&mut self, val: Self) -> Self;
     fn fetch_and(&mut self, val: Self) -> Self;
     fn fetch_nand(&mut self, val: Self) -> Self;
     fn fetch_or(&mut self, val: Self) -> Self;
     fn fetch_xor(&mut self, val: Self) -> Self;
     fn fetch_max(&mut self, val: Self) -> Self;
     fn fetch_min(&mut self, val: Self) -> Self;
-    fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>
-    where
-        Self: Sized;
+    // fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>
+    // where
+    //     Self: Sized;
 }
 
 //create a macro the implements AsAtomic for all the primitive integer types
@@ -340,10 +324,10 @@ macro_rules! impl_as_atomic {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
                     atomic.fetch_add(val, Ordering::SeqCst)
                 }
-                fn fetch_sub(&mut self, val: Self) -> Self {
-                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
-                    atomic.fetch_sub(val, Ordering::SeqCst)
-                }
+                // fn fetch_sub(&mut self, val: Self) -> Self {
+                //     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                //     atomic.fetch_sub(val, Ordering::SeqCst)
+                // }
                 fn fetch_and(&mut self, val: Self) -> Self {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
                     atomic.fetch_and(val, Ordering::SeqCst)
@@ -368,10 +352,10 @@ macro_rules! impl_as_atomic {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
                     atomic.fetch_min(val, Ordering::SeqCst)
                 }
-                fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self> {
-                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
-                    atomic.compare_exchange(current, new, Ordering::SeqCst , Ordering::Relaxed)
-                }
+                // fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self> {
+                //     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                //     atomic.compare_exchange(current, new, Ordering::SeqCst , Ordering::Relaxed)
+                // }
             }
         )*
     };
@@ -462,12 +446,31 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     match op {
         AtomicOp::Write(val) => {
-            // let dst = std::mem::transmute::<&A, &mut A>(dst);
-            // println!("storing value {:?} {:?}", *val, dst as *const A);
             (&mut *(dst as *mut A)).store(*val);
         }
-        _ => {
-            unimplemented!()
+        AtomicOp::Sum(val) => {
+            (&mut *(dst as *mut A)).fetch_add(*val);
+        }
+        AtomicOp::BitOr(val) => {
+            (&mut *(dst as *mut A)).fetch_or(*val);
+        }
+        AtomicOp::BitXor(val) => {
+            (&mut *(dst as *mut A)).fetch_xor(*val);
+        }
+        AtomicOp::BitAnd(val) => {
+            (&mut *(dst as *mut A)).fetch_and(*val);
+        }
+        AtomicOp::BitNand(val) => {
+            (&mut *(dst as *mut A)).fetch_nand(*val);
+        }
+        AtomicOp::Read => {
+            panic!("Read atomic op not supported in this context");
+        }
+        AtomicOp::Cas(_, _) => {
+            panic!("Cas atomic op not supported in this context");
+        }
+        AtomicOp::Min(_) | AtomicOp::Max(_) => {
+            panic!("Min/Max atomic ops not supported in this context");
         }
     }
 }
@@ -475,14 +478,18 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
 unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A, result: *mut T) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     let res = match op {
+        AtomicOp::Min(val) => (&mut *(dst as *mut A)).fetch_min(*val),
+        AtomicOp::Max(val) => (&mut *(dst as *mut A)).fetch_max(*val),
+        AtomicOp::Sum(val) => (&mut *(dst as *mut A)).fetch_add(*val),
+        AtomicOp::BitOr(val) => (&mut *(dst as *mut A)).fetch_or(*val),
+        AtomicOp::BitXor(val) => (&mut *(dst as *mut A)).fetch_xor(*val),
+        AtomicOp::BitAnd(val) => (&mut *(dst as *mut A)).fetch_and(*val),
+        AtomicOp::BitNand(val) => (&mut *(dst as *mut A)).fetch_nand(*val),
         AtomicOp::Read => (&*dst).load(),
-        AtomicOp::Write(val) => {
-            // let dst = std::mem::transmute::<&A, &mut A>(dst);
-            (&mut *(dst as *mut A)).swap(*val)
-        }
-        _ => {
-            unimplemented!()
-        }
+        AtomicOp::Write(val) => (&mut *(dst as *mut A)).swap(*val),
+        AtomicOp::Cas(_, _) => panic!("Cas atomic op not supported in this context"),
     };
     (result as *mut A).write(res);
 }
+
+//TODO compare and swap
