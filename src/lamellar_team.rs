@@ -780,6 +780,7 @@ impl From<LamellarTeamRemote> for Pin<Arc<LamellarTeamRT>> {
             LamellarTeamRemote::SubTeam(darc_team) => darc_team.clone(),
         }
     }
+}
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub(crate) struct LamellarTeamRemotePtr {
