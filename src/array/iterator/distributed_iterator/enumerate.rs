@@ -37,9 +37,7 @@ where
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Enumerate<I> {
         let iter = self.iter.init(start_i, cnt, _s);
-        let val = Enumerate::new(iter, start_i);
-        // println!("{:?} Enumerate init {start_i} {cnt} {start_i}",std::thread::current().id());
-        val
+        Enumerate::new(iter, start_i)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -57,9 +55,7 @@ where
     }
 
     fn elems(&self, in_elems: usize) -> usize {
-        let in_elems = self.iter.elems(in_elems);
-        // println!("enumerate elems {:?}",in_elems);
-        in_elems
+        self.iter.elems(in_elems)
     }
     // fn global_index(&self, index: usize) -> Option<usize> {
     //     let g_index = self.iter.global_index(index);
@@ -86,8 +82,6 @@ where
     I: IndexedDistributedIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.iter.iterator_index(index);
-        // println!("{:?} \t Enumerate iterator index {index} {g_index:?}",std::thread::current().id());
-        g_index
+        self.iter.iterator_index(index)
     }
 }

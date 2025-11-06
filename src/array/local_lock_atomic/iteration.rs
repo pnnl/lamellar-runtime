@@ -165,8 +165,7 @@ impl<T: Dist + 'static> DistributedIterator for LocalLockDistIter<'static, T> {
 }
 impl<T: Dist + 'static> IndexedDistributedIterator for LocalLockDistIter<'static, T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-        g_index
+        self.data.subarray_index_from_local(index, 1)
     }
 }
 
@@ -366,8 +365,7 @@ impl<T: Dist + 'static> DistributedIterator for LocalLockDistIterMut<'static, T>
 
 impl<T: Dist + 'static> IndexedDistributedIterator for LocalLockDistIterMut<'static, T> {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        let g_index = self.data.subarray_index_from_local(index, 1);
-        g_index
+        self.data.subarray_index_from_local(index, 1)
     }
 }
 

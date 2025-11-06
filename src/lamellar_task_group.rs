@@ -269,7 +269,7 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
         let mut map = self.data.lock(); //.insert(pe, data);
 
-        let reqs = map.entry(sub_id).or_insert_with(|| HashMap::new());
+        let reqs = map.entry(sub_id).or_default();
         reqs.insert(pe, data);
 
         if reqs.len() == self.arch.num_pes() {
@@ -280,15 +280,13 @@ impl LamellarRequestAddResult for TaskGroupMultiAmHandleInner {
             // else {
             //     println!("0. no waker found for sub_id {}", sub_id);
             // }
-        } else {
-            if let Some(waker) = self.wakers.lock().get(&sub_id) {
-                // println!("1. waker found for sub_id {}", sub_id);
-                waker.wake_by_ref();
-            }
+        } else if let Some(waker) = self.wakers.lock().get(&sub_id) {
+            // println!("1. waker found for sub_id {}", sub_id);
+            waker.wake_by_ref();
+        }
             //  else {
             //     println!("1. no waker found for sub_id {}", sub_id);
             // }
-        }
     }
     fn update_counters(&self, _sub_id: usize) {
         self.team_counters.dec_outstanding(1);
@@ -1141,7 +1139,7 @@ impl DarcSerde for AmGroupAm {
 
     fn des(&self, _cur_pe: Result<usize, crate::IdError>) {
         // println!("task group des");
-        // we dont actually do anything here, as each individual am will call its
+        // we don't actually do anything here, as each individual am will call its
         // own des function during the deserialization of the AmGroupAm
     }
 }
@@ -1161,8 +1159,8 @@ impl LamellarAM for AmGroupAm {
 impl LamellarSerde for AmGroupAm {
     fn serialized_size(&self) -> usize {
         let mut size = 0;
-        size += crate::serialized_size(&0usize, true);
-        let id_size = crate::serialized_size(&AM_ID_START, true);
+        size += crate::serialized_size(&0usize);
+        let id_size = crate::serialized_size(&AM_ID_START);
         for am in &self.ams[self.si..self.ei] {
             size += id_size;
             size += am.serialized_size();
@@ -1173,12 +1171,12 @@ impl LamellarSerde for AmGroupAm {
         let mut i = 0;
         // let timer = std::time::Instant::now();
         let num = self.ei - self.si;
-        crate::serialize_into(&mut buf[i..], &num, true).unwrap();
-        i += crate::serialized_size(&num, true);
+        crate::serialize_into(&mut buf[i..], &num).unwrap();
+        i += crate::serialized_size(&num);
         for am in &self.ams[self.si..self.ei] {
             let id = *(AMS_IDS.get(am.get_id()).unwrap());
-            crate::serialize_into(&mut buf[i..], &id, true).unwrap();
-            i += crate::serialized_size(&id, true);
+            crate::serialize_into(&mut buf[i..], &id).unwrap();
+            i += crate::serialized_size(&id);
             am.serialize_into(&mut buf[i..]);
             i += am.serialized_size();
         }
@@ -1195,11 +1193,11 @@ impl LamellarSerde for AmGroupAm {
 impl LamellarResultSerde for AmGroupAm {
     fn serialized_result_size(&self, result: &Box<dyn std::any::Any + Sync + Send>) -> usize {
         let result = result.downcast_ref::<Vec<Vec<u8>>>().unwrap();
-        crate::serialized_size(result, true)
+        crate::serialized_size(result)
     }
     fn serialize_result_into(&self, buf: &mut [u8], result: &Box<dyn std::any::Any + Sync + Send>) {
         let result = result.downcast_ref::<Vec<Vec<u8>>>().unwrap();
-        crate::serialize_into(buf, result, true).unwrap();
+        crate::serialize_into(buf, result).unwrap();
     }
 }
 
@@ -1256,13 +1254,13 @@ fn am_group_am_unpack(
 ) -> std::sync::Arc<dyn RemoteActiveMessage + Sync + Send> {
     let mut i = 0;
 
-    let id_size = crate::serialized_size(&AM_ID_START, true);
+    let id_size = crate::serialized_size(&AM_ID_START);
     let mut ams = Vec::new();
-    let mut num: usize = crate::deserialize(&bytes[i..], true).unwrap();
-    i += crate::serialized_size(&num, true);
+    let mut num: usize = crate::deserialize(&bytes[i..]).unwrap();
+    i += crate::serialized_size(&num);
     // println!("task group unpack");
     while num > 0 {
-        let id: AmId = crate::deserialize(&bytes[i..], true).unwrap();
+        let id: AmId = crate::deserialize(&bytes[i..]).unwrap();
         i += id_size;
         // println!("task group unpack am");
         let am = AMS_EXECS.get(&id).unwrap()(&bytes[i..], cur_pe);
@@ -1294,13 +1292,13 @@ struct AmGroupAmReturn {
 
 impl LamellarSerde for AmGroupAmReturn {
     fn serialized_size(&self) -> usize {
-        crate::serialized_size(&self.val, true)
+        crate::serialized_size(&self.val)
     }
     fn serialize_into(&self, buf: &mut [u8]) {
-        crate::serialize_into(buf, &self.val, true).unwrap();
+        crate::serialize_into(buf, &self.val).unwrap();
     }
     fn serialize(&self) -> Vec<u8> {
-        crate::serialize(self, true).unwrap()
+        crate::serialize(self).unwrap()
     }
 }
 
@@ -1377,12 +1375,11 @@ impl AmGroup {
     /// # Example
     /// ```
     /// use lamellar::active_messaging::prelude::*;
-    /// fn main(){
-    ///     let world = lamellar::LamellarWorldBuilder::new().build();
-    ///     let my_pe = world.my_pe();
-    ///     let num_pes = world.num_pes();
-    ///     let mut am_group = AmGroup::new(&world);
-    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    /// let mut am_group = AmGroup::new(&world);
     /// ```
     pub fn new<U: Into<IntoLamellarTeam>>(team: U) -> AmGroup {
         AmGroup {
@@ -1418,20 +1415,18 @@ impl AmGroup {
     ///     }
     /// }
     ///
-    /// fn main(){
-    ///     let world = lamellar::LamellarWorldBuilder::new().build();
-    ///     let my_pe = world.my_pe();
-    ///     let num_pes = world.num_pes();
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
     ///
-    ///     let am1 = Am1{foo: 1};
-    ///     let am2 = Am2{bar: "hello".to_string()};
-    ///     //create a new AmGroup
-    ///     let mut am_group = AmGroup::new(&world);
-    ///     // add the AMs to the group
-    ///     // we can specify individual PEs to execute on or all PEs
-    ///     am_group.add_am_all(am1.clone());
-    ///     am_group.add_am_all(am2.clone());
-    /// }
+    /// let am1 = Am1{foo: 1};
+    /// let am2 = Am2{bar: "hello".to_string()};
+    /// //create a new AmGroup
+    /// let mut am_group = AmGroup::new(&world);
+    /// // add the AMs to the group
+    /// // we can specify individual PEs to execute on or all PEs
+    /// am_group.add_am_all(am1.clone());
+    /// am_group.add_am_all(am2.clone());
     /// ```
     pub fn add_am_all<F>(&mut self, am: F)
     where
@@ -1474,20 +1469,18 @@ impl AmGroup {
     ///     }
     /// }
     ///
-    /// fn main(){
-    ///     let world = lamellar::LamellarWorldBuilder::new().build();
-    ///     let my_pe = world.my_pe();
-    ///     let num_pes = world.num_pes();
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
     ///
-    ///     let am1 = Am1{foo: 1};
-    ///     let am2 = Am2{bar: "hello".to_string()};
-    ///     //create a new AmGroup
-    ///     let mut am_group = AmGroup::new(&world);
-    ///     // add the AMs to the group
-    ///     // we can specify individual PEs to execute on or all PEs
-    ///     am_group.add_am_pe(0,am1.clone());
-    ///     am_group.add_am_pe(1,am2.clone());
-    /// }
+    /// let am1 = Am1{foo: 1};
+    /// let am2 = Am2{bar: "hello".to_string()};
+    /// //create a new AmGroup
+    /// let mut am_group = AmGroup::new(&world);
+    /// // add the AMs to the group
+    /// // we can specify individual PEs to execute on or all PEs
+    /// am_group.add_am_pe(0,am1.clone());
+    /// am_group.add_am_pe(1,am2.clone());
     /// ```
     pub fn add_am_pe<F>(&mut self, pe: usize, am: F)
     where
@@ -1526,22 +1519,21 @@ impl AmGroup {
     ///     }
     /// }
     ///
-    /// fn main(){
-    ///     let world = lamellar::LamellarWorldBuilder::new().build();
-    ///     let my_pe = world.my_pe();
-    ///     let num_pes = world.num_pes();
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
     ///
-    ///     let am1 = Am1{foo: 1};
-    ///     let am2 = Am2{bar: "hello".to_string()};
-    ///     //create a new AmGroup
-    ///     let mut am_group = AmGroup::new(&world);
-    ///     // add the AMs to the group
-    ///     // we can specify individual PEs to execute on or all PEs
-    ///     am_group.add_am_pe(0,am1.clone());
-    ///     am_group.add_am_pe(1,am1.clone());
-    ///     am_group.add_am_all(am2.clone());
-    ///     //execute and await the completion of all AMs in the group
-    ///     world.block_on(am_group.exec());
+    /// let am1 = Am1{foo: 1};
+    /// let am2 = Am2{bar: "hello".to_string()};
+    /// //create a new AmGroup
+    /// let mut am_group = AmGroup::new(&world);
+    /// // add the AMs to the group
+    /// // we can specify individual PEs to execute on or all PEs
+    /// am_group.add_am_pe(0,am1.clone());
+    /// am_group.add_am_pe(1,am1.clone());
+    /// am_group.add_am_all(am2.clone());
+    /// //execute and await the completion of all AMs in the group
+    /// world.block_on(am_group.exec());
     /// }
     /// ```
     pub async fn exec(&mut self) {
@@ -1797,6 +1789,11 @@ impl<T> TypedAmGroupResult<T> {
         }
     }
 
+    /// Indicate if the AM group request is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// returns an iterator over the results of the Typed Am group
     pub fn iter(&self) -> TypedAmGroupResultIter<'_, T> {
         TypedAmGroupResultIter {
@@ -1961,7 +1958,7 @@ impl<T> TypedAmGroupUnitResult<T> {
         for req in self.reqs.iter() {
             if let Ok(_idx) = req.ids.binary_search(&index) {
                 match &req.reqs {
-                    BaseAmGroupResult::SinglePeUnit(res) => return AmGroupResult::Pe(req.pe, &res),
+                    BaseAmGroupResult::SinglePeUnit(res) => return AmGroupResult::Pe(req.pe, res),
                     BaseAmGroupResult::AllPeUnit(res) => {
                         return AmGroupResult::All(TypedAmAllIter::Unit(TypedAmAllUnitIter {
                             all: res,

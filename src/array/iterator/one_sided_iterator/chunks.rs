@@ -31,13 +31,12 @@ where
         // let array = iter.array().clone(); //.to_base::<u8>();
         // println!(" Chunks size: {:?}", chunk_size);
 
-        let chunks = Chunks {
+        Chunks {
             iter,
             index: 0,
             chunk_size,
             state: ChunkState::Finished,
-        };
-        chunks
+        }
     }
 
     fn get_buffer(

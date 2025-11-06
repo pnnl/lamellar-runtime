@@ -60,10 +60,7 @@ where
     type Item = <I as DistributedIterator>::Item;
     type Array = <I as DistributedIterator>::Array;
     fn init(&self, start_i: usize, len: usize, _s: Sealed) -> Take<I> {
-        // println!("init take start_i: {:?} cnt: {:?} count: {:?}",start_i, cnt,self.count);
-        let val = Take::new(self.iter.init(start_i, len, _s), self.count, start_i);
-        // println!("{:?} Take init {start_i} {len} {:?} {start_i}",std::thread::current().id(),self.count);
-        val
+        Take::new(self.iter.init(start_i, len, _s), self.count, start_i)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
@@ -72,9 +69,7 @@ where
         // println!("take next");
         if self.iterator_index(self.cur_index)? < self.count {
             self.cur_index += 1;
-            let val = self.iter.next();
-            // println!("{:?} Take next ",std::thread::current().id());
-            val
+            self.iter.next()
         } else {
             // println!("{:?} Take done",std::thread::current().id());
             None

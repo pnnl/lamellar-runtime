@@ -106,42 +106,22 @@ impl IndexSize {
     }
 
     fn create_buf(&self, num_elems: usize) -> IndexBuf {
-        let num_bytes = num_elems * self.len();
+        let num_elements = num_elems * self.len();
         match self {
             IndexSize::U8 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U8(0, vec)
+                IndexBuf::U8(0, vec![0; num_elements])
             }
             IndexSize::U16 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U16(0, vec)
+                IndexBuf::U16(0, vec![0; num_elements])
             }
             IndexSize::U32 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U32(0, vec)
+                IndexBuf::U32(0, vec![0; num_elements])
             }
             IndexSize::U64 => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::U64(0, vec)
+                IndexBuf::U64(0, vec![0; num_elements])
             }
             IndexSize::Usize => {
-                let mut vec = Vec::with_capacity(num_bytes);
-                unsafe {
-                    vec.set_len(num_bytes);
-                }
-                IndexBuf::Usize(0, vec)
+                IndexBuf::Usize(0, vec![0; num_elements])
             }
         }
     }
@@ -160,37 +140,37 @@ impl IndexBuf {
     fn push(&mut self, val: usize) {
         match self {
             IndexBuf::U8(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8;
+                let vec_ptr = vec.as_mut_ptr();
                 unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u8);
+                    std::ptr::write(vec_ptr.add(*i), val as u8);
                 }
                 *i += 1;
             }
             IndexBuf::U16(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u16;
+                let vec_ptr = vec.as_mut_ptr() as *mut u16;
                 unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u16);
+                    std::ptr::write(vec_ptr.add(*i), val as u16);
                 }
                 *i += 1;
             }
             IndexBuf::U32(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u32;
+                let vec_ptr = vec.as_mut_ptr() as *mut u32;
                 unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u32);
+                    std::ptr::write(vec_ptr.add(*i), val as u32);
                 }
                 *i += 1;
             }
             IndexBuf::U64(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut u64;
+                let vec_ptr = vec.as_mut_ptr() as *mut u64;
                 unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as u64);
+                    std::ptr::write(vec_ptr.add(*i), val as u64);
                 }
                 *i += 1;
             }
             IndexBuf::Usize(i, vec) => {
-                let vec_ptr = vec.as_mut_ptr() as *mut u8 as *mut usize;
+                let vec_ptr = vec.as_mut_ptr() as *mut usize;
                 unsafe {
-                    std::ptr::write(vec_ptr.offset(*i as isize), val as usize);
+                    std::ptr::write(vec_ptr.add(*i), val);
                 }
                 *i += 1;
             }
@@ -205,7 +185,7 @@ impl IndexBuf {
             IndexBuf::Usize(i, _) => *i,
         }
     }
-    fn to_vec(self) -> Vec<u8> {
+    fn into_vec(self) -> Vec<u8> {
         match self {
             IndexBuf::U8(i, mut vec) => {
                 unsafe {
@@ -294,8 +274,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
     ) -> ArrayBatchOpHandle {
-        let (indices, i_len) = index.as_op_input();
-        let (vals, v_len) = val.as_op_input();
+        let (indices, i_len) = index.into_op_input();
+        let (vals, v_len) = val.into_op_input();
 
         let max_local_size = (0..self.num_pes())
             .map(|pe| self.inner.num_elems_pe(pe))
@@ -331,7 +311,6 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                 BatchReturnType::None,
                 index_size,
             )
-            .into()
         } else if v_len > 1 && i_len > 1 {
             //many vals many indices
             self.multi_val_multi_index::<()>(
@@ -360,8 +339,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
     ) -> ArrayFetchBatchOpHandle<T> {
-        let (indices, i_len) = index.as_op_input();
-        let (vals, v_len) = val.as_op_input();
+        let (indices, i_len) = index.into_op_input();
+        let (vals, v_len) = val.into_op_input();
         let max_local_size = (0..self.num_pes())
             .map(|pe| self.inner.num_elems_pe(pe))
             .max()
@@ -409,7 +388,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         } else {
             VecDeque::new()
         };
-        if res.len() == 0 {
+        if res.is_empty() {
             return ArrayFetchBatchOpHandle::new(byte_array, res, 0);
         }
         ArrayFetchBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
@@ -423,8 +402,8 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
     ) -> ArrayResultBatchOpHandle<T> {
-        let (indices, i_len) = index.as_op_input();
-        let (vals, v_len) = val.as_op_input();
+        let (indices, i_len) = index.into_op_input();
+        let (vals, v_len) = val.into_op_input();
         let max_local_size = (0..self.num_pes())
             .map(|pe| self.inner.num_elems_pe(pe))
             .max()
@@ -497,14 +476,14 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
 
         // println!("single_val_multi_index");
 
-        for (_i, index) in indices.drain(..).enumerate() {
+        for index in indices.drain(..) {
             let cnt2 = cnt.clone();
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.inc_outstanding(1);
             self.inner.data.team.inc_outstanding(1);
-            let index_vec = index.to_vec();
+            let index_vec = index.into_vec();
             let the_array: UnsafeArray<T> = self.clone();
             self.inner
                 .data
@@ -536,7 +515,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             let am = SingleValMultiIndex::new_with_vec(
                                 byte_array2.clone(),
                                 op,
-                                new_buffer.to_vec(),
+                                new_buffer.into_vec(),
                                 val,
                                 index_size,
                             )
@@ -557,7 +536,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             let am = SingleValMultiIndex::new_with_vec(
                                 byte_array2.clone(),
                                 op,
-                                buff.to_vec(),
+                                buff.into_vec(),
                                 val,
                                 index_size,
                             )
@@ -688,15 +667,15 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         // println!("num_reqs {:?}", num_reqs);
         let mut start_i = 0;
 
-        for (_i, (index, val)) in indices.drain(..).zip(vals.drain(..)).enumerate() {
+        for (index, val) in indices.drain(..).zip(vals.drain(..)) {
             let cnt2 = cnt.clone();
             let futures2 = futures.clone();
             let byte_array2 = byte_array.clone();
             let len = index.len();
             self.inner.data.array_counters.inc_outstanding(1);
             self.inner.data.team.inc_outstanding(1);
-            let index_vec = index.to_vec();
-            let vals_vec = val.to_vec();
+            let index_vec = index.into_vec();
+            let vals_vec = val.into_vec();
             let the_array: UnsafeArray<T> = self.clone();
             self.inner
                 .data
@@ -749,7 +728,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                             ),
                             IndexSize::Usize => buffs[pe].extend_from_slice(
                                 IdxVal::<usize, T> {
-                                    index: local_index as usize,
+                                    index: local_index,
                                     val,
                                 }
                                 .as_bytes(),
@@ -779,7 +758,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
                     for (pe, (buff, res_buff)) in
                         buffs.into_iter().zip(res_buffs.into_iter()).enumerate()
                     {
-                        if buff.len() > 0 {
+                        if !buff.is_empty() {
                             let am = MultiValMultiIndex::new_with_vec(
                                 byte_array2.clone(),
                                 op,
@@ -871,7 +850,7 @@ impl SingleValMultiIndex {
     ) -> Self {
         let val_u8 = &val as *const T as *const u8;
         Self {
-            array: array.into(),
+            array,
             idx: indices,
             val: unsafe { std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>()) }.to_vec(),
             op: op.into(),
@@ -910,7 +889,7 @@ impl MultiValSingleIndex {
         let val_u8 = val.as_ptr() as *const u8;
 
         Self {
-            array: array.into(),
+            array,
             idx: index,
             val: unsafe {
                 std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
@@ -942,7 +921,7 @@ impl MultiValMultiIndex {
         index_size: IndexSize,
     ) -> Self {
         Self {
-            array: array.into(),
+            array,
             idxs_vals,
             op: op.into(),
             index_size,

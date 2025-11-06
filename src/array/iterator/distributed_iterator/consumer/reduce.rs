@@ -59,7 +59,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(ReduceAm {
             iter: self.iter_clone(Sealed),
             op: self.op.clone(),
@@ -181,7 +181,7 @@ where
                 }
                 if let Some(val) = val {
                     let mut reducing = Box::pin(Self::async_reduce_remote_vals(
-                        val.clone(),
+                        val,
                         this.team.clone(),
                         this.op.clone(),
                     ));
@@ -353,7 +353,7 @@ where
         let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         match iter.next() {
             Some(mut accum) => {
-                while let Some(elem) = iter.next() {
+                for elem in iter {
                     accum = (self.op)(accum, elem);
                 }
                 Some(accum)

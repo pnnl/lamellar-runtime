@@ -225,7 +225,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn shr(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -299,7 +299,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_shr<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_shr(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -397,6 +397,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -432,6 +435,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -470,6 +476,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -510,6 +519,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -546,6 +558,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -560,7 +575,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn shr<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn shr(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -581,6 +596,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -620,6 +638,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -634,7 +655,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_shr<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_shr(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -658,6 +679,9 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///

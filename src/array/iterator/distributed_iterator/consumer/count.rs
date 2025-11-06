@@ -55,7 +55,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(CountAm {
             iter: self.iter_clone(Sealed),
             schedule,
@@ -156,7 +156,7 @@ impl Future for InnerDistIterCountHandle {
                     Box::pin(Self::async_reduce_remote_counts(*cnt, this.team.clone()));
                 match Future::poll(global_cnt.as_mut(), cx) {
                     Poll::Ready(count) => {
-                        return Poll::Ready(count);
+                        Poll::Ready(count)
                     }
                     Poll::Pending => {
                         *this.state = InnerState::Counting(global_cnt);
@@ -309,9 +309,9 @@ where
     I: DistributedIterator + 'static,
 {
     async fn exec(&self) -> usize {
-        let mut iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
+        let iter = self.schedule.init_iter(self.iter.iter_clone(Sealed));
         let mut count: usize = 0;
-        while let Some(_) = iter.next() {
+        for _ in iter {
             count += 1;
         }
         // println!("count: {} {:?}", count, std::thread::current().id());

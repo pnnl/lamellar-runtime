@@ -75,7 +75,7 @@ impl<T: Dist + 'static> LocalIterator for ReadOnlyLocalChunks<T> {
         }
     }
     fn elems(&self, in_elems: usize) -> usize {
-        in_elems / self.chunk_size + (in_elems % self.chunk_size != 0) as usize
+        in_elems / self.chunk_size + (!in_elems.is_multiple_of(self.chunk_size)) as usize
     }
 
     fn advance_index(&mut self, count: usize) {

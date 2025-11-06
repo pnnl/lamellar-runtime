@@ -31,7 +31,7 @@ mod shmem;
 
 lazy_static! {
     static ref SERIALIZE_HEADER_LEN: usize =
-        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
+        crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()));
 }
 
 /// The list of available lamellae backends, used to specify how data is transferred between PEs
@@ -60,16 +60,16 @@ impl Default for Backend {
     fn default() -> Self {
         match config().backend.as_str() {
             "rofi" => {
-                #[cfg(feature = "rofi")]
-                return Backend::Rofi;
                 #[cfg(not(feature = "rofi"))]
-                panic!("unable to set rofi backend, recompile with 'enable-rofi' feature")
+                panic!("unable to set rofi backend, recompile with 'enable-rofi' feature");
+                #[cfg(feature = "rofi")]
+                Backend::Rofi
             }
             "shmem" => {
-                return Backend::Shmem;
+                Backend::Shmem
             }
             _ => {
-                return Backend::Local;
+                Backend::Local
             }
         }
     }

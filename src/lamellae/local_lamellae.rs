@@ -257,7 +257,7 @@ impl LamellaeRDMA for Local {
         allocs.insert(
             data_addr,
             MyPtr {
-                ptr: data_ptr as *mut u8,
+                ptr: data_ptr,
                 layout,
             },
         );

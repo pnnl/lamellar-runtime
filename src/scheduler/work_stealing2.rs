@@ -233,7 +233,7 @@ impl LamellarExecutor for WorkStealing2 {
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.schedule();
         LamellarTask {
@@ -251,7 +251,7 @@ impl LamellarExecutor for WorkStealing2 {
         let schedule = move |runnable| work_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.schedule();
         task.detach();
@@ -268,7 +268,7 @@ impl LamellarExecutor for WorkStealing2 {
         let schedule = move |runnable| io_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.schedule();
         task.detach();
@@ -285,7 +285,7 @@ impl LamellarExecutor for WorkStealing2 {
         let schedule = move |runnable| imm_inj.push(runnable);
         let (runnable, task) = Builder::new()
             .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-            .spawn(move |_task_id| async move { task.await }, schedule);
+            .spawn(move |_task_id| task, schedule);
 
         runnable.run(); //try to run immediately
         task.detach();
@@ -299,7 +299,7 @@ impl LamellarExecutor for WorkStealing2 {
         let (runnable, mut task) = unsafe {
             Builder::new()
                 .metadata(TASK_ID.fetch_add(1, Ordering::Relaxed))
-                .spawn_unchecked(move |_task_id| async move { fut.await }, schedule)
+                .spawn_unchecked(move |_task_id| fut, schedule)
         };
         let waker = runnable.waker();
         runnable.run(); //try to run immediately
@@ -389,11 +389,7 @@ impl WorkStealing2 {
         let num_workers = std::cmp::max(1, num_workers - 1);
         let mut num_threads_per_group = match std::env::var("LAMELLAR_WS2_THREADS") {
             Ok(s) => {
-                if let Ok(num) = s.parse::<usize>() {
-                    num
-                } else {
-                    4
-                }
+                s.parse::<usize>().unwrap_or(4)
             }
             _ => 4,
         };
@@ -422,7 +418,7 @@ impl WorkStealing2 {
     // #[tracing::instrument(skip_all)]
     fn init(&mut self) {
         let mut num_groups = self.max_num_threads / self.num_threads_per_group;
-        if self.max_num_threads % self.num_threads_per_group != 0 {
+        if !self.max_num_threads.is_multiple_of(self.num_threads_per_group) {
             num_groups += 1;
         }
 

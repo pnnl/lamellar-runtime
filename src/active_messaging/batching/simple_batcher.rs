@@ -190,7 +190,7 @@ impl Batcher for SimpleBatcher {
         }
         let mut darcs = vec![];
         data.ser(1, &mut darcs); //1 because we are only sending back to the original PE
-        let darc_list_size = crate::serialized_size(&darcs, false);
+        let darc_list_size = crate::serialized_size(&darcs);
         let size = batch.add(
             req_data,
             LamellarData::Data(data, darcs, darc_list_size),
@@ -284,7 +284,7 @@ impl Batcher for SimpleBatcher {
         let mut i = 0;
         // println!("executing batched msg {:?}", data.len());
         while i < data.len() {
-            let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN], false).unwrap();
+            let cmd: Cmd = crate::deserialize(&data[i..i + *CMD_LEN]).unwrap();
             i += *CMD_LEN;
             // let temp_i = i;
             // println!("cmd {:?}", cmd);
@@ -407,7 +407,7 @@ impl SimpleBatcher {
         cmd: Cmd,
     ) {
         // println!("serialize_am");
-        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &cmd, false).unwrap();
+        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &cmd).unwrap();
         *i += *CMD_LEN;
 
         let am_header = AmHeader {
@@ -415,7 +415,7 @@ impl SimpleBatcher {
             req_id: req_data.id,
             team_addr: req_data.team_addr,
         };
-        crate::serialize_into(&mut data_buf[*i..*i + *AM_HEADER_LEN], &am_header, false).unwrap();
+        crate::serialize_into(&mut data_buf[*i..*i + *AM_HEADER_LEN], &am_header).unwrap();
         *i += *AM_HEADER_LEN;
 
         let am_size = am_size - (*CMD_LEN + *AM_HEADER_LEN);
@@ -446,7 +446,7 @@ impl SimpleBatcher {
         darc_list_size: usize,
     ) {
         // println!("serialize_data");
-        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Data, false).unwrap();
+        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Data).unwrap();
         *i += *CMD_LEN;
         let data_size = data_size - (*CMD_LEN + *DATA_HEADER_LEN + darc_list_size);
         let data_header = DataHeader {
@@ -457,12 +457,11 @@ impl SimpleBatcher {
         crate::serialize_into(
             &mut data_buf[*i..*i + *DATA_HEADER_LEN],
             &data_header,
-            false,
         )
         .unwrap();
         *i += *DATA_HEADER_LEN;
 
-        crate::serialize_into(&mut data_buf[*i..(*i + darc_list_size)], &darcs, false).unwrap();
+        crate::serialize_into(&mut data_buf[*i..(*i + darc_list_size)], &darcs).unwrap();
         *i += darc_list_size;
 
         data.serialize_into(&mut data_buf[*i..*i + data_size]);
@@ -472,7 +471,7 @@ impl SimpleBatcher {
     //#[tracing::instrument(skip_all)]
     fn serialize_unit(req_data: ReqMetaData, data_buf: &mut [u8], i: &mut usize) {
         // println!("serialize_unit");
-        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Unit, false).unwrap();
+        crate::serialize_into(&mut data_buf[*i..*i + *CMD_LEN], &Cmd::Unit).unwrap();
         *i += *CMD_LEN;
 
         let unit_header = UnitHeader {
@@ -481,7 +480,6 @@ impl SimpleBatcher {
         crate::serialize_into(
             &mut data_buf[*i..*i + *UNIT_HEADER_LEN],
             &unit_header,
-            false,
         )
         .unwrap();
         *i += *UNIT_HEADER_LEN;
@@ -512,7 +510,7 @@ impl SimpleBatcher {
                 Some(AllocError::OutOfMemoryError(_)) => {
                     lamellae.alloc_pool(size * 2);
                 }
-                _ => panic!("unhanlded error!! {:?}", err),
+                _ => panic!("unhandled error!! {:?}", err),
             }
             data = lamellae.serialize_header(header.clone(), size);
         }
@@ -531,9 +529,9 @@ impl SimpleBatcher {
     ) {
         // println!("exec_am");
         let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN]).unwrap();
         let (team, world) =
-            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            ame.get_team_and_world(msg.src as usize, am_header.team_addr, lamellae);
         *i += *AM_HEADER_LEN;
 
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
@@ -590,9 +588,9 @@ impl SimpleBatcher {
     ) {
         // println!("exec_return_am");
         let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN]).unwrap();
         let (team, world) =
-            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            ame.get_team_and_world(msg.src as usize, am_header.team_addr, lamellae);
         *i += *AM_HEADER_LEN;
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();

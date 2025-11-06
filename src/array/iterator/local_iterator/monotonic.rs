@@ -36,28 +36,20 @@ where
     type Item = (usize, <I as LocalIterator>::Item);
     type Array = <I as LocalIterator>::Array;
     fn init(&self, start_i: usize, cnt: usize, _s: Sealed) -> Monotonic<I> {
-        let val = Monotonic::new(self.iter.init(start_i, cnt, _s), start_i);
-        // println!("{:?} Monotonic init {start_i} {cnt} {start_i}",std::thread::current().id());
-        val
+        Monotonic::new(self.iter.init(start_i, cnt, _s), start_i)
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(a) = self.iter.next() {
-            let i = self.cur_index;
-            // println!("{:?} Monotonic next {:?} i: {:?}",std::thread::current().id(),self.cur_index,i);
+        self.iter.next().map(|a| {
             self.cur_index += 1;
-            Some((i, a))
-        } else {
-            // println!("{:?} Monotonic done",std::thread::current().id());
-            None
-        }
+            (self.cur_index, a)
+        })
     }
 
     fn elems(&self, in_elems: usize) -> usize {
-        let in_elems = self.iter.elems(in_elems);
-        in_elems
+        self.iter.elems(in_elems)
     }
 
     fn advance_index(&mut self, count: usize) {

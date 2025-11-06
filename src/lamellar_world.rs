@@ -231,14 +231,7 @@ impl LamellarWorld {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        if let Some(team) = LamellarTeam::create_subteam_from_arch(self.team.clone(), arch) {
-            // self.teams
-            //     .write()
-            //     .insert(team.team.team_hash, Arc::downgrade(&team.team));
-            Some(team)
-        } else {
-            None
-        }
+        LamellarTeam::create_subteam_from_arch(self.team.clone(), arch)
     }
 
     #[doc(alias("One-sided", "onesided"))] //#[tracing::instrument(skip_all)]
@@ -305,8 +298,8 @@ impl Clone for LamellarWorld {
             team_rt: self.team_rt.clone(),
             // teams: self.teams.clone(),
             _counters: self._counters.clone(),
-            my_pe: self.my_pe.clone(),
-            num_pes: self.num_pes.clone(),
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
             ref_cnt: self.ref_cnt.clone(),
         }
     }
@@ -571,7 +564,7 @@ impl LamellarWorldBuilder {
     //#[tracing::instrument(skip_all)]
     pub fn build(self) -> LamellarWorld {
         // let mut timer = std::time::Instant::now();
-        assert_eq!(INIT.fetch_or(true, Ordering::SeqCst), false, "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
+        assert!(!INIT.fetch_or(true, Ordering::SeqCst), "ERROR: Building more than one world is not allowed, you may want to consider cloning or creating a reference to first instance");
         // let teams = Arc::new(RwLock::new(HashMap::new()));
         // println!("{:?}: INIT", timer.elapsed());
 
@@ -674,3 +667,10 @@ impl LamellarWorldBuilder {
         world
     }
 }
+
+impl Default for LamellarWorldBuilder {
+    fn default() -> Self {
+       Self::new()
+    }
+}
+

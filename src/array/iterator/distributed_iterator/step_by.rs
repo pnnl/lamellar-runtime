@@ -65,30 +65,20 @@ where
                 }
             }
             iter.advance_index(offset_index);
-            let val = StepBy::new(iter, self.step_size, (offset_index > 0) as usize);
-
-            // println!("{:?} StepBy init {} {} {} ",std::thread::current().id(),in_start_i* self.step_size+offset_index,cnt * self.step_size,self.step_size);
-            val
+            StepBy::new(iter, self.step_size, (offset_index > 0) as usize)
         } else {
             // nothing to iterate so set len to 0
             iter.advance_index(cnt);
-            let val = StepBy::new(iter, self.step_size, 0);
-            // println!("{:?} StepBy nothing init {} {} {} ",std::thread::current().id(),in_start_i * self.step_size,cnt * self.step_size,self.step_size);
-            val
+            StepBy::new(iter, self.step_size, 0)
         }
     }
     fn array(&self) -> Self::Array {
         self.iter.array()
     }
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(res) = self.iter.next() {
-            // println!("{:?} StepBy next ",std::thread::current().id());
+        self.iter.next().inspect(|_res| {
             self.iter.advance_index(self.step_size - 1); //-1 cause iter.next() already advanced by 1
-            Some(res)
-        } else {
-            // println!("{:?} StepBy done ",std::thread::current().id());
-            None
-        }
+        })
     }
     fn elems(&self, in_elems: usize) -> usize {
         let in_elems = self.iter.elems(in_elems);
@@ -116,13 +106,9 @@ where
     I: IndexedDistributedIterator,
 {
     fn iterator_index(&self, index: usize) -> Option<usize> {
-        if let Some(mut g_index) = self.iter.iterator_index(index * self.step_size) {
-            g_index = g_index / self.step_size + self.add_one;
-            // println!("{:?} \t StepBy iterator index {index} {g_index}",std::thread::current().id());
-            Some(g_index)
-        } else {
-            // println!("{:?} \t StepBy iterator index {index} None",std::thread::current().id());
-            None
-        }
+        self.iter.iterator_index(index * self.step_size).map(|mut g_index| {
+            g_index /= self.step_size + self.add_one;
+            g_index
+        })
     }
 }

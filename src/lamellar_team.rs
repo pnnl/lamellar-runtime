@@ -37,7 +37,7 @@ use std::marker::PhantomData;
 
 //use tracing::*;
 
-// to manage team lifetimes properly we need a seperate user facing handle that contains a strong link to the inner team.
+// to manage team lifetimes properly we need a separate user facing handle that contains a strong link to the inner team.
 // this outer handle has a lifetime completely tied to whatever the user wants
 // when the outer handle is dropped, we do the appropriate barriers and then remove the inner team from the runtime data structures
 // this should allow for the inner team to persist while at least one user handle exists in the world.
@@ -100,29 +100,14 @@ impl LamellarTeam {
         // teams: Arc<RwLock<HashMap<u64, Weak<LamellarTeamRT>>>>,
         am_team: bool,
     ) -> Arc<LamellarTeam> {
-        // unsafe{
-        //     let pinned_team = Pin::into_inner_unchecked(team.clone()).clone();
-        //     let team_ptr = Arc::into_raw(pinned_team);
-        //     println!{"new lam team: {:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
-
-        // }
-        // team.print_cnt();
         let panic = team.panic.clone();
-        let the_team = Arc::new(LamellarTeam {
+        Arc::new(LamellarTeam {
             world,
             team,
             // teams,
             am_team,
             panic,
-        });
-        // the_team.print_cnt();
-        // unsafe{
-        //     let pinned_team = Pin::into_inner_unchecked(the_team.team.clone()).clone();
-        //     let team_ptr = Arc::into_raw(pinned_team);
-        //     println!{"new lam team: {:?} {:?} {:?} {:?}",&team_ptr,team_ptr, (the_team.team.remote_ptr_addr as *mut (*const LamellarTeamRT)).as_ref(), (*(the_team.team.remote_ptr_addr as *mut (*const LamellarTeamRT))).as_ref()};
-
-        // }
-        the_team
+        })
     }
 
     // pub fn print_cnt(&self) {
@@ -157,7 +142,7 @@ impl LamellarTeam {
     #[allow(dead_code)]
     //#[tracing::instrument(skip_all)]
     pub fn get_pes(&self) -> Vec<usize> {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.arch.team_iter().collect::<Vec<usize>>()
     }
@@ -187,13 +172,13 @@ impl LamellarTeam {
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn num_pes(&self) -> usize {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.arch.num_pes()
     }
 
     // #[doc(alias("One-sided", "onesided"))]
-    /// Returns nummber of threads on this PE (including the main thread)
+    /// Returns number of threads on this PE (including the main thread)
     ///
     /// # One-sided Operation
     /// The result is returned only on the calling PE
@@ -246,7 +231,7 @@ impl LamellarTeam {
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn world_pe_id(&self) -> usize {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.world_pe
     }
@@ -279,7 +264,7 @@ impl LamellarTeam {
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn team_pe_id(&self) -> Result<usize, IdError> {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.arch.team_pe(self.team.world_pe)
     }
@@ -288,7 +273,7 @@ impl LamellarTeam {
     /// create a subteam containing any number of pe's from this team using the provided LamellarArch (layout)
     ///
     /// # Collective Operation
-    /// Requrires all PEs present within `parent` to enter the call otherwise deadlock will occur.
+    /// Requires all PEs present within `parent` to enter the call otherwise deadlock will occur.
     /// Note that this *does* include the PEs that will not exist within the new subteam.
     ///
     /// # Examples
@@ -313,7 +298,7 @@ impl LamellarTeam {
     where
         L: LamellarArch + std::hash::Hash + 'static,
     {
-        assert!(parent.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(parent.panic.load(Ordering::SeqCst), 0);
         let world = if let Some(world) = &parent.world {
             world.clone()
         } else {
@@ -352,7 +337,7 @@ impl LamellarTeam {
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn print_arch(&self) {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.print_arch()
     }
@@ -381,7 +366,7 @@ impl LamellarTeam {
     ///```
     //#[tracing::instrument(skip_all)]
     pub fn barrier(&self) {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.barrier()
     }
@@ -403,7 +388,7 @@ impl LamellarTeam {
     /// world.barrier(); //block until all PEs have entered the barrier
     ///```
     pub fn async_barrier(&self) -> BarrierHandle {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.async_barrier()
     }
@@ -475,7 +460,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None)
@@ -486,7 +471,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist,
     {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.exec_am_pe_tg(pe, am, None)
     }
@@ -496,33 +481,33 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     where
         F: LamellarActiveMessage + LocalAM + 'static,
     {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.exec_am_local_tg(am, None)
     }
 
     //#[tracing::instrument(skip_all)]
     fn wait_all(&self) {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.wait_all();
     }
 
     fn await_all(&self) -> impl std::future::Future<Output = ()> + Send {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.await_all()
     }
 
     //#[tracing::instrument(skip_all)]
     fn barrier(&self) {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.barrier();
     }
 
     fn async_barrier(&self) -> BarrierHandle {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         self.team.async_barrier()
     }
@@ -532,7 +517,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         F: Future + Send + 'static,
         F::Output: Send,
     {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
         self.team.scheduler.spawn_task(
             task,
             vec![
@@ -543,7 +528,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
     }
 
     fn block_on<F: Future>(&self, f: F) -> F::Output {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         // trace_span!("block_on").in_scope(||
         self.team.scheduler.block_on(f)
@@ -556,7 +541,8 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         <I as IntoIterator>::Item: Future + Send + 'static,
         <<I as IntoIterator>::Item as Future>::Output: Send,
     {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
+
         self.team
             .scheduler
             .block_on(join_all(iter.into_iter().map(|task| {
@@ -578,10 +564,9 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
         &self,
         size: usize,
     ) -> FallibleSharedMemoryRegionHandle<T> {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
-        // self.team.barrier.barrier();
-        let mr = if self.team.num_world_pes == self.team.num_pes {
+        if self.team.num_world_pes == self.team.num_pes {
             SharedMemoryRegion::try_new(size, self.team.clone(), AllocationType::Global)
         } else {
             SharedMemoryRegion::try_new(
@@ -589,15 +574,12 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
                 self.team.clone(),
                 AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
-        };
-        // self.team.barrier.barrier();
-        mr
+        }
     }
     fn alloc_shared_mem_region<T: Dist>(&self, size: usize) -> SharedMemoryRegionHandle<T> {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
-        // self.team.barrier.barrier();
-        let mr = if self.team.num_world_pes == self.team.num_pes {
+        if self.team.num_world_pes == self.team.num_pes {
             SharedMemoryRegion::new(size, self.team.clone(), AllocationType::Global)
         } else {
             SharedMemoryRegion::new(
@@ -605,16 +587,14 @@ impl RemoteMemoryRegion for Arc<LamellarTeam> {
                 self.team.clone(),
                 AllocationType::Sub(self.team.arch.team_iter().collect::<Vec<usize>>()),
             )
-        };
-        // self.team.barrier.barrier();
-        mr
+        }
     }
 
     fn try_alloc_one_sided_mem_region<T: Dist>(
         &self,
         size: usize,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        assert!(self.panic.load(Ordering::SeqCst) == 0);
+        debug_assert_eq!(self.panic.load(Ordering::SeqCst), 0);
 
         OneSidedMemoryRegion::try_new(size, &self.team, self.team.lamellae.clone())
     }
@@ -806,33 +786,28 @@ impl LamellarEnv for Pin<Arc<LamellarTeamRT>> {
     fn num_pes(&self) -> usize {
         self.num_pes
     }
+
     fn num_threads_per_pe(&self) -> usize {
         self.num_threads()
     }
+
     fn world(&self) -> Arc<LamellarTeam> {
-        // println!("LamellarTeamRT world");
-        // self.print_cnt();
         let world = if let Some(world) = self.world.clone() {
             world
         } else {
-            // self.print_cnt();
             self.clone()
         };
-        let world = LamellarTeam::new(None, world, false);
-        // self.print_cnt();
-        world
+
+        LamellarTeam::new(None, world, false)
     }
+
     fn team(&self) -> Arc<LamellarTeam> {
-        // println!("LamellarTeamRT team");
-        // self.print_cnt();
         let world = if self.world.is_some() {
             Some(self.world())
         } else {
             None
         };
-        let team = LamellarTeam::new(world, self.clone(), false);
-        // self.print_cnt();
-        team
+        LamellarTeam::new(world, self.clone(), false)
     }
 }
 
@@ -1030,7 +1005,7 @@ impl LamellarTeamRT {
 
         if self.panic.load(Ordering::SeqCst) == 0 {
             // what does it mean if we drop a parent team while a sub_team is valid?
-            if let None = &self.parent {
+            if self.parent.is_none() {
                 // println!("shutdown lamellae, going to shutdown scheduler");
                 self.scheduler.begin_shutdown();
                 self.put_dropped();
@@ -1231,7 +1206,6 @@ impl LamellarTeamRT {
         return;
 
         let mut s = Instant::now();
-        let mut cnt = 0;
 
         for (pe, hash_val) in hash_buf
             .as_slice()
@@ -1277,7 +1251,6 @@ impl LamellarTeamRT {
                     panic!("team creating mismatch! Ensure teams are constructed in same order on every pe");
                 } else {
                     std::thread::yield_now();
-                    cnt = cnt + 1;
                 }
             }
         }
@@ -1358,8 +1331,8 @@ impl LamellarTeamRT {
     //#[tracing::instrument(skip_all)]
     pub(crate) fn print_arch(&self) {
         println!("-----mapping of team pe ids to parent pe ids-----");
-        let mut parent = format!("");
-        let mut team = format!("");
+        let mut parent = String::new();
+        let mut team = String::new();
         for i in 0..self.arch.num_pes() {
             let mut width = (i as f64).log10() as usize + 1;
             if let Ok(id) = self.arch.world_pe(i) {
@@ -1371,8 +1344,8 @@ impl LamellarTeamRT {
         println!("  team pes: {}", team);
         println!("global pes: {}", parent);
         println!("-----mapping of parent pe ids to team pe ids-----");
-        parent = format!("");
-        team = format!("");
+        parent = String::new();
+        team = String::new();
         for i in 0..self.num_world_pes {
             let mut width = (i as f64).log10() as usize + 1;
             if let Ok(id) = self.arch.team_pe(i) {
@@ -1845,7 +1818,6 @@ impl LamellarTeamRT {
             am: Some((Am::Remote(req_data, func), 1)),
             _phantom: PhantomData,
         }
-        .into()
     }
 
     pub(crate) fn spawn_am_pe_tg<F>(
@@ -1913,7 +1885,6 @@ impl LamellarTeamRT {
             am: None,
             _phantom: PhantomData,
         }
-        .into()
     }
 
     //#[tracing::instrument(skip_all)]
@@ -2122,7 +2093,6 @@ impl LamellarTeamRT {
             am: Some((Am::Remote(req_data, am), 1)),
             _phantom: PhantomData,
         }
-        .into()
     }
 
     #[allow(dead_code)]
@@ -2187,7 +2157,6 @@ impl LamellarTeamRT {
             am: None,
             _phantom: PhantomData,
         }
-        .into()
     }
 
     //#[tracing::instrument(skip_all)]
@@ -2264,6 +2233,7 @@ impl LamellarTeamRT {
             _phantom: PhantomData,
         }
     }
+
     // /// allocate a shared memory region from the asymmetric heap
     // ///
     // /// # Arguments

@@ -438,22 +438,20 @@
 //!     }
 //! }
 //!
-//! fn main(){
-//!     let world = lamellar::LamellarWorldBuilder::new().build();
-//!     let my_pe = world.my_pe();
-//!     let num_pes = world.num_pes();
-//!     //Send initial message to right neighbor
-//!     let next_pe = (my_pe + 1) % num_pes; //account for wrap arround
-//!     let request = world.exec_am_pe(
-//!         next_pe,
-//!         RingAm {
-//!             original_pe: my_pe
-//!         }
-//!     );
-//!     //wait for the request to complete
-//!     let results = request.block();
-//!     println!("PE {my_pe} {results:?}");
-//! }
+//! let world = lamellar::LamellarWorldBuilder::new().build();
+//! let my_pe = world.my_pe();
+//! let num_pes = world.num_pes();
+//! //Send initial message to right neighbor
+//! let next_pe = (my_pe + 1) % num_pes; //account for wrap arround
+//! let request = world.exec_am_pe(
+//!     next_pe,
+//!     RingAm {
+//!         original_pe: my_pe
+//!     }
+//! );
+//! //wait for the request to complete
+//! let results = request.block();
+//! println!("PE {my_pe} {results:?}");
 //!```
 //! The key thing to notice in this example is how we wait for a request to finish will change depending on the context we are executing in.
 //! When we are in the active message we are already in an asynchronous context so we can simply `await` the future returned to us by the `exec_am_pe()` call.

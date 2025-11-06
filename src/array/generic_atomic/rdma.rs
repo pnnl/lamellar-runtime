@@ -114,7 +114,6 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
             .array
             .array
             .pes_for_range(self.index, self.buf.len())
-            .into_iter()
         {
             // println!("pe {:?}",pe);
             let remote_am = GenericAtomicRemoteGetAm {
@@ -127,7 +126,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
         unsafe {
             match self.array.array.inner.distribution {
                 Distribution::Block => {
-                    let u8_buf = self.buf.clone().to_base::<u8>();
+                    let u8_buf = self.buf.clone().into_base::<u8>();
                     let mut cur_index = 0;
                     for req in reqs.drain(..) {
                         let data = req.await;
@@ -227,7 +226,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
 
         unsafe {
-            let u8_buf = self.buf.clone().to_base::<u8>();
+            let u8_buf = self.buf.clone().into_base::<u8>();
             let mut reqs = vec![];
             match self.array.array.inner.distribution {
                 Distribution::Block => {
@@ -236,7 +235,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -269,7 +267,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -333,46 +330,41 @@ impl LamellarAm for GenericAtomicRemotePutAm {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         // let _lock = self.array.lock.write();
         unsafe {
-            match self
+            if let Some((elems, indices)) = self
                 .array
                 .array
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, indices)) => {
-                    // println!("elems: {:?}",elems);
-                    let mut locks = Vec::new();
-                    let mut diff = None;
-                    for i in indices {
-                        //for simplicity lets lock all the indicies we are concerned about
-                        match diff {
-                            Some(diff) => {
-                                // assert_eq!(i+diff,self.array.array.inner.pe_full_offset_for_local_index(self.array.array.inner.data.my_pe,i).expect("invalid local index"));
-                                locks.push(self.array.locks[(i as isize + diff) as usize].lock());
-                            }
-                            None => {
-                                let temp_i = self
-                                    .array
-                                    .array
-                                    .inner
-                                    .pe_full_offset_for_local_index(
-                                        self.array.array.inner.data.my_pe,
-                                        i,
-                                    )
-                                    .expect("invalid local index");
-                                diff = Some(temp_i as isize - i as isize);
-                                locks.push(self.array.locks[temp_i].lock());
-                            }
+                .local_elements_for_range(self.start_index, self.len) {
+                // println!("elems: {:?}",elems);
+                let mut locks = Vec::new();
+                let mut diff = None;
+                for i in indices {
+                    //for simplicity lets lock all the indicies we are concerned about
+                    match diff {
+                        Some(diff) => {
+                            // assert_eq!(i+diff,self.array.array.inner.pe_full_offset_for_local_index(self.array.array.inner.data.my_pe,i).expect("invalid local index"));
+                            locks.push(self.array.locks[(i as isize + diff) as usize].lock());
+                        }
+                        None => {
+                            let temp_i = self
+                                .array
+                                .array
+                                .inner
+                                .pe_full_offset_for_local_index(
+                                    self.array.array.inner.data.my_pe,
+                                    i,
+                                )
+                                .expect("invalid local index");
+                            diff = Some(temp_i as isize - i as isize);
+                            locks.push(self.array.locks[temp_i].lock());
                         }
                     }
-                    std::ptr::copy_nonoverlapping(
-                        self.data.as_ptr(),
-                        elems.as_mut_ptr(),
-                        elems.len(),
-                    )
                 }
-                None => {}
+                std::ptr::copy_nonoverlapping(
+                    self.data.as_ptr(),
+                    elems.as_mut_ptr(),
+                    elems.len(),
+                )
             }
         }
-        // println!("done remote put");
     }
 }

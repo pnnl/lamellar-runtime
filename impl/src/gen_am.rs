@@ -71,13 +71,13 @@ pub(crate) fn impl_lamellar_serde_trait(
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
             fn serialized_size(&self)->usize{
-                #lamellar::serialized_size(self,true)
+                #lamellar::serialized_size(self)
             }
             fn serialize_into(&self,buf: &mut [u8]){
-                #lamellar::serialize_into(buf,self,true).expect("can serialize and enough space in buf");
+                #lamellar::serialize_into(buf,self).expect("can serialize and enough space in buf");
             }
             fn serialize(&self)->Vec<u8>{
-                #lamellar::serialize(self,true).expect("can serialize")
+                #lamellar::serialize(self).expect("can serialize")
             }
         }
     }
@@ -92,13 +92,13 @@ fn impl_return_lamellar_serde_trait(
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarSerde for #am_name #ty_generics #where_clause {
             fn serialized_size(&self)->usize{
-                #lamellar::serialized_size(&self.val,true)
+                #lamellar::serialized_size(&self.val)
             }
             fn serialize_into(&self,buf: &mut [u8]){
-                #lamellar::serialize_into(buf,&self.val,true).expect("can serialize and enough space in buf");
+                #lamellar::serialize_into(buf,&self.val).expect("can serialize and enough space in buf");
             }
             fn serialize(&self)->Vec<u8>{
-                #lamellar::serialize(self,true).expect("can serialize")
+                #lamellar::serialize(self).expect("can serialize")
             }
         }
     }
@@ -115,11 +115,11 @@ pub(crate) fn impl_lamellar_result_serde_trait(
         impl #impl_generics #lamellar::active_messaging::LamellarResultSerde for #am_name #ty_generics #where_clause {
             fn serialized_result_size(&self,result: & Box<dyn std::any::Any + Sync + Send>)->usize{
                 let result  = result.downcast_ref::<#ret_type>().expect("can downcast result box");
-                #lamellar::serialized_size(result,true)
+                #lamellar::serialized_size(result)
             }
             fn serialize_result_into(&self,buf: &mut [u8],result: & Box<dyn std::any::Any + Sync + Send>){
                 let result  = result.downcast_ref::<#ret_type>().expect("can downcast result box");
-                #lamellar::serialize_into(buf,result,true).expect("can serialize and enough size in buf");
+                #lamellar::serialize_into(buf,result).expect("can serialize and enough size in buf");
             }
         }
     }
@@ -159,7 +159,7 @@ fn impl_unpack_and_register_function(
     let am_name_unpack = quote::format_ident!("{}_unpack", am_name.clone());
     quote! {
         fn #am_name_unpack #impl_generics (bytes: &[u8], cur_pe: Result<usize,#lamellar::IdError>) -> std::sync::Arc<dyn #lamellar::active_messaging::RemoteActiveMessage + Sync + Send>  {
-            let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes,true).expect("can deserialize into remote active message"));
+            let __lamellar_data: std::sync::Arc<#am_name #ty_generics> = std::sync::Arc::new(#lamellar::deserialize(&bytes).expect("can deserialize into remote active message"));
             <#am_name #ty_generics as #lamellar::active_messaging::DarcSerde>::des(&__lamellar_data,cur_pe);
             __lamellar_data
         }
@@ -469,6 +469,7 @@ pub(crate) fn generate_am(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_am_struct(
     generics: &syn::Generics,
     attributes: &proc_macro2::TokenStream,

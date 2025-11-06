@@ -117,7 +117,6 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
             .array
             .array
             .pes_for_range(self.index, self.buf.len())
-            .into_iter()
         {
             // println!("pe {:?}",pe);
             let remote_am = LocalLockRemoteGetAm {
@@ -130,7 +129,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
         unsafe {
             match self.array.array.inner.distribution {
                 Distribution::Block => {
-                    let u8_buf = self.buf.clone().to_base::<u8>();
+                    let u8_buf = self.buf.clone().into_base::<u8>();
                     let mut cur_index = 0;
                     for req in reqs.drain(..) {
                         let data = req.await;
@@ -202,7 +201,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
 
         unsafe {
-            let u8_buf = self.buf.clone().to_base::<u8>();
+            let u8_buf = self.buf.clone().into_base::<u8>();
             let mut reqs = vec![];
             match self.array.array.inner.distribution {
                 Distribution::Block => {
@@ -211,7 +210,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -251,7 +249,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -319,20 +316,16 @@ impl LamellarAm for LocalLockRemotePutAm {
         let _lock = self.array.lock.write().await;
         // println!("got write lock");
         unsafe {
-            match self
+            if let Some((elems, _)) = self
                 .array
                 .array
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, _)) => {
-                    // println!("elems: {:?}",elems);
-                    std::ptr::copy_nonoverlapping(
-                        self.data.as_ptr(),
-                        elems.as_mut_ptr(),
-                        elems.len(),
-                    )
-                }
-                None => {}
+                .local_elements_for_range(self.start_index, self.len) {
+                // println!("elems: {:?}",elems);
+                std::ptr::copy_nonoverlapping(
+                    self.data.as_ptr(),
+                    elems.as_mut_ptr(),
+                    elems.len(),
+                )
             }
         }
         // println!("done remote put dropping write lock");

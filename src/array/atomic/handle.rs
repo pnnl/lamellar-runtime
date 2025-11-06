@@ -123,24 +123,24 @@ impl<T: Dist + ArrayOps + 'static> Future for AtomicArrayHandle<T> {
     }
 }
 
-impl<T: Dist + ArrayOps + 'static> Into<AtomicArrayHandle<T>> for GenericAtomicArrayHandle<T> {
-    fn into(self) -> AtomicArrayHandle<T> {
-        let team = self.team.clone();
-        let launched = self.launched;
+impl<T: Dist + ArrayOps + 'static> From<GenericAtomicArrayHandle<T>> for AtomicArrayHandle<T> {
+    fn from(val: GenericAtomicArrayHandle<T>) -> Self {
+        let team = val.team.clone();
+        let launched = val.launched;
         AtomicArrayHandle {
-            inner: InnerAtomicArrayHandle::Generic(self),
+            inner: InnerAtomicArrayHandle::Generic(val),
             team,
             launched,
         }
     }
 }
 
-impl<T: Dist + ArrayOps + 'static> Into<AtomicArrayHandle<T>> for NativeAtomicArrayHandle<T> {
-    fn into(self) -> AtomicArrayHandle<T> {
-        let team = self.team.clone();
-        let launched = self.launched;
+impl<T: Dist + ArrayOps + 'static> From<NativeAtomicArrayHandle<T>> for AtomicArrayHandle<T> {
+    fn from(val: NativeAtomicArrayHandle<T>) -> Self {
+        let team = val.team.clone();
+        let launched = val.launched;
         AtomicArrayHandle {
-            inner: InnerAtomicArrayHandle::Native(self),
+            inner: InnerAtomicArrayHandle::Native(val),
             team,
             launched,
         }

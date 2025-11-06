@@ -33,7 +33,7 @@ pub(crate) mod tokio_executor;
 use tokio_executor::TokioRt;
 
 // ACTIVE ENUM
-// since atomic enums would be another dependecy
+// since atomic enums would be another dependency
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -135,7 +135,7 @@ unsafe impl<T: Send> Send for LamellarTaskInner<T> {}
 unsafe impl<T: Sync> Sync for LamellarTaskInner<T> {}
 
 impl<T> Drop for LamellarTaskInner<T> {
-    fn drop(self: &mut Self) {
+    fn drop(&mut self) {
         // let mut dropped = LamellarTaskInner::Dropped;
 
         // std::mem::swap(&mut dropped, self);

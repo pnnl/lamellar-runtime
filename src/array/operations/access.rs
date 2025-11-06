@@ -94,10 +94,9 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn store(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array()
             .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
-            .into()
     }
 
     /// This call performs a batched vesion of the [store][AccessOps::store] function,
@@ -164,7 +163,7 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn swap(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.as_lamellar_byte_array())
             .into()
@@ -298,10 +297,9 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn store(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array()
             .initiate_batch_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
-            .into()
     }
 
     /// This call performs a batched vesion of the [store][AccessOps::store] function,
@@ -368,7 +366,7 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn swap(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.as_lamellar_byte_array())
             .into()

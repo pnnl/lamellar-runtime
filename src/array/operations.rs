@@ -41,7 +41,6 @@ pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps, UnsafeShiftOps};
 // use std::pin::Pin;
 // use std::sync::atomic::{AtomicBool, Ordering};
 // use std::sync::Arc;
-use std::u8;
 
 /// A marker trait for types that can be used as an array
 /// Users should not implement this directly, rather they should use the [trait@ArrayOps] derive macro
@@ -361,7 +360,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
         }
     }
 
-    pub(crate) fn to_vec(self) -> Vec<T> {
+    pub(crate) fn into_vec(self) -> Vec<T> {
         match self {
             OpInputEnum::Val(v) => vec![v],
             OpInputEnum::Slice(s) => s.to_vec(),
@@ -434,17 +433,17 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
 ///```
 pub trait OpInput<'a, T: Dist> {
     #[doc(hidden)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize); //(Vec<(Box<dyn Iterator<Item = T>    + '_>,usize)>,usize);
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize); //(Vec<(Box<dyn Iterator<Item = T>    + '_>,usize)>,usize);
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for T {
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("val as op input");
         (vec![OpInputEnum::Val(self)], 1)
     }
 }
 impl<'a, T: Dist> OpInput<'a, T> for &T {
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("ref as op input");
         (vec![OpInputEnum::Val(*self)], 1)
     }
@@ -452,7 +451,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &T {
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("slice as op input");
         let len = self.len();
         let mut iters = vec![];
@@ -482,9 +481,9 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("iter as op input");
-        self.collect::<Vec<_>>().as_op_input()
+        self.collect::<Vec<_>>().into_op_input()
     }
 }
 
@@ -508,7 +507,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("slice as mut op input");
         let len = self.len();
         let mut iters = vec![];
@@ -543,23 +542,23 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec ref as op input");
-        (&self[..]).as_op_input()
+        (&self[..]).into_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec ref mut as op input");
-        (&self[..]).as_op_input()
+        (&self[..]).into_op_input()
     }
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec as op input");
         let len = self.len();
         if len == 0 {
@@ -669,7 +668,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
     // #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("LocalLockLocalData as_op_input {:?}", self.deref());
         let len = self.len();
         let mut iters = vec![];
@@ -709,7 +708,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a LocalLockLocalData<T> {
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
     // #[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("GlobalLockLocalData as_op_input");
         let len = self.len();
         let mut iters = vec![];
@@ -755,20 +754,20 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array.clone() {
-            AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
-            AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::GenericAtomicArray(a) => a.local_data().into_op_input(),
+            AtomicArray::NativeAtomicArray(a) => a.local_data().into_op_input(),
         }
     }
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array {
-            AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
-            AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::GenericAtomicArray(a) => a.local_data().into_op_input(),
+            AtomicArray::NativeAtomicArray(a) => a.local_data().into_op_input(),
         }
     }
 }
@@ -781,7 +780,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
 
         let local_data = self.clone();
@@ -818,14 +817,14 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T> {
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        (&self).as_op_input()
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (&self).into_op_input()
     }
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
     //#[tracing::instrument(skip_all)]
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
         // let len = slice.len();
         // let local_data = self.local_data();
@@ -867,8 +866,8 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
-    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
-        (&self).as_op_input()
+    fn into_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (&self).into_op_input()
     }
 }
 

@@ -247,7 +247,7 @@ impl LamellarAM for MemRegionFinishedAm {
     async fn exec(self) {
         // println!("in finished am {:?}",self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
-        let _mrh = match mrh_map.get(&self.parent_id) {
+        match mrh_map.get(&self.parent_id) {
             Some(mrh) => {
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
                 // println!("in finished am {:?} mrh {:?}",self,mrh);
@@ -256,7 +256,7 @@ impl LamellarAM for MemRegionFinishedAm {
                 "in finished am this should only be possible on the original pe? {:?} ",
                 self
             ), //or we are on the original node?
-        };
+        }
         // println!("leaving finished am");
     }
 }
@@ -368,7 +368,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         lamellae: Arc<Lamellae>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
         let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, lamellae, AllocationType::Local)?;
-        let mr = unsafe { mr_t.to_base::<u8>() };
+        let mr = unsafe { mr_t.into_base::<u8>() };
         let pe = mr.pe;
 
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -407,11 +407,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// or you may use the similar blocking_put call (with a potential performance penalty);
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied the data buffer
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -468,10 +468,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// the data buffer is free to be reused upon return of this function.
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -525,11 +525,11 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// The user is responsible for transmission termination detection
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -582,10 +582,10 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// After calling this function, the data is guaranteed to be placed in the data buffer
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if "data" does not have any local data on this PE
@@ -637,10 +637,15 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// An iterator to data local to this PE
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Panics
     /// Panics if the calling PE does not contain any local data
+    ///
+    /// # Safety
+    /// This call is always unsafe as there's no guarantee there aren't other mutable references to the
+    /// memory region elsewhere in the system
+    ///
     /// # Examples
     ///```
     /// use lamellar::memregion::prelude::*;
@@ -663,7 +668,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// Returns true if the PE does contain data, false otherwise
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Examples
     ///```
@@ -693,17 +698,13 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///```
     pub fn data_local(&self) -> bool {
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(_addr) = self.mr.inner.mr.addr() {
-                true
-            } else {
-                false
-            }
+            matches!(self.mr.inner.mr.addr(), Ok(_addr))
         } else {
             false
         }
     }
 
-    pub(crate) unsafe fn to_base<B: Dist>(self) -> OneSidedMemoryRegion<B> {
+    pub(crate) unsafe fn into_base<B: Dist>(self) -> OneSidedMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         OneSidedMemoryRegion {
@@ -833,7 +834,7 @@ impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
 }
 
 impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
-    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
+    unsafe fn into_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
         OneSidedMemoryRegion {

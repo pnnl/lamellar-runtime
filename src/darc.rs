@@ -32,18 +32,16 @@
 //!     }
 //!  }
 //!
-//! fn main(){
-//!     let world = LamellarWorldBuilder::new().build();
-//!     let my_pe = world.my_pe();
-//!     let num_pes = world.num_pes();
-//!     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
-//!     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
-//!     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
-//!     world.wait_all(); // wait for my active message to return
-//!     world.barrier(); //at this point all updates will have been performed
-//!     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
-//! }
-///```
+//! let world = LamellarWorldBuilder::new().build();
+//! let my_pe = world.my_pe();
+//! let num_pes = world.num_pes();
+//! let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+//! let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
+//! darc_counter.fetch_add(my_pe, Ordering::SeqCst);
+//! world.wait_all(); // wait for my active message to return
+//! world.barrier(); //at this point all updates will have been performed
+//! assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
+//!```
 use core::marker::PhantomData;
 use futures_util::future::join_all;
 use serde::{Deserialize, Deserializer};
@@ -105,9 +103,11 @@ pub(crate) enum DarcMode {
     RestartDrop,
 }
 
+const DARC_MODE_RESTART_DROP:u8 = DarcMode::RestartDrop as u8;
+
 #[lamellar_impl::AmDataRT(Debug)]
 struct FinishedAm {
-    cnt: usize,
+    count: usize,
     src_pe: usize,
     inner_addr: usize, //cant pass the darc itself cause we cant handle generics yet in lamellarAM...
 }
@@ -118,7 +118,7 @@ impl LamellarAM for FinishedAm {
         // println!("in finished! {:?}",self);
         let inner = unsafe { &*(self.inner_addr as *mut DarcInner<()>) }; //we dont actually care about the "type" we wrap here, we just need access to the meta data for the darc
                                                                           // inner.team().print_cnt();
-        inner.dist_cnt.fetch_sub(self.cnt, Ordering::SeqCst);
+        inner.dist_cnt.fetch_sub(self.count, Ordering::SeqCst);
     }
 }
 
@@ -185,17 +185,15 @@ unsafe impl<T> Sync for DarcInner<T> {} //we cant create DarcInners without goin
 ///     }
 ///  }
 ///
-/// fn main(){
-///     let world = LamellarWorldBuilder::new().build();
-///     let my_pe = world.my_pe();
-///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
-///     let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
-///     darc_counter.fetch_add(my_pe, Ordering::SeqCst);
-///     world.wait_all(); // wait for my active message to return
-///     world.barrier(); //at this point all updates will have been performed
-///     assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
-/// }
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let num_pes = world.num_pes();
+/// let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+/// let _ = world.exec_am_all(DarcAm {counter: darc_counter.clone()}).spawn();
+/// darc_counter.fetch_add(my_pe, Ordering::SeqCst);
+/// world.wait_all(); // wait for my active message to return
+/// world.barrier(); //at this point all updates will have been performed
+/// assert_eq!(darc_counter.load(Ordering::SeqCst),num_pes+my_pe); //NOTE: the value of darc_counter will be different on each PE
 ///```
 pub struct Darc<T: 'static> {
     inner: *mut DarcInner<T>,
@@ -246,13 +244,13 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 //#[doc(hidden)]
 /// `WeakDarc`` is a version of Darc that holds a non-owning reference to the managed object.
 /// (similar to [`Weak`](std::sync::Weak)).
-/// The managed object can be accessed by calling [`upgrade`](WeakDarc::upgrade), wich returns and ``Option<Darc<T>>``
+/// The managed object can be accessed by calling [`upgrade`](WeakDarc::upgrade), which returns and ``Option<Darc<T>>``
 ///
 /// A `WeakDarc` does not count toward ownership, thus it will not prevent the value stored in the allocation from being dropped,
 /// and it makes no guarantees itself about the value still being present, and thus can return `None` from `upgrade()`.
 /// Note that a `WeakDarc` does prevent the allocation itself from being deallocated.
 ///
-/// The typical way to obtian a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
+/// The typical way to obtain a `WeakDarc` is to call [`Darc::downgrade`](Darc::downgrade).
 ///
 /// # Examples
 ///```
@@ -273,19 +271,17 @@ impl<'de, T: 'static> Deserialize<'de> for Darc<T> {
 ///     }
 ///  }
 ///
-/// fn main(){
-///     let world = LamellarWorldBuilder::new().build();
-///     let my_pe = world.my_pe();
-///     let num_pes = world.num_pes();
-///     let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
-///     let weak = Darc::downgrade(&darc_counter);
-///     match weak.upgrade(){
-///         Some(counter) => {
-///             counter.fetch_add(my_pe, Ordering::SeqCst);
-///         }
-///         None => {
-///             println!("counter is gone");
-///         }   
+/// let world = LamellarWorldBuilder::new().build();
+/// let my_pe = world.my_pe();
+/// let num_pes = world.num_pes();
+/// let darc_counter = Darc::new(&world, AtomicUsize::new(0)).block().unwrap();
+/// let weak = Darc::downgrade(&darc_counter);
+/// match weak.upgrade(){
+///     Some(counter) => {
+///         counter.fetch_add(my_pe, Ordering::SeqCst);
+///     }
+///     None => {
+///         println!("counter is gone");
 ///     }
 /// }
 ///```
@@ -374,7 +370,7 @@ impl<T: 'static> DarcInner<T> {
 
     fn inc_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
         if self.ref_cnt_addr + pe * std::mem::size_of::<AtomicUsize>() < 10 {
-            println!("error!!!! addrress makes no sense: {:?} ", pe);
+            println!("error!!!! address makes no sense: {:?} ", pe);
             println!("{:?}", self);
             panic!();
         }
@@ -414,11 +410,11 @@ impl<T: 'static> DarcInner<T> {
         };
         let team = self.team();
         let mut reqs = vec![];
-        for pe in 0..ref_cnts.len() {
-            let cnt = ref_cnts[pe].swap(0, Ordering::SeqCst);
+        for (pe, ref_cnt) in ref_cnts.iter().enumerate() {
+            let count = ref_cnt.swap(0, Ordering::SeqCst);
 
-            if cnt > 0 {
-                let my_addr = &*self as *const DarcInner<T> as usize;
+            if count > 0 {
+                let my_addr = self as *const DarcInner<T> as usize;
                 let pe_addr = team.lamellae.remote_addr(
                     team.arch.world_pe(pe).expect("invalid team member"),
                     my_addr,
@@ -436,7 +432,7 @@ impl<T: 'static> DarcInner<T> {
                     team.spawn_am_pe_tg(
                         pe,
                         FinishedAm {
-                            cnt,
+                            count,
                             src_pe: pe,
                             inner_addr: pe_addr,
                         },
@@ -482,7 +478,7 @@ impl<T: 'static> DarcInner<T> {
     ) -> bool {
         for pe in mode_refs.iter() {
             let timer = std::time::Instant::now();
-            while *pe != state as u8 {
+            while *pe != state {
                 if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                     join_all(inner.send_finished()).await;
                 }
@@ -514,7 +510,7 @@ impl<T: 'static> DarcInner<T> {
                 if reset && timer.elapsed().as_secs_f64() > config().deadlock_timeout / 2.0 {
                     return false;
                 }
-                if reset && mode_refs.iter().any(|x| *x == DarcMode::RestartDrop as u8) {
+                if reset && mode_refs.contains(&DARC_MODE_RESTART_DROP) {
                     return false;
                 }
                 async_std::task::yield_now().await;
@@ -531,7 +527,7 @@ impl<T: 'static> DarcInner<T> {
     ) {
         unsafe {
             (*(((&mut mode_refs[inner.my_pe]) as *mut u8) as *mut AtomicU8)) //this should be fine given that DarcMode uses Repr(u8)
-                .store(state as u8, Ordering::SeqCst)
+                .store(state, Ordering::SeqCst)
         };
         let rdma = &team.lamellae;
         for pe in team.arch.team_iter() {
@@ -600,7 +596,7 @@ impl<T: 'static> DarcInner<T> {
             // );
 
             while outstanding_refs {
-                if mode_refs.iter().any(|x| *x == DarcMode::RestartDrop as u8) {
+                if mode_refs.contains(&DARC_MODE_RESTART_DROP) {
                     Self::broadcast_state(
                         inner.clone(),
                         team.clone(),
@@ -972,12 +968,10 @@ impl<T> Darc<T> {
             .inner()
             .weak_local_cnt
             .fetch_add(1, Ordering::SeqCst);
-        let weak = WeakDarc {
+        WeakDarc {
             inner: the_darc.inner,
             src_pe: the_darc.src_pe,
-        };
-        // the_darc.print();
-        weak
+        }
     }
     pub(crate) fn inner(&self) -> &DarcInner<T> {
         unsafe { self.inner.as_ref().expect("invalid darc inner ptr") }
@@ -1413,7 +1407,7 @@ impl<T: Send + Sync> Darc<T> {
 
     pub(crate) async fn block_on_outstanding(self, state: DarcMode, extra_cnt: usize) {
         let wrapped = WrappedInner {
-            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
+            inner: NonNull::new(self.inner).expect("invalid darc pointer"),
         };
         DarcInner::block_on_outstanding(wrapped, state, extra_cnt).await;
     }
@@ -1444,7 +1438,7 @@ impl<T: Send + Sync> Darc<T> {
     /// ```
     pub fn into_localrw(self) -> IntoLocalRwDarcHandle<T> {
         let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
+            inner: NonNull::new(self.inner).expect("invalid darc pointer"),
         };
         let team = self.inner().team().clone();
         IntoLocalRwDarcHandle {
@@ -1480,7 +1474,7 @@ impl<T: Send + Sync> Darc<T> {
     /// ```
     pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {
         let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.inner as *mut DarcInner<T>).expect("invalid darc pointer"),
+            inner: NonNull::new(self.inner).expect("invalid darc pointer"),
         };
         let team = self.inner().team().clone();
         IntoGlobalRwDarcHandle {
@@ -1592,6 +1586,8 @@ macro_rules! launch_drop {
 }
 
 impl<T: 'static> Drop for Darc<T> {
+    // A few macro expansions seem to result in some identical else blocks, which Clippy finds upsetting.
+    #[allow(clippy::if_same_then_else)]
     fn drop(&mut self) {
         let inner = self.inner();
         let cnt = inner.local_cnt.fetch_sub(1, Ordering::SeqCst);
@@ -1850,49 +1846,42 @@ impl std::fmt::Debug for __NetworkDarc {
 
 impl<T> From<Darc<T>> for __NetworkDarc {
     fn from(darc: Darc<T>) -> Self {
-        // println!("net darc from darc");
         let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
+        __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-        };
-        // darc.print();
-        ndarc
+        }
     }
 }
 
 impl<T> From<&Darc<T>> for __NetworkDarc {
     fn from(darc: &Darc<T>) -> Self {
-        // println!("net darc from darc");
         let team = &darc.inner().team();
-        let ndarc = __NetworkDarc {
+        __NetworkDarc {
             inner_addr: darc.inner as *const u8 as usize,
             backend: team.lamellae.backend(),
             orig_world_pe: team.world_pe,
             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
-        };
-        // darc.print();
-        ndarc
+        }
     }
 }
 
 impl<T> From<__NetworkDarc> for Darc<T> {
     fn from(ndarc: __NetworkDarc) -> Self {
         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
-            let darc = Darc {
+            Darc {
                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
                     as *mut DarcInner<T>,
                 src_pe: ndarc.orig_team_pe,
-            };
-            darc
+            }
         } else {
             println!(
                 "ndarc: 0x{:x} {:?} {:?} {:?} ",
                 ndarc.inner_addr, ndarc.backend, ndarc.orig_world_pe, ndarc.orig_team_pe
             );
-            panic!("unexepected lamellae backend {:?}", &ndarc.backend);
+            panic!("unexpected lamellae backend {:?}", &ndarc.backend);
         }
     }
 }

@@ -113,7 +113,6 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
             .array
             .array
             .pes_for_range(self.index, self.buf.len())
-            .into_iter()
         {
             // println!("pe {:?}",pe);
             let remote_am = NativeAtomicRemoteGetAm {
@@ -126,7 +125,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
         unsafe {
             match self.array.array.inner.distribution {
                 Distribution::Block => {
-                    let u8_buf = self.buf.clone().to_base::<u8>();
+                    let u8_buf = self.buf.clone().into_base::<u8>();
                     let mut cur_index = 0;
                     for req in reqs.drain(..) {
                         let data = req.await;
@@ -208,7 +207,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
         // let u8_len = self.buf.len() * std::mem::size_of::<T>();
 
         unsafe {
-            let u8_buf = self.buf.clone().to_base::<u8>();
+            let u8_buf = self.buf.clone().into_base::<u8>();
             let mut reqs = vec![];
             match self.array.array.inner.distribution {
                 Distribution::Block => {
@@ -217,7 +216,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -250,7 +248,6 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                         .array
                         .array
                         .pes_for_range(self.index, self.buf.len())
-                        .into_iter()
                     {
                         if let Some(len) = self.array.array.num_elements_on_pe_for_range(
                             pe,
@@ -314,28 +311,24 @@ impl LamellarAm for NativeAtomicRemotePutAm {
         // println!("in remote put {:?} {:?} {:?}",self.start_index,self.len,self.data);
         // let _lock = self.array.lock.write();
         unsafe {
-            match self
+            if let Some((elems, _indices)) = self
                 .array
                 .array
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, _indices)) => {
-                    // println!("elems: {:?}",elems);
-                    let src_ptr = self.data.as_ptr();
-                    let dst_ptr = elems.as_mut_ptr();
-                    for offset in (0..elems.len()).step_by(self.array.orig_t.size()) {
-                        self.array.orig_t.store(
-                            src_ptr.offset(offset as isize),
-                            dst_ptr.offset(offset as isize),
-                        );
-                    }
-                    // std::ptr::copy_nonoverlapping(
-                    //     self.data.as_ptr(),
-                    //     elems.as_mut_ptr(),
-                    //     elems.len(),
-                    // )
+                .local_elements_for_range(self.start_index, self.len) {
+                // println!("elems: {:?}",elems);
+                let src_ptr = self.data.as_ptr();
+                let dst_ptr = elems.as_mut_ptr();
+                for offset in (0..elems.len()).step_by(self.array.orig_t.size()) {
+                    self.array.orig_t.store(
+                        src_ptr.offset(offset as isize),
+                        dst_ptr.offset(offset as isize),
+                    );
                 }
-                None => {}
+                // std::ptr::copy_nonoverlapping(
+                //     self.data.as_ptr(),
+                //     elems.as_mut_ptr(),
+                //     elems.len(),
+                // )
             }
         }
         // println!("done remote put");

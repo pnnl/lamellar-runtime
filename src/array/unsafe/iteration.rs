@@ -34,7 +34,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     pub unsafe fn dist_iter(&self) -> DistIter<'static, T, UnsafeArray<T>> {
-        DistIter::new(self.clone().into(), 0, 0)
+        DistIter::new(self.clone(), 0, 0)
     }
 
     #[doc(alias = "Collective")]
@@ -61,7 +61,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     pub unsafe fn dist_iter_mut(&self) -> DistIterMut<'static, T, UnsafeArray<T>> {
-        DistIterMut::new(self.clone().into(), 0, 0)
+        DistIterMut::new(self.clone(), 0, 0)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -89,7 +89,7 @@ impl<T: Dist> UnsafeArray<T> {
     /// }
     ///```
     pub unsafe fn local_iter(&self) -> LocalIter<'static, T, UnsafeArray<T>> {
-        LocalIter::new(self.clone().into(), 0, 0)
+        LocalIter::new(self.clone(), 0, 0)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -115,8 +115,9 @@ impl<T: Dist> UnsafeArray<T> {
     ///         array.local_iter_mut().for_each(move |elem| *elem = my_pe)
     ///     .block();
     /// }
+    /// ```
     pub unsafe fn local_iter_mut(&self) -> LocalIterMut<'static, T, UnsafeArray<T>> {
-        LocalIterMut::new(self.clone().into(), 0, 0)
+        LocalIterMut::new(self.clone(), 0, 0)
     }
 
     #[doc(alias("One-sided", "onesided"))]

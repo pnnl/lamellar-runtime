@@ -71,7 +71,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let val = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
+    fn load(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
         self.inner_array()
@@ -180,6 +180,9 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -192,7 +195,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let val = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
+    unsafe fn load(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
         self.inner_array()
@@ -219,6 +222,9 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///

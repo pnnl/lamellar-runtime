@@ -213,7 +213,7 @@ impl Ser for Rofi {
         let header_size = *SERIALIZE_HEADER_LEN;
         let ser_data = RofiData::new(self.rofi_comm.clone(), header_size + serialized_size)?;
         // bincode::serialize_into(ser_data.header_as_bytes(), &header)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+        crate::serialize_into(ser_data.header_as_bytes(), &header)?; //we want header to be a fixed size
         Ok(SerializedData::RofiData(ser_data))
     }
 }

@@ -74,13 +74,13 @@ impl LamellarRequestResult {
         let mut added = false;
 
         if req.user_held() {
-            req.add_result(pe as usize, sub_id, data);
+            req.add_result(pe, sub_id, data);
             added = true;
         } else {
             // if the user dropped the handle we still need to handle if Darcs are returned
             if let InternalResult::Remote(_, darcs) = data {
                 // we need to appropriately set the reference counts if the returned data contains any Darcs
-                // we "cheat" in that we dont actually care what the Darc wraps (hence the cast to ()) we just care
+                // we "cheat" in that we don't actually care what the Darc wraps (hence the cast to ()) we just care
                 // that the reference count is updated.
                 for darc in darcs {
                     match darc {

@@ -86,7 +86,7 @@ impl Barrier {
             (vec![], None)
         };
 
-        let bar = Barrier {
+        Barrier {
             my_pe,
             num_pes,
             n,
@@ -99,9 +99,7 @@ impl Barrier {
             barrier_buf: Arc::new(buffs),
             send_buf,
             panic,
-        };
-        // bar.print_bar();
-        bar
+        }
     }
 
     fn print_bar(&self) {
@@ -123,6 +121,7 @@ impl Barrier {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn barrier_timeout(
         &self,
         s: &mut Instant,
@@ -220,11 +219,9 @@ impl Barrier {
                             }
                         }
                         for i in 1..=self.n {
-                            let team_recv_pe = ((my_index as isize
-                                - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
-                                as isize)
-                                .rem_euclid(self.num_pes as isize)
-                                as isize;
+                            let team_recv_pe = (my_index as isize
+                                - (i as isize * (self.n as isize + 1).pow(round as u32)))
+                                .rem_euclid(self.num_pes as isize);
                             let recv_pe =
                                 self.arch.single_iter(team_recv_pe as usize).next().unwrap();
                             if team_recv_pe as usize != my_index {
@@ -312,35 +309,33 @@ impl Barrier {
         };
         // println!("in barrier handle");
         // self.print_bar();
-        if self.panic.load(Ordering::SeqCst) == 0 {
-            if let Some(_) = &self.send_buf {
-                if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-                    let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                    // println!("barrier id: {:?}", barrier_id);
-                    handle.barrier_id = barrier_id;
-                    handle.my_index = my_index;
+        if self.panic.load(Ordering::SeqCst) == 0 && self.send_buf.is_some() {
+            if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
+                let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
+                // println!("barrier id: {:?}", barrier_id);
+                handle.barrier_id = barrier_id;
+                handle.my_index = my_index;
 
-                    if barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
-                        handle.state = State::Waiting;
+                if barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
+                    handle.state = State::Waiting;
+                    return handle;
+                }
+                // else if barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
+                //     println!("should this happen>?");
+                // }
+
+                handle.state = State::RoundInit(0);
+                let mut round = 0;
+                while round < self.num_rounds {
+                    handle.do_send_round(round);
+                    if let Some(recv_pe) = handle.do_recv_round(round, 1) {
+                        handle.state = State::RoundInProgress(round, recv_pe);
                         return handle;
                     }
-                    // else if barrier_id < self.cur_barrier_id.load(Ordering::SeqCst) {
-                    //     println!("should this happen>?");
-                    // }
-
-                    handle.state = State::RoundInit(0);
-                    let mut round = 0;
-                    while round < self.num_rounds {
-                        handle.do_send_round(round);
-                        if let Some(recv_pe) = handle.do_recv_round(round, 1) {
-                            handle.state = State::RoundInProgress(round, recv_pe);
-                            return handle;
-                        }
-                        round += 1;
-                    }
-                    self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
-                    handle.state = State::RoundInit(self.num_rounds);
+                    round += 1;
                 }
+                self.cur_barrier_id.store(barrier_id + 1, Ordering::SeqCst);
+                handle.state = State::RoundInit(self.num_rounds);
             }
         }
         handle
@@ -411,10 +406,9 @@ impl BarrierHandle {
     fn do_recv_round(&self, round: usize, recv_pe_index: usize) -> Option<usize> {
         // println!("do recv round {:?}", round);
         for i in recv_pe_index..=self.n {
-            let team_recv_pe = ((self.my_index as isize
-                - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
-                as isize)
-                .rem_euclid(self.num_pes as isize) as isize;
+            let team_recv_pe = (self.my_index as isize
+                - (i as isize * (self.n as isize + 1).pow(round as u32)))
+                .rem_euclid(self.num_pes as isize);
             // let recv_pe = self.arch.single_iter(team_recv_pe as usize).next().unwrap();
             if team_recv_pe as usize != self.my_index {
                 unsafe {
@@ -566,19 +560,8 @@ impl LamellarRequest for BarrierHandle {
         self.launched = true;
         match self.state {
             State::Waiting => false,
-            State::RoundInit(round) => {
-                if round < self.num_rounds {
-                    false
-                } else {
-                    true
-                }
-            }
-            State::RoundInProgress(round, _) => {
-                if round < self.num_rounds {
-                    false
-                } else {
-                    true
-                }
+            State::RoundInit(round) | State::RoundInProgress(round, _)  => {
+                round >= self.num_rounds
             }
         }
     }

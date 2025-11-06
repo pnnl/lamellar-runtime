@@ -441,7 +441,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
                     .expect("ptr is non null"),
             )
         };
-        let iter = OneSidedIter {
+        OneSidedIter {
             array,
             buf_0,
             index: 0,
@@ -449,9 +449,7 @@ impl<'a, T: Dist + 'static, A: LamellarArrayInternalGet<T>> OneSidedIter<'a, T, 
             ptr,
             state: State::Finished,
             _marker: PhantomData,
-        };
-
-        iter
+        }
     }
 }
 

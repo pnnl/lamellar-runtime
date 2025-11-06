@@ -109,7 +109,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn bit_and(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -258,7 +258,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn bit_or(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -332,7 +332,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_bit_or(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -407,7 +407,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    fn bit_xor(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -481,7 +481,7 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    fn fetch_bit_xor(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -606,6 +606,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -620,7 +623,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn bit_and(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -629,7 +632,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
         )
     }
 
-    /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
+    /// This call performs a batched version of the [bit_and][BitWiseOps::bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -641,6 +644,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -680,6 +686,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -694,7 +703,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_bit_and(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -718,6 +727,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -755,6 +767,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -769,7 +784,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn bit_or(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -790,6 +805,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -829,6 +847,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -843,7 +864,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_bit_or(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -867,6 +888,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -904,6 +928,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -918,7 +945,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle {
+    unsafe fn bit_xor(&self, index: usize, val: T) -> ArrayOpHandle {
         self.inner_array().initiate_batch_op(
             val,
             index,
@@ -939,6 +966,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///
@@ -978,6 +1008,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
     ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
+    ///
     /// # Examples
     ///
     ///```
@@ -992,7 +1025,7 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// let old = req.block();
     ///```
     //#[tracing::instrument(skip_all)]
-    unsafe fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+    unsafe fn fetch_bit_xor(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(
                 val,
@@ -1016,6 +1049,9 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     /// with respect to launching the operation. That is, the operation will
     /// occur regardless of if the future is ever polled or not, Enabling
     /// a "fire and forget" programming model.
+    ///
+    /// # Safety
+    /// Operations on [`UnsafeArray`] should be considered unsafe.
     ///
     /// # Examples
     ///

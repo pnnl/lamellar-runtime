@@ -49,9 +49,7 @@ where
     }
 
     fn elems(&self, in_elems: usize) -> usize {
-        let in_elems = self.iter.elems(in_elems);
-        // println!("enumerate elems {:?}",in_elems);
-        in_elems
+        self.iter.elems(in_elems)
     }
     // fn global_index(&self, index: usize) -> Option<usize> {
     //     let g_index = self.iter.global_index(index);

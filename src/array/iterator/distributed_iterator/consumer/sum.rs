@@ -51,7 +51,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.iter.next()
     }
-    fn into_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
+    fn as_am(&self, schedule: IterSchedule) -> LamellarArcLocalAm {
         Arc::new(SumAm {
             iter: self.iter_clone(Sealed),
             schedule,

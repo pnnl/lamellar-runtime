@@ -180,7 +180,7 @@ impl LamellaeAM for Shmem {
                 .filter(|pe| pe != &self.my_pe)
                 .map(|pe| self.cq.send_data(data.clone(), pe))
                 .collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
-            while let Some(_) = futures.next().await {}
+            while (futures.next().await).is_some() {}
         }
     }
 }
@@ -205,7 +205,7 @@ impl Ser for Shmem {
     ) -> Result<SerializedData, anyhow::Error> {
         let header_size = *SERIALIZE_HEADER_LEN;
         let ser_data = ShmemData::new(self.shmem_comm.clone(), header_size + serialized_size)?;
-        crate::serialize_into(ser_data.header_as_bytes(), &header, false)?; //we want header to be a fixed size
+        crate::serialize_into(ser_data.header_as_bytes(), &header)?; //we want header to be a fixed size
         Ok(SerializedData::ShmemData(ser_data))
     }
 }
