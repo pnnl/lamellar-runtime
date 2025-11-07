@@ -1,11 +1,10 @@
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::{ArrayOps, ReadOnlyArray};
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::{Dist, LamellarTeamRT, UnsafeArray};
+use crate::{Darc, Dist, LamellarTeamRT, UnsafeArray};
 
 use futures_util::{ready, Future};
 use pin_project::{pin_project, pinned_drop};
@@ -29,7 +28,7 @@ use pin_project::{pin_project, pinned_drop};
 /// let array: ReadOnlyArray<usize> = ReadOnlyArray::new(&world,100,Distribution::Cyclic).block();
 /// ```
 pub struct ReadOnlyArrayHandle<T: Dist + ArrayOps + 'static> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future: Pin<Box<dyn Future<Output = UnsafeArray<T>> + Send>>,

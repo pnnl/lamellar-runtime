@@ -8,12 +8,12 @@ use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
-use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::{array::*, Darc};
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
@@ -1211,7 +1211,7 @@ impl<T: Dist> From<&mut NetworkAtomicByteArray> for AtomicArray<T> {
 
 // //#[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NetworkAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

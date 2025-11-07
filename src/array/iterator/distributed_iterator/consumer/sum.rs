@@ -10,7 +10,7 @@ use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::Dist;
+use crate::{Darc, Dist};
 use futures_util::{ready, Future};
 use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
@@ -59,7 +59,7 @@ where
     }
     fn create_handle(
         self,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerDistIterSumHandle {
@@ -78,7 +78,7 @@ where
 #[pin_project]
 pub(crate) struct InnerDistIterSumHandle<T> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<T>>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     state: InnerState<T>,
     spawned: bool,
 }
@@ -92,7 +92,7 @@ impl<T> InnerDistIterSumHandle<T>
 where
     T: Dist + ArrayOps + std::iter::Sum,
 {
-    async fn async_reduce_remote_vals(local_sum: T, team: Pin<Arc<LamellarTeamRT>>) -> T {
+    async fn async_reduce_remote_vals(local_sum: T, team: Darc<LamellarTeamRT>) -> T {
         let local_sums = UnsafeArray::<T>::async_new(
             &team,
             team.num_pes,

@@ -258,7 +258,7 @@ impl CommMem for LibfabricComm {
             ))
     }
 
-    fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+    fn local_rt_alloc_from_local_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
         for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
@@ -281,8 +281,8 @@ impl CommMem for LibfabricComm {
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        trace!("get_alloc: {:?}", addr);
+    fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+        trace!("get_alloc cloned: {:?}", addr);
         if let Ok(alloc) = self.ofi.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: CommAllocInner::LibfabricAlloc(alloc),

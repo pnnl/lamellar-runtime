@@ -153,8 +153,8 @@ impl CommMem for RofiCComm {
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        trace!("get_alloc: {:?}", addr);
+    fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+        trace!("get_alloc_cloned: {:?}", addr);
         let allocs = self.fabric_allocs.read();
         if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(alloc.clone());

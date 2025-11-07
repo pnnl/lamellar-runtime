@@ -1,17 +1,16 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::rdma::private::Sealed;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
+use crate::darc::Darc;
 use crate::lamellae::{AllocationType, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
-use crate::lamellar_team::LamellarTeamRemotePtr;
+// use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LamellarTeamRT;
-use crate::LAMELLAES;
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::ops::Bound;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use tracing::trace;
@@ -29,7 +28,7 @@ pub struct NetMemRegionHandle {
     mr_addr: usize,
     mr_size: usize,
     mr_pe: usize,
-    team: LamellarTeamRemotePtr,
+    team: Darc<LamellarTeamRT>, //LamellarTeamRemotePtr,
     my_id: (usize, usize),
     parent_id: (usize, usize),
 }
@@ -46,14 +45,15 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
         );
         let grand_parent_id = net_handle.parent_id;
         let parent_id = net_handle.my_id;
-        let lamellae = if let Some(lamellae) = LAMELLAES.read().get(&net_handle.team.backend) {
-            lamellae.clone()
-        } else {
-            panic!(
-                "unexepected lamellae backend {:?}",
-                &net_handle.team.backend
-            );
-        };
+        let lamellae = net_handle.team.lamellae.clone();
+        // let lamellae = if let Some(lamellae) = LAMELLAES.read().get(&net_handle.team.backend) {
+        //     lamellae.clone()
+        // } else {
+        //     panic!(
+        //         "unexepected lamellae backend {:?}",
+        //         &net_handle.team.backend
+        //     );
+        // };
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let mrh = match mrh_map.get(&parent_id) {
             Some(mrh) => {
@@ -61,7 +61,7 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                 mrh.clone()
             }
             None => {
-                let team: Pin<Arc<LamellarTeamRT>> = net_handle.team.into();
+                let team: Darc<LamellarTeamRT> = net_handle.team.into();
                 let mem_region = MemoryRegion::from_remote_addr(
                     net_handle.mr_addr,
                     net_handle.mr_pe,
@@ -127,7 +127,7 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
 #[derive(Debug)]
 pub(crate) struct MemRegionHandleInner {
     mr: MemoryRegion<u8>,
-    team: Pin<Arc<LamellarTeamRT>>,
+    team: Darc<LamellarTeamRT>,
     pub(crate) local_ref: AtomicUsize,
     remote_sent: AtomicUsize,
     remote_recv: AtomicUsize,
@@ -190,6 +190,7 @@ impl crate::active_messaging::DarcSerde for MemRegionHandle {
             self.inner.grand_parent_id
         );
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
+        self.inner.team.ser(num_pes, darcs);
         darcs.push(RemotePtr::NetMemRegionHandle(self.inner.clone().into()));
     }
 }
@@ -379,7 +380,7 @@ impl<T: Remote> LamellarEnv for OneSidedMemoryRegion<T> {
 impl<T: Remote> OneSidedMemoryRegion<T> {
     pub(crate) fn try_new(
         size: usize,
-        team: &std::pin::Pin<Arc<LamellarTeamRT>>,
+        team: &Darc<LamellarTeamRT>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
         let mr_t: MemoryRegion<T> = MemoryRegion::try_new(
             size,
@@ -480,7 +481,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     ///             std::thread::yield_now();
     ///         }
     ///         assert_eq!(pe,*elem);
-    ///     }      
+    ///     }
     /// }
     ///```
     pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(

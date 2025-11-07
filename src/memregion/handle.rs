@@ -1,5 +1,5 @@
+use crate::darc::Darc;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::SharedMemoryRegion;
@@ -30,7 +30,7 @@ use pin_project::{pin_project, pinned_drop};
 /// let memregion: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
 /// ```
 pub struct FallibleSharedMemoryRegionHandle<T: Remote> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future:
@@ -112,7 +112,7 @@ impl<T: Remote> Future for FallibleSharedMemoryRegionHandle<T> {
 /// let memregion: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
 /// ```
 pub struct SharedMemoryRegionHandle<T: Remote> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future: Pin<Box<dyn Future<Output = SharedMemoryRegion<T>> + Send>>,
@@ -193,7 +193,7 @@ impl<T: Remote> Future for SharedMemoryRegionHandle<T> {
 // /// let array: OneSidedMemoryRegion<usize> = OneSidedMemoryRegion::new(&world,100).block();
 // /// ```
 // pub(crate) struct OneSidedMemoryRegionHandle<T: Dist> {
-//     pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+//     pub(crate) team: Darc<LamellarTeamRT>,
 //     pub(crate) launched: bool,
 //     #[pin]
 //     pub(crate) creation_future:

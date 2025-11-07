@@ -143,6 +143,9 @@ impl Drop for LibfabricComm {
         // }
         let _ = self.ofi.clear_allocs();
         let _ = self.ofi.barrier();
-        trace!("libfabric comm dropped");
+        trace!(
+            "libfabric comm dropped ofi count: {:?}",
+            Arc::strong_count(&self.ofi)
+        );
     }
 }

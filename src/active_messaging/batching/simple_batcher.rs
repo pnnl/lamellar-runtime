@@ -162,7 +162,7 @@ impl Batcher for SimpleBatcher {
             req_data,
             LamellarData::Am(am, am_id, am_size),
             am_size,
-            *AM_HEADER_LEN,
+            *AM_HEADER_LEN.get().expect("am header size not calculated"),
         );
         let batch_id = batch.batch_id.load(Ordering::SeqCst);
         if size == 0 {
@@ -266,7 +266,7 @@ impl Batcher for SimpleBatcher {
             req_data,
             LamellarData::Return(am, am_id, am_size),
             am_size,
-            *AM_HEADER_LEN,
+            *AM_HEADER_LEN.get().expect("am header size not calculated"),
         );
         let batch_id = batch.batch_id.load(Ordering::SeqCst);
         if size == 0 {
@@ -729,13 +729,19 @@ impl SimpleBatcher {
         crate::serialize_into(&mut data_buf[i..i + *CMD_LEN], &cmd, false).unwrap();
         i += *CMD_LEN;
 
+        // if req_data.dst.is_some() {
+        //     req_data.team.ser(1, &mut vec![]); //ensure team is serialized for am header
+        // } else {
+        //     req_data.team.ser(req_data.team.num_pes(), &mut vec![]); //ensure team is serialized for am header
+        // }
         let am_header = AmHeader {
             am_id: am_id,
             req_id: req_data.id,
-            team_addr: req_data.team_addr.into(),
+            // team_addr: req_data.team_addr.into(),
+            team: req_data.team.clone(),
         };
-        crate::serialize_into(&mut data_buf[i..i + *AM_HEADER_LEN], &am_header, false).unwrap();
-        i += *AM_HEADER_LEN;
+        crate::serialize_into(&mut data_buf[i..i + *AM_HEADER_LEN.get().expect("am header size not calculated")], &am_header, false).unwrap();
+        i += *AM_HEADER_LEN.get().expect("am header size not calculated");
 
         let darc_ser_cnt = match req_data.dst {
             Some(_) => 1,
@@ -840,10 +846,12 @@ impl SimpleBatcher {
         trace!("exec_am");
         let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")], false).unwrap();
+            am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
-            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-        *i += *AM_HEADER_LEN;
+            // ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            ame.get_team_and_world(&am_header.team);
+        *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
 
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
@@ -855,7 +863,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
         };
         // println!(
         //     "[{:?}] simple batcher exec_am submit task",
@@ -902,10 +910,13 @@ impl SimpleBatcher {
         trace!("exec_return_am");
         let data = ser_data.data_as_bytes();
         let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")], false).unwrap();
+        am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
-            ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-        *i += *AM_HEADER_LEN;
+            // ame.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            ame.get_team_and_world(&am_header.team);
+
+        *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
@@ -916,7 +927,7 @@ impl SimpleBatcher {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
         };
         // println!(
         //     "[{:?}] exec_return_am submit task",

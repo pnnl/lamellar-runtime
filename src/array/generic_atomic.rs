@@ -646,7 +646,7 @@ impl<T: Dist> From<&mut GenericAtomicByteArray> for AtomicArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -733,7 +733,7 @@ impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
-    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    // fn team_rt(&self) -> Darc<LamellarTeamRT> {
     //     self.array.team_rt()
     // }
     // fn my_pe(&self) -> usize {

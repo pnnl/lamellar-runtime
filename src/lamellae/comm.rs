@@ -95,14 +95,17 @@ pub(crate) trait CommMem {
         remote_addr: usize,
     ) -> (CommAlloc, usize);
 
-    // think of this as Box::from_raw, it takes a raw remote address and returns the CommAlloc that contains it
+    // think of this as Box::from_raw, it takes a raw local address and returns the CommAlloc that contains it
     // this does not not increment the ref count of the CommAlloc, this should be matched to a alloc.leak() call typically
     // we need this to enable appropriate freeing of serialized active message data after it has been processed at a remote PE
-    fn local_rt_alloc_from_addr(&self, addr: usize) -> error::AllocResult<CommAlloc>;
+    // or for use in reconstructing a Darc<LamellarTeamRT> from a raw pointer
+    fn local_rt_alloc_from_local_addr(&self, addr: usize) -> error::AllocResult<CommAlloc>;
+
     // this translates a local address to a remote address
     fn remote_addr(&self, remote_pe: usize, local_addr: usize) -> CommAllocAddr;
-    // this checks for an allocation at the given address
-    fn get_alloc(&self, addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
+
+    // this checks for an allocation at the given address and returns it if it exists incrementing the ref count
+    fn get_alloc_cloned(&self, addr: CommAllocAddr) -> error::AllocResult<CommAlloc>;
 }
 
 #[enum_dispatch]

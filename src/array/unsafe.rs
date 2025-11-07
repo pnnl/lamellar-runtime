@@ -24,7 +24,6 @@ use crate::LamellarTaskGroup;
 use core::marker::PhantomData;
 use futures_util::{future, StreamExt};
 use std::ops::Bound;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -32,7 +31,7 @@ use std::time::Instant;
 pub(crate) struct UnsafeArrayData {
     pub(crate) mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) task_group: Arc<LamellarTaskGroup>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
@@ -423,7 +422,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
 
-    pub(crate) fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    pub(crate) fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.inner.data.team.clone()
     }
 
@@ -900,7 +899,7 @@ impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
 }
 
 impl<T: Dist> ArrayExecAm<T> for UnsafeArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

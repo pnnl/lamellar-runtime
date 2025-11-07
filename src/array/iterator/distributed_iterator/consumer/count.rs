@@ -5,13 +5,13 @@ use crate::array::iterator::{consumer::*, IterLockFuture};
 
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::barrier::BarrierHandle;
+use crate::darc::Darc;
 use crate::darc::DarcMode;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::Darc;
 
 use futures_util::{ready, Future};
 use pin_project::{pin_project, pinned_drop};
@@ -63,7 +63,7 @@ where
     }
     fn create_handle(
         self,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerDistIterCountHandle {
@@ -82,7 +82,7 @@ where
 #[pin_project]
 pub(crate) struct InnerDistIterCountHandle {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<usize>>,
-    team: Pin<Arc<LamellarTeamRT>>,
+    team: Darc<LamellarTeamRT>,
     state: InnerState,
     spawned: bool,
 }
@@ -106,7 +106,7 @@ impl LamellarAm for UpdateCntAm {
 }
 
 impl InnerDistIterCountHandle {
-    async fn async_reduce_remote_counts(local_cnt: usize, team: Pin<Arc<LamellarTeamRT>>) -> usize {
+    async fn async_reduce_remote_counts(local_cnt: usize, team: Darc<LamellarTeamRT>) -> usize {
         let cnt = Darc::async_try_new_with_drop(&team, AtomicUsize::new(0), DarcMode::Darc, None)
             .await
             .unwrap();

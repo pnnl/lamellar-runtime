@@ -679,7 +679,7 @@ impl<T: 'static> Future for TaskGroupLocalAmHandle<T> {
 /// ```
 #[derive(Debug)]
 pub struct LamellarTaskGroup {
-    team: Pin<Arc<LamellarTeamRT>>,
+    team: Darc<LamellarTeamRT>,
     id: usize, //for exec_pe requests -- is actually the pointer to the rt_req (but *const are not sync so we use usize)
     multi_id: usize, //for exec_all requests -- is actually the pointer to the rt_multi_req  (but *const are not sync so we use usize)
     local_id: usize, //for exec_local requests -- is actually the pointer to the rt_local_req  (but *const are not sync so we use usize)
@@ -1017,7 +1017,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: self.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(self.team.clone()).addr(),
         };
         // println!("[{:?}] task group am all", std::thread::current().id());
         // self.team.scheduler.submit_am();
@@ -1059,7 +1059,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: self.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(self.team.clone()).addr(),
         };
         // println!("[{:?}] task group am pe", std::thread::current().id());
         // self.team.scheduler.submit_am(Am::Remote(req_data, func));
@@ -1107,7 +1107,7 @@ impl LamellarTaskGroup {
             lamellae: self.team.lamellae.clone(),
             world: world,
             team: self.team.clone(),
-            team_addr: self.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(self.team.clone()).addr(),
         };
         // println!("[{:?}] task group am local", std::thread::current().id());
         // self.team.scheduler.submit_am(Am::Local(req_data, func));
@@ -1380,7 +1380,7 @@ impl LamellarResultDarcSerde for AmGroupAmReturn {}
 /// in am2 hello on PE1
 /// ```
 pub struct AmGroup {
-    team: Pin<Arc<LamellarTeamRT>>,
+    team: Darc<LamellarTeamRT>,
     cnt: usize,
     reqs: BTreeMap<usize, (Vec<usize>, Vec<LamellarArcAm>, usize)>,
 }

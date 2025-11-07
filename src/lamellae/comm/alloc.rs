@@ -282,6 +282,7 @@ impl CommAllocRdma for CommAllocInner {
         }
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        trace!("CommAllocInner::put_unmanaged called");
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")

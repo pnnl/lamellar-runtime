@@ -11,6 +11,7 @@ use crate::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
     },
+    darc::Darc,
     lamellae::{
         AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc,
         CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice,
@@ -21,11 +22,8 @@ use crate::{
     LamellarEnv,
 };
 use core::marker::PhantomData;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use std::{
-    hash::{Hash, Hasher},
-    pin::Pin,
-};
 
 //#[doc(hidden)]
 /// Prelude for using the [LamellarMemoryRegion] module
@@ -861,7 +859,7 @@ impl<T: Remote> MemoryRegion<T> {
         addr: usize,
         pe: usize,
         num_bytes: usize,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         lamellae: Arc<Lamellae>,
     ) -> Result<MemoryRegion<T>, anyhow::Error> {
         trace!(

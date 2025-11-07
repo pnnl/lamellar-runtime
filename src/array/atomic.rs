@@ -11,7 +11,7 @@ use crate::array::iterator::distributed_iterator::DistIteratorLauncher;
 use crate::array::iterator::local_iterator::LocalIteratorLauncher;
 use crate::array::native_atomic::NativeAtomicElement;
 use crate::array::network_atomic::NetworkAtomicElement;
-use crate::array::*;
+use crate::{array::*, Darc};
 // use crate::darc::{Darc, DarcMode};
 use crate::barrier::BarrierHandle;
 use crate::lamellae::comm::CommInfo;
@@ -721,11 +721,17 @@ impl AtomicByteArray {
             }
         }
     }
-    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    pub(crate) fn team(&self) -> Darc<LamellarTeamRT> {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.data.team(),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.data.team(),
-            AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.data.team(),
+            AtomicByteArray::NativeAtomicByteArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
+            AtomicByteArray::GenericAtomicByteArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
+            AtomicByteArray::NetworkAtomicByteArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
         }
     }
 
@@ -929,7 +935,7 @@ impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
         distribution: Distribution,
     ) -> AtomicArrayHandle<T> {
         println!("new atomic array");
-        let team: Pin<Arc<LamellarTeamRT>> = team.into().team.clone();
+        let team: Darc<LamellarTeamRT> = team.into().team.clone();
         if team.lamellae.comm().atomic_avail::<T>() {
             NetworkAtomicArray::new_internal(team, array_size, distribution).into()
         } else if NATIVE_ATOMICS.contains(&TypeId::of::<T>()) {

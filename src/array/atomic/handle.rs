@@ -1,5 +1,4 @@
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use super::{
@@ -11,7 +10,7 @@ use super::{ArrayOps, AtomicArray};
 
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::{Dist, LamellarTeamRT};
+use crate::{Darc, Dist, LamellarTeamRT};
 
 use futures_util::{ready, Future};
 use pin_project::{pin_project, pinned_drop};
@@ -36,7 +35,7 @@ use pin_project::{pin_project, pinned_drop};
 /// ```
 pub struct AtomicArrayHandle<T: Dist + ArrayOps + 'static> {
     pub(crate) inner: InnerAtomicArrayHandle<T>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
 }
 

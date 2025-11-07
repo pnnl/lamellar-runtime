@@ -145,7 +145,7 @@ impl CommMem for LocalComm {
         );
     }
 
-    fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+    fn local_rt_alloc_from_local_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
         let allocs = self.heap_allocs.lock();
         for (_addr, alloc) in allocs.iter() {
             if alloc.start() <= addr && addr < alloc.start() + alloc.num_bytes() {
@@ -162,7 +162,7 @@ impl CommMem for LocalComm {
         CommAllocAddr(local_addr)
     }
 
-    fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+    fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
         let allocs = self.allocs.lock();
         if let Some(alloc) = allocs.get(&addr.0) {
             return Ok(CommAlloc {

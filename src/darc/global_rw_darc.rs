@@ -35,7 +35,7 @@ pub(crate) struct DistRwLock<T> {
     collective_cnt: AtomicUsize,
     // local_cnt: AtomicUsize, //eventually we can do an optimization potentially where if we already have the global lock and another local request comes in we keep it (although this could cause starvation)
     // local_state: Mutex<Option<LockType>>,
-    team: std::pin::Pin<Arc<LamellarTeamRT>>,
+    team: Darc<LamellarTeamRT>,
     data: std::cell::UnsafeCell<T>,
 }
 
@@ -330,7 +330,7 @@ impl<T: 'static> Drop for GlobalRwDarcReadGuard<T> {
         // println!("dropping global rwdarc read guard");
         if self.local_cnt.fetch_sub(1, Ordering::SeqCst) == 1 {
             let inner = self.darc.inner();
-            let team = inner.team();
+            let team = inner.darc_rt_team();
             let remote_rwlock_addr = team.lamellae.comm().remote_addr(
                 0,
                 inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
@@ -381,7 +381,7 @@ impl<T: 'static> Drop for GlobalRwDarcWriteGuard<T> {
     fn drop(&mut self) {
         // println!("dropping write guard");
         let inner = self.darc.inner();
-        let team = inner.team();
+        let team = inner.darc_rt_team();
         let remote_rwlock_addr = team.lamellae.comm().remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
@@ -431,7 +431,7 @@ impl<T: 'static> Drop for GlobalRwDarcCollectiveWriteGuard<T> {
     fn drop(&mut self) {
         // println!("dropping collective write guard");
         let inner = self.darc.inner();
-        let team = inner.team();
+        let team = inner.darc_rt_team();
         let remote_rwlock_addr = team.lamellae.comm().remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
@@ -608,7 +608,7 @@ impl<T> GlobalRwDarc<T> {
     pub fn read(&self) -> GlobalRwDarcReadHandle<T> {
         // println!("async read");
         let inner = self.inner();
-        let team = inner.team();
+        let team = inner.darc_rt_team();
         let remote_rwlock_addr = team.lamellae.comm().remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
@@ -673,7 +673,7 @@ impl<T> GlobalRwDarc<T> {
     pub fn write(&self) -> GlobalRwDarcWriteHandle<T> {
         // println!("async write");
         let inner = self.inner();
-        let team = inner.team();
+        let team = inner.darc_rt_team();
         let remote_rwlock_addr = team.lamellae.comm().remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
@@ -719,7 +719,7 @@ impl<T> GlobalRwDarc<T> {
     pub fn collective_write(&self) -> GlobalRwDarcCollectiveWriteHandle<T> {
         // println!("async write");
         let inner = self.inner();
-        let team = inner.team();
+        let team = inner.darc_rt_team();
         let remote_rwlock_addr = team.lamellae.comm().remote_addr(
             0,
             inner as *const DarcInner<DistRwLock<T>> as *const () as usize,
@@ -839,7 +839,7 @@ impl<T: Send> GlobalRwDarc<T> {
             },
             _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
         };
-        let team = self.darc.inner().team().clone();
+        let team = self.darc.inner().darc_rt_team();
         IntoDarcHandle {
             darc: self.into(),
             team,
@@ -887,7 +887,7 @@ impl<T: Send> GlobalRwDarc<T> {
             },
             _phantom: PhantomData::<DarcInner<DistRwLock<T>>>,
         };
-        let team = self.darc.inner().team().clone();
+        let team = self.darc.inner().darc_rt_team();
         IntoLocalRwDarcHandle {
             darc: self.into(),
             team,

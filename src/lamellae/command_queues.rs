@@ -381,7 +381,7 @@ impl CmdMsgBuffer {
 
                         // unsafe { SerializedData::decrement_cnt_from_addr(comm, ser_data_addr) };
                         let _alloc = comm
-                            .local_rt_alloc_from_addr( cmd.daddr).expect("failed to find local alloc from addr");
+                            .local_rt_alloc_from_local_addr( cmd.daddr).expect("failed to find local alloc from addr");
                         //creates and then drops to decrement the reference count
                     }
                 }

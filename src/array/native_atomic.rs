@@ -8,7 +8,7 @@ use crate::array::atomic::AtomicElement;
 
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
-use crate::array::*;
+use crate::{array::*, Darc};
 // use crate::darc::Darc;
 use crate::array::private::ArrayExecAm;
 use crate::barrier::BarrierHandle;
@@ -1204,7 +1204,7 @@ impl<T: Dist> From<&mut NativeAtomicByteArray> for AtomicArray<T> {
 
 // //#[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

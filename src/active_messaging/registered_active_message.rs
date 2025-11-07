@@ -16,7 +16,7 @@ use crate::{
 
 use async_recursion::async_recursion;
 // use log::trace;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 pub(crate) const AM_ID_START: AmId = 1;
 
@@ -75,9 +75,8 @@ pub(crate) struct RegisteredActiveMessages {
     executor: Arc<Executor>,
 }
 
+pub(crate) static AM_HEADER_LEN: OnceLock<usize> = OnceLock::new();
 lazy_static! {
-    pub(crate) static ref AM_HEADER_LEN: usize =
-        crate::serialized_size::<AmHeader>(&AmHeader::default(), false);
     pub(crate) static ref DATA_HEADER_LEN: usize =
         crate::serialized_size::<DataHeader>(&DataHeader::default(), false);
     pub(crate) static ref UNIT_HEADER_LEN: usize =
@@ -85,10 +84,11 @@ lazy_static! {
     pub(crate) static ref CMD_LEN: usize = crate::serialized_size::<Cmd>(&Cmd::Am, false);
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub(crate) struct AmHeader {
     pub(crate) am_id: AmId,
-    pub(crate) team_addr: usize,
+    // pub(crate) team_addr: usize,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) req_id: ReqId,
 }
 
@@ -377,23 +377,38 @@ impl RegisteredActiveMessages {
             am_id,
             am_size,
             cmd,
-            *AM_HEADER_LEN
+            *AM_HEADER_LEN.get().expect("am header size not calculated")
         );
         let header = self.create_header(&req_data, cmd);
         let mut data_buf = self
-            .create_data_buf(header, am_size + *AM_HEADER_LEN, &req_data.lamellae)
+            .create_data_buf(
+                header,
+                am_size + *AM_HEADER_LEN.get().expect("am header size not calculated"),
+                &req_data.lamellae,
+            )
             .await;
         let mut data_slice = data_buf.data_as_bytes_mut();
 
+        // if req_data.dst.is_some() {
+        //     req_data.team.ser(1, &mut vec![]); //ensure team is serialized for am header
+        // } else {
+        //     req_data.team.ser(req_data.team.num_pes(), &mut vec![]); //ensure team is serialized for am header
+        // }
         let am_header = AmHeader {
             am_id: am_id,
             req_id: req_data.id,
-            team_addr: req_data.team_addr.into(),
+            // team_addr: req_data.team_addr.into(),
+            team: req_data.team.clone(),
         };
 
-        crate::serialize_into(&mut data_slice[0..*AM_HEADER_LEN], &am_header, false).unwrap();
+        crate::serialize_into(
+            &mut data_slice[0..*AM_HEADER_LEN.get().expect("am header size not calculated")],
+            &am_header,
+            false,
+        )
+        .unwrap();
 
-        let i = *AM_HEADER_LEN;
+        let i = *AM_HEADER_LEN.get().expect("am header size not calculated");
 
         let darc_ser_cnt = match req_data.dst {
             Some(_) => 1,
@@ -562,11 +577,16 @@ impl RegisteredActiveMessages {
     ) {
         trace!("ame exec_am");
         let data = ser_data.data_as_bytes();
-        let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+        let am_header: AmHeader = crate::deserialize(
+            &data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
+            false,
+        )
+        .unwrap();
+        am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
-            self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-        *i += *AM_HEADER_LEN;
+            // self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            self.get_team_and_world(&am_header.team);
+        *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
 
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
@@ -578,7 +598,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
         };
 
         world.team.world_counters.inc_outstanding(1);
@@ -621,11 +641,16 @@ impl RegisteredActiveMessages {
     ) {
         trace!("ame exec_return_am");
         let data = ser_data.data_as_bytes();
-        let am_header: AmHeader =
-            crate::deserialize(&data[*i..*i + *AM_HEADER_LEN], false).unwrap();
+        let am_header: AmHeader = crate::deserialize(
+            &data[*i..*i + *AM_HEADER_LEN.get().expect("am header size not calculated")],
+            false,
+        )
+        .unwrap();
+        am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
-            self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-        *i += *AM_HEADER_LEN;
+            // self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+            self.get_team_and_world(&am_header.team);
+        *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();
 
@@ -636,7 +661,7 @@ impl RegisteredActiveMessages {
             lamellae: lamellae.clone(),
             world: world.team.clone(),
             team: team.team.clone(),
-            team_addr: team.team.remote_ptr_alloc.comm_addr(),
+            // team_addr: Darc::into_raw_team(team.team.clone()).addr(),
         };
         self.exec_local_am(req_data, am.as_local(), world, team)
             .await;

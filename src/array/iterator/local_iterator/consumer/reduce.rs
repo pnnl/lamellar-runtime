@@ -9,6 +9,7 @@ use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 
+use crate::darc::Darc;
 use futures_util::{ready, Future};
 use pin_project::{pin_project, pinned_drop};
 use std::collections::VecDeque;
@@ -62,7 +63,7 @@ where
     }
     fn create_handle(
         self,
-        _team: Pin<Arc<LamellarTeamRT>>,
+        _team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerLocalIterReduceHandle {

@@ -3,6 +3,7 @@ use crate::array::iterator::local_iterator::LocalIterator;
 use crate::array::iterator::private::*;
 use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::r#unsafe::private::UnsafeArrayInner;
+use crate::darc::Darc;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
@@ -72,7 +73,7 @@ where
     }
     fn create_handle(
         self,
-        _team: Pin<Arc<LamellarTeamRT>>,
+        _team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerLocalIterForEachHandle {
@@ -143,7 +144,7 @@ where
     }
     fn create_handle(
         self,
-        _team: Pin<Arc<LamellarTeamRT>>,
+        _team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerLocalIterForEachHandle {

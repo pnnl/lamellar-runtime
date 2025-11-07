@@ -64,6 +64,7 @@
 //! let vec = array.local_data().to_vec();
 //! ```
 use crate::barrier::BarrierHandle;
+use crate::darc::Darc;
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::{
     one_sided::OneSidedMemoryRegion, shared::SharedMemoryRegion, AsLamellarBuffer, Dist,
@@ -711,16 +712,28 @@ impl LamellarByteArray {
         }
     }
 
-    pub(crate) fn team(&self) -> Pin<Arc<LamellarTeamRT>> {
+    pub(crate) fn team(&self) -> Darc<LamellarTeamRT> {
         match self {
-            LamellarByteArray::UnsafeArray(array) => array.inner.data.team(),
-            LamellarByteArray::ReadOnlyArray(array) => array.array.inner.data.team(),
+            LamellarByteArray::UnsafeArray(array) => array.inner.data.inner().darc_rt_team(),
+            LamellarByteArray::ReadOnlyArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
             LamellarByteArray::AtomicArray(array) => array.team(),
-            LamellarByteArray::NativeAtomicArray(array) => array.array.inner.data.team(),
-            LamellarByteArray::GenericAtomicArray(array) => array.array.inner.data.team(),
-            LamellarByteArray::LocalLockArray(array) => array.array.inner.data.team(),
-            LamellarByteArray::GlobalLockArray(array) => array.array.inner.data.team(),
-            LamellarByteArray::NetworkAtomicArray(array) => array.array.inner.data.team(),
+            LamellarByteArray::NativeAtomicArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
+            LamellarByteArray::GenericAtomicArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
+            LamellarByteArray::LocalLockArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
+            LamellarByteArray::GlobalLockArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
+            LamellarByteArray::NetworkAtomicArray(array) => {
+                array.array.inner.data.inner().darc_rt_team()
+            }
         }
     }
 
@@ -1225,15 +1238,14 @@ pub trait InnerArray: Sized {
 }
 
 pub(crate) mod private {
-    use crate::active_messaging::*;
     use crate::array::{
         rdma::private::LamellarRdmaGet, AtomicArray, GenericAtomicArray, LamellarByteArray,
         LamellarReadArray, LamellarWriteArray, NativeAtomicArray, NetworkAtomicArray, UnsafeArray,
     };
     use crate::memregion::Dist;
     use crate::LamellarTeamRT;
+    use crate::{active_messaging::*, Darc};
     use enum_dispatch::enum_dispatch;
-    use std::pin::Pin;
     use std::sync::Arc;
     //#[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
@@ -1251,7 +1263,7 @@ pub(crate) mod private {
     //#[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub(crate) trait ArrayExecAm<T: Dist> {
-        fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>>;
+        fn team_rt(&self) -> Darc<LamellarTeamRT>;
         fn team_counters(&self) -> Arc<AMCounters>;
         fn exec_am_local_tg<F>(&self, am: F) -> LocalAmHandle<F::Output>
         where

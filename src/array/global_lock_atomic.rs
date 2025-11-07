@@ -8,7 +8,6 @@ pub(crate) mod operations;
 mod rdma;
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
-use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
@@ -19,6 +18,7 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
+use crate::{array::*, Darc};
 
 use pin_project::pin_project;
 
@@ -794,7 +794,7 @@ impl<T: Dist> From<&mut GlobalLockByteArray> for GlobalLockArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for GlobalLockArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

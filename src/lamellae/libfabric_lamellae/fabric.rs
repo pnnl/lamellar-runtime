@@ -1760,8 +1760,8 @@ impl LibfabricAlloc {
 
 impl Drop for LibfabricAlloc {
     fn drop(&mut self) {
-        debug!(target: "libfabric", "Dropping LibfabricAlloc: {:x} - {:x}", self.range.start,self.range.end);
         let fabric_ref_count = self.decrement_fabric_ref_count();
+        debug!(target: "libfabric", "Dropping LibfabricAlloc: {:x} - {:x} ref_cnt(before drop) {}", self.range.start,self.range.end, fabric_ref_count);
 
         match &self.alloc_table {
             AllocTable::Fabric(alloc_table) => {

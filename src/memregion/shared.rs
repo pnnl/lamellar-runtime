@@ -7,7 +7,6 @@ use crate::{memregion::*, LamellarEnv, LamellarTeam};
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 // use serde::ser::Serialize;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use std::ops::Bound;
@@ -66,28 +65,15 @@ impl<T: Remote> LamellarEnv for SharedMemoryRegion<T> {
 
 impl<T: Remote> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
-        // println!("in shared ser");
         self.mr.serialize_update_cnts(num_pes);
         darcs.push(RemotePtr::NetworkDarc(self.mr.clone().into()));
     }
-    // fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-    //     // println!("in shared des");
-    //     // match cur_pe {
-    //     //     Ok(_) => {
-    //     //         self.mr.deserialize_update_cnts();
-    //     //     }
-    //     //     Err(err) => {
-    //     //         panic!("can only access darcs within team members ({:?})", err);
-    //     //     }
-    //     // }
-    //     // self.mr.print();
-    // }
 }
 
 impl<T: Remote> SharedMemoryRegion<T> {
     // pub(crate) fn new(
     //     size: usize,
-    //     team: Pin<Arc<LamellarTeamRT>>,
+    //     team: Darc<LamellarTeamRT>,
     //     alloc: AllocationType,
     // ) -> SharedMemoryRegionHandle<T> {
     //     SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
@@ -95,7 +81,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
 
     pub(crate) fn new(
         size: usize,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> SharedMemoryRegionHandle<T> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
@@ -149,7 +135,7 @@ impl<T: Remote> SharedMemoryRegion<T> {
 
     pub(crate) fn try_new(
         size: usize,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> FallibleSharedMemoryRegionHandle<T> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);

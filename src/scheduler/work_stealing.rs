@@ -206,7 +206,7 @@ impl WorkStealingThread {
                     std::thread::yield_now();
                 }
                 active_cnt.fetch_sub(1, Ordering::SeqCst);
-                // println!("TestSchdulerWorker thread shutting down");
+                trace!("TestSchdulerWorker thread shutting down");
             })
             .unwrap()
     }
@@ -452,9 +452,9 @@ impl LamellarExecutor for WorkStealing {
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn force_shutdown(&self) {
-        // println!("work stealing shuting down {:?}", self.status());
+        trace!("work stealing force shutting down");
 
-        // println!("work stealing shuting down {:?}",self.status());
+        // println!("work stealing shutting down {:?}",self.status());
         let my_id = std::thread::current().id();
         if self.threads.iter().any(|e| e.thread().id() == my_id) {
             self.active_cnt.fetch_sub(1, Ordering::SeqCst); // I paniced so I wont actually decrement
@@ -605,12 +605,12 @@ impl Drop for WorkStealing {
     //when is this called with respect to world?
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        // println!("dropping work stealing");
+        trace!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
             if thread.thread().id() != std::thread::current().id() {
                 let _res = thread.join();
             }
         }
-        // println!("WorkStealing Scheduler Dropped");
+        trace!("WorkStealing Scheduler Dropped");
     }
 }

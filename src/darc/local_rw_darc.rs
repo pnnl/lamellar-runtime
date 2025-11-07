@@ -349,7 +349,7 @@ impl<T: Sync + Send> LocalRwDarc<T> {
         //         .expect("invalid darc pointer"),
         // };
         let inner = self.darc.inner.clone();
-        let team = self.darc.inner().team().clone();
+        let team = self.darc.inner().darc_rt_team();
         IntoGlobalRwDarcHandle {
             darc: self.into(),
             team,
@@ -391,7 +391,7 @@ impl<T: Send + Sync> LocalRwDarc<T> {
         //         .expect("invalid darc pointer"),
         // };
         let inner = self.darc.inner.clone();
-        let team = self.darc.inner().team().clone();
+        let team = self.darc.inner().darc_rt_team();
         IntoDarcHandle {
             darc: self.into(),
             team,

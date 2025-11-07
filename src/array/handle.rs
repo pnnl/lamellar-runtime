@@ -1,6 +1,5 @@
 use std::{
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -8,6 +7,7 @@ use futures_util::Future;
 
 use pin_project::{pin_project, pinned_drop};
 
+use crate::darc::Darc;
 use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, Dist, LamellarTeamRT};
 
 use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeArray};
@@ -571,7 +571,7 @@ use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeA
 ///  */
 /// ```
 pub struct IntoUnsafeArrayHandle<T> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = UnsafeArray<T>> + Send>>,
@@ -669,7 +669,7 @@ impl<T> Future for IntoUnsafeArrayHandle<T> {
 ///  */
 /// ```
 pub struct IntoAtomicArrayHandle<T: Dist> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = AtomicArray<T>> + Send>>,
@@ -767,7 +767,7 @@ impl<T: Dist> Future for IntoAtomicArrayHandle<T> {
 ///  */
 /// ```
 pub struct IntoLocalLockArrayHandle<T: Dist> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = LocalLockArray<T>> + Send>>,
@@ -865,7 +865,7 @@ impl<T: Dist> Future for IntoLocalLockArrayHandle<T> {
 ///  */
 /// ```
 pub struct IntoGlobalLockArrayHandle<T: Dist> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = GlobalLockArray<T>> + Send>>,
@@ -963,7 +963,7 @@ impl<T: Dist> Future for IntoGlobalLockArrayHandle<T> {
 ///  */
 /// ```
 pub struct IntoReadOnlyArrayHandle<T: Dist> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ReadOnlyArray<T>> + Send>>,

@@ -223,8 +223,8 @@ impl CommMem for ShmemComm {
             .expect("remote addr doesnt correspnd to local alloc")
     }
 
-    fn local_rt_alloc_from_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
-        trace!("local_rt_alloc_from_addr: {:x}", addr);
+    fn local_rt_alloc_from_local_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+        trace!("local_rt_alloc_from_local_addr: {:x}", addr);
         let allocs = self.runtime_allocs.read();
         for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr) {
@@ -250,8 +250,8 @@ impl CommMem for ShmemComm {
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    fn get_alloc(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        trace!("get_alloc: {:?}", addr);
+    fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
+        trace!("get_alloc_cloned: {:?}", addr);
         if let Ok(inner_alloc) = self.allocator.get_alloc_from_start_addr(addr) {
             return Ok(CommAlloc {
                 inner_alloc: CommAllocInner::ShmemAlloc(inner_alloc),

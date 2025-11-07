@@ -25,14 +25,18 @@ struct DataAM {
 impl LamellarAM for DataAM {
     async fn exec() {
         let mut rng = rand::thread_rng();
-        let pes = Uniform::from(0..lamellar::team.num_pes());
-        println!("depth {:?} {:?}", self.depth, self.path);
+        let num_pes = lamellar::team.num_pes();
+        let pes = Uniform::from(0..num_pes);
+        println!(
+            "depth {:?} {:?} num_pes: {:?}",
+            self.depth, self.path, num_pes
+        );
         let mut path = self.path.clone();
         path.push(lamellar::current_pe);
         if self.depth > 0 {
             for _i in 0..self.width {
                 let pe = pes.sample(&mut rng);
-                // println!("sending {:?} to {:?}", path, pe);
+                println!("sending {:?} to {:?}", path, pe);
                 let _ = lamellar::team
                     .exec_am_pe(
                         pe,
@@ -50,6 +54,7 @@ impl LamellarAM for DataAM {
 }
 
 fn main() {
+    // std::thread::sleep(std::time::Duration::from_secs(60));
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .with(
@@ -90,6 +95,7 @@ fn main() {
             (num_pes as f64 / 2.0).ceil() as usize, //num_pes in team
         ))
         .unwrap(); //okay to unwrap because we are creating a sub_team of the world (i.e. my_pe guaranteed to be in the parent or the subteam)
+
     let odd_team = world
         .create_team_from_arch(StridedArch::new(
             1,                                      // start pe
@@ -98,7 +104,7 @@ fn main() {
         ))
         .unwrap(); //okay to unwrap because we are creating a sub_team of the world (i.e. my_pe guaranteed to be in the parent or the subteam)
     let s = Instant::now();
-    let width = 1;
+    let width = 2;
     if my_pe == 0 {
         for _i in 0..width {
             let pe = pes.sample(&mut rng) / 2; //since both teams consist of half the number of pes as the world
@@ -128,5 +134,6 @@ fn main() {
     }
     world.wait_all();
     world.barrier();
+
     println!("time: {:?}", s.elapsed().as_secs_f64());
 }
