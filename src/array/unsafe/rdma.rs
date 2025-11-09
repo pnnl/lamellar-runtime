@@ -614,10 +614,10 @@ impl<T: Dist> UnsafeArray<T> {
 // }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn put(&self, index: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
+    pub unsafe fn put(&self, index: usize, data: T) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put(self, index, data, Sealed)
     }
-    pub unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
+    pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
         <Self as LamellarRdmaPut<T>>::put_unmanaged(self, index, data, Sealed)
     }
     pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
@@ -634,16 +634,10 @@ impl<T: Dist> UnsafeArray<T> {
     ) {
         <Self as LamellarRdmaPut<T>>::put_buffer_unmanaged(self, index, buf.into(), Sealed)
     }
-    pub unsafe fn put_pe(
-        &self,
-        pe: usize,
-        offset: usize,
-        data: T,
-        _: Sealed,
-    ) -> ArrayRdmaPutHandle<T> {
+    pub unsafe fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_pe(self, pe, offset, data, Sealed)
     }
-    pub unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
+    pub unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
         <Self as LamellarRdmaPut<T>>::put_pe_unmanaged(self, pe, offset, data, Sealed)
     }
     pub unsafe fn put_pe_buffer<U: Into<MemregionRdmaInput<T>>>(
@@ -662,10 +656,10 @@ impl<T: Dist> UnsafeArray<T> {
     ) {
         <Self as LamellarRdmaPut<T>>::put_pe_buffer_unmanaged(self, pe, offset, buf.into(), Sealed)
     }
-    pub unsafe fn put_all(&self, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
+    pub unsafe fn put_all(&self, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
         <Self as LamellarRdmaPut<T>>::put_all(self, offset, data, Sealed)
     }
-    pub unsafe fn put_all_unmanaged(&self, offset: usize, data: T, _: Sealed) {
+    pub unsafe fn put_all_unmanaged(&self, offset: usize, data: T) {
         <Self as LamellarRdmaPut<T>>::put_all_unmanaged(self, offset, data, Sealed)
     }
     pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
@@ -683,22 +677,16 @@ impl<T: Dist> UnsafeArray<T> {
         <Self as LamellarRdmaPut<T>>::put_all_buffer_unmanaged(self, offset, buf.into(), Sealed)
     }
 
-    pub unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
+    pub unsafe fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         <Self as LamellarRdmaGet<T>>::get(self, index, Sealed)
     }
-    pub unsafe fn get_buffer(
-        &self,
-        index: usize,
-        num_elems: usize,
-        _: Sealed,
-    ) -> ArrayRdmaGetBufferHandle<T> {
+    pub unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed)
     }
     pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed)
     }
@@ -706,12 +694,11 @@ impl<T: Dist> UnsafeArray<T> {
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged(self, index, data, Sealed)
     }
 
-    pub unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
+    pub unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed)
     }
     pub unsafe fn get_buffer_pe(
@@ -719,7 +706,6 @@ impl<T: Dist> UnsafeArray<T> {
         pe: usize,
         offset: usize,
         num_elems: usize,
-        _: Sealed,
     ) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed)
     }
@@ -728,7 +714,6 @@ impl<T: Dist> UnsafeArray<T> {
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed)
     }
@@ -737,7 +722,6 @@ impl<T: Dist> UnsafeArray<T> {
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged_pe(self, pe, offset, data, Sealed)
     }

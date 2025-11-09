@@ -433,7 +433,7 @@ struct InitGetPeAm<T: Dist> {
 impl<T: Dist + 'static> LamellarAm for InitGetPeAm<T> {
     async fn exec(self) -> T {
         let _global_lock = self.array.read_lock().await;
-        unsafe { self.array.array.get_pe(self.pe, self.offset, Sealed).await }
+        unsafe { self.array.array.get_pe(self.pe, self.offset).await }
     }
 }
 
@@ -448,12 +448,7 @@ struct InitGetBufferAm<T: Dist> {
 impl<T: Dist + 'static> LamellarAm for InitGetBufferAm<T> {
     async fn exec(self) -> Vec<T> {
         let _global_lock = self.array.read_lock().await;
-        unsafe {
-            self.array
-                .array
-                .get_buffer(self.index, self.len, Sealed)
-                .await
-        }
+        unsafe { self.array.array.get_buffer(self.index, self.len).await }
     }
 }
 
@@ -472,7 +467,7 @@ impl<T: Dist + 'static> LamellarAm for InitGetBufferPeAm<T> {
         unsafe {
             self.array
                 .array
-                .get_buffer_pe(self.pe, self.offset, self.len, Sealed)
+                .get_buffer_pe(self.pe, self.offset, self.len)
                 .await
         }
     }
@@ -491,10 +486,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for InitGetIntoBuffer
         let _global_lock = self.array.read_lock().await;
         let buf = self.buf.lock().split_off(0);
         unsafe {
-            self.array
-                .array
-                .get_into_buffer(self.index, buf, Sealed)
-                .await;
+            self.array.array.get_into_buffer(self.index, buf).await;
         }
     }
 }
@@ -515,7 +507,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for InitGetIntoBuffer
         unsafe {
             self.array
                 .array
-                .get_into_buffer_pe(self.pe, self.offset, buf, Sealed)
+                .get_into_buffer_pe(self.pe, self.offset, buf)
                 .await;
         }
     }
@@ -559,7 +551,7 @@ impl<T: Dist + 'static> LamellarAm for InitPePutAm<T> {
         unsafe {
             self.array
                 .array
-                .put_pe(self.pe, self.offset, self.val, Sealed)
+                .put_pe(self.pe, self.offset, self.val)
                 .await;
         }
     }
@@ -577,10 +569,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAllAm<T> {
     async fn exec(self) {
         let _global_lock = self.array.write_lock().await;
         unsafe {
-            self.array
-                .array
-                .put_all(self.offset, self.val, Sealed)
-                .await;
+            self.array.array.put_all(self.offset, self.val).await;
         }
     }
 }

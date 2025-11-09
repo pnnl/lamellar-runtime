@@ -421,11 +421,11 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         })
     }
 
-    pub unsafe fn put(&self, index: usize, data: T, _: Sealed) -> RdmaHandle<T> {
+    pub unsafe fn put(&self, index: usize, data: T) -> RdmaHandle<T> {
         RTMemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
-    pub unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
+    pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_unmanaged(self, self.pe, index, data)
     }
 
@@ -552,7 +552,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
     // ///
     // /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
     // ///```
-    pub unsafe fn get(&self, index: usize, _: Sealed) -> RdmaGetHandle<T> {
+    pub unsafe fn get(&self, index: usize) -> RdmaGetHandle<T> {
         RTMemoryRegionRDMA::<T>::get(self, self.pe, index)
     }
     pub unsafe fn get_buffer(&self, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
@@ -562,7 +562,6 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) -> RdmaGetIntoBufferHandle<T, B> {
         RTMemoryRegionRDMA::<T>::get_into_buffer(self, self.pe, index, data)
     }
@@ -570,7 +569,6 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) {
         RTMemoryRegionRDMA::<T>::get_into_buffer_unmanaged(self, self.pe, index, data);
     }

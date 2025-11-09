@@ -79,19 +79,13 @@ impl<T: Dist> GenericAtomicArray<T> {
     pub fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get(self, index, Sealed) }
     }
-    pub unsafe fn get_buffer(
-        &self,
-        index: usize,
-        num_elems: usize,
-        _: Sealed,
-    ) -> ArrayRdmaGetBufferHandle<T> {
+    pub unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed)
     }
     pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed)
     }
@@ -99,7 +93,6 @@ impl<T: Dist> GenericAtomicArray<T> {
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged(self, index, data, Sealed)
     }
@@ -112,7 +105,6 @@ impl<T: Dist> GenericAtomicArray<T> {
         pe: usize,
         offset: usize,
         num_elems: usize,
-        _: Sealed,
     ) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed)
     }
@@ -121,7 +113,6 @@ impl<T: Dist> GenericAtomicArray<T> {
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed)
     }
@@ -130,7 +121,6 @@ impl<T: Dist> GenericAtomicArray<T> {
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
-        _: Sealed,
     ) {
         <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged_pe(self, pe, offset, data, Sealed)
     }
@@ -384,7 +374,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GenericAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = self.get_into_buffer(index, data, Sealed).spawn();
+        let _ = self.get_into_buffer(index, data).spawn();
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
@@ -452,7 +442,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GenericAtomicArray<T> {
         data: LamellarBuffer<T, B>,
         _: Sealed,
     ) {
-        let _ = self.get_into_buffer_pe(pe, offset, data, Sealed).spawn();
+        let _ = self.get_into_buffer_pe(pe, offset, data).spawn();
     }
 }
 
