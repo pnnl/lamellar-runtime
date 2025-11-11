@@ -1242,12 +1242,12 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     // #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        if self.mode == Mode::Remote {
-            return Err(MemRegionError::MemNotLocalError);
-        }
-        unsafe { Ok(self.alloc.as_mut_ptr()) }
-    }
+    // pub(crate) fn as_mut_ptr(&self) -> MemResult<*mut T> {
+    //     if self.mode == Mode::Remote {
+    //         return Err(MemRegionError::MemNotLocalError);
+    //     }
+    //     unsafe { Ok(self.alloc.as_mut_ptr()) }
+    // }
 
     // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn as_casted_mut_ptr<R: Remote>(&self) -> MemResult<*mut R> {

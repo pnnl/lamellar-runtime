@@ -2124,8 +2124,12 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         //     true,
         // ));
 
-        output.extend(test_ops(the_type.clone(), op_types.clone()));
-        output.extend(test_ops(opt_type, opt_op_types.clone()));
+        if !op_types.is_empty() {
+            output.extend(test_ops(the_type.clone(), op_types.clone()));
+        }
+        if !opt_op_types.is_empty() {
+            output.extend(test_ops(opt_type.clone(), opt_op_types.clone()));
+        }
 
         // output.extend(gen_atomic_rdma(typeident.clone(), true));
     }

@@ -361,6 +361,13 @@ impl Drop for LamellarWorld {
 
             // LAMELLAES.write().clear();
             trace!("LamellarWorld dropped");
+        } else {
+            // SAFETY: This is safe because we are not the last reference to the world, so the team and team_rt
+            // will not be dropped yet.
+            unsafe {
+                ManuallyDrop::drop(&mut self.team);
+                ManuallyDrop::drop(&mut self.team_rt);
+            }
         }
     }
 }
@@ -598,7 +605,8 @@ impl LamellarWorldBuilder {
         let _ = AM_HEADER_LEN.set(crate::serialized_size::<AmHeader>(
             &AmHeader {
                 am_id: 0,
-                team: team_rt.clone(),
+                // team: team_rt.clone(),
+                team_addr: team_rt.darc_addr(),
                 req_id: ReqId::default(),
             },
             false,
@@ -606,7 +614,7 @@ impl LamellarWorldBuilder {
         let _ = TEAM_HEADER_LEN
             .set(crate::serialized_size::<TeamHeader>(
                 &TeamHeader {
-                    team: team_rt.clone(),
+                    team: team_rt.darc_addr(),
                     am_batch_cnts: 0,
                 },
                 false,

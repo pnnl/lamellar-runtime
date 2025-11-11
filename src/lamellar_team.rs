@@ -690,6 +690,12 @@ pub struct IntoLamellarTeam {
     pub(crate) team: Darc<LamellarTeamRT>,
 }
 
+impl Drop for IntoLamellarTeam {
+    fn drop(&mut self) {
+        trace!("Dropping IntoLamellarTeam");
+    }
+}
+
 impl From<Darc<LamellarTeamRT>> for IntoLamellarTeam {
     #[tracing::instrument(skip_all, level = "debug")]
     fn from(team: Darc<LamellarTeamRT>) -> Self {

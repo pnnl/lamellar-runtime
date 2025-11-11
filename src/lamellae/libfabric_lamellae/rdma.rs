@@ -159,7 +159,7 @@ pub(crate) struct LibfabricGetFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<T>,
+    result: Box<MaybeUninit<T>>,
 }
 
 impl<T: Remote> LibfabricGetFuture<T> {
@@ -176,23 +176,22 @@ impl<T: Remote> LibfabricGetFuture<T> {
                 )
                 .expect("error in get");
         }
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.spawned = true;
         self.alloc.ofi.wait_all().unwrap();
-        unsafe { self.result.assume_init() }
+        unsafe { self.result.assume_init_read() }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
                 self.alloc.ofi.wait_all().unwrap();
-                unsafe { self.result.assume_init() }
+                unsafe { self.result.assume_init_read() }
             },
             counters,
         )
@@ -223,13 +222,10 @@ impl<T: Remote> Future for LibfabricGetFuture<T> {
             self.exec_at();
         }
         let this = self.project();
-        *this.spawned = true;
         this.alloc.ofi.wait_all().unwrap();
 
         Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
+            this.result.assume_init_read()
         })
     }
 }
@@ -567,7 +563,7 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(MaybeUninit::uninit()),
         }
         .into()
     }
@@ -761,7 +757,7 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(MaybeUninit::uninit()),
         }
         .into()
     }

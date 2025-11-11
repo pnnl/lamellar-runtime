@@ -104,7 +104,7 @@ pub(crate) struct UcxAtomicFetchFuture<T> {
     pub(super) remote_pe: usize,
     pub(crate) offset: usize,
     pub(super) op: AtomicOp<T>,
-    pub(crate) result: MaybeUninit<T>,
+    pub(crate) result: Box<MaybeUninit<T>>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -127,22 +127,19 @@ impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
                 std::slice::from_mut(&mut *self.result.as_mut_ptr()),
             )
         });
+        self.spawned = true;
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
         let request = self.request.take().expect("ucx request doesnt exist");
         request.wait().expect("Failed to wait for UcxRequest");
-        self.spawned = true;
         unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
+            self.result.assume_init_read()
         }
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
@@ -150,9 +147,7 @@ impl<T: Copy + Send + 'static> UcxAtomicFetchFuture<T> {
                 let request = self.request.take().expect("ucx request doesnt exist");
                 request.wait().expect("Failed to wait for UcxRequest");
                 unsafe {
-                    let mut res = MaybeUninit::uninit();
-                    std::mem::swap(&mut self.result, &mut res);
-                    res.assume_init()
+                    self.result.assume_init_read()
                 }
             },
             counters,
@@ -182,14 +177,11 @@ impl<T: Copy + Send + 'static> Future for UcxAtomicFetchFuture<T> {
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            self.spawned = true;
         }
         let request = self.request.take().expect("ucx request doesnt exist");
         request.wait().expect("Failed to wait for UcxRequest");
         Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
+            self.result.assume_init_read()
         })
     }
 }
@@ -257,7 +249,7 @@ impl CommAllocAtomic for UcxAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            result: MaybeUninit::uninit(),
+            result: Box::new(MaybeUninit::uninit()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -332,7 +324,7 @@ impl CommAllocAtomic for OneSidedUcxAlloc {
             remote_pe: pe,
             offset,
             op: op,
-            result: MaybeUninit::uninit(),
+            result: Box::new(MaybeUninit::uninit()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,

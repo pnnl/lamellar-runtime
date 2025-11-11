@@ -87,8 +87,8 @@ lazy_static! {
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub(crate) struct AmHeader {
     pub(crate) am_id: AmId,
-    // pub(crate) team_addr: usize,
-    pub(crate) team: Darc<LamellarTeamRT>,
+    pub(crate) team_addr: usize,
+    // pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) req_id: ReqId,
 }
 
@@ -397,8 +397,8 @@ impl RegisteredActiveMessages {
         let am_header = AmHeader {
             am_id: am_id,
             req_id: req_data.id,
-            // team_addr: req_data.team_addr.into(),
-            team: req_data.team.clone(),
+            team_addr: req_data.team.darc_addr(),
+            // team: req_data.team.clone(),
         };
 
         crate::serialize_into(
@@ -582,10 +582,10 @@ impl RegisteredActiveMessages {
             false,
         )
         .unwrap();
-        am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
+        // am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
-            // self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-            self.get_team_and_world(&am_header.team);
+            self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+        // self.get_team_and_world(&am_header.team);
         *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
 
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
@@ -646,10 +646,10 @@ impl RegisteredActiveMessages {
             false,
         )
         .unwrap();
-        am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
+        // am_header.team.inner().dec_pe_ref_count(msg.src as usize, 1);
         let (team, world) =
-            // self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
-            self.get_team_and_world(&am_header.team);
+            self.get_team_and_world(msg.src as usize, am_header.team_addr, &lamellae);
+        // self.get_team_and_world(&am_header.team);
         *i += *AM_HEADER_LEN.get().expect("am header size not calculated");
         let am = AMS_EXECS.get(&am_header.am_id).unwrap()(&data[*i..], team.team.team_pe);
         *i += am.serialized_size();

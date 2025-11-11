@@ -188,14 +188,14 @@ impl<T: Dist> ReadOnlyArray<T> {
 }
 
 impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
-    unsafe fn get(&self, index: usize, s: Sealed) -> ArrayRdmaGetHandle<T> {
+    unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
         self.array.get(index)
     }
     unsafe fn get_buffer(
         &self,
         index: usize,
         num_elems: usize,
-        s: Sealed,
+        _: Sealed,
     ) -> ArrayRdmaGetBufferHandle<T> {
         self.array.get_buffer(index, num_elems)
     }
@@ -203,7 +203,7 @@ impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        s: Sealed,
+        _: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         self.array.get_into_buffer(index, data)
     }
@@ -211,12 +211,12 @@ impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
         &self,
         index: usize,
         data: LamellarBuffer<T, B>,
-        s: Sealed,
+        _: Sealed,
     ) {
         self.array.get_into_buffer_unmanaged(index, data)
     }
 
-    unsafe fn get_pe(&self, pe: usize, offset: usize, s: Sealed) -> ArrayRdmaGetHandle<T> {
+    unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
         self.array.get_pe(pe, offset)
     }
     unsafe fn get_buffer_pe(
@@ -224,7 +224,7 @@ impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
         pe: usize,
         offset: usize,
         num_elems: usize,
-        s: Sealed,
+        _: Sealed,
     ) -> ArrayRdmaGetBufferHandle<T> {
         self.array.get_buffer_pe(pe, offset, num_elems)
     }
@@ -233,7 +233,7 @@ impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
-        s: Sealed,
+        _: Sealed,
     ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
         self.array.get_into_buffer_pe(pe, offset, data)
     }
@@ -242,7 +242,7 @@ impl<T: Dist> LamellarRdmaGet<T> for ReadOnlyArray<T> {
         pe: usize,
         offset: usize,
         data: LamellarBuffer<T, B>,
-        s: Sealed,
+        _: Sealed,
     ) {
         self.array.get_into_buffer_unmanaged_pe(pe, offset, data)
     }

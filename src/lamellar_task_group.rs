@@ -840,7 +840,7 @@ impl LamellarTaskGroup {
         });
         let rt_local_req = Arc::new(LamellarRequestResult::TgAm(local_req.clone()));
         LamellarTaskGroup {
-            team: team.clone(),
+            team: team,
             id: Arc::as_ptr(&rt_req) as usize,
             multi_id: Arc::as_ptr(&rt_multi_req) as usize,
             local_id: Arc::as_ptr(&rt_local_req) as usize,
@@ -1128,6 +1128,7 @@ impl LamellarTaskGroup {
 impl Drop for LamellarTaskGroup {
     fn drop(&mut self) {
         self.cnt.fetch_sub(1, Ordering::SeqCst);
+        trace!("Dropping LamellarTaskGroup");
     }
 }
 

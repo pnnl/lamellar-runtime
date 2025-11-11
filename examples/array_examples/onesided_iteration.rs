@@ -1,9 +1,22 @@
 use futures_util::stream::StreamExt;
 use lamellar::array::prelude::*;
 
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
+
 const ARRAY_LEN: usize = 100;
 
 fn main() {
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true),
+        )
+        .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -13,11 +26,12 @@ fn main() {
         AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
 
     //we are going to initialize the data on each PE by directly accessing its local data
-
+    block_array.print();
     block_array
         .mut_local_data()
         .iter()
         .for_each(|e| e.store(my_pe));
+    cyclic_array.print();
     cyclic_array
         .mut_local_data()
         .iter()

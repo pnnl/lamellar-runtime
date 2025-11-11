@@ -19,6 +19,7 @@ mod step_by;
 use step_by::*;
 
 mod zip;
+use tracing::trace;
 use zip::*;
 
 //TODO: further test the buffered iter
@@ -361,7 +362,8 @@ pub struct OneSidedIter<T: Dist + 'static, A: LamellarArray<T>> {
 #[pin_project(project = StateProj)]
 pub(crate) enum State<T> {
     // Ready,
-    Pending(#[pin] LamellarTask<Vec<T>>),
+    SinglePending(#[pin] LamellarTask<T>),
+    BufferedPending(#[pin] LamellarTask<Vec<T>>),
     Buffered(Vec<T>),
     Finished,
 }
@@ -406,28 +408,53 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
     type Array = A;
 
     fn init(&mut self) {
-        // println!(
+        // trace!(
         //     "Iter init: index: {:?} buf_len {:?} array_len {:?}",
         //     self.index,
         //     self.buf_0.len(),
         //     self.array.len()
         // );
         // let temp_buf = self.buf_0.split(0);
-        let req = unsafe { self.array.get_buffer(self.index, self.buf_size, Sealed) };
+        if self.buf_size == 1 {
+            let req = unsafe { self.array.get(self.index, Sealed) };
+            trace!("one sided iter init single get launched");
+            self.state = State::SinglePending(req.spawn());
+        } else {
+            trace!("one sided iter init buffered get launched");
+            let req = unsafe { self.array.get_buffer(self.index, self.buf_size, Sealed) };
+            // req.launch();
+            self.state = State::BufferedPending(req.spawn());
+        }
         // req.launch();
-        self.state = State::Pending(req.spawn());
     }
 
     fn next(&mut self) -> Option<Self::Item> {
         let mut cur_state = State::Finished;
         std::mem::swap(&mut self.state, &mut cur_state);
         match cur_state {
-            State::Pending(req) => {
+            State::SinglePending(req) => {
+                // req.blocking_wait();
+                let data = req.block();
+                self.index += 1;
+                if self.index < self.array.len() {
+                    trace!("one sided iter next single get launched");
+                    let req = unsafe { self.array.get(self.index, Sealed) };
+                    self.state = State::SinglePending(req.spawn());
+                } else {
+                    trace!("one sided iter next finished");
+                    self.state = State::Finished;
+                }
+                Some(data)
+            }
+            State::BufferedPending(req) => {
+                trace!("one sided iter buffered pending blocking");
                 // req.blocking_wait();
                 let data = req.block();
                 // if self.buf_0.try_reset() != true {
                 //     panic!("Cannot reset buffer as it is shared");
                 // }
+                let data_usize_slice  = unsafe{ std::slice::from_raw_parts(data.as_ptr() as *const usize, data.len())};
+                trace!("one sided iter buffered pending got data {:?}",data_usize_slice);
                 let val = data[0];
                 self.state = State::Buffered(data);
 
@@ -435,23 +462,33 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 self.buf_index += 1;
                 Some(val)
             }
-            State::Buffered(mut data) => {
-                //once here the we never go back to pending
+            State::Buffered(data) => {
+                let data_usize_slice  = unsafe{ std::slice::from_raw_parts(data.as_ptr() as *const usize, data.len())};
+                trace!(
+                    "one sided iter buffered next: index: {} buf_index: {} data: {:?}",
+                    self.index,
+                    self.buf_index,
+                    data_usize_slice
+                );
+                let val = data[self.buf_index];
+                self.index += 1;
+                self.buf_index += 1;
                 if self.index < self.array.len() {
                     if self.buf_index == self.buf_size {
                         //need to get new data
                         self.buf_index = 0;
 
-                        let mut new_data = if self.index + self.buf_size < self.array.len() {
+                        if self.index + self.buf_size < self.array.len() {
                             // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             // let temp_buf = self.buf_0.split(0);
 
-                            unsafe {
+                            let req = unsafe {
                                 self.array
                                     .get_buffer(self.index, self.buf_size, Sealed)
-                                    .block()
-                            }
+                                    .spawn()
+                            };
+                            self.state = State::BufferedPending(req);
                             // if self.buf_0.try_reset() != true {
                             //     panic!("Cannot reset buffer as it is shared");
                             // }
@@ -460,23 +497,21 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                             // but safe with respect to the buf_0 as we have consumed all its content and this is the only reference
                             // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
 
-                            unsafe {
+                            let req = unsafe {
                                 self.array
                                     .get_buffer(self.index, self.array.len() - self.index, Sealed)
-                                    .block()
-                            }
+                                    .spawn()
+                            };
+                            self.state = State::BufferedPending(req);
                         };
-                        std::mem::swap(&mut data, &mut new_data);
+                    } else {
+                        self.state = State::Buffered(data);
                     }
-                    let val = data[self.buf_index];
-                    self.state = State::Buffered(data);
-                    self.index += 1;
-                    self.buf_index += 1;
-                    Some(val)
                 } else {
+                    trace!("one sided iter buffered set finished");
                     self.state = State::Finished;
-                    None
                 }
+                Some(val)
             }
             State::Finished => None,
         }
@@ -486,7 +521,24 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
         let mut this = self.project();
 
         let res = match this.state.as_mut().project() {
-            StateProj::Pending(req) => match req.poll(cx) {
+            StateProj::SinglePending(req) => match req.poll(cx) {
+                Poll::Ready(data) => {
+                    let val = data;
+                    *this.index += 1;
+                    // *this.buf_index += 1;
+                    if *this.index < this.array.len() {
+                        let req = unsafe { this.array.get(*this.index, Sealed).spawn() };
+                        *this.state = State::SinglePending(req);
+                    } else {
+                        *this.state = State::Finished;
+                    }
+                    Some(val)
+                }
+                Poll::Pending => {
+                    return Poll::Pending;
+                }
+            },
+            StateProj::BufferedPending(req) => match req.poll(cx) {
                 Poll::Ready(data) => {
                     let val = data[0];
                     *this.state = State::Buffered(data);
@@ -518,7 +570,7 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                             }
                         };
                         // req.ready_or_set_waker(cx.waker());
-                        *this.state = State::Pending(req);
+                        *this.state = State::BufferedPending(req);
 
                         return Poll::Pending;
                     }
@@ -544,34 +596,41 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
     fn advance_index_pin(mut self: Pin<&mut Self>, count: usize) {
         // let this = self.as_mut().project();
         self.index += count;
-        self.buf_index += count;
-        if self.buf_index == self.buf_size {
-            self.buf_index = 0;
-            // self.fill_buffer(0);
-            if self.index + self.buf_size < self.array.len() {
-                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-                // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
-                // let temp_buf = self.buf_0.split(0);
-                let req = unsafe {
-                    self.array
-                        .get_buffer(self.index, self.buf_size, Sealed)
-                        .spawn()
-                };
-                // req.launch();
-                self.state = State::Pending(req);
-            } else {
-                // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
-                // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
-                // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
-                // let temp_buf = self.buf_0.split(0);
-                // let _ = temp_buf.split(self.array.len() - self.index);
-                let req = unsafe {
-                    self.array
-                        .get_buffer(self.index, self.array.len() - self.index, Sealed)
-                        .spawn()
-                };
-                // req.launch();
-                self.state = State::Pending(req);
+        if self.buf_size == 1 {
+            let req = unsafe { self.array.get(self.index, Sealed).spawn() };
+            self.state = State::SinglePending(req);
+        } else {
+            self.buf_index += count;
+            if self.buf_index == self.buf_size {
+                self.buf_index = 0;
+                // self.fill_buffer(0);
+                if self.index + self.buf_size < self.array.len() {
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                    // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+                    // let temp_buf = self.buf_0.split(0);
+
+                    let req = unsafe {
+                        self.array
+                            .get_buffer(self.index, self.buf_size, Sealed)
+                            .spawn()
+                    };
+                    // req.launch();
+                    self.state = State::BufferedPending(req);
+                } else {
+                    // potentially unsafe depending on the array type (i.e. UnsafeArray - which requries unsafe to construct an iterator),
+                    // but safe with respect to the buf_0 as we have consumed all its content and self is the only reference
+                    // sub_region is set to the remaining size of the array so we will not have an out of bounds issue
+                    // let temp_buf = self.buf_0.split(0);
+                    // let _ = temp_buf.split(self.array.len() - self.index);
+
+                    let req = unsafe {
+                        self.array
+                            .get_buffer(self.index, self.array.len() - self.index, Sealed)
+                            .spawn()
+                    };
+                    // req.launch();
+                    self.state = State::BufferedPending(req);
+                }
             }
         }
     }

@@ -916,9 +916,9 @@ impl CommAlloc {
     pub(crate) unsafe fn as_mut_ptr<T>(&self) -> *mut T {
         self.inner_alloc.addr().as_mut_ptr::<T>()
     }
-    pub(crate) unsafe fn as_ref<T>(&self) -> Option<&T> {
-        self.as_ptr::<T>().as_ref()
-    }
+    // pub(crate) unsafe fn as_ref<T>(&self) -> Option<&T> {
+    //     self.as_ptr::<T>().as_ref()
+    // }
     pub(crate) fn comm_addr(&self) -> CommAllocAddr {
         self.inner_alloc.addr()
     }

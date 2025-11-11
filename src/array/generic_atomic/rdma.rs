@@ -494,7 +494,7 @@ impl<T: Dist + 'static> LamellarAm for GenericAtomicInitGetBufferAm<T> {
                 let remote_am = GenericAtomicRemoteGetBufferAm {
                     array: self.array.clone().into(),
                     start_index: self.index,
-                    len: self.len,
+                    len: temp_buf.len(),
                     buf: unsafe { temp_buf.clone().to_base::<u8>() },
                 };
                 bufs.push(temp_buf.clone());

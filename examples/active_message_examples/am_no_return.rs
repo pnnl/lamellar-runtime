@@ -16,7 +16,7 @@ use tracing_subscriber::fmt::{self, SubscriberBuilder};
 #[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
     my_pe: usize,
-    #[AmGroup(static)]
+    // #[AmGroup(static)]
     test_var: u16,
 }
 

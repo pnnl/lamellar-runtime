@@ -316,10 +316,12 @@ impl<T: Dist> LamellarRdmaPut<T> for LocalLockArray<T> {
 impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let sub_array = self.sub_array(index..index + 1);
+
             let req = self.exec_am_pe_tg(
                 pe,
                 LocalLockGetPeAm {
-                    array: self.sub_array(offset..offset + 1).into(),
+                    array: sub_array.into(),
                 },
             );
             ArrayRdmaGetHandle {
@@ -453,10 +455,7 @@ struct LocalLockGetPeAm {
 impl LamellarAm for LocalLockGetPeAm<T> {
     async fn exec(self) -> Vec<u8> {
         let _lock = self.array.lock.read().await;
-        // self.array
-        //     .array
-        //     .element_for_local_index(self.local_index)
-        //     .to_vec()
+
         self.array.array.local_data().to_vec()
     }
 }

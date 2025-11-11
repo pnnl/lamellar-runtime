@@ -218,14 +218,15 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 panic!("Lamellar Arrays do not yet support elements that impl Drop");
             } else {
                 // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(
-                    rmr_t.as_mut_slice(), //.expect("data should exist on pe"),
-                );
-                std::ptr::write_bytes(
-                    rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
-                    0u8,
-                    len,
-                )
+                // let len = std::mem::size_of_val::<[T]>(
+                //     rmr_t.as_mut_slice(), //.expect("data should exist on pe"),
+                // );
+                // std::ptr::write_bytes(
+                //     rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
+                //     0u8,
+                //     len,
+                // )
+                rmr_t.as_mut_slice().fill(T::default());
             }
         }
         let rmr = unsafe { rmr_t.to_base::<u8>() };

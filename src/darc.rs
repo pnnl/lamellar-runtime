@@ -432,22 +432,22 @@ impl<T: 'static> DarcInner<T> {
     // we use this when we deserialize a darc as part of an am header (i.e. when sending the team)
     // as the deserialized darc automatically calls inc_pe_ref_count for us
     // but for these darcs we dont consider it a remote reference
-    pub(crate) fn dec_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
-        trace!("dec_pe_ref_count pe: {} amt: {} {:?}", pe, amt, self);
-        let team_pe = pe;
-        let tot_ref_cnt = unsafe {
-            (&self.total_ref_cnt_slice[team_pe] as *const _ as *const AtomicUsize)
-                .as_ref()
-                .expect("invalid darc addr")
-        };
-        tot_ref_cnt.fetch_sub(amt, Ordering::SeqCst);
-        let ref_cnt = unsafe {
-            (&self.ref_cnt_slice[team_pe] as *const _ as *const AtomicUsize)
-                .as_ref()
-                .expect("invalid darc addr")
-        };
-        ref_cnt.fetch_sub(amt, Ordering::SeqCst)
-    }
+    // pub(crate) fn dec_pe_ref_count(&self, pe: usize, amt: usize) -> usize {
+    //     trace!("dec_pe_ref_count pe: {} amt: {} {:?}", pe, amt, self);
+    //     let team_pe = pe;
+    //     let tot_ref_cnt = unsafe {
+    //         (&self.total_ref_cnt_slice[team_pe] as *const _ as *const AtomicUsize)
+    //             .as_ref()
+    //             .expect("invalid darc addr")
+    //     };
+    //     tot_ref_cnt.fetch_sub(amt, Ordering::SeqCst);
+    //     let ref_cnt = unsafe {
+    //         (&self.ref_cnt_slice[team_pe] as *const _ as *const AtomicUsize)
+    //             .as_ref()
+    //             .expect("invalid darc addr")
+    //     };
+    //     ref_cnt.fetch_sub(amt, Ordering::SeqCst)
+    // }
 
     fn update_item(&mut self, item: *const T) {
         self.item = item;

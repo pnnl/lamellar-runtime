@@ -635,8 +635,9 @@
 
 use crate::barrier::BarrierHandle;
 use crate::darc::Darc;
+use crate::darc::DarcInner;
 use crate::darc::__NetworkDarc;
-use crate::lamellae::{Lamellae, SerializedData};
+use crate::lamellae::{comm::CommMem, Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -1369,30 +1370,30 @@ pub(crate) trait ActiveMessageEngine {
     #[tracing::instrument(skip_all, level = "debug")]
     fn get_team_and_world(
         &self,
-        // pe: usize,
-        // team_addr: usize,
-        // lamellae: &Arc<Lamellae>,
-        team_rt: &Darc<LamellarTeamRT>,
+        pe: usize,
+        team_addr: usize,
+        lamellae: &Arc<Lamellae>,
+        // team_rt: &Darc<LamellarTeamRT>,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
-        // trace!(
-        //     "get_team_and_world: pe: {:?} team_addr: {:x} ",
-        //     pe,
-        //     team_addr
-        // );
-        // let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
-        // let team_rt = unsafe {
-        //     let team_ptr = *local_team_addr.as_ptr::<*const DarcInner<LamellarTeamRT>>();
-        //     trace!(
-        //         "team_ptr from local_team_addr {:?} {:?} {:?}",
-        //         local_team_addr,
-        //         team_ptr,
-        //         local_team_addr.as_ref::<*const Darc<LamellarTeamRT>>()
-        //     );
-        //     // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
-        //     // Arc::increment_strong_count(team_ptr);
-        //     // Pin::new_unchecked(Arc::from_raw(team_ptr))
-        //     Darc::team_from_raw(team_ptr)
-        // };
+        trace!(
+            "get_team_and_world: pe: {:?} team_addr: {:x} ",
+            pe,
+            team_addr
+        );
+        let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
+        let team_rt = unsafe {
+            let team_ptr = *local_team_addr.as_ptr::<*const DarcInner<LamellarTeamRT>>();
+            trace!(
+                "team_ptr from local_team_addr {:?} {:?} {:?}",
+                local_team_addr,
+                team_ptr,
+                local_team_addr.as_ref::<*const Darc<LamellarTeamRT>>()
+            );
+            // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
+            // Arc::increment_strong_count(team_ptr);
+            // Pin::new_unchecked(Arc::from_raw(team_ptr))
+            Darc::cloned_team_from_raw(team_ptr)
+        };
         let world_rt = if let Some(world) = team_rt.world.clone() {
             world
         } else {

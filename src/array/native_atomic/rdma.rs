@@ -528,14 +528,13 @@ impl LamellarAm for NativeAtomicRemoteGetBufferAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) {
-        // println!("in NativeAtomic remotegetam {:?} {:?}",self.start_index,self.len);
-        let mut data = vec![0; self.len * self.array.orig_t.size()];
         unsafe {
-            if let Some((elems, _indices)) = self
+            let data = if let Some((elems, _indices)) = self
                 .array
                 .array
                 .local_elements_for_range(self.start_index, self.len)
             {
+                let mut data = elems.to_vec();
                 let src_ptr = elems.as_mut_ptr();
                 let dst_ptr = data.as_mut_ptr();
                 for offset in (0..data.len()).step_by(self.array.orig_t.size()) {
@@ -544,8 +543,13 @@ impl LamellarAm for NativeAtomicRemoteGetBufferAm {
                         dst_ptr.offset(offset as isize),
                     );
                 }
+                data
+            } else {
+                vec![]
+            };
+            if data.len() > 0 {
+                self.buf.put_buffer(0, data).await;
             }
-            self.buf.put_buffer(0, data).await;
         }
     }
 }

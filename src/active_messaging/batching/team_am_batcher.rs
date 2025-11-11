@@ -25,7 +25,8 @@ lazy_static! {
     static ref REQ_ID_LEN: usize = crate::serialized_size::<ReqId>(&Default::default(), false);
 }
 
-type TeamId = Darc<LamellarTeamRT>;
+// type TeamId = Darc<LamellarTeamRT>;
+type TeamId = usize;
 type AmIdMap = HashMap<AmId, Vec<(ReqMetaData, LamellarArcAm, usize)>>;
 type TeamMap = HashMap<TeamId, AmIdMap>;
 
@@ -89,7 +90,8 @@ impl TeamAmBatcherInner {
     ) -> usize {
         let mut temp_size = 0;
         let team_batch = batch
-            .entry(req_data.team.clone())
+            .entry(req_data.team.darc_addr())
+            // .entry(req_data.team.clone())
             .or_insert_with(|| HashMap::new());
         if team_batch.len() == 0 {
             temp_size += *TEAM_HEADER_LEN
@@ -522,7 +524,7 @@ impl TeamAmBatcher {
         am_batch: TeamMap,
         mut data_slice: CommSlice<u8>,
         cmd: Cmd,
-        pe: Option<usize>,
+        _pe: Option<usize>,
     ) -> usize {
         let mut i = 0;
         if am_batch.len() > 0 {
@@ -769,18 +771,18 @@ impl TeamAmBatcher {
                 )
                 .deserialize_data()
                 .unwrap();
-            team_header
-                .team
-                .inner()
-                .dec_pe_ref_count(msg.src as usize, 1);
+            // team_header
+            //     .team
+            //     .inner()
+            //     .dec_pe_ref_count(msg.src as usize, 1);
             // println!("team header: {:?}", team_header);
             *i += *TEAM_HEADER_LEN
                 .get()
                 .expect("am header size not calculated");
 
             let (team, world) =
-                // ame.get_team_and_world(msg.src as usize, team_header.team_id, &lamellae);
-                ame.get_team_and_world(&team_header.team);
+                ame.get_team_and_world(msg.src as usize, team_header.team, &lamellae);
+            // ame.get_team_and_world(&team_header.team);
 
             for _am_batchs in 0..team_header.am_batch_cnts {
                 // let batched_am_header: BatchedAmHeader =

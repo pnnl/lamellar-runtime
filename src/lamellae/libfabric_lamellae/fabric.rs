@@ -429,50 +429,50 @@ impl Ofi {
         let _guard = self.completion_lock.write();
         let mut prev_expected_cnt = pending.load(Ordering::SeqCst);
         let mut old_cnt = cntr.read();
-        if prev_expected_cnt != old_cnt {
-            // let _guard = self.completion_lock.read();
-            let mut expected_cnt = pending.load(Ordering::SeqCst);
-            // let mut prev_expected_cnt = expected_cnt;
-            let mut cur_cnt = cntr.read();
-            // let mut old_cnt = cur_cnt;
-            // let  err_cnt = cntr.readerr();
-            let mut first = true;
-            trace!(
-            "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
-            cntr.read(),
-        );
-            // let mut timer = std::time::Instant::now();
+        // if prev_expected_cnt != old_cnt {
+        // let _guard = self.completion_lock.read();
+        let mut expected_cnt = pending.load(Ordering::SeqCst);
+        // let mut prev_expected_cnt = expected_cnt;
+        let mut cur_cnt = cntr.read();
+        // let mut old_cnt = cur_cnt;
+        // let  err_cnt = cntr.readerr();
+        let mut first = true;
+        trace!(
+                "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
+                cntr.read(),
+            );
+        // let mut timer = std::time::Instant::now();
 
-            while expected_cnt > cur_cnt
-                || prev_expected_cnt < expected_cnt
-                || cur_cnt != old_cnt
-                || first
-            {
-                first = false;
-                prev_expected_cnt = expected_cnt;
-                old_cnt = cur_cnt;
-                let _ = self.progress();
-                let wait_result = cntr.wait(prev_expected_cnt as u64, -1);
+        while expected_cnt < cur_cnt
+            || prev_expected_cnt < expected_cnt
+            || cur_cnt != old_cnt
+            || first
+        {
+            first = false;
+            prev_expected_cnt = expected_cnt;
+            old_cnt = cur_cnt;
+            let _ = self.progress();
+            let wait_result = cntr.wait(prev_expected_cnt as u64, -1);
 
-                if let Err(err) = wait_result {
-                    if let libfabric::error::ErrorKind::TimedOut = err.kind {
-                        if let Err(err) = self.progress() {
-                            match err.kind {
-                                libfabric::error::ErrorKind::TryAgain => {}
-                                _ => return Err(err),
-                            }
+            if let Err(err) = wait_result {
+                if let libfabric::error::ErrorKind::TimedOut = err.kind {
+                    if let Err(err) = self.progress() {
+                        match err.kind {
+                            libfabric::error::ErrorKind::TryAgain => {}
+                            _ => return Err(err),
                         }
                     }
                 }
-
-                cur_cnt = cntr.read();
-                expected_cnt = pending.load(Ordering::SeqCst);
             }
-            trace!(
+
+            cur_cnt = cntr.read();
+            expected_cnt = pending.load(Ordering::SeqCst);
+        }
+        trace!(
             "{dir} after.   expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
             cntr.read(),
         );
-        }
+        // }
         Ok(())
     }
 
@@ -531,6 +531,8 @@ impl Ofi {
     ) -> Result<u64, libfabric::error::Error> {
         // let _guard = self.completion_lock.read();
         let _guard = self.completion_lock.write();
+        self.put_cnt
+            .fetch_max(self.put_cntr.read(), Ordering::SeqCst);
         loop {
             match fun() {
                 Ok(_) => break,
@@ -554,6 +556,8 @@ impl Ofi {
     ) -> Result<u64, libfabric::error::Error> {
         // let _guard = self.completion_lock.read();
         let _guard = self.completion_lock.write();
+        self.get_cnt
+            .fetch_max(self.get_cntr.read(), Ordering::SeqCst);
         loop {
             match fun() {
                 Ok(_) => break,
@@ -567,7 +571,7 @@ impl Ofi {
             }
         }
 
-        Ok(self.get_cnt.fetch_add(1, Ordering::SeqCst))
+        Ok(self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1)
     }
 
     fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
@@ -1714,7 +1718,9 @@ impl LibfabricAlloc {
         let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
-        let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+        // let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+        let res = &mut *(result as *mut [T] as *mut [OFI]);
+
         match op.src() {
             Some(src) => {
                 let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));

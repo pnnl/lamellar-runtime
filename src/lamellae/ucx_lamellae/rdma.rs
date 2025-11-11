@@ -182,7 +182,7 @@ pub(crate) struct UcxGetFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<T>,
+    result: Box<MaybeUninit<T>>,
     request: Option<UcxRequest>,
 }
 
@@ -196,21 +196,20 @@ impl<T: Remote> UcxGetFuture<T> {
                 std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
             ));
         }
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.spawned = true;
         if let Some(request) = self.request.take() {
             request.wait().expect("ucx get failed");
         } else {
             self.alloc.wait_all();
         }
-        unsafe { self.result.assume_init() }
+        unsafe { self.result.assume_init_read() }
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
@@ -220,7 +219,7 @@ impl<T: Remote> UcxGetFuture<T> {
                 } else {
                     self.alloc.wait_all();
                 }
-                unsafe { self.result.assume_init() }
+                unsafe { self.result.assume_init_read() }
             },
             counters,
         )
@@ -251,7 +250,6 @@ impl<T: Remote> Future for UcxGetFuture<T> {
             self.exec_at();
         }
         let this = self.project();
-        *this.spawned = true;
         if let Some(request) = this.request.take() {
             request.wait().expect("ucx get failed");
         } else {
@@ -259,9 +257,7 @@ impl<T: Remote> Future for UcxGetFuture<T> {
         }
 
         Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
+            this.result.assume_init_read()
         })
     }
 }
@@ -662,7 +658,7 @@ impl CommAllocRdma for UcxAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(MaybeUninit::uninit()),
             request: None,
         }
         .into()
@@ -871,7 +867,7 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(MaybeUninit::uninit()),
             request: None,
         }
         .into()

@@ -1,5 +1,4 @@
 use crate::active_messaging::RemotePtr;
-use crate::array::rdma::private::Sealed;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
 use crate::lamellae::{AllocationType, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};

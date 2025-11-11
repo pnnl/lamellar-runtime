@@ -49,7 +49,11 @@ impl<T: Dist> ArrayRdmaGetHandle<T> {
                     let data = task.await;
                     // println!("data: {:?}", data);
                     if data.len() != std::mem::size_of::<T>() {
-                        panic!("Remote AM get returned incorrect number of bytes");
+                        panic!(
+                            "Remote AM get returned incorrect number of bytes {:?} {:?}",
+                            data.len(),
+                            std::mem::size_of::<T>()
+                        );
                     }
                     unsafe { std::ptr::read_unaligned(data.as_ptr() as *const T) }
                 })

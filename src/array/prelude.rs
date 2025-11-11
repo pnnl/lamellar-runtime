@@ -20,7 +20,7 @@ pub use crate::array::operations::{
     UnsafeShiftOps,
 };
 pub use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayHandle};
-pub use crate::array::rdma::private::Sealed;
+// pub use crate::array::rdma::private::Sealed;
 pub use crate::array::read_only::{ReadOnlyArray, ReadOnlyArrayHandle};
 pub use crate::array::{
     register_reduction,
