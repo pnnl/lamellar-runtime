@@ -281,7 +281,7 @@ pub struct GenericAtomicByteArray {
 
 impl GenericAtomicByteArray {
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_,()> {
         let index = self
             .array
             .inner
@@ -522,7 +522,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         let index = self
             .array
             .inner

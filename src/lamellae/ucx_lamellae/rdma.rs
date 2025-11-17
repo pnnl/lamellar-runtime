@@ -256,9 +256,7 @@ impl<T: Remote> Future for UcxGetFuture<T> {
             this.alloc.wait_all();
         }
 
-        Poll::Ready(unsafe {
-            this.result.assume_init_read()
-        })
+        Poll::Ready(unsafe { this.result.assume_init_read() })
     }
 }
 
@@ -662,6 +660,13 @@ impl CommAllocRdma for UcxAlloc {
             request: None,
         }
         .into()
+    }
+
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        let mut val = T::default();
+        let mut val_slice = std::slice::from_mut(&mut val);
+        unsafe { self.blocking_inner_get(pe, offset, val_slice) };
+        val
     }
 
     fn get_buffer<T: Remote>(

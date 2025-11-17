@@ -574,6 +574,39 @@ impl CommAllocRdma for CommAllocInner {
         }
     }
 
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get(inner_alloc, pe, offset)
+            }
+        }
+    }
+
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1012,6 +1045,9 @@ impl CommAllocRdma for CommAlloc {
         offset: usize,
     ) -> RdmaGetHandle<T> {
         self.inner_alloc.get(scheduler, counters, pe, offset)
+    }
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        self.inner_alloc.blocking_get(pe, offset)
     }
     fn get_buffer<T: Remote>(
         &self,

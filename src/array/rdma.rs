@@ -85,21 +85,35 @@ pub(crate) mod private {
     // the implementing Array to determine the final saftely
     // exposed to the user.
 
+    #[doc(hidden)]
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarRdmaGet<T: Dist> {
         unsafe fn get(&self, index: usize, _marker: Sealed) -> ArrayRdmaGetHandle<T>;
+        unsafe fn get_blocking(&self, index: usize, _marker: Sealed) -> T;
         unsafe fn get_buffer(
             &self,
             index: usize,
             num_elems: usize,
             _marker: Sealed,
         ) -> ArrayRdmaGetBufferHandle<T>;
+        unsafe fn get_buffer_blocking(
+            &self,
+            index: usize,
+            num_elems: usize,
+            _marker: Sealed,
+        ) -> Vec<T>;
         unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
             &self,
             index: usize,
             data: LamellarBuffer<T, B>,
             _marker: Sealed,
         ) -> ArrayRdmaGetIntoBufferHandle<T, B>;
+        unsafe fn get_into_buffer_blocking<B: AsLamellarBuffer<T>>(
+            &self,
+            index: usize,
+            data: LamellarBuffer<T, B>,
+            _marker: Sealed,
+        );
         unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
             &self,
             index: usize,
@@ -109,6 +123,7 @@ pub(crate) mod private {
 
         unsafe fn get_pe(&self, pe: usize, offset: usize, _marker: Sealed)
             -> ArrayRdmaGetHandle<T>;
+        unsafe fn get_pe_blocking(&self, pe: usize, offset: usize, _marker: Sealed) -> T;
         unsafe fn get_buffer_pe(
             &self,
             pe: usize,
@@ -116,6 +131,13 @@ pub(crate) mod private {
             num_elems: usize,
             _marker: Sealed,
         ) -> ArrayRdmaGetBufferHandle<T>;
+        unsafe fn get_buffer_pe_blocking(
+            &self,
+            pe: usize,
+            offset: usize,
+            num_elems: usize,
+            _marker: Sealed,
+        ) -> Vec<T>;
         unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
             &self,
             pe: usize,
@@ -123,6 +145,13 @@ pub(crate) mod private {
             data: LamellarBuffer<T, B>,
             _marker: Sealed,
         ) -> ArrayRdmaGetIntoBufferHandle<T, B>;
+        unsafe fn get_into_buffer_pe_blocking<B: AsLamellarBuffer<T>>(
+            &self,
+            pe: usize,
+            offset: usize,
+            data: LamellarBuffer<T, B>,
+            _marker: Sealed,
+        );
         unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
             &self,
             pe: usize,

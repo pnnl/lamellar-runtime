@@ -745,6 +745,35 @@ impl UcxAlloc {
         )
     }
 
+    pub(crate) unsafe fn blocking_inner_get<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst_addr: &mut [T],
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        trace!(
+            target: "ucx",
+            "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
+            pe,
+            offset,
+            dst_addr.len(),
+            std::mem::size_of::<T>(),
+            dst_addr.len() * std::mem::size_of::<T>(),
+            self.num_bytes(),
+        );
+        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let (remote_addr, rkey) = &self.remote_keys[pe];
+        self.endpoints[pe]
+            .blocking_get(
+                dst_addr.as_mut_ptr() as _,
+                dst_addr.len() * std::mem::size_of::<T>(),
+                remote_addr + offset,
+                &rkey,
+            )
+            .unwrap();
+    }
+
     pub(crate) fn inner_atomic_op<T: Copy>(
         &self,
         pe: usize,

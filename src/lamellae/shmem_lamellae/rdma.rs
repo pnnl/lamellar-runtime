@@ -503,6 +503,10 @@ impl CommAllocRdma for ShmemAlloc {
         .into()
     }
 
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        unimplemented!()
+    }
+
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

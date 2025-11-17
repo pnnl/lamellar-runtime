@@ -122,7 +122,6 @@ impl Ofi {
             .map_err(|e| FabricError::InitError(e.c_err))?;
 
         // trace!("Found the following providers");
-        // info.iter().for_each(|e| println!("{:?}", e));
         let info_entry = info
             .into_iter()
             .find(|e| {
@@ -442,17 +441,19 @@ impl Ofi {
                 cntr.read(),
             );
         // let mut timer = std::time::Instant::now();
+        drop(_guard);
 
-        while expected_cnt < cur_cnt
+        while cur_cnt < expected_cnt
             || prev_expected_cnt < expected_cnt
             || cur_cnt != old_cnt
             || first
         {
+            let _guard = self.completion_lock.write();
             first = false;
             prev_expected_cnt = expected_cnt;
             old_cnt = cur_cnt;
             let _ = self.progress();
-            let wait_result = cntr.wait(prev_expected_cnt as u64, -1);
+            let wait_result = cntr.wait(prev_expected_cnt as u64, 1);
 
             if let Err(err) = wait_result {
                 if let libfabric::error::ErrorKind::TimedOut = err.kind {
@@ -467,8 +468,10 @@ impl Ofi {
 
             cur_cnt = cntr.read();
             expected_cnt = pending.load(Ordering::SeqCst);
+            std::thread::yield_now();
         }
         trace!(
+            target: "libfabric",
             "{dir} after.   expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
             cntr.read(),
         );
@@ -556,7 +559,8 @@ impl Ofi {
     ) -> Result<u64, libfabric::error::Error> {
         // let _guard = self.completion_lock.read();
         let _guard = self.completion_lock.write();
-        self.get_cnt
+        let old_cnt = self
+            .get_cnt
             .fetch_max(self.get_cntr.read(), Ordering::SeqCst);
         loop {
             match fun() {
@@ -570,8 +574,9 @@ impl Ofi {
                 }
             }
         }
-
-        Ok(self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1)
+        let new_cnt = self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1;
+        trace!(target: "libfabric", "done posting get {} {}", old_cnt, new_cnt);
+        Ok(new_cnt)
     }
 
     fn init_barrier(self: &Arc<Ofi>) -> FabricResult<()> {
@@ -632,7 +637,6 @@ impl Ofi {
         };
 
         trace!(target: "libfabric", "Full Allocating aligned size: {} aligned", aligned_size);
-        // println!("{:?}", std::backtrace::Backtrace::capture());
 
         // Map memory of aligned size
         let mut mem = memmap::MmapOptions::new()
@@ -659,12 +663,12 @@ impl Ofi {
             MaybeDisabledMemoryRegion::Disabled(mr) => {
                 match mr {
                     DisabledMemoryRegion::EpBind(mr) => {
-                        // println!("Binding memory region to endpoint");
+                        // trace!("Binding memory region to endpoint");
                         mr.enable(&self.ep)
                             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
                     }
                     DisabledMemoryRegion::RmaEvent(mr) => {
-                        // println!("Binding memory region to domain");
+                        // trace!("Binding memory region to domain");
                         mr.enable()
                             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
                         // This will bind the memory region to the domain
@@ -868,6 +872,7 @@ impl Ofi {
 
         let mut remote_dst_addr = remote_alloc_info.mem_address().add(dst_addr - offset);
         trace!(
+            target: "libfabric",
             "Remote destination address for PE {}: {:?}",
             pe,
             remote_dst_addr
@@ -876,6 +881,7 @@ impl Ofi {
         let remote_key = remote_alloc_info.key();
         if std::mem::size_of_val(src_addr) < self.info_entry.tx_attr().inject_size() {
             trace!(
+                target: "libfabric",
                 "Injecting write to PE {} at address {:?}",
                 pe,
                 remote_dst_addr
@@ -962,12 +968,12 @@ impl Ofi {
 
 impl Drop for Ofi {
     fn drop(&mut self) {
-        trace!("Dropping OFI backend");
+        trace!(target: "libfabric", "Dropping OFI backend");
         let _ = self.barrier();
         let _ = self.wait_for_tx_cntr();
-        trace!("wait_all put done");
+        trace!(target: "libfabric", "wait_all put done");
         let _ = self.wait_for_rx_cntr();
-        trace!("wait_all done");
+        trace!(target: "libfabric", "wait_all done");
     }
 }
 
@@ -995,7 +1001,7 @@ impl AllocInfoManager {
         let allocs = table.drain(..).collect::<Vec<_>>();
         drop(table); // we do this because when the allocs are dropped, they may call back into the AllocInfoManager to remove themselves thus deadlocking
         for alloc in allocs {
-            trace!("Clearing alloc: {:?}", alloc);
+            trace!(target: "libfabric", "Clearing alloc: {:?}", alloc);
         }
     }
 
@@ -1066,6 +1072,7 @@ impl AllocInfoManager {
         remote_addr: usize,
     ) -> Option<(CommAlloc, usize)> {
         trace!(
+            target: "libfabric",
             "looking for remote_addr: {:x} on pr {:x}",
             remote_pe,
             remote_addr
@@ -1497,6 +1504,7 @@ impl LibfabricAlloc {
         let remote_key = remote_alloc_info.key();
         if std::mem::size_of_val(src_addr) < self.ofi.info_entry.tx_attr().inject_size() {
             trace!(
+                target: "libfabric",
                 "Injecting write to PE {} at address {:?}",
                 pe,
                 remote_dst_addr.as_ptr()
@@ -1579,6 +1587,7 @@ impl LibfabricAlloc {
             self.ofi
                 .post_get(|| unsafe {
                     trace!(
+                        target: "libfabric",
                         "GET: from PE {} at addr {:?} to local addr {:?} len {}",
                         pe,
                         remote_src_addr,
@@ -1650,12 +1659,13 @@ impl LibfabricAlloc {
             "PE {} is not part of the sub allocation group",
             pe
         ));
-        let remote_dst_addr =
-            unsafe { remote_alloc_info.mem_address().as_type::<OFI>().add(offset) };
+        let remote_dst_addr = unsafe { remote_alloc_info.mem_address().add(offset) };
         let remote_key = remote_alloc_info.key();
 
         let src = op.src().expect("Atomic operation has no source");
-        let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+        let src = &*(src as *const T as *const OFI);
+        let buf = std::slice::from_ref(src);
+        // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
         self.ofi.post_put(|| {
             self.ofi.ep.inject_atomic_to(
                 buf,
@@ -1780,6 +1790,7 @@ impl Drop for LibfabricAlloc {
                 let rt_ref_count = self.decrement_rt_ref_count();
                 if rt_ref_count == 1 {
                     debug!(target: "libfabric", "Freeing runtime LibfabricAlloc: {:?}",  self);
+
                     rt_alloc_table.free(*addr).expect(&format!(
                         "[{:?}] Error removing from runtime alloc table {:x}",
                         std::thread::current().id(),

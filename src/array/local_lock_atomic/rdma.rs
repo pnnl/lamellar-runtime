@@ -315,7 +315,7 @@ impl<T: Dist> LamellarRdmaPut<T> for LocalLockArray<T> {
 
 impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+        if let Some((pe, _offset)) = self.pe_and_offset_for_global_index(index) {
             let sub_array = self.sub_array(index..index + 1);
 
             let req = self.exec_am_pe_tg(

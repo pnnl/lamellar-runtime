@@ -534,13 +534,15 @@ impl Batcher for SimpleBatcher {
         let mut i = 0;
         trace!("executing batched msg {:?}", ser_data.data_len());
         let mut cnts = HashMap::new();
+        // let mut cnt =0;
         while i < ser_data.data_len() {
             let cmd: Cmd = ser_data
                 .sub_data(i, i + *CMD_LEN)
                 .deserialize_data()
                 .unwrap();
             i += *CMD_LEN;
-
+            // print!("{cnt} ");
+            // cnt+=1;
             match cmd {
                 Cmd::Am => {
                     *cnts.entry(Cmd::Am).or_insert(0) += 1;
@@ -585,7 +587,7 @@ impl Batcher for SimpleBatcher {
                 }
             }
         }
-        debug!(
+        trace!(
             "finished batched msg from {:?} {:?} {:?}",
             msg.src,
             cnts,

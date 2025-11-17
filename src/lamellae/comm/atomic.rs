@@ -209,7 +209,7 @@ impl<T: Copy + Send + 'static> Future for AtomicFetchOpHandle<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(crate) enum AtomicOp<T> {
     Min(T),
     Max(T),

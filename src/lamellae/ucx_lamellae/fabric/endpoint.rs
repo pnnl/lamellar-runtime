@@ -234,6 +234,58 @@ impl Endpoint {
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
+    pub(crate) fn blocking_get(
+        &self,
+        buf: *const u8,
+        size: usize,
+        remote_addr: usize,
+        rkey: &RKey,
+    ) -> Result<(), Error> {
+        // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
+        //     let request = &mut *(request as *mut Request);
+        //     request.waker.wake();
+        // }
+        let request = unsafe {
+            ucp_get_nbx(
+                self.handle,
+                buf as _,
+                size as _,
+                remote_addr as _,
+                rkey.handle,
+                &ucp_request_param_t {
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
+                    flags: 0,
+                    request: std::ptr::null_mut(),
+                    cb: ucp_request_param_t__bindgen_ty_1 { send: None },
+                    datatype: 0,
+                    user_data: std::ptr::null_mut(),
+                    reply_buffer: std::ptr::null_mut(),
+                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+                    recv_info: ucp_request_param_t__bindgen_ty_2 {
+                        length: std::ptr::null_mut(),
+                    },
+                    memh: std::ptr::null_mut(),
+                } as _,
+            )
+        };
+        if request.is_null() {
+            Ok(())
+        } else if UCS_PTR_IS_PTR(request) {
+            loop {
+                let _ = self.worker.progress();
+                // if UCS_PTR_IS_PTR(request) {
+                if unsafe { ucp_request_check_status(request as _) } != ucs_status_t::UCS_INPROGRESS
+                {
+                    break;
+                }
+                // }
+            }
+            unsafe { ucp_request_free(request as _) };
+            Ok(())
+        } else {
+            Error::from_ptr(request)
+        }
+    }
 
     pub(crate) fn atomic_put<T>(
         &self,

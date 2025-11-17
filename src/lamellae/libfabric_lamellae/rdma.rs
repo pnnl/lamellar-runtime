@@ -224,9 +224,7 @@ impl<T: Remote> Future for LibfabricGetFuture<T> {
         let this = self.project();
         this.alloc.ofi.wait_all().unwrap();
 
-        Poll::Ready(unsafe {
-            this.result.assume_init_read()
-        })
+        Poll::Ready(unsafe { this.result.assume_init_read() })
     }
 }
 
@@ -248,7 +246,11 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
             let mut dst = vec![T::default(); self.len];
-            // let dst_mut_slice = std::slice::from_raw_parts_mut(dst.as_mut_ptr(), self.len);
+            let dst_mut_slice = std::slice::from_raw_parts_mut(
+                dst.as_mut_ptr() as *mut u8,
+                self.len * std::mem::size_of::<T>(),
+            );
+            dst_mut_slice.fill(1);
 
             // dst.set_len(self.len);
             self.alloc
@@ -257,12 +259,13 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
             // dst.set_len(self.len);
             // let dst = std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(dst);
             self.result.write(dst);
+            self.spawned = true;
         }
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
-        self.spawned = true;
+
         self.alloc.ofi.wait_all().unwrap();
         let mut res = MaybeUninit::uninit();
         std::mem::swap(&mut self.result, &mut res);
@@ -270,7 +273,6 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
@@ -309,7 +311,6 @@ impl<T: Remote> Future for LibfabricGetBufferFuture<T> {
             self.exec_at();
         }
         let this = self.project();
-        *this.spawned = true;
         this.alloc.ofi.wait_all().unwrap();
 
         Poll::Ready(unsafe {
@@ -566,6 +567,15 @@ impl CommAllocRdma for LibfabricAlloc {
             result: Box::new(MaybeUninit::uninit()),
         }
         .into()
+    }
+
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        let mut val = T::default();
+        let mut val_slice = std::slice::from_mut(&mut val);
+        unsafe {
+            LibfabricAlloc::inner_get(&self, pe, offset, val_slice, true)
+                .expect("error in blocking_get")
+        };
     }
     fn get_buffer<T: Remote>(
         &self,

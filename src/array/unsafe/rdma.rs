@@ -8,7 +8,7 @@ use crate::{
         rdma::private::{LamellarRdmaGet, LamellarRdmaPut, Sealed},
         *,
     },
-    lamellae::{RdmaGetBufferHandle, RdmaGetIntoBufferHandle},
+    lamellae::{CommAllocRdma, RdmaGetBufferHandle, RdmaGetIntoBufferHandle},
     memregion::{
         AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
     },
@@ -680,6 +680,20 @@ impl<T: Dist> UnsafeArray<T> {
     pub unsafe fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         <Self as LamellarRdmaGet<T>>::get(self, index, Sealed)
     }
+
+    pub unsafe fn get_blocking(&self, index: usize) -> T {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.inner
+                .data
+                .mem_region
+                .as_base::<T>()
+                .alloc
+                .blocking_get(pe, offset)
+        } else {
+            panic!("index out of bounds in LamellarArray put");
+        }
+    }
+
     pub unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed)
     }

@@ -346,6 +346,9 @@ pub(crate) trait CommAllocRdma {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T>;
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        T::default()
+    }
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,

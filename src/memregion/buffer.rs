@@ -146,20 +146,20 @@ impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
     }
 }
 
-// impl<T: Remote> LamellarBuffer<T, CommSlice<T>> {
-//     /// unsafe because multiple handles to the same memory region can be created,
-//     /// thus user must ensure that nothing else is mutating the memory region
-//     /// while this buffer exists
-//     pub(crate) unsafe fn from_comm_slice(comm_slice: CommSlice<T>) -> Self {
-//         let len = comm_slice.len();
-//         LamellarBuffer {
-//             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(comm_slice))).into())
-//                 .unwrap(),
-//             range: 0..len,
-//             _phantom: PhantomData,
-//         }
-//     }
-// }
+impl<T: Remote> LamellarBuffer<T, CommSlice<T>> {
+    /// unsafe because multiple handles to the same memory region can be created,
+    /// thus user must ensure that nothing else is mutating the memory region
+    /// while this buffer exists
+    pub(crate) unsafe fn from_comm_slice(comm_slice: CommSlice<T>) -> Self {
+        let len = comm_slice.len();
+        LamellarBuffer {
+            data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(comm_slice))).into())
+                .unwrap(),
+            range: 0..len,
+            _phantom: PhantomData,
+        }
+    }
+}
 
 impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     /// safe because the buffer takes ownership of the vec
@@ -261,13 +261,30 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         unsafe { &mut self.data.as_mut().data.as_mut_slice()[self.range.clone()] }
     }
 
-    // pub(crate) unsafe fn base_as_ptr<P>(&self) -> *const P {
-    //     unsafe { self.data.as_ref().data.as_slice().as_ptr() as *const P }
-    // }
+    pub(crate) unsafe fn orig_as_slice(&self) -> &[T] {
+        unsafe { self.data.as_ref().data.as_slice() }
+    }
+    pub(crate) unsafe fn orig_as_casted_slice<P>(&self) -> &[P] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.data.as_ref().data.as_slice().as_ptr() as *const P,
+                self.data.as_ref().data.as_slice().len() * std::mem::size_of::<T>()
+                    / std::mem::size_of::<P>(),
+            )
+        }
+    }
 
-    // pub(crate) fn base_num_bytes(&self) -> usize {
-    //     unsafe { &self.data.as_ref().data.as_slice().len() * std::mem::size_of::<T>() }
-    // }
+    pub(crate) unsafe fn orig_as_ptr(&self) -> *const T {
+        unsafe { self.data.as_ref().data.as_slice().as_ptr() as *const T }
+    }
+
+    pub(crate) unsafe fn orig_as_casted_ptr<P>(&self) -> *const P {
+        unsafe { self.data.as_ref().data.as_slice().as_ptr() as *const P }
+    }
+
+    pub(crate) fn orig_num_bytes(&self) -> usize {
+        unsafe { &self.data.as_ref().data.as_slice().len() * std::mem::size_of::<T>() }
+    }
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> Drop for LamellarBuffer<T, B> {
