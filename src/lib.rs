@@ -27,18 +27,34 @@ pub fn lamellar_main(args: TokenStream, item: TokenStream) -> TokenStream {
 
     let res = quote! {
         use prrte_sys::prterun_path;
-        use pmi::pmi::PmiBuilder;
-        use pmi::pmi::Pmi;
         
         fn main() #ret_type {
             let prte_launched = std::env::var("PRTE_LAUNCHED").is_ok();
             if !prte_launched {
-                let args: Vec<String> = std::env::args().collect();
+                // Collect command line arguments
+                let mut args: Vec<String> = std::env::args().collect();
+
+                // Remove first argument (executable name) and maintain it for later
+                let exec = args.remove(0);
+
+                // Prepare arguments for prterun
                 let mut prterun_args = Vec::<String>::new();
-                for arg in args.iter().skip(1) {
-                    prterun_args.push(arg.to_string());
+
+                // Collect any additional arguments after "--" to pass to prterun
+                let pos = args.iter().position(|x| x == "--");
+                if let Some(pos) = pos {
+                    args.split_off(pos).into_iter().skip(1).for_each(|x| {
+                        prterun_args.push(x.to_string());
+                    });
                 }
-                prterun_args.push(args[0].clone());
+                let end = args.len();
+
+                // After the prterun arguments, add the executable name
+                prterun_args.push(exec);
+                
+                // Add the arguments targeting the application
+                prterun_args.extend(args.into_iter());
+
                 std::process::Command::new(prterun_path())
                     .args(prterun_args)
                     .status()
