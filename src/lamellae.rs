@@ -21,12 +21,19 @@ match_cfg::match_cfg! {
 
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabric_lamellae;
+
+#[cfg(feature = "enable-libfabric-async")]
+pub(crate) mod libfabric_async_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
 
 #[cfg(feature = "enable-libfabric")]
 use {
     libfabric_lamellae::{Libfabric, LibfabricBuilder},
+};
+#[cfg(feature = "enable-libfabric-async")]
+use {
+    libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
 };
 #[cfg(feature = "enable-ucx")]
 use {
@@ -52,6 +59,8 @@ lazy_static! {
 pub enum Backend {
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
     Ucx,
     /// The Local backend -- intended for single process environments
@@ -95,6 +104,13 @@ impl Default for Backend {
                 return Backend::Libfabric;
                 #[cfg(not(feature = "enable-libfabric"))]
                 panic!("unable to set libfabric backend, recompile with 'enable-libfabric' feature")
+            }
+
+            "libfabric-async" => {
+                #[cfg(feature = "enable-libfabric-async")]
+                return Backend::LibfabricAsync;
+                #[cfg(not(feature = "enable-libfabric-async"))]
+                panic!("unable to set libfabric-async backend, recompile with 'enable-libfabric-async' feature")
             }
             "ucx" => {
                 #[cfg(feature = "enable-ucx")]
@@ -298,6 +314,8 @@ pub(crate) trait Des {
 pub(crate) enum LamellaeBuilder {
     #[cfg(feature = "enable-libfabric")]
     LibfabricBuilder,
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsyncBuilder,
     #[cfg(feature = "enable-ucx")]
     UcxBuilder,
     ShmemBuilder,
@@ -333,6 +351,8 @@ pub(crate) trait Ser {
 pub(crate) enum Lamellae {
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
     Ucx,
     // #[cfg(feature = "enable-libfabric")]
@@ -345,11 +365,11 @@ impl Lamellae {
     pub(crate) fn comm(&self) -> &Comm {
         match self {
             #[cfg(feature = "enable-libfabric")]
-            Lamellae::Libfabric(libfabric) => libfabric.comm(),
+            Lamellae::Libfabric(libfabric) => libfabric.comm(), 
+            #[cfg(feature = "enable-libfabric-async")]
+            Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.comm(),
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.comm(),
-            // #[cfg(feature = "enable-libfabric")]
-            // Lamellae::LibfabricAsync => self.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
             Lamellae::Local(local) => local.comm(),
         }
@@ -359,6 +379,8 @@ impl Lamellae {
         match self {
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.wait_all_print(),
+            #[cfg(feature = "enable-libfabric-async")]
+            Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.wait_all_print(),
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.wait_all_print(),
             // #[cfg(feature = "enable-libfabric")]
@@ -391,6 +413,12 @@ pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
             LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain))
+        }
+        #[cfg(feature = "enable-libfabric-async")]
+        Backend::LibfabricAsync => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            LamellaeBuilder::LibfabricAsyncBuilder(LibfabricAsyncBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-ucx")]
         Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),

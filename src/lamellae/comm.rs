@@ -15,6 +15,10 @@ pub use rdma::Remote;
 
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
+
+#[cfg(feature = "enable-libfabric-async")]
+use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
+
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
 use crate::lamellae::{
@@ -39,6 +43,8 @@ pub(crate) enum CmdQStatus {
 pub(crate) enum Comm {
     #[cfg(feature = "enable-libfabric")]
     Libfabric(LibfabricComm),
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsync(LibfabricAsyncComm),
     #[cfg(feature = "enable-ucx")]
     Ucx(UcxComm),
     Shmem(ShmemComm),

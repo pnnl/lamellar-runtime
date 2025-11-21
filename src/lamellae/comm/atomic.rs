@@ -2,6 +2,10 @@
 use crate::lamellae::libfabric_lamellae::atomic::{
     LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
 };
+#[cfg(feature = "enable-libfabric-async")]
+use crate::lamellae::libfabric_async_lamellae::atomic::{
+    LibfabricAsyncAtomicFetchFuture, LibfabricAsyncAtomicFuture,
+};
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
 use crate::{
@@ -94,6 +98,8 @@ pub struct AtomicOpHandle<T> {
 pub(crate) enum AtomicOpFuture<T> {
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFuture<T>),
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
@@ -106,6 +112,8 @@ impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
@@ -122,6 +130,8 @@ impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFuture::Libfabric(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
@@ -138,6 +148,8 @@ impl<T: Copy + Send + 'static> Future for AtomicOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric")]
             AtomicOpFutureProj::Libfabric(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFutureProj::Ucx(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
@@ -157,6 +169,8 @@ pub struct AtomicFetchOpHandle<T> {
 pub(crate) enum AtomicFetchOpFuture<T> {
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsync(#[pin] LibfabricAsyncAtomicFetchFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
@@ -169,6 +183,8 @@ impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
@@ -185,6 +201,8 @@ impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
         match self.future {
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFuture::Libfabric(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
@@ -201,6 +219,8 @@ impl<T: Copy + Send + 'static> Future for AtomicFetchOpHandle<T> {
         match this.future.project() {
             #[cfg(feature = "enable-libfabric")]
             AtomicFetchOpFutureProj::Libfabric(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),

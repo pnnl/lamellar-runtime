@@ -21,16 +21,18 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [dependencies]
 lamellar-impl = { version = "0.7.0", path = "impl" }
-libfabric = { path = "../rofi-junction/libfabric", features = [
+libfabric = { path = "/qfs/people/thom895/rofi/libfabric", features = [
     # "use-async-std",
     "threading-thread-safe",
 ], optional = true }
 # rofi-rust = { path = "../rofi-junction/rofi-rust", features = [
 #     "async-rofi",
 # ], optional = true }
-pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
+pmi = { path = "/qfs/people/thom895/rofi/pmi", default-features = false, features = [
     "with-pmix",
 ], optional = true }
+lamellar_main= {path = "/qfs/people/thom895/rofi/lamellar_main", optional = true}
+prrte-sys = { path = "/qfs/people/thom895/rofi/prrte-sys", optional = true}
 lamellar-ucx-sys = { path = "lamellar-ucx-sys", version = "0.1.0", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
@@ -112,12 +114,13 @@ enable-rofi-c-shared = ["rofi-c", "rofisys/shared", "libc"]
 rofi-c = []
 enable-rofi-rust = []
 enable-libfabric = ["libfabric", "pmi"]
+enable-libfabric-async = ["libfabric/use-async-std", "pmi"]
 enable-ucx = ["lamellar-ucx-sys", "pmi", "thiserror"]
 tokio-executor = ["tokio"]
 disable-runtime-warnings = []
 runtime-warnings-panic = []
 slurm-test = []
-default = []
+# default = ["enable-libfabric-async"]
 
 
 [profile.release]
