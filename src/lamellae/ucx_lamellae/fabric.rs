@@ -819,6 +819,32 @@ impl UcxAlloc {
         }
     }
 
+    pub(crate) fn blocking_inner_atomic_fetch_op<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        op: &AtomicOp<T>,
+        result: &mut [T],
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        match op {
+            AtomicOp::Read => {
+                let (remote_addr, rkey) = &self.remote_keys[pe];
+                self.endpoints[pe]
+                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
+                    .expect("blocking_atomic_get failed");
+            }
+            AtomicOp::Write(val) => {
+                let (remote_addr, rkey) = &self.remote_keys[pe];
+                self.endpoints[pe]
+                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey)
+                    .expect("blocking_atomic_swap failed");
+            }
+            _ => panic!("Unsupported atomic operation"),
+        }
+    }
+
     pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
     }

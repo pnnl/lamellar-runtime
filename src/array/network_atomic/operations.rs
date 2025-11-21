@@ -21,6 +21,22 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
             panic!("invalid index");
         }
     }
+
+    fn blocking_load(&self, index: usize) -> T {
+        // println!("in Network atomic blocking load");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .atomic_fetch_op_blocking(pe, offset, AtomicOp::Read)
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
 }
 
 //TODO can we add
@@ -49,6 +65,21 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
             ArrayFetchOpHandle {
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+    fn blocking_swap(&self, index: usize, val: T) -> T {
+        // println!("in Network atomic blocking swap");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                self.array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
             }
         } else {
             panic!("invalid index");

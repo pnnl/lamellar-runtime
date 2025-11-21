@@ -10,6 +10,13 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for AtomicArray<T> {
             AtomicArray::NetworkAtomicArray(array) => array.load(index),
         }
     }
+    fn blocking_load(&self, index: usize) -> T {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.blocking_load(index),
+            AtomicArray::GenericAtomicArray(array) => array.blocking_load(index),
+            AtomicArray::NetworkAtomicArray(array) => array.blocking_load(index),
+        }
+    }
 }
 
 impl<T: ElementOps + 'static> AccessOps<T> for AtomicArray<T> {
@@ -26,6 +33,13 @@ impl<T: ElementOps + 'static> AccessOps<T> for AtomicArray<T> {
             AtomicArray::NativeAtomicArray(array) => array.swap(index, val),
             AtomicArray::GenericAtomicArray(array) => array.swap(index, val),
             AtomicArray::NetworkAtomicArray(array) => array.swap(index, val),
+        }
+    }
+    fn blocking_swap(&self, index: usize, val: T) -> T {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => array.blocking_swap(index, val),
+            AtomicArray::GenericAtomicArray(array) => array.blocking_swap(index, val),
+            AtomicArray::NetworkAtomicArray(array) => array.blocking_swap(index, val),
         }
     }
 }

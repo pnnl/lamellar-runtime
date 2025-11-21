@@ -4,8 +4,9 @@ use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
-use crate::lamellae::AtomicOp;
+use crate::lamellae::{AtomicOp, CommInfo};
 use crate::AmHandle;
+use core::panic;
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
@@ -1167,13 +1168,10 @@ impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
                 }
             }
         } else {
-            self.initiate_batch_fetch_op_2(
-                self.dummy_val(),
-                index,
-                ArrayOpCmd::Load,
-                self.clone().into(),
-            )
-            .into()
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
         }
     }
 }
@@ -1198,26 +1196,56 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
                 }
             }
         } else {
-            self.initiate_op(val, index, ArrayOpCmd::Store, self.clone().into())
-                .into()
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
         }
     }
     unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
         //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self.inner.data.mem_region.as_base::<T>().atomic_fetch_op(
-                pe,
-                offset,
-                AtomicOp::Write(val),
-            );
-            ArrayFetchOpHandle {
-                array: self.clone().into(),
-                state: FetchOpState::Network(handle),
+            if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+                let handle = self.inner.data.mem_region.as_base::<T>().atomic_fetch_op(
+                    pe,
+                    offset,
+                    AtomicOp::Write(val),
+                );
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Network(handle),
+                }
+            } else {
+                self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())
+                    .into()
             }
         } else {
-            self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())
-                .into()
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+    unsafe fn blocking_swap(&self, index: usize, val: T) -> T {
+        // println!("in Network atomic blocking swap");
+        //add the check for atomic statement
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+                self.inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
+            } else {
+                self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())
+                    .block()[0]
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
         }
     }
 }

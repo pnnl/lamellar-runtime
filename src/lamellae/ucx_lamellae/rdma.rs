@@ -1,5 +1,4 @@
 use std::{
-    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -182,7 +181,7 @@ pub(crate) struct UcxGetFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: Box<MaybeUninit<T>>,
+    result: Box<T>,
     request: Option<UcxRequest>,
 }
 
@@ -193,7 +192,7 @@ impl<T: Remote> UcxGetFuture<T> {
             self.request = Some(self.alloc.inner_get(
                 self.pe,
                 self.offset,
-                std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
+                std::slice::from_mut(&mut *self.result),
             ));
         }
         self.spawned = true;
@@ -206,7 +205,7 @@ impl<T: Remote> UcxGetFuture<T> {
         } else {
             self.alloc.wait_all();
         }
-        unsafe { self.result.assume_init_read() }
+        *self.result
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
@@ -219,7 +218,7 @@ impl<T: Remote> UcxGetFuture<T> {
                 } else {
                     self.alloc.wait_all();
                 }
-                unsafe { self.result.assume_init_read() }
+                *self.result
             },
             counters,
         )
@@ -256,7 +255,7 @@ impl<T: Remote> Future for UcxGetFuture<T> {
             this.alloc.wait_all();
         }
 
-        Poll::Ready(unsafe { this.result.assume_init_read() })
+        Poll::Ready(**this.result)
     }
 }
 
@@ -269,7 +268,7 @@ pub(crate) struct UcxGetBufferFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<Vec<T>>,
+    result: Vec<T>,
     request: Option<UcxRequest>,
 }
 
@@ -277,13 +276,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_get(&mut self) {
         unsafe {
-            let mut dst = Vec::<T>::with_capacity(self.len);
-            dst.set_len(self.len);
-            self.request = Some(
-                self.alloc
-                    .inner_get(self.pe, self.offset, dst.as_mut_slice()),
-            );
-            self.result.write(dst);
+            self.request = Some(self.alloc.inner_get(self.pe, self.offset, &mut self.result));
         }
     }
 
@@ -295,9 +288,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
         } else {
             self.alloc.wait_all();
         }
-        let mut res = MaybeUninit::uninit();
-        std::mem::swap(&mut self.result, &mut res);
-        unsafe { res.assume_init() }
+        std::mem::take(&mut self.result)
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_get();
@@ -311,9 +302,7 @@ impl<T: Remote> UcxGetBufferFuture<T> {
                 } else {
                     self.alloc.wait_all();
                 }
-                let mut res = MaybeUninit::uninit();
-                std::mem::swap(&mut self.result, &mut res);
-                unsafe { res.assume_init() }
+                std::mem::take(&mut self.result)
             },
             counters,
         )
@@ -351,11 +340,7 @@ impl<T: Remote> Future for UcxGetBufferFuture<T> {
             this.alloc.wait_all();
         }
 
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(std::mem::take(this.result))
     }
 }
 
@@ -656,7 +641,7 @@ impl CommAllocRdma for UcxAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(MaybeUninit::uninit()),
+            result: Box::new(T::default()),
             request: None,
         }
         .into()
@@ -664,7 +649,7 @@ impl CommAllocRdma for UcxAlloc {
 
     fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
         let mut val = T::default();
-        let mut val_slice = std::slice::from_mut(&mut val);
+        let val_slice = std::slice::from_mut(&mut val);
         unsafe { self.blocking_inner_get(pe, offset, val_slice) };
         val
     }
@@ -692,10 +677,16 @@ impl CommAllocRdma for UcxAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Vec::new(),
             request: None,
         }
         .into()
+    }
+
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        let mut buf = vec![T::default(); len];
+        unsafe { self.blocking_inner_get(pe, offset, buf.as_mut_slice()) };
+        buf
     }
 
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
@@ -718,6 +709,20 @@ impl CommAllocRdma for UcxAlloc {
             request: None,
         }
         .into()
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        if pe != self.my_pe {
+            unsafe { self.blocking_inner_get(pe, offset, dst.as_mut_slice()) };
+        } else {
+            let len = dst.len();
+            dst.as_mut_slice()
+                .copy_from_slice(&self.as_mut_slice()[offset..(offset + len)]);
+        }
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
@@ -872,12 +877,23 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(MaybeUninit::uninit()),
+            result: Box::new(T::default()),
             request: None,
         }
         .into()
     }
 
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let mut val = T::default();
+        let val_slice = std::slice::from_mut(&mut val);
+        unsafe { self.alloc.blocking_inner_get(pe, offset, val_slice) };
+        val
+    }
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -899,10 +915,30 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Vec::new(),
             request: None,
         }
         .into()
+    }
+
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get_buffer called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let mut dst = vec![T::default(); len];
+        unsafe {
+            dst.set_len(len);
+            if pe != self.alloc.my_pe {
+                self.alloc
+                    .blocking_inner_get(pe, offset, dst.as_mut_slice());
+            } else {
+                dst.as_mut_slice()
+                    .copy_from_slice(&self.alloc.as_mut_slice()[offset..(offset + len)]);
+            }
+        }
+        dst
     }
 
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
@@ -930,6 +966,27 @@ impl CommAllocRdma for OneSidedUcxAlloc {
             request: None,
         }
         .into()
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get_into_buffer called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        if pe != self.alloc.my_pe {
+            let _ = unsafe {
+                UcxAlloc::blocking_inner_get(&self.alloc, pe, offset, dst.as_mut_slice())
+            };
+        } else {
+            let len = dst.len();
+            dst.as_mut_slice()
+                .copy_from_slice(&self.alloc.as_mut_slice()[offset..(offset + len)]);
+        }
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,

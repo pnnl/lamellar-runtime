@@ -1066,6 +1066,15 @@ impl<T: Remote> MemoryRegion<T> {
             .get(&self.scheduler, self.counters.clone(), pe, index)
     }
 
+    pub(crate) unsafe fn blocking_get(&self, pe: usize, index: usize) -> T {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant get value of type {:?} from memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
+        trace!("get blocking memregion {:?} index: {:?}", self.alloc, index);
+
+        self.alloc.inner_alloc.blocking_get(pe, index)
+    }
+
     //TODO: once we have a reliable asynchronos get wait mechanism, we return a request handle,
     //data probably needs to be referenced count or lifespan controlled so we know it exists when the get trys to complete
     //in the handle drop method we will wait until the request completes before dropping...  ensuring the data has a place to go
@@ -1097,6 +1106,15 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .get_buffer(&self.scheduler, self.counters.clone(), pe, index, len)
     }
+    pub(crate) unsafe fn blocking_get_buffer(&self, pe: usize, index: usize, len: usize) -> Vec<T> {
+        trace!(
+            "get buffer blocking memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+
+        self.alloc.inner_alloc.blocking_get_buffer(pe, index, len)
+    }
 
     pub(crate) unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
@@ -1117,6 +1135,23 @@ impl<T: Remote> MemoryRegion<T> {
             index,
             data,
         )
+    }
+
+    pub(crate) unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        trace!(
+            "get into buffer blocking memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+
+        self.alloc
+            .inner_alloc
+            .blocking_get_into_buffer(pe, index, data)
     }
 
     pub(crate) unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
@@ -1191,6 +1226,17 @@ impl<T: Remote> MemoryRegion<T> {
             pe,
             index,
         )
+    }
+
+    pub(crate) fn atomic_fetch_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) -> T {
+        trace!(
+            "atomic_fetch_op memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc
+            .inner_alloc
+            .blocking_atomic_fetch_op(op, pe, index)
     }
 
     pub(crate) fn wait_all(&self) {

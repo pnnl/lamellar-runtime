@@ -74,6 +74,11 @@ impl<T: Dist> AtomicArray<T> {
     pub fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
         unsafe { <Self as LamellarRdmaGet<T>>::get(self, index, Sealed) }
     }
+    pub fn blocking_get(&self, index: usize) -> T {
+        unsafe { <Self as LamellarRdmaGet<T>>::blocking_get(self, index, Sealed) }
+    }
+
+    //we are saying these are unsafe because only elements are atomically updated, not buffers
     pub unsafe fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed)
     }
@@ -94,6 +99,9 @@ impl<T: Dist> AtomicArray<T> {
 
     pub unsafe fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
         <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed)
+    }
+    pub unsafe fn blocking_get_pe(&self, pe: usize, offset: usize) -> T {
+        <Self as LamellarRdmaGet<T>>::blocking_get_pe(self, pe, offset, Sealed)
     }
     pub fn get_buffer_pe(
         &self,
@@ -380,6 +388,21 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
+    unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => {
+                <NativeAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get(array, index, Sealed)
+            }
+            AtomicArray::GenericAtomicArray(array) => {
+                <GenericAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get(array, index, Sealed)
+            }
+            AtomicArray::NetworkAtomicArray(array) => {
+                <NetworkAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get(array, index, Sealed)
+            }
+        }
+    }
+
     unsafe fn get_buffer(
         &self,
         index: usize,
@@ -404,6 +427,27 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
+    unsafe fn blocking_get_buffer(&self, index: usize, num_elems: usize, _: Sealed) -> Vec<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => {
+                <NativeAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_buffer(
+                    array, index, num_elems, Sealed,
+                )
+            }
+            AtomicArray::GenericAtomicArray(array) => {
+                <GenericAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_buffer(
+                    array, index, num_elems, Sealed,
+                )
+            }
+            AtomicArray::NetworkAtomicArray(array) => {
+                <NetworkAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_buffer(
+                    array, index, num_elems, Sealed,
+                )
+            }
+        }
+    }
+
     unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -428,6 +472,32 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
+    unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => {
+                <NativeAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_into_buffer(
+                    array, index, data, Sealed,
+                )
+            }
+            AtomicArray::GenericAtomicArray(array) => {
+                <GenericAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_into_buffer(
+                    array, index, data, Sealed,
+                )
+            }
+            AtomicArray::NetworkAtomicArray(array) => {
+                <NetworkAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_into_buffer(
+                    array, index, data, Sealed,
+                )
+            }
+        }
+    }
+
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -452,6 +522,7 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
         match self {
             AtomicArray::NativeAtomicArray(array) => {
@@ -465,6 +536,27 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
+    unsafe fn blocking_get_pe(&self, pe: usize, offset: usize, _: Sealed) -> T {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => {
+                <NativeAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_pe(
+                    array, pe, offset, Sealed,
+                )
+            }
+            AtomicArray::GenericAtomicArray(array) => {
+                <GenericAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_pe(
+                    array, pe, offset, Sealed,
+                )
+            }
+            AtomicArray::NetworkAtomicArray(array) => {
+                <NetworkAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_pe(
+                    array, pe, offset, Sealed,
+                )
+            }
+        }
+    }
+
     unsafe fn get_buffer_pe(
         &self,
         pe: usize,
@@ -490,6 +582,33 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
+    unsafe fn blocking_get_buffer_pe(
+        &self,
+        pe: usize,
+        offset: usize,
+        num_elems: usize,
+        _: Sealed,
+    ) -> Vec<T> {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => {
+                <NativeAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                    array, pe, offset, num_elems, Sealed,
+                )
+            }
+            AtomicArray::GenericAtomicArray(array) => {
+                <GenericAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                    array, pe, offset, num_elems, Sealed,
+                )
+            }
+            AtomicArray::NetworkAtomicArray(array) => {
+                <NetworkAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_buffer_pe(
+                    array, pe, offset, num_elems, Sealed,
+                )
+            }
+        }
+    }
+
     unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -515,6 +634,33 @@ impl<T: Dist> LamellarRdmaGet<T> for AtomicArray<T> {
             }
         }
     }
+
+    unsafe fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        match self {
+            AtomicArray::NativeAtomicArray(array) => {
+                <NativeAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(
+                    array, pe, offset, data, Sealed,
+                )
+            }
+            AtomicArray::GenericAtomicArray(array) => {
+                <GenericAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(
+                    array, pe, offset, data, Sealed,
+                )
+            }
+            AtomicArray::NetworkAtomicArray(array) => {
+                <NetworkAtomicArray<T> as LamellarRdmaGet<T>>::blocking_get_into_buffer_pe(
+                    array, pe, offset, data, Sealed,
+                )
+            }
+        }
+    }
+
     unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,

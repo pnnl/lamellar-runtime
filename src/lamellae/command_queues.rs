@@ -1144,9 +1144,9 @@ impl InnerCQ {
         let (local_daddr_alloc, offset) =
             self.comm.local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
         let _ = local_daddr_alloc
-            .get_into_buffer(&self.scheduler, vec![], src, offset, unsafe {
+            .get_into_buffer(&self.scheduler, vec![], src, offset, 
                 buffer.split_off(0)
-            })
+            )
             .spawn();
         // self.comm.wait();
         // let tmp_data = local_daddr_alloc.get_buffer(

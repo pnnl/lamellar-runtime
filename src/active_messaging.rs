@@ -740,13 +740,13 @@ pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend
 
 impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
 
-#[derive(
-    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
-)]
-pub(crate) enum ExecType {
-    Am(Cmd),
-    Runtime(Cmd),
-}
+// #[derive(
+//     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
+// )]
+// pub(crate) enum ExecType {
+//     Am(Cmd),
+//     Runtime(Cmd),
+// }
 
 #[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]

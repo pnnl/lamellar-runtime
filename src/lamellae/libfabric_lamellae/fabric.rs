@@ -53,7 +53,8 @@ type RmaAtomicCollEp =
 enum BarrierImpl {
     Uninit,
     Collective(MulticastGroupCollective),
-    Manual(usize, AtomicUsize),
+    Manual(LibfabricAlloc, AtomicUsize),
+    Pmi(Arc<PmiX>),
 }
 
 pub(crate) struct Ofi {
@@ -234,7 +235,7 @@ impl Ofi {
         let ofi = Arc::new(Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
-            _my_pmi: my_pmi,
+            _my_pmi: my_pmi.clone(),
             info_entry,
             _fabric: fabric,
             domain,
@@ -246,13 +247,13 @@ impl Ofi {
             ep,
             mapped_addresses,
             alloc_manager: Arc::new(alloc_manager),
-            barrier_impl: RwLock::new(BarrierImpl::Uninit),
+            barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi)),
             put_cnt: AtomicU64::new(0),
             get_cnt: AtomicU64::new(0),
             completion_lock: RwLock::new(()),
         });
 
-        ofi.init_barrier()?;
+        // ofi.init_barrier()?;
 
         Ok(ofi)
     }
@@ -441,19 +442,19 @@ impl Ofi {
                 cntr.read(),
             );
         // let mut timer = std::time::Instant::now();
-        drop(_guard);
+        // drop(_guard);
 
         while cur_cnt < expected_cnt
             || prev_expected_cnt < expected_cnt
             || cur_cnt != old_cnt
-            || first
+            // || first
         {
-            let _guard = self.completion_lock.write();
+            // let _guard = self.completion_lock.write();
             first = false;
             prev_expected_cnt = expected_cnt;
             old_cnt = cur_cnt;
             let _ = self.progress();
-            let wait_result = cntr.wait(prev_expected_cnt as u64, 1);
+            let wait_result = cntr.wait(prev_expected_cnt as u64, -1);
 
             if let Err(err) = wait_result {
                 if let libfabric::error::ErrorKind::TimedOut = err.kind {
@@ -530,6 +531,7 @@ impl Ofi {
 
     fn post_put(
         &self,
+        blocking: bool,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
         // let _guard = self.completion_lock.read();
@@ -550,11 +552,16 @@ impl Ofi {
             }
         }
         trace!("done posting put");
-        Ok(self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1)
+        let cnt = self.put_cnt.fetch_add(1, Ordering::SeqCst) + 1;
+        if blocking {
+            self.put_cntr.wait(cnt, -1)?;
+        }
+        Ok(cnt)
     }
 
     fn post_get(
         &self,
+        blocking: bool,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
         // let _guard = self.completion_lock.read();
@@ -576,6 +583,9 @@ impl Ofi {
         }
         let new_cnt = self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1;
         trace!(target: "libfabric", "done posting get {} {}", old_cnt, new_cnt);
+        if blocking {
+            self.get_cntr.wait(new_cnt, -1)?;
+        }
         Ok(new_cnt)
     }
 
@@ -586,6 +596,7 @@ impl Ofi {
             .domain
             .query_collective::<()>(CollectiveOp::Barrier, &mut coll_attr)
             .is_err()
+            || true
         {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
             let barrier_size = all_pes.len() * std::mem::size_of::<usize>();
@@ -599,8 +610,7 @@ impl Ofi {
                     }
                 })?;
 
-            *self.barrier_impl.write() =
-                BarrierImpl::Manual(barrier_addr.start(), AtomicUsize::new(0));
+            *self.barrier_impl.write() = BarrierImpl::Manual(barrier_addr, AtomicUsize::new(0));
             Ok(())
         } else {
             let all_pes: Vec<_> = (0..self.num_pes).collect();
@@ -611,6 +621,10 @@ impl Ofi {
             );
             Ok(())
         }
+    }
+    pub(crate) fn clear_barrier(&self) {
+        let mut barrier_impl = self.barrier_impl.write();
+        *barrier_impl = BarrierImpl::Uninit;
     }
     pub(crate) fn alloc(
         self: &Arc<Ofi>,
@@ -804,43 +818,50 @@ impl Ofi {
                 // trace!("Done with barrier");
                 Ok(())
             }
-            BarrierImpl::Manual(barrier_addr, barrier_id) => {
-                let n = 2;
+            BarrierImpl::Manual(barrier_alloc, barrier_id) => {
+                let n = 2usize;
                 let pes = (0..self.num_pes).collect::<Vec<_>>();
                 let num_pes = pes.len();
                 let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
                 let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
                 // let _guard = self.completion_lock.read();
-                let _guard = self.completion_lock.write();
+                // let _guard = self.completion_lock.write();
                 for round in 0..num_rounds as usize {
                     for i in 1..=n {
-                        let send_pe = euclid_rem(
-                            self.my_pe as i64 + i as i64 * (n as i64 + 1).pow(round as u32),
-                            num_pes as i64,
-                        );
+                        let send_pe = (self.my_pe + i * (n + 1).pow(round as u32)) % num_pes;
 
-                        let dst = barrier_addr + 8 * self.my_pe;
+                        // let dst = barrier_addr + 8 * self.my_pe;
                         unsafe {
-                            self.inner_put(dst, std::slice::from_ref(&my_barrier), send_pe, false)?
+                            barrier_alloc.inner_put::<usize>(
+                                send_pe,
+                                self.my_pe,
+                                std::slice::from_ref(&my_barrier),
+                                false,
+                            )?
+                            // self.inner_put(dst, std::slice::from_ref(&my_barrier), send_pe, false)?
                         };
                     }
 
                     for i in 1..=n {
-                        let recv_pe = euclid_rem(
-                            self.my_pe as i64 - i as i64 * (n as i64 + 1).pow(round as u32),
-                            num_pes as i64,
-                        );
-                        let barrier_vec = unsafe {
-                            std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
-                        };
+                        let recv_pe = (self.my_pe as i64
+                            - i as i64 * (n as i64 + 1).pow(round as u32))
+                        .rem_euclid(num_pes as i64);
+                        // let barrier_vec = unsafe {
+                        //     std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
+                        // };
+                        let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
 
-                        while my_barrier > barrier_vec[recv_pe] {
+                        while my_barrier > barrier_vec[recv_pe as usize] {
                             self.progress()?;
                             std::thread::yield_now();
                         }
                     }
                 }
 
+                Ok(())
+            }
+            BarrierImpl::Pmi(pmi) => {
+                pmi.barrier(true).expect("PMI Barrier failed");
                 Ok(())
             }
         }
@@ -851,7 +872,7 @@ impl Ofi {
         pe: usize,
         src_addr: &[T],
         dst_addr: usize,
-        sync: bool,
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let (offset, mr, remote_alloc_info) = {
             let table = self.alloc_manager.mr_info_table.read();
@@ -886,7 +907,7 @@ impl Ofi {
                 pe,
                 remote_dst_addr
             );
-            self.post_put(|| unsafe {
+            self.post_put(blocking, || unsafe {
                 self.ep.inject_write_to(
                     src_addr,
                     &self.mapped_addresses[pe],
@@ -902,7 +923,7 @@ impl Ofi {
                     self.info_entry.ep_attr().max_msg_size(),
                 );
 
-                self.post_put(|| unsafe {
+                self.post_put(blocking, || unsafe {
                     self.ep.write_to(
                         &src_addr[curr_idx..curr_idx + msg_len],
                         Some(&mr.descriptor()),
@@ -917,10 +938,6 @@ impl Ofi {
             }
         }
 
-        if sync {
-            self.wait_for_tx_cntr()?;
-        }
-        // trace!("Done putting");
         Ok(())
     }
 
@@ -966,16 +983,16 @@ impl Ofi {
     // }
 }
 
-impl Drop for Ofi {
-    fn drop(&mut self) {
-        trace!(target: "libfabric", "Dropping OFI backend");
-        let _ = self.barrier();
-        let _ = self.wait_for_tx_cntr();
-        trace!(target: "libfabric", "wait_all put done");
-        let _ = self.wait_for_rx_cntr();
-        trace!(target: "libfabric", "wait_all done");
-    }
-}
+// impl Drop for Ofi {
+//     fn drop(&mut self) {
+//         trace!(target: "libfabric", "Dropping OFI backend");
+//         // let _ = self.barrier();
+//         let _ = self.wait_for_tx_cntr();
+//         trace!(target: "libfabric", "wait_all put done");
+//         let _ = self.wait_for_rx_cntr();
+//         trace!(target: "libfabric", "wait_all done");
+//     }
+// }
 
 pub(crate) struct AllocInfoManager {
     pub(crate) mr_info_table: Arc<RwLock<Vec<LibfabricAlloc>>>,
@@ -1479,7 +1496,7 @@ impl LibfabricAlloc {
         pe: usize,
         offset: usize, //T-sized offset
         src_addr: &[T],
-        sync: bool,
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
@@ -1509,7 +1526,7 @@ impl LibfabricAlloc {
                 pe,
                 remote_dst_addr.as_ptr()
             );
-            self.ofi.post_put(|| unsafe {
+            self.ofi.post_put(blocking, || unsafe {
                 self.ofi.ep.inject_write_to(
                     src_addr,
                     &self.ofi.mapped_addresses[pe],
@@ -1526,7 +1543,7 @@ impl LibfabricAlloc {
                 );
 
                 self.ofi
-                    .post_put(|| unsafe {
+                    .post_put(blocking, || unsafe {
                         self.ofi.ep.write_to(
                             &src_addr[curr_idx..curr_idx + msg_len],
                             Some(&self.mr.descriptor()),
@@ -1542,19 +1559,16 @@ impl LibfabricAlloc {
             }
         }
 
-        if sync {
-            self.ofi.wait_for_tx_cntr()?;
-        }
-        // trace!("Done putting");
         Ok(())
     }
 
+    
     pub(crate) unsafe fn inner_get<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
         dst_addr: &mut [T],
-        sync: bool,
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
@@ -1564,52 +1578,99 @@ impl LibfabricAlloc {
         ));
 
         let mut remote_src_addr = remote_alloc_info.mem_address().add(offset);
-        debug!(
-            "Inner Get: Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}-{:?} {} bytes",
-            pe,
-            remote_alloc_info.mem_address(),
-            offset,
-            std::mem::size_of::<T>(),
-            dst_addr.len(),
-            remote_src_addr,
-            remote_src_addr.add(std::mem::size_of_val(dst_addr)),
-            std::mem::size_of_val(dst_addr)
-        );
         let remote_key = remote_alloc_info.key();
+        // trace!(
+        //     "Inner Get: Remote destination address for PE {}: base_addr {:?} offset<T> {} size_of<T> {} len {} {:?}-{:?} {} bytes",
+        //     pe,
+        //     remote_alloc_info.mem_address(),
+        //     offset,
+        //     std::mem::size_of::<T>(),
+        //     dst_addr.len(),
+        //     remote_src_addr,
+        //     remote_src_addr.add(std::mem::size_of_val(dst_addr)),
+        //     std::mem::size_of_val(dst_addr)
+        // );
+        if dst_addr.len() < self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>()
+        {
+            // trace!(
+            //     target: "libfabric",
+            //     "GET: from PE {} at addr {:?} to local addr {:?} len {} {}",
+            //     pe,
+            //     remote_src_addr,
+            //     dst_addr.as_mut_ptr(),
+            //     std::mem::size_of_val(dst_addr),
+            //     dst_addr.len(),
+            // );
+            self.ofi.post_get(blocking, || unsafe {
+                self.ofi.ep.read_from(
+                    dst_addr,
+                    Some(&self.mr.descriptor()),
+                    &self.ofi.mapped_addresses[pe],
+                    remote_src_addr,
+                    &remote_key,
+                )
+            })?;
+        } else {
+            let mut curr_idx = 0;
 
-        let mut curr_idx = 0;
-
-        while curr_idx < dst_addr.len() {
-            let msg_len = std::cmp::min(
-                dst_addr.len() - curr_idx,
-                self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
-            );
-            self.ofi
-                .post_get(|| unsafe {
-                    trace!(
-                        target: "libfabric",
-                        "GET: from PE {} at addr {:?} to local addr {:?} len {}",
-                        pe,
-                        remote_src_addr,
-                        &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
-                        msg_len * std::mem::size_of::<T>()
-                    );
-                    self.ofi.ep.read_from(
-                        &mut dst_addr[curr_idx..curr_idx + msg_len],
-                        Some(&self.mr.descriptor()),
-                        &self.ofi.mapped_addresses[pe],
-                        remote_src_addr,
-                        &remote_key,
-                    )
-                })
-                .expect("Error posting get");
-            remote_src_addr = remote_src_addr.add(msg_len * std::mem::size_of::<T>());
-            curr_idx += msg_len;
+            while curr_idx < dst_addr.len() {
+                let msg_len = std::cmp::min(
+                    dst_addr.len() - curr_idx,
+                    self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
+                );
+                self.ofi
+                    .post_get(blocking, || unsafe {
+                        trace!(
+                            target: "libfabric",
+                            "GET: from PE {} at addr {:?} to local addr {:?} len {}",
+                            pe,
+                            remote_src_addr,
+                            &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
+                            msg_len * std::mem::size_of::<T>()
+                        );
+                        self.ofi.ep.read_from(
+                            &mut dst_addr[curr_idx..curr_idx + msg_len],
+                            Some(&self.mr.descriptor()),
+                            &self.ofi.mapped_addresses[pe],
+                            remote_src_addr,
+                            &remote_key,
+                        )
+                    })
+                    .expect("Error posting get");
+                remote_src_addr = remote_src_addr.add(msg_len * std::mem::size_of::<T>());
+                curr_idx += msg_len;
+            }
         }
 
-        if sync {
-            self.ofi.wait_for_rx_cntr()?;
-        }
+        Ok(())
+    }
+
+    #[inline(never)]
+    pub(crate) unsafe fn inner_get_small<T: Copy>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst_addr: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
+        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations,
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+
+        let mut remote_src_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+        self.ofi.post_get(blocking, || unsafe {
+            self.ofi.ep.read_from(
+                dst_addr,
+                Some(&self.mr.descriptor()),
+                &self.ofi.mapped_addresses[pe],
+                remote_src_addr,
+                &remote_key,
+            )
+        })?;
 
         Ok(())
     }
@@ -1666,7 +1727,7 @@ impl LibfabricAlloc {
         let src = &*(src as *const T as *const OFI);
         let buf = std::slice::from_ref(src);
         // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
-        self.ofi.post_put(|| {
+        self.ofi.post_put(false, || {
             self.ofi.ep.inject_atomic_to(
                 buf,
                 &self.ofi.mapped_addresses[pe],
@@ -1684,28 +1745,29 @@ impl LibfabricAlloc {
         offset: usize,
         op: &LamellarAtomicOp<T>,
         result: &mut [T],
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-                self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-                self.typed_atomic_fetch_op::<T, u16>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, u16>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-                self.typed_atomic_fetch_op::<T, u32>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, u32>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_fetch_op::<T, u64>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, u64>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                self.typed_atomic_fetch_op::<T, usize>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, usize>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-                self.typed_atomic_fetch_op::<T, i8>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, i8>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-                self.typed_atomic_fetch_op::<T, i16>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, i16>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-                self.typed_atomic_fetch_op::<T, i32>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, i32>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-                self.typed_atomic_fetch_op::<T, i64>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, i64>(pe, offset, op, result, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-                self.typed_atomic_fetch_op::<T, isize>(pe, offset, op, result)
+                self.typed_atomic_fetch_op::<T, isize>(pe, offset, op, result, blocking)
             } else {
                 panic!("Unsupported atomic operation type");
             }
@@ -1718,6 +1780,7 @@ impl LibfabricAlloc {
         offset: usize,
         op: &LamellarAtomicOp<T>,
         result: &mut [T],
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations, offset + 1 because atomics operate on a single element and we verifying we arent missaligned
@@ -1734,7 +1797,7 @@ impl LibfabricAlloc {
         match op.src() {
             Some(src) => {
                 let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
-                self.ofi.post_get(|| {
+                self.ofi.post_get(blocking, || {
                     self.ofi.ep.fetch_atomic_from(
                         buf,
                         None,
@@ -1749,7 +1812,7 @@ impl LibfabricAlloc {
             }
             None => {
                 let buf_val = res[0];
-                self.ofi.post_get(|| {
+                self.ofi.post_get(blocking, || {
                     self.ofi.ep.fetch_atomic_from(
                         std::slice::from_ref(&buf_val),
                         None,
@@ -1834,16 +1897,6 @@ impl From<OneSidedLibfabricAlloc> for CommAlloc {
             inner_alloc: CommAllocInner::OneSidedLibfabricAlloc(alloc),
             alloc_type: CommAllocType::Remote,
         }
-    }
-}
-
-fn euclid_rem(a: i64, b: i64) -> usize {
-    let r = a % b;
-
-    if r >= 0 {
-        r as usize
-    } else {
-        (r + b.abs()) as usize
     }
 }
 

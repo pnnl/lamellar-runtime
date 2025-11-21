@@ -12,7 +12,7 @@ use crate::{
         CommAllocAddr,
     },
     scheduler::Scheduler,
-    LamellarTask,
+    LamellarTask, Remote,
 };
 
 use futures_util::Future;
@@ -100,7 +100,7 @@ pub(crate) enum AtomicOpFuture<T> {
     Local(#[pin] LocalAtomicFuture<T>),
 }
 
-impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
+impl<T: Remote> AtomicOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicOp Operation completes
     pub fn block(self) {
         match self.future {
@@ -130,7 +130,7 @@ impl<T: Copy + Send + 'static> AtomicOpHandle<T> {
     }
 }
 
-impl<T: Copy + Send + 'static> Future for AtomicOpHandle<T> {
+impl<T: Remote> Future for AtomicOpHandle<T> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -163,7 +163,7 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     Local(#[pin] LocalAtomicFetchFuture<T>),
 }
 
-impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
+impl<T: Remote> AtomicFetchOpHandle<T> {
     /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
     pub fn block(self) -> T {
         match self.future {
@@ -193,7 +193,7 @@ impl<T: Copy + Send + 'static> AtomicFetchOpHandle<T> {
     }
 }
 
-impl<T: Copy + Send + 'static> Future for AtomicFetchOpHandle<T> {
+impl<T: Remote> Future for AtomicFetchOpHandle<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -258,7 +258,7 @@ impl<T> AtomicOp<T> {
 }
 
 pub(crate) trait CommAllocAtomic {
-    fn atomic_op<T: Copy>(
+    fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -266,16 +266,16 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T>;
-    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
-    fn atomic_op_all<T: Copy>(
+    fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
+    fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: AtomicOp<T>,
         offset: usize,
     ) -> AtomicOpHandle<T>;
-    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize);
-    fn atomic_fetch_op<T: Copy>(
+    fn atomic_op_all_unmanaged<T: Remote>(&self, op: AtomicOp<T>, offset: usize);
+    fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -283,6 +283,7 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T>;
+    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T;
 }
 
 pub(crate) trait AsAtomic: Copy + std::fmt::Debug {

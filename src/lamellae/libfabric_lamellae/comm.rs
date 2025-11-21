@@ -141,8 +141,10 @@ impl Drop for LibfabricComm {
         // for (addr, _alloc) in self.fabric_allocs.write().drain(..) {
         //     self.ofi.free(addr).expect("error in ofi free");
         // }
-        let _ = self.ofi.clear_allocs();
         let _ = self.ofi.barrier();
+        self.ofi.clear_barrier();
+        let _ = self.ofi.clear_allocs();
+        
         trace!(
             "libfabric comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)

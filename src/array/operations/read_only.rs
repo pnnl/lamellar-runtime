@@ -84,6 +84,10 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    fn blocking_load(&self, index: usize) -> T {
+        self.load(index).block()
+    }
+
     /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
     /// return a vector of values rather than a single value.
     ///

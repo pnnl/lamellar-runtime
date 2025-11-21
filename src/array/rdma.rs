@@ -89,14 +89,14 @@ pub(crate) mod private {
     #[enum_dispatch(LamellarReadArray<T>,LamellarWriteArray<T>)]
     pub trait LamellarRdmaGet<T: Dist> {
         unsafe fn get(&self, index: usize, _marker: Sealed) -> ArrayRdmaGetHandle<T>;
-        unsafe fn get_blocking(&self, index: usize, _marker: Sealed) -> T;
+        unsafe fn blocking_get(&self, index: usize, _marker: Sealed) -> T;
         unsafe fn get_buffer(
             &self,
             index: usize,
             num_elems: usize,
             _marker: Sealed,
         ) -> ArrayRdmaGetBufferHandle<T>;
-        unsafe fn get_buffer_blocking(
+        unsafe fn blocking_get_buffer(
             &self,
             index: usize,
             num_elems: usize,
@@ -108,7 +108,7 @@ pub(crate) mod private {
             data: LamellarBuffer<T, B>,
             _marker: Sealed,
         ) -> ArrayRdmaGetIntoBufferHandle<T, B>;
-        unsafe fn get_into_buffer_blocking<B: AsLamellarBuffer<T>>(
+        unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
             &self,
             index: usize,
             data: LamellarBuffer<T, B>,
@@ -123,7 +123,7 @@ pub(crate) mod private {
 
         unsafe fn get_pe(&self, pe: usize, offset: usize, _marker: Sealed)
             -> ArrayRdmaGetHandle<T>;
-        unsafe fn get_pe_blocking(&self, pe: usize, offset: usize, _marker: Sealed) -> T;
+        unsafe fn blocking_get_pe(&self, pe: usize, offset: usize, _marker: Sealed) -> T;
         unsafe fn get_buffer_pe(
             &self,
             pe: usize,
@@ -131,7 +131,7 @@ pub(crate) mod private {
             num_elems: usize,
             _marker: Sealed,
         ) -> ArrayRdmaGetBufferHandle<T>;
-        unsafe fn get_buffer_pe_blocking(
+        unsafe fn blocking_get_buffer_pe(
             &self,
             pe: usize,
             offset: usize,
@@ -145,7 +145,7 @@ pub(crate) mod private {
             data: LamellarBuffer<T, B>,
             _marker: Sealed,
         ) -> ArrayRdmaGetIntoBufferHandle<T, B>;
-        unsafe fn get_into_buffer_pe_blocking<B: AsLamellarBuffer<T>>(
+        unsafe fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
             &self,
             pe: usize,
             offset: usize,

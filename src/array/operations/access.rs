@@ -170,6 +170,10 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    fn blocking_swap(&self, index: usize, val: T) -> T {
+        self.swap(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [swap][AccessOps::swap] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -372,6 +376,10 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.as_lamellar_byte_array())
             .into()
+    }
+
+    unsafe fn blocking_swap(&self, index: usize, val: T) -> T {
+        self.swap(index, val).block()
     }
 
     /// This call performs a batched vesion of the [swap][AccessOps::swap] function,

@@ -646,6 +646,38 @@ impl CommAllocRdma for CommAllocInner {
             }
         }
     }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_buffer(inner_alloc, pe, offset, len)
+            }
+        }
+    }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -682,6 +714,43 @@ impl CommAllocRdma for CommAllocInner {
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
                 CommAllocRdma::get_into_buffer(inner_alloc, scheduler, counters, pe, offset, dst)
+            }
+        }
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                CommAllocRdma::blocking_get_into_buffer(inner_alloc, pe, offset, dst)
             }
         }
     }
@@ -725,7 +794,7 @@ impl CommAllocRdma for CommAllocInner {
 }
 
 impl CommAllocAtomic for CommAllocInner {
-    fn atomic_op<T: Copy>(
+    fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -764,7 +833,7 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
-    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")
@@ -796,7 +865,7 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
-    fn atomic_op_all<T: Copy>(
+    fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -834,7 +903,7 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
-    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+    fn atomic_op_all_unmanaged<T: Remote>(&self, op: AtomicOp<T>, offset: usize) {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")
@@ -866,7 +935,7 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
-    fn atomic_fetch_op<T: Copy>(
+    fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -902,6 +971,38 @@ impl CommAllocAtomic for CommAllocInner {
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
                 inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            }
+        }
+    }
+    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
             }
         }
     }
@@ -1060,6 +1161,9 @@ impl CommAllocRdma for CommAlloc {
         self.inner_alloc
             .get_buffer(scheduler, counters, pe, offset, len)
     }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        self.inner_alloc.blocking_get_buffer(pe, offset, len)
+    }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -1070,6 +1174,14 @@ impl CommAllocRdma for CommAlloc {
     ) -> RdmaGetIntoBufferHandle<T, B> {
         self.inner_alloc
             .get_into_buffer(scheduler, counters, pe, offset, dst)
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) {
+        self.inner_alloc.blocking_get_into_buffer(pe, offset, dst)
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,

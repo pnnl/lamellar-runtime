@@ -9,7 +9,7 @@ use crate::{
         CommAllocAddr, CommAllocAtomic,
     },
     warnings::RuntimeWarning,
-    LamellarTask,
+    LamellarTask, Remote,
 };
 
 use super::Scheduler;
@@ -17,7 +17,6 @@ use super::Scheduler;
 use pin_project::{pin_project, pinned_drop};
 use std::{
     future::Future,
-    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -85,40 +84,27 @@ impl<T: 'static> Future for ShmemAtomicFuture<T> {
 pub(crate) struct ShmemAtomicFetchFuture<T> {
     pub(super) op: AtomicOp<T>,
     pub(super) dst: CommAllocAddr,
-    pub(super) result: MaybeUninit<T>,
+    pub(super) result: Box<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
 }
 
-impl<T: Send + 'static> ShmemAtomicFetchFuture<T> {
+impl<T: Remote> ShmemAtomicFetchFuture<T> {
     pub(crate) fn block(mut self) -> T {
-        net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut_ptr());
+        net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut() as *mut T);
         self.spawned = true;
-        unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
-        }
-        // Ok(())
+        *self.result
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
-        net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut_ptr());
-
+        net_atomic_fetch_op(&self.op, &self.dst, self.result.as_mut() as *mut T);
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(
-            async move {
-                unsafe {
-                    let mut res = MaybeUninit::uninit();
-                    std::mem::swap(&mut self.result, &mut res);
-                    res.assume_init()
-                }
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { *self.result }, counters)
     }
 }
 
@@ -139,28 +125,20 @@ impl<T> From<ShmemAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
     }
 }
 
-impl<T: Send + 'static> Future for ShmemAtomicFetchFuture<T> {
+impl<T: Remote> Future for ShmemAtomicFetchFuture<T> {
     type Output = T;
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
-            let res_ptr = self.result.as_mut_ptr();
+            let res_ptr = self.result.as_mut() as *mut T;
             net_atomic_fetch_op(&self.op, &self.dst, res_ptr);
-
             *self.as_mut().project().spawned = true;
-        } else {
         }
-        // rofi_c_wait();
-
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(*self.result)
     }
 }
 
 impl CommAllocAtomic for ShmemAlloc {
-    fn atomic_op<T: Copy>(
+    fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -182,14 +160,14 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
         let remote_dst_addr = remote_dst_base + offset;
         net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
     }
-    fn atomic_op_all<T: Copy>(
+    fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -213,7 +191,7 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         for pe in 0..self.num_pes() {
@@ -222,7 +200,7 @@ impl CommAllocAtomic for ShmemAlloc {
             net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
         }
     }
-    fn atomic_fetch_op<T: Copy>(
+    fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -237,17 +215,26 @@ impl CommAllocAtomic for ShmemAlloc {
         ShmemAtomicFetchFuture {
             op,
             dst: CommAllocAddr(remote_dst_addr),
-            result: MaybeUninit::uninit(),
+            result: Box::new(T::default()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
         }
         .into()
     }
+    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        let mut result = T::default();
+        net_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr), &mut result as *mut T);
+        result
+    }
 }
 
 impl CommAllocAtomic for OneSidedShmemAlloc {
-    fn atomic_op<T: Copy>(
+    fn atomic_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -273,7 +260,7 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
@@ -285,7 +272,7 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         let remote_dst_addr = remote_dst_base + offset;
         net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
     }
-    fn atomic_op_all<T: Copy>(
+    fn atomic_op_all<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -294,10 +281,10 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
     ) -> AtomicOpHandle<T> {
         self.atomic_op(scheduler, counters, op, self.remote_pe, offset)
     }
-    fn atomic_op_all_unmanaged<T: Copy + 'static>(&self, op: AtomicOp<T>, offset: usize) {
+    fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         self.atomic_op_unmanaged(op, self.remote_pe, offset)
     }
-    fn atomic_fetch_op<T: Copy>(
+    fn atomic_fetch_op<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
@@ -317,11 +304,25 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         ShmemAtomicFetchFuture {
             op,
             dst: CommAllocAddr(remote_dst_addr),
-            result: MaybeUninit::uninit(),
+            result: Box::new(T::default()),
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
         }
         .into()
+    }
+    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking atomic fetch op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.start();
+        let remote_dst_addr = remote_dst_base + offset;
+        let mut result = T::default();
+        net_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr), &mut result as *mut T);
+        result
     }
 }

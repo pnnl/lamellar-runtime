@@ -1,5 +1,4 @@
 use std::{
-    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -87,7 +86,7 @@ impl<T: Remote> LibfabricPutFuture<T> {
         }
     }
 
-    fn exec_op(&self) {
+    fn exec_op(&mut self) {
         match &self.op {
             AllocOp::Put(pe, src) => {
                 self.inner_put(*pe, src);
@@ -102,18 +101,17 @@ impl<T: Remote> LibfabricPutFuture<T> {
                 self.inner_put_all_buf(pes, src);
             }
         }
+
+        self.spawned = true;
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
-        self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        // let ofi = self.alloc.ofi.clone();
         self.scheduler
             .clone()
             .spawn_task(async move { self.alloc.ofi.wait_all().unwrap() }, counters)
@@ -139,14 +137,12 @@ impl<T: Remote> From<LibfabricPutFuture<T>> for RdmaHandle<T> {
 
 impl<T: Remote> Future for LibfabricPutFuture<T> {
     type Output = ();
-    fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            self.alloc.ofi.wait_all().unwrap();
-            *self.project().spawned = true;
-        } else {
-            self.alloc.ofi.wait_all().unwrap();
         }
+        self.alloc.ofi.wait_all().unwrap();
+
         Poll::Ready(())
     }
 }
@@ -159,7 +155,7 @@ pub(crate) struct LibfabricGetFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: Box<MaybeUninit<T>>,
+    result: Box<T>,
 }
 
 impl<T: Remote> LibfabricGetFuture<T> {
@@ -171,7 +167,7 @@ impl<T: Remote> LibfabricGetFuture<T> {
                 .inner_get(
                     self.pe,
                     self.offset,
-                    std::slice::from_raw_parts_mut(self.result.as_mut_ptr(), 1),
+                    std::slice::from_mut(&mut *self.result),
                     false,
                 )
                 .expect("error in get");
@@ -182,7 +178,8 @@ impl<T: Remote> LibfabricGetFuture<T> {
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
         self.alloc.ofi.wait_all().unwrap();
-        unsafe { self.result.assume_init_read() }
+        // unsafe { self.result.assume_init_read() }
+        *self.result
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
@@ -191,7 +188,7 @@ impl<T: Remote> LibfabricGetFuture<T> {
         self.scheduler.clone().spawn_task(
             async move {
                 self.alloc.ofi.wait_all().unwrap();
-                unsafe { self.result.assume_init_read() }
+                *self.result
             },
             counters,
         )
@@ -224,7 +221,8 @@ impl<T: Remote> Future for LibfabricGetFuture<T> {
         let this = self.project();
         this.alloc.ofi.wait_all().unwrap();
 
-        Poll::Ready(unsafe { this.result.assume_init_read() })
+        // Poll::Ready(unsafe { this.result.assume_init_read() })
+        Poll::Ready(**this.result)
     }
 }
 
@@ -237,7 +235,7 @@ pub(crate) struct LibfabricGetBufferFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<Vec<T>>,
+    result: Vec<T>,
 }
 
 impl<T: Remote> LibfabricGetBufferFuture<T> {
@@ -245,20 +243,9 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
     fn exec_at(&mut self) {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
-            let mut dst = vec![T::default(); self.len];
-            let dst_mut_slice = std::slice::from_raw_parts_mut(
-                dst.as_mut_ptr() as *mut u8,
-                self.len * std::mem::size_of::<T>(),
-            );
-            dst_mut_slice.fill(1);
-
-            // dst.set_len(self.len);
             self.alloc
-                .inner_get(self.pe, self.offset, &mut dst, false)
+                .inner_get(self.pe, self.offset, &mut self.result, false)
                 .expect("error in get_buffer");
-            // dst.set_len(self.len);
-            // let dst = std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(dst);
-            self.result.write(dst);
             self.spawned = true;
         }
     }
@@ -267,9 +254,7 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
         self.exec_at();
 
         self.alloc.ofi.wait_all().unwrap();
-        let mut res = MaybeUninit::uninit();
-        std::mem::swap(&mut self.result, &mut res);
-        unsafe { res.assume_init() }
+        std::mem::take(&mut self.result)
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
@@ -278,9 +263,7 @@ impl<T: Remote> LibfabricGetBufferFuture<T> {
         self.scheduler.clone().spawn_task(
             async move {
                 self.alloc.ofi.wait_all().unwrap();
-                let mut res = MaybeUninit::uninit();
-                std::mem::swap(&mut self.result, &mut res);
-                unsafe { res.assume_init() }
+                std::mem::take(&mut self.result)
             },
             counters,
         )
@@ -312,12 +295,7 @@ impl<T: Remote> Future for LibfabricGetBufferFuture<T> {
         }
         let this = self.project();
         this.alloc.ofi.wait_all().unwrap();
-
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(std::mem::take(this.result))
     }
 }
 
@@ -335,7 +313,6 @@ pub(crate) struct LibfabricGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        // if self.pe != self.my_pe {
         unsafe {
             LibfabricAlloc::inner_get(
                 &self.alloc,
@@ -346,16 +323,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricGetIntoBufferFuture<T, B> {
             )
             .expect("error in get_into_buffer");
         };
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
         self.alloc.ofi.wait_all().unwrap();
-        self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         let ofi = self.alloc.ofi.clone();
@@ -389,11 +365,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricGetIntoBufferFuture<
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            self.alloc.ofi.wait_all().unwrap();
-            *self.project().spawned = true;
-        } else {
-            self.alloc.ofi.wait_all().unwrap();
         }
+        self.alloc.ofi.wait_all().unwrap();
         Poll::Ready(())
     }
 }
@@ -564,18 +537,31 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(MaybeUninit::uninit()),
+            result: Box::new(T::default()),
         }
         .into()
     }
 
     fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
         let mut val = T::default();
-        let mut val_slice = std::slice::from_mut(&mut val);
+        let val_slice = std::slice::from_mut(&mut val);
         unsafe {
-            LibfabricAlloc::inner_get(&self, pe, offset, val_slice, true)
+            LibfabricAlloc::inner_get_small(self, pe, offset, val_slice, true)
                 .expect("error in blocking_get")
         };
+        val
+        // let mut result = T::default();
+        // let mut_result_slice = std::slice::from_mut(&mut result);
+        // LibfabricAlloc::atomic_fetch_op_inner(
+        //     self,
+        //     pe,
+        //     offset,
+        //     &crate::lamellae::AtomicOp::Read,
+        //     mut_result_slice,
+        //     true,
+        // )
+        // .unwrap();
+        // result
     }
     fn get_buffer<T: Remote>(
         &self,
@@ -593,9 +579,18 @@ impl CommAllocRdma for LibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: vec![T::default(); len],
         }
         .into()
+    }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        let mut dst = vec![T::default(); len];
+        unsafe {
+            self.inner_get(pe, offset, &mut dst, true)
+                .expect("error in blocking_get_buffer")
+        };
+        dst
+        
     }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
@@ -617,6 +612,18 @@ impl CommAllocRdma for LibfabricAlloc {
         }
         .into()
     }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        unsafe {
+            LibfabricAlloc::inner_get(&self, pe, offset, dst.as_mut_slice(), true)
+                .expect("error in blocking_get_into_buffer")
+        };
+    }
+
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -767,9 +774,23 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Box::new(MaybeUninit::uninit()),
+            result: Box::new(T::default()),
         }
         .into()
+    }
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let mut val = T::default();
+        let val_slice = std::slice::from_mut(&mut val);
+        unsafe {
+            LibfabricAlloc::inner_get(&self.alloc, pe, offset, val_slice, true)
+                .expect("error in blocking_get")
+        };
+        val
     }
     fn get_buffer<T: Remote>(
         &self,
@@ -792,9 +813,23 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: vec![T::default(); len],
         }
         .into()
+    }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let mut dst = vec![T::default(); len];
+        unsafe {
+            self.alloc
+                .inner_get(pe, offset, &mut dst, true)
+                .expect("error in blocking_get_buffer");
+        };
+        dst
     }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
@@ -820,6 +855,22 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             counters,
         }
         .into()
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get_into_buffer called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        unsafe {
+            LibfabricAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice(), true)
+                .expect("error in blocking_get_into_buffer")
+        };
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,

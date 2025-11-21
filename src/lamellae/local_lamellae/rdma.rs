@@ -1,5 +1,4 @@
 use std::{
-    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -52,15 +51,15 @@ impl<T: Remote> LocalFuture<T> {
                 alloc_slice[self.index..src.len()].copy_from_slice(src.as_slice());
             },
         }
+
+        self.spawned = true;
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.spawned = true;
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.spawn_task(async {}, counters)
@@ -81,7 +80,6 @@ impl<T: Remote> Future for LocalFuture<T> {
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            *self.project().spawned = true;
         }
         Poll::Ready(())
     }
@@ -102,7 +100,7 @@ pub(crate) struct LocalGetFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<T>,
+    result: Box<T>,
 }
 
 impl<T: Remote> LocalGetFuture<T> {
@@ -111,35 +109,24 @@ impl<T: Remote> LocalGetFuture<T> {
         unsafe {
             let alloc_slice = self.alloc.as_mut_slice();
             assert!(self.index < alloc_slice.len());
-            self.result.write(alloc_slice[self.index]);
+            *self.result = alloc_slice[self.index];
         }
+
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.spawned = true;
-        unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
-        }
+        *self.result
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(
-            async move {
-                unsafe {
-                    let mut res = MaybeUninit::uninit();
-                    std::mem::swap(&mut self.result, &mut res);
-                    res.assume_init()
-                }
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { *self.result }, counters)
     }
 }
 
@@ -158,15 +145,7 @@ impl<T: Remote> Future for LocalGetFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        let this = self.project();
-        *this.spawned = true;
-        // rofi_c_wait();
-
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(*self.result)
     }
 }
 
@@ -186,7 +165,7 @@ pub(crate) struct LocalGetBufferFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<Vec<T>>,
+    result: Vec<T>,
 }
 
 impl<T: Remote> LocalGetBufferFuture<T> {
@@ -194,40 +173,25 @@ impl<T: Remote> LocalGetBufferFuture<T> {
     fn exec_at(&mut self) {
         let alloc_slice = unsafe { self.alloc.as_mut_slice() };
         assert!(self.index + self.len <= alloc_slice.len());
-        let mut dst = Vec::<T>::with_capacity(self.len);
-        unsafe {
-            dst.set_len(self.len);
-        }
-        dst.as_mut_slice()
+        self.result
+            .as_mut_slice()
             .copy_from_slice(&alloc_slice[self.index..(self.index + self.len)]);
-        self.result.write(dst);
+
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
-        self.spawned = true;
-        unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
-        }
+        std::mem::take(&mut self.result)
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(
-            async move {
-                unsafe {
-                    let mut res = MaybeUninit::uninit();
-                    std::mem::swap(&mut self.result, &mut res);
-                    res.assume_init()
-                }
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { std::mem::take(&mut self.result) }, counters)
     }
 }
 
@@ -246,15 +210,7 @@ impl<T: Remote> Future for LocalGetBufferFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        let this = self.project();
-        *this.spawned = true;
-        // rofi_c_wait();
-
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(std::mem::take(&mut self.result))
     }
 }
 
@@ -285,16 +241,15 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LocalGetIntoBufferFuture<T, B> {
         self.buffer
             .as_mut_slice()
             .copy_from_slice(&alloc_slice[self.index..(self.index + len)]);
+
+        self.spawned = true;
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.spawned = true;
-        // Ok(())
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.spawn_task(async {}, counters)
@@ -315,7 +270,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LocalGetIntoBufferFuture<T, B
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            *self.project().spawned = true;
         }
         Poll::Ready(())
     }
@@ -462,13 +416,14 @@ impl CommAllocRdma for Arc<LocalAlloc> {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(T::default()),
         }
         .into()
     }
 
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
-        unimplemented!()
+    fn blocking_get<T: Remote>(&self, _pe: usize, offset: usize) -> T {
+        assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
+        unsafe { self.as_mut_slice::<T>()[offset] }
     }
     fn get_buffer<T: Remote>(
         &self,
@@ -485,9 +440,14 @@ impl CommAllocRdma for Arc<LocalAlloc> {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: vec![T::default(); len],
         }
         .into()
+    }
+    fn blocking_get_buffer<T: Remote>(&self, _pe: usize, offset: usize, len: usize) -> Vec<T> {
+        let alloc_slice = unsafe { self.as_mut_slice() };
+        assert!(offset + len <= alloc_slice.len());
+        alloc_slice[offset..(offset + len)].to_vec()
     }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
@@ -507,14 +467,28 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         }
         .into()
     }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        _pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        let alloc_slice = unsafe { self.as_mut_slice() };
+        assert!(offset + dst.len() <= alloc_slice.len());
+        let len = dst.len();
+        dst.as_mut_slice()
+            .copy_from_slice(&alloc_slice[offset..(offset + len)]);
+    }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         _pe: usize,
         offset: usize,
-        dst: LamellarBuffer<T, B>,
+        mut dst: LamellarBuffer<T, B>,
     ) {
         let alloc_slice = unsafe { self.as_mut_slice() };
         assert!(offset + dst.len() <= alloc_slice.len());
-        alloc_slice[offset..(offset + dst.len())].copy_from_slice(dst.as_slice());
+        let len = dst.len();
+        dst.as_mut_slice()
+            .copy_from_slice(&alloc_slice[offset..(offset + len)]);
     }
 }

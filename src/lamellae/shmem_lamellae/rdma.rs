@@ -1,5 +1,4 @@
 use std::{
-    mem::MaybeUninit,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -72,14 +71,14 @@ impl<T: Remote> ShmemFuture<T> {
                 }
             }
         }
+
+        self.spawned = true;
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.spawn_task(async {}, counters)
@@ -108,7 +107,6 @@ impl<T: Remote> Future for ShmemFuture<T> {
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            *self.project().spawned = true;
         }
         Poll::Ready(())
     }
@@ -120,40 +118,30 @@ pub(crate) struct ShmemGetFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<T>,
+    result: Box<T>,
 }
 
 impl<T: Remote> ShmemGetFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
-        unsafe { self.result.write(self.src.as_ptr::<T>().read()) };
+        unsafe {
+            *self.result = self.src.as_ptr::<T>().read();
+        }
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> T {
         self.exec_at();
-        self.spawned = true;
-        unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
-        }
+        *self.result
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.spawn_task(
-            async move {
-                unsafe {
-                    let mut res = MaybeUninit::uninit();
-                    std::mem::swap(&mut self.result, &mut res);
-                    res.assume_init()
-                }
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { *self.result }, counters)
     }
 }
 
@@ -180,15 +168,7 @@ impl<T: Remote> Future for ShmemGetFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        let this = self.project();
-        *this.spawned = true;
-        // rofi_c_wait();
-
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(*self.result)
     }
 }
 #[pin_project(PinnedDrop)]
@@ -198,7 +178,7 @@ pub(crate) struct ShmemGetBufferFuture<T> {
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
-    result: MaybeUninit<Vec<T>>,
+    result: Vec<T>,
 }
 
 impl<T: Remote> ShmemGetBufferFuture<T> {
@@ -206,38 +186,23 @@ impl<T: Remote> ShmemGetBufferFuture<T> {
     fn exec_at(&mut self) {
         trace!("getting src: {:?} ", self.src);
         unsafe {
-            let mut dst = Vec::<T>::with_capacity(self.len);
-            dst.set_len(self.len);
             let src_slice = std::slice::from_raw_parts(self.src.as_ptr::<T>(), self.len);
-            dst.copy_from_slice(src_slice);
-            self.result.write(dst);
+            self.result.copy_from_slice(src_slice);
         }
+        self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_at();
-        self.spawned = true;
-        unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(&mut self.result, &mut res);
-            res.assume_init()
-        }
+        std::mem::take(&mut self.result)
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(
-            async move {
-                unsafe {
-                    let mut res = MaybeUninit::uninit();
-                    std::mem::swap(&mut self.result, &mut res);
-                    res.assume_init()
-                }
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { std::mem::take(&mut self.result) }, counters)
     }
 }
 
@@ -264,15 +229,7 @@ impl<T: Remote> Future for ShmemGetBufferFuture<T> {
         if !self.spawned {
             self.exec_at();
         }
-        let this = self.project();
-        *this.spawned = true;
-        // rofi_c_wait();
-
-        Poll::Ready(unsafe {
-            let mut res = MaybeUninit::uninit();
-            std::mem::swap(this.result, &mut res);
-            res.assume_init()
-        })
+        Poll::Ready(std::mem::take(&mut self.result))
     }
 }
 
@@ -290,14 +247,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> ShmemGetIntoBufferFuture<T, B> {
         let dst = self.buffer.as_mut_slice();
         let src_slice = unsafe { std::slice::from_raw_parts(self.src.as_ptr::<T>(), dst.len()) };
         dst.copy_from_slice(src_slice);
+        self.spawned = true;
     }
     pub(crate) fn block(mut self) {
         self.exec_op();
-        self.spawned = true;
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
-        self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.spawn_task(async {}, counters)
@@ -328,7 +284,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for ShmemGetIntoBufferFuture<T, B
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
             self.exec_op();
-            *self.project().spawned = true;
         }
         Poll::Ready(())
     }
@@ -498,13 +453,17 @@ impl CommAllocRdma for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(T::default()),
         }
         .into()
     }
 
     fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
-        unimplemented!()
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        unsafe { remote_src_addr.as_ptr::<T>().read() }
     }
 
     fn get_buffer<T: Remote>(
@@ -525,9 +484,21 @@ impl CommAllocRdma for ShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: vec![T::default(); len],
         }
         .into()
+    }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let mut dst = vec![T::default(); len];
+        unsafe {
+            let src_slice = std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), len);
+            dst.copy_from_slice(src_slice);
+        }
+        dst
     }
 
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
@@ -550,6 +521,21 @@ impl CommAllocRdma for ShmemAlloc {
             counters,
         }
         .into()
+    }
+
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.pe_base_offset(pe);
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let src_slice =
+            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
+        dst.as_mut_slice().copy_from_slice(src_slice);
     }
 
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
@@ -700,9 +686,22 @@ impl CommAllocRdma for OneSidedShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: Box::new(T::default()),
         }
         .into()
+    }
+
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        unsafe { remote_src_addr.as_ptr::<T>().read() }
     }
 
     fn get_buffer<T: Remote>(
@@ -728,9 +727,26 @@ impl CommAllocRdma for OneSidedShmemAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: MaybeUninit::uninit(),
+            result: vec![T::default(); len],
         }
         .into()
+    }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get_buffer called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + len * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        unsafe {
+            let mut dst = vec![T::default(); len];
+            let src_slice = std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), len);
+            dst.copy_from_slice(src_slice);
+            dst
+        }
     }
 
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
@@ -758,6 +774,27 @@ impl CommAllocRdma for OneSidedShmemAlloc {
             counters,
         }
         .into()
+    }
+
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking_get_into_buffer called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + dst.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_src_base = self.start();
+        let remote_src_addr = CommAllocAddr(remote_src_base + offset);
+        let src_slice =
+            unsafe { std::slice::from_raw_parts(remote_src_addr.as_ptr::<T>(), dst.len()) };
+
+        dst.as_mut_slice().copy_from_slice(src_slice);
     }
 
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(

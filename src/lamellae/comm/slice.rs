@@ -243,6 +243,16 @@ impl<T> CommAllocRdma for CommSlice<T> {
         }
         self.inner_alloc.get(scheduler, counters, pe, offset)
     }
+    fn blocking_get<U: Remote>(&self, pe: usize, offset: usize) -> U {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get: CommSlice<{:?}> vs get<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
+        self.inner_alloc.blocking_get(pe, offset)
+    }
     fn get_buffer<U: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -261,6 +271,16 @@ impl<T> CommAllocRdma for CommSlice<T> {
         self.inner_alloc
             .get_buffer(scheduler, counters, pe, offset, len)
     }
+    fn blocking_get_buffer<U: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<U> {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get_buffer: CommSlice<{:?}> vs get_buffer<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
+        self.inner_alloc.blocking_get_buffer(pe, offset, len)
+    }
     fn get_into_buffer<U: Remote, B: AsLamellarBuffer<U>>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -278,6 +298,21 @@ impl<T> CommAllocRdma for CommSlice<T> {
         }
         self.inner_alloc
             .get_into_buffer(scheduler, counters, pe, offset, dst)
+    }
+    fn blocking_get_into_buffer<U: Remote, B: AsLamellarBuffer<U>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<U, B>,
+    ) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in get_into_buffer: CommSlice<{:?}> vs get_into_buffer<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
+        self.inner_alloc.blocking_get_into_buffer(pe, offset, dst)
     }
     fn get_into_buffer_unmanaged<U: Remote, B: AsLamellarBuffer<U>>(
         &self,

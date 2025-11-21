@@ -201,7 +201,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+        let _ = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op_unmanaged(
             pe,
             offset,
             AtomicOp::Write(data),
@@ -307,6 +307,17 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
             panic!("index out of bounds in LamellarArray get");
         }
     }
+    unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_fetch_op_blocking(
+                pe,
+                offset,
+                AtomicOp::Read,
+            )
+        } else {
+            panic!("index out of bounds in LamellarArray get");
+        }
+    }
     unsafe fn get_buffer(
         &self,
         index: usize,
@@ -324,6 +335,10 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
             spawned: false,
         }
     }
+
+    unsafe fn blocking_get_buffer(&self, index: usize, num_elems: usize, _: Sealed) -> Vec<T> {
+        <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed).block()
+    }
     unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         index: usize,
@@ -340,6 +355,15 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
             state: ArrayRdmaGetIntoBufferState::LocalAmGet(req),
             spawned: false,
         }
+    }
+
+    unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).block()
     }
     unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
         &self,
@@ -361,6 +385,10 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
             state: ArrayRdmaGetState::AtomicGet(req),
             spawned: false,
         }
+    }
+
+    unsafe fn blocking_get_pe(&self, pe: usize, offset: usize, _: Sealed) -> T {
+        <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed).block()
     }
     unsafe fn get_buffer_pe(
         &self,
@@ -385,6 +413,16 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
             spawned: false,
         }
     }
+
+    unsafe fn blocking_get_buffer_pe(
+        &self,
+        pe: usize,
+        offset: usize,
+        num_elems: usize,
+        _: Sealed,
+    ) -> Vec<T> {
+        <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed).block()
+    }
     unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
@@ -405,6 +443,15 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
             state: ArrayRdmaGetIntoBufferState::RemoteAmGet(data, req),
             spawned: false,
         }
+    }
+    unsafe fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed).block()
     }
     unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
         &self,
