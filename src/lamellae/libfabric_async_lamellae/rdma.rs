@@ -237,12 +237,9 @@ impl<T: Remote> GetBufferFutureData<T> {
             // let dst_mut_slice = std::slice::from_raw_parts_mut(dst.as_mut_ptr(), self.len);
 
             // dst.set_len(self.len);
-            println!("getting buffer len {}", dst.len());
             self.alloc
                 .inner_get(self.pe, self.offset, &mut dst).await
                 .expect("error in get_buffer");
-            println!("got buffer len {}", dst.len());
-            // dst.set_len(self.len);
             // let dst = std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(dst);
             self.result.write(dst);
             let mut res = MaybeUninit::uninit();
