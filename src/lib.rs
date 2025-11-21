@@ -119,22 +119,25 @@ pub fn lamellar_test(_args: TokenStream, item: TokenStream) -> TokenStream {
             let mut prterun_args = Vec::<String>::new();
 
         //     // Collect any additional arguments after "--" to pass to prterun
-        //     let pos = args.iter().position(|x| x == "--");
-        //     if let Some(pos) = pos {
-        //         args.split_off(pos).into_iter().skip(1).for_each(|x| {
-        //             prterun_args.push(x.to_string());
-        //         });
-        //     }
-        //     let end = args.len();
+            let pos = args.iter().position(|x| x == "--");
+            if let Some(pos) = pos {
+                args.split_off(pos).into_iter().skip(1).for_each(|x| {
+                    prterun_args.push(x.to_string());
+                });
+            }
+            let end = args.len();
 
-        //     // After the prterun arguments, add the executable name
+            // After the prterun arguments, add the executable name
             prterun_args.push(exec);
             prterun_args.push(func_name);
             
-        //     // Add the arguments targeting the application
+            // Add the arguments targeting the application
             prterun_args.extend(args.into_iter());
             prterun_args.push("--ignored".to_string());
             prterun_args.push("--exact".to_string());
+            // prterun_args.iter().for_each(|x| {
+            //     println!("prterun arg: {}", x);
+            // });
             std::process::Command::new(prterun_path())
                 .args(prterun_args)
                 .status()
