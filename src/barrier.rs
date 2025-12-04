@@ -278,7 +278,7 @@ impl Barrier {
                                             recv_pe,
                                             barrier_id,
                                         );
-                                        self.lamellae.comm().flush();
+                                        self.lamellae.comm().thread_flush();
                                         wait_func();
                                     }
                                 
@@ -445,7 +445,7 @@ impl BarrierHandle {
                 
                     //safe as  each pe is only capable of writing to its own index
                     if self.barrier_buf[i - 1].as_slice()[round] < self.barrier_id {
-                        self.lamellae.comm().flush();
+                        self.lamellae.comm().thread_flush();
                         // trace!("waiting for recv pe: {:?} round: {:?} i: {:?}",  team_recv_pe, round, i);
                         return Some(i);
                     }

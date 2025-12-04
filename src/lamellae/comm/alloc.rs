@@ -1074,6 +1074,14 @@ impl CommAlloc {
             alloc_type: self.alloc_type,
         }
     }
+    pub(crate) fn set_print(&mut self, print: bool) {
+        #[cfg(feature = "enable-libfabric")]
+        {
+            if let CommAllocInner::LibfabricAlloc(inner_alloc) = &mut self.inner_alloc {
+                inner_alloc.print = print;
+            }
+        }
+    }
 }
 
 impl CommAllocRdma for CommAlloc {

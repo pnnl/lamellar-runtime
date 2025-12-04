@@ -110,8 +110,14 @@ pub(crate) trait CommMem {
 
 #[enum_dispatch]
 pub(crate) trait CommProgress {
-    fn flush(&self);
-    fn wait(&self);
+    fn flush_all(&self);
+    fn thread_flush(&self){
+        self.flush_all();
+    }
+    fn wait_all(&self);
+    fn thread_wait(&self){
+        self.wait_all();
+    }
     fn barrier(&self);
 }
 

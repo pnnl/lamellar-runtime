@@ -1109,7 +1109,7 @@ impl LamellarTeamRT {
         }
         self.mem_regions.write().clear();
         self.sub_teams.write().clear(); // not sure this is necessary or should be allowed? sub teams delete themselves from this map when dropped...
-        self.lamellae.comm().wait();
+        self.lamellae.comm().wait_all(); // need to wait on operations from all threads
         self.lamellae.comm().barrier();
         if self.panic.load(Ordering::SeqCst) == 0 {
             // what does it mean if we drop a parent team while a sub_team is valid?
@@ -1332,7 +1332,7 @@ impl LamellarTeamRT {
         for (pe, hash_val) in hash_buf.as_slice().iter().enumerate() {
             if pe != self.team_pe.unwrap() {
                 while *hash_val == 0 {
-                    self.flush();
+                    self.lamellae.comm().thread_wait();
                     std::thread::yield_now();
                     if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                         let status = hash_buf
@@ -1499,7 +1499,7 @@ impl LamellarTeamRT {
         // println!("wait_all called on pe: {}", self.world_pe);
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
 
-        self.lamellae.comm().wait();
+        self.lamellae.comm().wait_all();// want to wait on operations from all threads
 
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
@@ -1595,7 +1595,7 @@ impl LamellarTeamRT {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
         // println!("await_all called on pe: {}", self.world_pe);
-        self.lamellae.comm().wait();
+        self.lamellae.comm().wait_all(); //want to wait on operations from all threads
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.team_counters.launched_req_cnt.load(Ordering::SeqCst);
@@ -1723,7 +1723,7 @@ impl LamellarTeamRT {
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn flush(&self) {
-        self.lamellae.comm().flush();
+        self.lamellae.comm().flush_all();
     }
 }
 impl Darc<LamellarTeamRT> {

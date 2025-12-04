@@ -11,7 +11,6 @@ pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
 
-
 match_cfg::match_cfg! {
     #[cfg(feature = "rofi-c")] => {
         pub(crate) mod rofi_c_lamellae;
@@ -25,19 +24,13 @@ pub(crate) mod libfabric_lamellae;
 pub(crate) mod ucx_lamellae;
 
 #[cfg(feature = "enable-libfabric")]
-use {
-    libfabric_lamellae::{Libfabric, LibfabricBuilder},
-};
+use libfabric_lamellae::{Libfabric, LibfabricBuilder};
 #[cfg(feature = "enable-ucx")]
-use {
-    ucx_lamellae::{Ucx, UcxBuilder},
-};
+use ucx_lamellae::{Ucx, UcxBuilder};
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
-use std::sync::{
-    Arc,
-};
+use std::sync::Arc;
 use tracing::{debug, trace};
 
 lazy_static! {
@@ -137,8 +130,6 @@ pub(crate) struct SubSerializedData {
     pub(crate) payload_bytes: CommSlice<u8>,
 }
 
-
-
 // we have allocated this memory out of fabric memory and thus are responsible for managing it,
 // we will not move the underlying data, reallocate it, nor free it until all references are dropped
 unsafe impl Send for SerializedData {}
@@ -147,20 +138,25 @@ unsafe impl Sync for SerializedData {}
 unsafe impl Send for SubSerializedData {}
 unsafe impl Sync for SubSerializedData {}
 
-
 impl SerializedData {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(comm: Arc<Comm>, size: usize) -> Result<Self, anyhow::Error> {
         let alloc_size = size; //+ ser_data_size_size;
-        let alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
+        let mut alloc = comm.rt_alloc(alloc_size, std::mem::align_of::<usize>())?;
+        alloc.set_print(true);
         let ser_data_bytes = alloc.comm_slice_at_byte_offset(0, size);
         let header_bytes = ser_data_bytes.sub_slice(0..*SERIALIZE_HEADER_LEN);
         let payload_bytes = ser_data_bytes.sub_slice(*SERIALIZE_HEADER_LEN..size);
 
-            debug!("creating new serialized data {:?} {:?} {:?} {:?}",
-                alloc,ser_data_bytes,header_bytes,payload_bytes
-            );
-        
+        // println!(
+        //     "[{:?}, {:?}] creating new serialized data {:?} {:?} {:?} {:?}",
+        //     std::time::Instant::now(),
+        //     std::thread::current().id(),
+        //     alloc,
+        //     ser_data_bytes,
+        //     header_bytes,
+        //     payload_bytes
+        // );
 
         Ok(SerializedData {
             alloc,
@@ -211,6 +207,7 @@ impl SerializedData {
     }
 
     pub(crate) fn leak_alloc(self) -> CommAlloc {
+        // println!("Leaking allocation");
         self.alloc
     }
 }
@@ -218,7 +215,7 @@ impl SerializedData {
 impl std::fmt::Debug for SerializedData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-            
+
             self.alloc.comm_addr(),
             self.ser_data_bytes.as_ptr(),
             self.ser_data_bytes.len(),
@@ -268,7 +265,7 @@ impl SubSerializedData {
 impl std::fmt::Debug for SubSerializedData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "SubSeralizedData addr: {:x} relative addr {:?} len {:?} data {:?} data_len {:?} alloc_size {:?}",
-            
+
             self.alloc.comm_addr(),
             self._ser_data_bytes.as_ptr(),
             self._ser_data_bytes.len(),
@@ -384,13 +381,13 @@ pub(crate) trait LamellaeUtil: Send {
 
 #[allow(unused_variables)]
 #[tracing::instrument(skip_all, level = "debug")]
-pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
+pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "enable-libfabric")]
         Backend::Libfabric => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
-            LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain))
+            LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain, num_threads))
         }
         #[cfg(feature = "enable-ucx")]
         Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),

@@ -429,7 +429,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
-        self.inner.data.team.lamellae.comm().wait();
+        self.inner.data.team.lamellae.comm().wait_all(); //wait on operations from all threads
         let am_counters = self.inner.data.array_counters.clone();
 
         let mut temp_now = Instant::now();
@@ -969,7 +969,7 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
-        self.inner.data.team.lamellae.comm().wait();
+        self.inner.data.team.lamellae.comm().wait_all(); //wait on operations from all threads
         let mut temp_now = Instant::now();
         while self
             .inner

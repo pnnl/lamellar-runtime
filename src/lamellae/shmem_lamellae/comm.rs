@@ -89,8 +89,8 @@ impl CommShutdown for ShmemComm {
 }
 
 impl CommProgress for ShmemComm {
-    fn flush(&self) {}
-    fn wait(&self) {}
+    fn flush_all(&self) {}
+    fn wait_all(&self) {}
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
         unsafe { self.allocator.barrier() };

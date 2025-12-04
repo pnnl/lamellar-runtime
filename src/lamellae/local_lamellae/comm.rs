@@ -98,8 +98,8 @@ impl CommShutdown for LocalComm {
 }
 
 impl CommProgress for LocalComm {
-    fn flush(&self) {}
-    fn wait(&self) {}
+    fn flush_all(&self) {}
+    fn wait_all(&self) {}
     fn barrier(&self) {}
 }
 

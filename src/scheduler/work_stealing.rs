@@ -158,10 +158,11 @@ impl WorkStealingThread {
                                     Ordering::Relaxed,
                                 ) == Ok(0)
                                 {
-                                    let ret = worker
-                                        .work_inj
-                                        .steal_batch_and_pop(&worker.work_q)
-                                        .success();
+                                    let ret = if worker.work_inj.len() < worker.work_stealers.len() * 5 {
+                                        worker.work_inj.steal_batch_and_pop(&worker.work_q).success()
+                                    } else {
+                                        worker.work_inj.steal().success()
+                                    };
                                     worker.work_flag.store(0, Ordering::SeqCst);
                                     ret
                                 } else {
@@ -501,10 +502,6 @@ impl LamellarExecutor for WorkStealing {
             runnable.run();
         }
     }
-
-    // fn set_max_workers(&mut self, num_workers: usize) {
-    //     self.max_num_threads = num_workers;
-    // }
 
     fn num_workers(&self) -> usize {
         self.orig_num_threads

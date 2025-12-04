@@ -82,10 +82,10 @@ impl CommShutdown for UcxComm {
 }
 
 impl CommProgress for UcxComm {
-    fn flush(&self) {
+    fn flush_all(&self) {
         self.ucx.progress();
     }
-    fn wait(&self) {
+    fn wait_all(&self) {
         self.ucx.wait_all();
         // while !self.ucx.wait_all() {
         //     std::thread::yield_now();

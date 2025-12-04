@@ -1240,7 +1240,7 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     pub(crate) fn wait_all(&self) {
-        self.rdma.comm().wait();
+        self.rdma.comm().wait_all();
     }
 
     #[tracing::instrument(skip_all, level = "debug")]

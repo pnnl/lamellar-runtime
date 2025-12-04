@@ -27,7 +27,7 @@ pub(crate) struct LibfabricBuilder {
 }
 
 impl LibfabricBuilder {
-    pub(crate) fn new(provider: &str, domain: &str) -> LibfabricBuilder {
+    pub(crate) fn new(provider: &str, domain: &str, num_threads: usize) -> LibfabricBuilder {
         let provider = if !provider.is_empty() {
             Some(provider)
         } else {
@@ -38,7 +38,7 @@ impl LibfabricBuilder {
         } else {
             None
         };
-        let libfabric_comm: Arc<Comm> = Arc::new(LibfabricComm::new(provider, domain).into());
+        let libfabric_comm: Arc<Comm> = Arc::new(LibfabricComm::new(provider, domain,num_threads).into());
         LibfabricBuilder {
             my_pe: libfabric_comm.my_pe(),
             num_pes: libfabric_comm.num_pes(),

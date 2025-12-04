@@ -649,51 +649,64 @@ impl Scheduler {
             .store(SchedulerStatus::Panic as u8, Ordering::SeqCst);
         self.executor.force_shutdown();
     }
+
+    pub(crate) fn max_threads(executor: &ExecutorType, num_workers: usize) -> usize {
+        match executor {
+            ExecutorType::LamellarWorkStealing | ExecutorType::LamellarWorkStealing2 | ExecutorType::LamellarWorkStealing3 => std::cmp::max(2, num_workers), // at least one worker + main thread, for more than one worker, the main thread is considered a worker.
+            ExecutorType::AsyncStd => num_workers +1, // the main thread + workers
+            #[cfg(feature = "tokio-executor")]
+            ExecutorType::Tokio => num_workers +1, //the main thread + workers
+        }
+    }
+    pub(crate) fn create_scheduler(
+        executor: ExecutorType,
+        num_pes: usize,
+        num_workers: usize,
+        panic: Arc<AtomicU8>,
+    ) -> Scheduler {
+        let am_stall_mark = Arc::new(AtomicUsize::new(0));
+        let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
+        let executor: Arc<Executor> = Arc::new(match executor {
+            ExecutorType::LamellarWorkStealing => {
+                WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
+            }
+            ExecutorType::LamellarWorkStealing2 => {
+                WorkStealing2::new(num_workers, status.clone(), panic.clone()).into()
+            }
+            ExecutorType::LamellarWorkStealing3 => {
+                WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
+            }
+            ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
+
+            #[cfg(feature = "tokio-executor")]
+            ExecutorType::Tokio => TokioRt::new(num_workers).into(),
+        });
+
+        let batcher = match config().batcher.as_str() {
+            "simple" => BatcherType::Simple(SimpleBatcher::new(
+                num_pes,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
+            "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
+                num_pes,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
+            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
+        };
+
+        Scheduler::new(
+            executor.clone(),
+            RegisteredActiveMessages::new(batcher, executor),
+            am_stall_mark,
+            status,
+            panic,
+        )
+    }
 }
 
-pub(crate) fn create_scheduler(
-    executor: ExecutorType,
-    num_pes: usize,
-    num_workers: usize,
-    panic: Arc<AtomicU8>,
-) -> Scheduler {
-    let am_stall_mark = Arc::new(AtomicUsize::new(0));
-    let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
-    let executor: Arc<Executor> = Arc::new(match executor {
-        ExecutorType::LamellarWorkStealing => {
-            WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
-        }
-        ExecutorType::LamellarWorkStealing2 => {
-            WorkStealing2::new(num_workers, status.clone(), panic.clone()).into()
-        }
-        ExecutorType::LamellarWorkStealing3 => {
-            WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
-        }
-        ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
 
-        #[cfg(feature = "tokio-executor")]
-        ExecutorType::Tokio => TokioRt::new(num_workers).into(),
-    });
 
-    let batcher = match config().batcher.as_str() {
-        "simple" => BatcherType::Simple(SimpleBatcher::new(
-            num_pes,
-            am_stall_mark.clone(),
-            executor.clone(),
-        )),
-        "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
-            num_pes,
-            am_stall_mark.clone(),
-            executor.clone(),
-        )),
-        _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
-    };
 
-    Scheduler::new(
-        executor.clone(),
-        RegisteredActiveMessages::new(batcher, executor),
-        am_stall_mark,
-        status,
-        panic,
-    )
-}
+

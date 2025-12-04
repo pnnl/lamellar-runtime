@@ -535,7 +535,7 @@ impl<T: 'static> DarcInner<T> {
     ) -> bool {
         let team = inner.rt_team();
         let rdma = team.lamellae.comm();
-        rdma.flush();
+        rdma.thread_flush();
         for pe in inner.mode_slice.iter() {
             let timer = std::time::Instant::now();
             while *pe != state {
@@ -580,7 +580,7 @@ impl<T: 'static> DarcInner<T> {
                 if reset && inner.mode_slice.iter().any(|x| *x == DarcMode::RestartDrop) {
                     return false;
                 }
-                rdma.flush();
+                rdma.thread_flush();
                 async_std::task::yield_now().await;
             }
         }
@@ -606,7 +606,7 @@ impl<T: 'static> DarcInner<T> {
             trace!("putting state {:?} to pe {}", state, pe);
             inner.mode_slice.put_unmanaged(state, pe, my_pe);
         }
-        rdma.wait();
+        rdma.thread_wait(); //just need to wait for puts initiaited on this thread to complete
         trace!("broadcasted state {:?}", state);
     }
 
@@ -758,13 +758,13 @@ impl<T: 'static> DarcInner<T> {
                         barrier_id = 0;
                     }
                 }
-                rdma.wait();
+                rdma.thread_wait(); //just need to wait for puts initiaited on this thread to complete
                 trace!(
                     "[{:?}]  finished putting ref cnts {:?}",
                     std::thread::current().id(),
                     inner.as_ref()
                 );
-                rdma.flush();
+                rdma.thread_flush();
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
                 trace!(
@@ -785,7 +785,7 @@ impl<T: 'static> DarcInner<T> {
                 if outstanding_refs {
                     barrier_id = 0;
                 }
-                rdma.flush();
+                rdma.thread_flush();
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
                 trace!(
@@ -808,14 +808,14 @@ impl<T: 'static> DarcInner<T> {
                         .mode_barrier_slice
                         .put_unmanaged(barrier_id, send_pe, inner.my_pe);
                 }
-                rdma.wait();
+                rdma.thread_wait(); // just need to wait for puts initiaited on this thread to complete
                 trace!(
                     "[{:?}]  after putting mode_barrier_slice{:?}",
                     std::thread::current().id(),
                     inner.as_ref()
                 );
                 //maybe we need to change the above to a get?
-                rdma.flush();
+                rdma.thread_flush();
 
                 let barrier_fut = unsafe { inner.barrier.as_ref().unwrap().async_barrier() };
                 barrier_fut.await;
@@ -878,7 +878,7 @@ impl<T: 'static> DarcInner<T> {
 
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
-        self.rt_team().lamellae.comm().wait();
+        self.rt_team().lamellae.comm().wait_all(); //want to wait on ops from all threads
         let mut temp_now = Instant::now();
         let am_counters = self.am_counters();
         let mut orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
@@ -1940,7 +1940,7 @@ impl<T: 'static> LamellarAM for DroppedWaitAM<T> {
             );
 
             darc_temp.assume_init();
-            self.team.lamellae.comm().wait();
+            // self.team.lamellae.comm().thread_wait(); not sure why we would need to wait here
 
             trace!("after darc_temp {:?}", &*self.inner.team);
             //recapture the team darc so we can drop it properly

@@ -3,7 +3,8 @@ use super::{
     Comm, Lamellae, SerializedData,
 };
 use crate::{
-    LamellarBuffer, env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats
+    env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
+    LamellarBuffer,
 };
 use core::panic;
 // use parking_lot::Mutex;
@@ -12,12 +13,12 @@ use std::collections::HashMap;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tracing::{debug,  info, trace, warn};
+use tracing::{debug, info, trace, warn};
 
 static MSG_ID: AtomicUsize = AtomicUsize::new(1);
 
-lazy_static!(
-    static ref PE_SENDS: Vec<Vec<AtomicUsize>>=  {
+lazy_static! {
+    static ref PE_SENDS: Vec<Vec<AtomicUsize>> = {
         let mut v = Vec::with_capacity(2);
         for _ in 0..2 {
             let mut t = Vec::with_capacity(32);
@@ -28,8 +29,7 @@ lazy_static!(
         }
         v
     };
-
-    static ref PE_RECVS: Vec<Vec<AtomicUsize>>=  {
+    static ref PE_RECVS: Vec<Vec<AtomicUsize>> = {
         let mut v = Vec::with_capacity(2);
         for _ in 0..2 {
             let mut t = Vec::with_capacity(32);
@@ -40,8 +40,7 @@ lazy_static!(
         }
         v
     };
-
-);
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -127,7 +126,7 @@ impl CmdMsg {
         let slice: &[u8] = unsafe { std::slice::from_raw_parts(pointer, size) };
         slice
     }
-    
+
     #[tracing::instrument(skip_all, level = "debug")]
     fn hash(&self) -> usize {
         let mut res = self
@@ -211,7 +210,7 @@ impl CmdBuf {
         self.index * std::mem::size_of::<CmdMsg>()
     }
     #[tracing::instrument(skip_all, level = "debug")]
-    fn iter(&self) -> std::slice::Iter<'_,CmdMsg> {
+    fn iter(&self) -> std::slice::Iter<'_, CmdMsg> {
         self.buf[0..self.index].iter()
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -366,7 +365,8 @@ impl CmdMsgBuffer {
 
                         // unsafe { SerializedData::decrement_cnt_from_addr(comm, ser_data_addr) };
                         let _alloc = comm
-                            .local_rt_alloc_from_local_addr( cmd.daddr).expect("failed to find local alloc from addr");
+                            .local_rt_alloc_from_local_addr(cmd.daddr)
+                            .expect("failed to find local alloc from addr");
                         //creates and then drops to decrement the reference count
                     }
                 }
@@ -468,7 +468,7 @@ impl InnerCQ {
             pe += 1;
         }
         trace!("cmd_buffers {:?}", cmd_buffers);
-        let  send_buffer: CommSlice<CmdMsg> = send_buffer_alloc.as_comm_slice();
+        let send_buffer: CommSlice<CmdMsg> = send_buffer_alloc.as_comm_slice();
         let mut send_buffers = vec![];
 
         // here we split the send buffers by PE so each PE has its own send buffer to avoid locking
@@ -483,7 +483,7 @@ impl InnerCQ {
         }
         trace!("send_buffer init {:?}", send_buffer);
 
-        let  recv_buffer: CommSlice<CmdMsg> = recv_buffer_alloc.as_comm_slice();
+        let recv_buffer: CommSlice<CmdMsg> = recv_buffer_alloc.as_comm_slice();
         let mut recv_buffers = vec![];
 
         //for recv buffers we lock each PE's buffer when we read from it, and we lock our own buffer when we are sending data to a remote PE
@@ -507,7 +507,7 @@ impl InnerCQ {
         // }
         // trace!("free_buffer init {:?}", free_buffer);
 
-        let  alloc_buffer: CommSlice<CmdMsg> = alloc_buffer_alloc.as_comm_slice();
+        let alloc_buffer: CommSlice<CmdMsg> = alloc_buffer_alloc.as_comm_slice();
         let mut alloc_buffers = vec![];
         for (i, cmd) in alloc_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
@@ -519,7 +519,7 @@ impl InnerCQ {
         }
         trace!("alloc_buffer init {:?}", alloc_buffer);
 
-        let  panic_buffer: CommSlice<CmdMsg> = panic_buffer_alloc.as_comm_slice();
+        let panic_buffer: CommSlice<CmdMsg> = panic_buffer_alloc.as_comm_slice();
         for (_, cmd) in panic_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
@@ -603,7 +603,7 @@ impl InnerCQ {
             match cmd.cmd {
                 Cmd::Clear => None,
                 // Cmd::Free => panic!("should not see free in recv buffer"),
-                Cmd::Tx  | Cmd::Free | Cmd::Release => {
+                Cmd::Tx | Cmd::Free | Cmd::Release => {
                     if cmd.daddr == 0 {
                         return None;
                     }
@@ -663,7 +663,10 @@ impl InnerCQ {
             let mut paniced = false;
             for pe in 0..self.num_pes {
                 if panic_buf[pe].cmd != Cmd::Clear {
-                    debug!("pe {} panic_buf not clear {:?}", pe, &panic_buf[pe] as *const CmdMsg);
+                    debug!(
+                        "pe {} panic_buf not clear {:?}",
+                        pe, &panic_buf[pe] as *const CmdMsg
+                    );
                     debug!("panic_buf {:?}", panic_buf[pe]);
                 }
                 if panic_buf[pe].check_hash() && panic_buf[pe].cmd == Cmd::Panic {
@@ -682,7 +685,12 @@ impl InnerCQ {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
-    fn try_sending_buffer(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer, printed: &mut bool) -> bool {
+    fn try_sending_buffer(
+        &self,
+        dst: usize,
+        cmd_buffer: &mut CmdMsgBuffer,
+        printed: &mut bool,
+    ) -> bool {
         if self.pending_cmds.load(Ordering::SeqCst) == 0 || cmd_buffer.full_bufs.len() > 0 {
             let mut send_buf = self.send_buffer[dst].lock_blocking();
             if send_buf[0].hash() == self.clear_cmd.hash() {
@@ -713,7 +721,10 @@ impl InnerCQ {
                     *printed = true;
                     debug!(
                         "unable to send buffer to dst({dst}) hash not clear {:?} {:?} {:?} {:?}",
-                        send_buf[0],self.clear_cmd, send_buf[0].hash(), self.clear_cmd.hash()
+                        send_buf[0],
+                        self.clear_cmd,
+                        send_buf[0].hash(),
+                        self.clear_cmd.hash()
                     );
                 }
                 false
@@ -744,7 +755,7 @@ impl InnerCQ {
     async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
         stats!(PE_SENDS[0][dst].fetch_add(1, Ordering::SeqCst));
         debug!("want to send data {:?} {:?} {:x}", data, dst, hash);
-        // if hash != calc_hash(data.usize_addr(), data.len())   
+        // if hash != calc_hash(data.usize_addr(), data.len())
         // {
         //     panic!(
         //         "[{:?}] 0. hash mismatch! {:?} {dst} {:x} {:x} ",
@@ -777,7 +788,7 @@ impl InnerCQ {
                 // had_to_wait = true;
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
-                self.try_sending_buffer(dst, &mut cmd_buffer,&mut printed);
+                self.try_sending_buffer(dst, &mut cmd_buffer, &mut printed);
             }
             async_std::task::yield_now().await;
         }
@@ -823,12 +834,14 @@ impl InnerCQ {
                         //ensure only a single task is waiting per destination
                         im_waiting = true;
                     } else {
-                        debug!("someone else is already waiting to send to dst({dst}) {:?}", data);
+                        debug!(
+                            "someone else is already waiting to send to dst({dst}) {:?}",
+                            data
+                        );
                         break;
                     }
-                }
-                else{
-                    if timer.elapsed().as_secs_f32() > 10.0{
+                } else {
+                    if timer.elapsed().as_secs_f32() > 10.0 {
                         timer = std::time::Instant::now();
                         debug!("im still waiting to send to dst({dst}) {:?}", data);
                     }
@@ -922,7 +935,7 @@ impl InnerCQ {
                 if pe != self.my_pe {
                     let alloc_buf = self.alloc_buffer[pe].lock_blocking();
                     while !alloc_buf[0].check_hash() || alloc_buf[0].cmd != Cmd::Alloc {
-                        self.comm.flush();
+                        self.comm.thread_flush();
                         std::thread::yield_now();
                         if start.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                             info!(
@@ -1005,7 +1018,7 @@ impl InnerCQ {
                     // .spawn();
                 }
             }
-            self.comm.wait();
+            self.comm.thread_wait(); //only need to wait on puts issued by this thread
             // join_all(txs).await;
         }
     }
@@ -1050,29 +1063,27 @@ impl InnerCQ {
             self.free_cmd,
             cmd,
         );
-        let (local_daddr_alloc, offset) =
-            self.comm.local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
+        let (local_daddr_alloc, offset) = self
+            .comm
+            .local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
         let local_daddr_slice =
             local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
-        let _ = local_daddr_slice.put_unmanaged::<Cmd>(
-            self.free_cmd.cmd,
-            dst,
-            0,
-        );
+        let _ = local_daddr_slice.put_unmanaged::<Cmd>(self.free_cmd.cmd, dst, 0);
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn check_transfers(&self, src: usize) {
         let mut cmd_buffer = self.cmd_buffers[src].lock_blocking(); //.await;
-        // trace!("checking transfers for {src}");
+                                                                    // trace!("checking transfers for {src}");
         self.progress_transfers(src, &mut cmd_buffer); //.await;
     }
 
     //update cmdbuffers to include a hash the wait on that here
     // #[tracing::instrument(skip(self), level = "debug")]
     async fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> Vec<CmdMsg> {
-        let (local_daddr_alloc, offset) =
-            self.comm.local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
+        let (local_daddr_alloc, offset) = self
+            .comm
+            .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
         let num_cmds = cmd.dsize / std::mem::size_of::<CmdMsg>();
         let remote_cmd_buffer =
             local_daddr_alloc.comm_slice_at_byte_offset::<CmdMsg>(offset, num_cmds);
@@ -1088,12 +1099,12 @@ impl InnerCQ {
         let data = vec![CmdMsg::default(); num_cmds];
         let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec(data);
 
-        let _ = remote_cmd_buffer
+        let task = remote_cmd_buffer
             .get_into_buffer(&self.scheduler, vec![], src, 0, buffer.split_off(0))
             .spawn(); //maybe we do a block here?
         let mut timer = std::time::Instant::now();
         while calc_hash(
-            unsafe{buffer.orig_as_ptr() } as usize,
+            unsafe { buffer.orig_as_ptr() } as usize,
             buffer.orig_num_bytes(),
         ) != cmd.msg_hash
         {
@@ -1115,14 +1126,13 @@ impl InnerCQ {
             }
             async_std::task::yield_now().await;
         }
-
-       let data = buffer.try_unwrap().expect("Multiple copies of data still exist");
+        task.await;
+        let data = buffer
+            .try_unwrap()
+            .expect("Multiple copies of data still exist");
 
         stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
-        debug!(
-            "got data from {src} -- {:?} cmds",
-            data.len()
-        );
+        debug!("got data from {src} -- {:?} cmds", data.len());
         data
     }
 
@@ -1135,31 +1145,25 @@ impl InnerCQ {
         msg_id: usize,
     ) {
         let len = ser_data.len();
+        // let vec = vec![0u8; len];
         let mut buffer = unsafe {
             LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(
                 ser_data.header_and_data_as_bytes_mut(),
             )
         };
+        // let mut buffer = LamellarBuffer::<u8, Vec<u8>>::from_vec(vec);
         trace!("get_serialized_data {:?} {:?} {:x}", src, cmd, cmd.daddr);
-        let (local_daddr_alloc, offset) =
-            self.comm.local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
-        let _ = local_daddr_alloc
-            .get_into_buffer(&self.scheduler, vec![], src, offset, 
-                buffer.split_off(0)
-            )
+        let (local_daddr_alloc, offset) = self
+            .comm
+            .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
+        let task = local_daddr_alloc
+            .get_into_buffer(&self.scheduler, vec![], src, offset, buffer.split_off(0))
             .spawn();
-        // self.comm.wait();
-        // let tmp_data = local_daddr_alloc.get_buffer(
-        //     &self.scheduler,
-        //     vec![],
-        //     src,
-        //     offset,
-        //     len,
-        // ).await;
         // let data_slice = buffer.try_unwrap().unwrap();
-
         // let data_slice = &tmp_data;
+        // let orig_thread = std::thread::current().id();
         let data_slice = ser_data.header_and_data_as_bytes_mut();
+
         let mut timer = std::time::Instant::now();
         trace!(
             "msg_id: {msg_id} tmp_data_addr: {:?} calced hash: {:x} cmd msg hash {:x} {:?} {:?}",
@@ -1169,29 +1173,38 @@ impl InnerCQ {
             &data_slice.as_slice()[0..std::cmp::min(32, len)],
             &data_slice.as_slice()[len.saturating_sub(32)..len],
         );
-        
+
         while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
-            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
-                debug!(
-                    "msg_id: {msg_id} data hash mismatch from {:?}!!! cmd: {:?} l: {:?} l(): {:?} -- calced hash {:x} expected {:x} [{:?}..{:?}] ",
+            if timer.elapsed().as_secs_f64() > 10.0 {
+                //config().deadlock_warning_timeout {
+                println!(
+                    "msg_id: {msg_id} data hash mismatch from {:?}!!! cmd: {:?} l: {:?} l(): {:?} -- calced hash {:x} expected {:x} [{:?}..{:?}] cur_thread: {:?}",
                     src,
                     cmd,
                     len,
                     data_slice.len(),
                     calc_hash(data_slice.as_ptr() as usize, len),
                     cmd.msg_hash,
-                   
+
                     &data_slice.as_slice()[0..32],
                     &data_slice.as_slice()[len.saturating_sub(32)..len],
-                   
-
+                    std::thread::current().id(),
+                    // orig_thread,
                 );
                 timer = std::time::Instant::now();
             }
             async_std::task::yield_now().await;
         }
+        task.await;
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(
+        //         data_slice.as_ptr(),
+        //         ser_data.header_and_data_as_bytes_mut().as_mut_ptr(),
+        //         len,
+        //     );
+        // }
         trace!(
             "after msg_id: {msg_id} calced hash: {:x} cmd msg hash {:x} ",
             calc_hash(data_slice.as_ptr() as usize, len),
@@ -1221,7 +1234,8 @@ impl InnerCQ {
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
         }
         let mut ser_data = ser_data.unwrap();
-        self.get_serialized_data(src, cmd, &mut ser_data, msg_id).await;
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id)
+            .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
         ser_data
     }
@@ -1428,35 +1442,74 @@ impl CommandQueue {
         //         .get(data.len().saturating_sub(32)..data.len())
         // );
         self.cq.send(data.ser_data_bytes.clone(), dst, hash).await;
-        data.leak_alloc().leak().expect("failed to leak alloc in send_data");
-       
+        data.leak_alloc()
+            .leak()
+            .expect("failed to leak alloc in send_data");
     }
 
     pub(crate) fn wait_all_print(&self) {
         println!("command queue");
-        println!("sends {:?}", print_stats!(PE_SENDS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
-        println!("recvs {:?}", print_stats!(PE_RECVS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
+        println!(
+            "sends {:?}",
+            print_stats!(PE_SENDS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
+        println!(
+            "recvs {:?}",
+            print_stats!(PE_RECVS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
         for pe in 0..self.cq.num_pes {
             let mut sends = Vec::new();
-            stats!(sends = PE_SENDS.iter().map(|x| x[pe].load(Ordering::SeqCst)).collect::<Vec<_>>());
+            stats!(
+                sends = PE_SENDS
+                    .iter()
+                    .map(|x| x[pe].load(Ordering::SeqCst))
+                    .collect::<Vec<_>>()
+            );
             let mut recvs = Vec::new();
-            stats!(recvs = PE_RECVS.iter().map(|x| x[pe].load(Ordering::SeqCst)).collect::<Vec<_>>());
+            stats!(
+                recvs = PE_RECVS
+                    .iter()
+                    .map(|x| x[pe].load(Ordering::SeqCst))
+                    .collect::<Vec<_>>()
+            );
             println!("PE {pe} sends: {:?} recvs: {:?}", sends, recvs);
             let cmd_buffer = self.cq.cmd_buffers[pe].lock_blocking();
             println!("cmd buffer for pe {pe}: {:?}", cmd_buffer);
             // if !cmd_buffer.waiting_bufs.empty() {
             println!("tx bufs: {:?}", cmd_buffer.tx_bufs);
-            for( addr, buf) in cmd_buffer.tx_bufs.iter() {
-                println!("tx buf: {:?} {:?}", addr , buf);
+            for (addr, buf) in cmd_buffer.tx_bufs.iter() {
+                println!("tx buf: {:?} {:?}", addr, buf);
                 for cmd in buf.iter() {
-                    println!("tx cmd: {:?} {:?}", cmd,cmd.dsize);
+                    println!("tx cmd: {:?} {:?}", cmd, cmd.dsize);
                     if cmd.dsize > 0 {
                         println!(
                             "active cmd: {:?} new calced hash: {:x} {:?} {:?}",
                             cmd,
                             calc_hash(cmd.daddr, cmd.dsize),
-                            unsafe{std::slice::from_raw_parts(cmd.daddr as *const u8, std::cmp::min(32, cmd.dsize))},
-                            unsafe{std::slice::from_raw_parts((cmd.daddr + cmd.dsize.saturating_sub(32)) as *const u8, std::cmp::min(32, cmd.dsize))},
+                            unsafe {
+                                std::slice::from_raw_parts(
+                                    cmd.daddr as *const u8,
+                                    std::cmp::min(32, cmd.dsize),
+                                )
+                            },
+                            unsafe {
+                                std::slice::from_raw_parts(
+                                    (cmd.daddr + cmd.dsize.saturating_sub(32)) as *const u8,
+                                    std::cmp::min(32, cmd.dsize),
+                                )
+                            },
                         );
                     }
                 }
@@ -1476,13 +1529,24 @@ impl CommandQueue {
             // }
             let send_buffer = self.cq.send_buffer[pe].lock_blocking();
             let recv_buffer = self.cq.recv_buffer[pe].read_blocking();
-            println!("recv_buffer outer ptr for pe {pe}: {:?}", &*recv_buffer as *const CommSlice<CmdMsg>);
-            println!("send_buffer outer ptr for pe {pe}: {:?}", &*send_buffer as *const CommSlice<CmdMsg>);
-            println!("recv_buffer ptr for pe {pe}: {:x}", recv_buffer.usize_addr());
-            println!("send_buffer ptr for pe {pe}: {:x}", send_buffer.usize_addr());
+            println!(
+                "recv_buffer outer ptr for pe {pe}: {:?}",
+                &*recv_buffer as *const CommSlice<CmdMsg>
+            );
+            println!(
+                "send_buffer outer ptr for pe {pe}: {:?}",
+                &*send_buffer as *const CommSlice<CmdMsg>
+            );
+            println!(
+                "recv_buffer ptr for pe {pe}: {:x}",
+                recv_buffer.usize_addr()
+            );
+            println!(
+                "send_buffer ptr for pe {pe}: {:x}",
+                send_buffer.usize_addr()
+            );
             println!("recv buffer: {:?}", recv_buffer[0]);
             println!("send buffer: {:?}", send_buffer[0]);
-            
         }
         panic!("finished command queue wait_all_print");
     }
@@ -1567,38 +1631,38 @@ impl CommandQueue {
                                     trace!("src: {:?} cmd_buf len {:?} msg_id: {msg_id}", src, len);
                                     // let scheduler2 = scheduler1.clone();
                                     // let task = async move {
-                                        for cmd in data.into_iter() {
-                                            if cmd.dsize != 0 {
-                                                let cq = cq.clone();
-                                                let lamellae = lamellae.clone();
-                                                let scheduler2 = scheduler1.clone();
-                                                let cmd_cnt_clone = cmd_cnt.clone();
-                                                let task = async move {
-                                                    let work_data = cq.get_cmd(src, cmd, msg_id).await;                                                
-                                                    debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
-                                                    scheduler2
-                                                        .submit_remote_am(work_data, lamellae.clone());
-                                                    if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
-                                                    {
+                                    for cmd in data.into_iter() {
+                                        if cmd.dsize != 0 {
+                                            let cq = cq.clone();
+                                            let lamellae = lamellae.clone();
+                                            let scheduler2 = scheduler1.clone();
+                                            let cmd_cnt_clone = cmd_cnt.clone();
+                                            let task = async move {
+                                                let work_data = cq.get_cmd(src, cmd, msg_id).await;
+                                                debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
+                                                scheduler2
+                                                    .submit_remote_am(work_data, lamellae.clone());
+                                                if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
+                                                {
                                                     //     debug!(
                                                     //         "done with all cmds for msg_id: {msg_id}"
                                                     //     );
-                                                        cq.send_free(src, cmd_buf_cmd);
-                                                    }
-                                                };
-                                                trace!(
-                                                    "[{:?}] recv_data submitting get command task",
-                                                    std::thread::current().id(),
-                                                );
-                                                scheduler1.submit_io_task(task);
-                                                i += 1;
-                                            } else {
-                                                panic!(
-                                                    "should not be here! {:?} -- {:?} [{:?}/{:?}]",
-                                                    cmd_buf_cmd, cmd, i, len
-                                                );
-                                            }
+                                                    cq.send_free(src, cmd_buf_cmd);
+                                                }
+                                            };
+                                            trace!(
+                                                "[{:?}] recv_data submitting get command task",
+                                                std::thread::current().id(),
+                                            );
+                                            scheduler1.submit_io_task(task);
+                                            i += 1;
+                                        } else {
+                                            panic!(
+                                                "should not be here! {:?} -- {:?} [{:?}/{:?}]",
+                                                cmd_buf_cmd, cmd, i, len
+                                            );
                                         }
+                                    }
                                     // debug!("done with all cmds for msg_id: {msg_id}");
                                     // cq.send_free(src, cmd_buf_cmd);
                                     // };
@@ -1611,8 +1675,8 @@ impl CommandQueue {
                     self.cq.check_transfers(src);
                 }
             }
-            
-            comm.flush();
+
+            comm.thread_flush();
             async_std::task::yield_now().await;
         }
         self.active
@@ -1634,7 +1698,25 @@ impl CommandQueue {
 impl Drop for CommandQueue {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        debug!("sends {:?}", print_stats!(PE_SENDS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
-        debug!("recvs {:?}", print_stats!(PE_RECVS.iter().map(|x| x.iter().map(|y| y.load(Ordering::SeqCst)).collect::<Vec<_>>()).collect::<Vec<_>>()));
+        debug!(
+            "sends {:?}",
+            print_stats!(PE_SENDS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
+        debug!(
+            "recvs {:?}",
+            print_stats!(PE_RECVS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
     }
 }
