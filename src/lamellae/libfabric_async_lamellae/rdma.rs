@@ -157,7 +157,7 @@ impl<T: Remote> GetFutureData<T> {
                 .expect("error in get");
             let mut res = MaybeUninit::uninit();
             std::mem::swap(&mut self.result, &mut res);
-            unsafe { res.assume_init() }
+            res.assume_init()
         }
     }
 
@@ -184,7 +184,7 @@ impl<T: Remote> GetFutureData<T> {
 impl<T: Remote> Future for LibfabricAsyncGetFuture<T> {
     type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut mut_self = self.get_mut();
+        let mut_self = self.get_mut();
         match mut_self.fut {
             Some(ref mut fut) => {
                 fut.as_mut().poll(cx)
@@ -244,7 +244,7 @@ impl<T: Remote> GetBufferFutureData<T> {
             self.result.write(dst);
             let mut res = MaybeUninit::uninit();
             std::mem::swap(&mut self.result, &mut res);
-            unsafe { res.assume_init() }
+            res.assume_init()
         }
     }
 
@@ -272,7 +272,7 @@ impl<T: Remote> GetBufferFutureData<T> {
 impl <T: Remote> Future for LibfabricAsyncGetBufferFuture<T> {
     type Output = Vec<T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut mut_self = self.get_mut();
+        let mut_self = self.get_mut();
         match mut_self.fut {
             Some(ref mut fut) => {
                 fut.as_mut().poll(cx)
@@ -354,7 +354,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
 impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricAsyncGetIntoBufferFuture<T, B> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut mut_self = self.get_mut();
+        let mut_self = self.get_mut();
         match mut_self.fut {
             Some(ref mut fut) => {
                 fut.as_mut().poll(cx)
@@ -391,7 +391,7 @@ impl<T: Remote> From<LibfabricAsyncPutFuture<T>> for RdmaHandle<T> {
 impl<T: Remote> Future for LibfabricAsyncPutFuture<T> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut mut_self = self.get_mut();
+        let mut_self = self.get_mut();
         match mut_self.fut {
             Some(ref mut fut) => {
                 fut.as_mut().poll(cx)

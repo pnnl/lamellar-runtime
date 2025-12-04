@@ -4,7 +4,8 @@ use libfabric::async_::comm::rma::AsyncReadEp;
 use libfabric::async_::comm::rma::AsyncWriteEp;
 use libfabric::MappedAddress;
 use parking_lot::RwLock;
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::pmi::PmiBuilder;
+use pmi::{pmi::Pmi};
 use libfabric::async_::connless_ep::ConnectionlessEndpoint;
 use libfabric::async_::cq::CompletionQueue;
 use libfabric::av::AddressVector;
@@ -36,10 +37,6 @@ use libfabric::enums::CollectiveOptions;
 use libfabric::RemoteMemAddressInfo;
 use libfabric::mr::MemoryRegion;
 use libfabric::cntr::Counter;
-use libfabric::cq::Completion;
-use libfabric::Context;
-use libfabric::eq::Event;
-use libfabric::eq::JoinCompleteEvent;
 use libfabric::enums::JoinOptions;
 use libfabric::mcast::MulticastGroupBuilder;
 use libfabric::av_set::AddressVectorSetBuilder;
@@ -47,7 +44,6 @@ use libfabric::enums::CompareAtomicOp;
 use libfabric::enums::FetchAtomicOp;
 use libfabric::AsFiType;
 use libfabric::comm::rma::WriteEp;
-use libfabric::comm::collective::CollectiveEp;
 use libfabric::comm::atomic::AtomicValidEp;
 use libfabric::mr::MemoryRegionBuilder;
 use libfabric::async_::ep::EndpointBuilder;
@@ -123,7 +119,7 @@ pub(crate) struct OfiAsync {
     _fabric: Fabric,
     info_entry: InfoEntry<RmaAtomicCollEp>,
     alloc_manager: Arc<AllocInfoManager>,
-    _my_pmi: Arc<PmiX>,
+    _my_pmi: Arc<dyn Pmi>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
     completion_lock: RwLock<()>,
@@ -141,7 +137,7 @@ impl std::fmt::Debug for OfiAsync {
 
 impl OfiAsync {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
-        let my_pmi = Arc::new(PmiX::new().map_err(|e| {
+        let my_pmi = Arc::new(PmiBuilder::init().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
         })?);
@@ -2138,7 +2134,7 @@ fn euclid_rem(a: i64, b: i64) -> usize {
     }
 }
 
-
+#[cfg(not(feature = "enable-libfabric"))]
 impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
     fn from(op: &LamellarAtomicOp<T>) -> Self {
         match op {
@@ -2158,6 +2154,7 @@ impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
     }
 }
 
+#[cfg(not(feature = "enable-libfabric"))]
 impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
     fn from(op: &LamellarAtomicOp<T>) -> Self {
         match op {
@@ -2178,6 +2175,7 @@ impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
     }
 }
 
+#[cfg(not(feature = "enable-libfabric"))]
 impl<T> From<LamellarAtomicOp<T>> for AtomicOp {
     fn from(op: LamellarAtomicOp<T>) -> Self {
         match op {
@@ -2197,6 +2195,7 @@ impl<T> From<LamellarAtomicOp<T>> for AtomicOp {
     }
 }
 
+#[cfg(not(feature = "enable-libfabric"))]
 impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
     fn from(op: LamellarAtomicOp<T>) -> Self {
         match op {

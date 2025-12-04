@@ -35,7 +35,7 @@ use crate::{
 };
 
 use parking_lot::RwLock;
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::pmi::{Pmi, PmiBuilder};
 use std::{
     collections::HashMap,
     sync::{
@@ -73,7 +73,7 @@ pub(crate) struct Ofi {
     _fabric: Fabric,
     info_entry: InfoEntry<RmaAtomicCollEp>,
     alloc_manager: Arc<AllocInfoManager>,
-    _my_pmi: Arc<PmiX>,
+    _my_pmi: Arc<dyn Pmi>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
     completion_lock: RwLock<()>,
@@ -90,7 +90,7 @@ impl std::fmt::Debug for Ofi {
 
 impl Ofi {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
-        let my_pmi = Arc::new(PmiX::new().map_err(|e| {
+        let my_pmi = Arc::new(PmiBuilder::init().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
         })?);

@@ -1,10 +1,8 @@
 use std::{future::Future, mem::MaybeUninit, pin::Pin, sync::Arc, task::Poll};
-use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
 use tracing::trace;
 
-use crate::{active_messaging::AMCounters, lamellae::{libfabric_async_lamellae::fabric::{LibfabricAsyncAlloc, OneSidedLibfabricAsyncAlloc}, AtomicFetchOpFuture, AtomicOp, AtomicOpFuture, CommAllocAtomic}, scheduler::Scheduler, warnings::RuntimeWarning, AtomicFetchOpHandle, AtomicOpHandle, LamellarTask};
-use crate::lamellae::CommAllocAddr;
+use crate::{active_messaging::AMCounters, lamellae::{libfabric_async_lamellae::fabric::{LibfabricAsyncAlloc, OneSidedLibfabricAsyncAlloc}, AtomicFetchOpFuture, AtomicOp, AtomicOpFuture, CommAllocAtomic}, scheduler::Scheduler, AtomicFetchOpHandle, AtomicOpHandle, LamellarTask};
 
 
 struct AtomicFetchOpFutureData<T> {
@@ -67,7 +65,7 @@ impl<T: Copy + Send + 'static> AtomicFetchOpFutureData<T> {
             res.assume_init()
         }
     }
-    pub(crate) fn block(mut self) -> T {
+    pub(crate) fn block(self) -> T {
         // self.spawned = true;
         self.scheduler
             .clone()
@@ -92,7 +90,7 @@ impl<T: Copy + Send + 'static> Future for LibfabricAsyncAtomicFetchFuture<T> {
     type Output = T;
 
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-        let mut mut_self = self.get_mut();
+        let mut_self = self.get_mut();
         match mut_self.fut.as_mut() {
             Some(fut) => {
                 fut.as_mut().poll(cx)
@@ -173,7 +171,7 @@ impl<T: Copy + Send + 'static> AtomicOpFutureData<T> {
             LibfabricAsyncAlloc::atomic_op_inner(&self.alloc, *pe, self.offset, self.op.clone()).await.unwrap();
         }
     }
-    pub(crate) fn block(mut self) {
+    pub(crate) fn block(self) {
         // self.spawned = true;
         self.scheduler
             .clone()
@@ -198,7 +196,7 @@ impl<T: Copy + Send + 'static> Future for LibfabricAsyncAtomicFuture<T> {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Self::Output> {
-        let mut mut_self = self.get_mut();
+        let mut_self = self.get_mut();
         match mut_self.fut.as_mut() {
             Some(fut) => {
                 fut.as_mut().poll(cx)

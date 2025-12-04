@@ -108,6 +108,7 @@ opt-level = 3
 
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
+enable-lamellar-main = ["lamellar_main", "prrte-sys"]
 enable-stats = []
 enable-rofi-c = ["rofi-c", "rofisys", "libc"]
 enable-rofi-c-shared = ["rofi-c", "rofisys/shared", "libc"]
@@ -120,7 +121,6 @@ tokio-executor = ["tokio"]
 disable-runtime-warnings = []
 runtime-warnings-panic = []
 slurm-test = []
-# default = ["enable-libfabric-async"]
 
 
 [profile.release]
