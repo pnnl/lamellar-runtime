@@ -1,21 +1,22 @@
 use libfabric::{
-    av::{AddressVector, AddressVectorBuilder, AddressVectorSetBuilder, AvInAddress},
+    av::{AddressVector, AddressVectorBuilder, AvInAddress},
+    av_set::AddressVectorSetBuilder,
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
         atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
-        collective::{CollectiveAttr, CollectiveEp, MulticastGroupCollective},
+        collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
     },
+    mcast::{MultiCastGroup, MulticastGroupBuilder},
     connless_ep::ConnectionlessEndpoint,
     cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq},
     domain::{Domain, DomainBuilder},
     enums::{
         AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp,
-        EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ResourceMgmt,
-        Threading, TrafficClass, TransferOptions,
+        EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ResourceMgmt, TrafficClass, TransferOptions,
     },
     ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder},
-    eq::{Event, EventQueue, EventQueueBuilder},
+    eq::{Event, EventQueue, EventQueueBuilder,ReadEq, JoinCompleteEvent},
     fabric::{Fabric, FabricBuilder},
     info::{libfabric_version, Info, InfoEntry},
     infocapsoptions::InfoCaps,
@@ -53,7 +54,7 @@ type RmaAtomicCollEp =
 // #[derive(Debug)]
 enum BarrierImpl {
     Uninit,
-    Collective(MulticastGroupCollective),
+    Collective(MultiCastGroup),
     Manual(LibfabricAlloc, AtomicUsize),
     Pmi(Arc<PmiX>),
 }
@@ -85,7 +86,7 @@ pub(crate) struct Ofi {
 }
 
 impl CommGroup{
-    fn wait_for_join_event(&self, ctx: &Context) -> Result<(), libfabric::error::Error> {
+    fn wait_for_join_event(&self, ctx: &Context) -> Result<JoinCompleteEvent, libfabric::error::Error> {
         loop {
             let eq_res = self.eq.read();
 
@@ -93,7 +94,7 @@ impl CommGroup{
                 Ok(event) => {
                     if let Event::JoinComplete(entry) = event {
                         if entry.is_context_equal(ctx) {
-                            return Ok(());
+                            return Ok(entry);
                         }
                     }
                 }
@@ -308,7 +309,6 @@ impl Ofi {
             .type_(EndpointType::Rdm)
             .leave_ep_attr()
             .enter_domain_attr()
-            .threading(Threading::Safe) //test different modes
             .mr_mode(
                 MrMode::new().prov_key().allocated().virt_addr(), // .local()
                                                                   // .endpoint()
@@ -519,7 +519,7 @@ impl Ofi {
     fn create_mc_group(
         &self,
         pes: &[usize],
-    ) -> Result<MulticastGroupCollective, libfabric::error::Error> {
+    ) -> Result<MultiCastGroup, libfabric::error::Error> {
         // trace!("Creating MC group of len: {}", pes.len());
         let cg = &self.utility_comm_group.lock(); 
         let mut av_set = AddressVectorSetBuilder::new_from_range(
@@ -537,10 +537,10 @@ impl Ofi {
         }
 
         let mut ctx = self.info_entry.allocate_context();
-        let mc = MulticastGroupCollective::new(&av_set);
-        mc.join_collective_with_context(&cg.ep, JoinOptions::new(), &mut ctx)
+        let mc = MulticastGroupBuilder::from_av_set(&av_set).build().join_collective_with_context(&cg.ep, JoinOptions::new(), &mut ctx)
             .unwrap();
-        cg.wait_for_join_event(&ctx).unwrap();
+        let join_event = cg.wait_for_join_event(&ctx).unwrap();
+        let mc = mc.join_complete(join_event);
         // trace!("Done Creating MC group");
 
         Ok(mc)
@@ -1577,7 +1577,7 @@ impl LibfabricAlloc {
                     .post_put(blocking, || unsafe {
                         cg.ep.write_to(
                             &src_addr[curr_idx..curr_idx + msg_len],
-                            Some(&self.mr.descriptor()),
+                            Some(self.mr.descriptor()),
                             &cg.mapped_addresses[pe],
                             remote_dst_addr,
                             &remote_key,
@@ -1635,7 +1635,7 @@ impl LibfabricAlloc {
             cg.post_get(blocking, || unsafe {
                 cg.ep.read_from(
                     dst_addr,
-                    Some(&self.mr.descriptor()),
+                    Some(self.mr.descriptor()),
                     &cg.mapped_addresses[pe],
                     remote_src_addr,
                     &remote_key,
@@ -1661,7 +1661,7 @@ impl LibfabricAlloc {
                         );
                         cg.ep.read_from(
                             &mut dst_addr[curr_idx..curr_idx + msg_len],
-                            Some(&self.mr.descriptor()),
+                            Some(self.mr.descriptor()),
                             &cg.mapped_addresses[pe],
                             remote_src_addr,
                             &remote_key,
@@ -1697,7 +1697,7 @@ impl LibfabricAlloc {
         cg.post_get(blocking, || unsafe {
             cg.ep.read_from(
                 dst_addr,
-                Some(&self.mr.descriptor()),
+                Some(self.mr.descriptor()),
                 &cg.mapped_addresses[pe],
                 remote_src_addr,
                 &remote_key,
@@ -1761,7 +1761,7 @@ impl LibfabricAlloc {
         // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
         let cg = &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
         cg.post_put(false, || {
-            cg.ep.inject_atomic_to(
+            cg.ep.atomic_inject_to(
                 buf,
                 &cg.mapped_addresses[pe],
                 remote_dst_addr,
