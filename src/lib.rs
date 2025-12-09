@@ -1,6 +1,85 @@
+
 use proc_macro::TokenStream;
+// use proc_macro2::TokenStream;
 use syn::{parse_macro_input, parse_quote, Attribute, ItemFn};
-use quote::quote;
+use quote::{quote, ToTokens};
+
+#[cfg(feature = "use-prterun")]
+fn launch_prterun(ret: Option<impl ToTokens>) -> impl ToTokens {
+    quote! {
+        let prte_launched = std::env::var("PRTE_LAUNCHED").is_ok();
+        if !prte_launched {
+            // Collect command line arguments
+            let mut args: Vec<String> = std::env::args().collect();
+
+            // Remove first argument (executable name) and maintain it for later
+            let exec = args.remove(0);
+
+            // Prepare arguments for prterun
+            let mut prterun_args = Vec::<String>::new();
+
+            // Collect any additional arguments after "--" to pass to prterun
+            let pos = args.iter().position(|x| x == "--");
+            if let Some(pos) = pos {
+                args.split_off(pos).into_iter().skip(1).for_each(|x| {
+                    prterun_args.push(x.to_string());
+                });
+            }
+            let end = args.len();
+
+            // After the prterun arguments, add the executable name
+            prterun_args.push(exec);
+            
+            // Add the arguments targeting the application
+            prterun_args.extend(args.into_iter());
+
+            std::process::Command::new(prterun_path())
+                .args(prterun_args)
+                .status()
+                .expect("failed to launch process");
+            #ret
+        }
+    }
+}
+
+
+#[cfg(feature = "use-srun")]
+fn launch_srun(ret: Option<impl ToTokens>) -> impl ToTokens {
+    quote! {
+        let slurm_launched = std::env::var("SLURM_LOCALID").is_ok();
+        if !slurm_launched {
+            // Collect command line arguments
+            let mut args: Vec<String> = std::env::args().collect();
+
+            // Remove first argument (executable name) and maintain it for later
+            let exec = args.remove(0);
+
+            // Prepare arguments for prterun
+            let mut slurmrun_args = Vec::<String>::new();
+
+            // Collect any additional arguments after "--" to pass to prterun
+            let pos = args.iter().position(|x| x == "--");
+            if let Some(pos) = pos {
+                args.split_off(pos).into_iter().skip(1).for_each(|x| {
+                    slurmrun_args.push(x.to_string());
+                });
+            }
+            let end = args.len();
+
+            // After the prterun arguments, add the executable name
+            slurmrun_args.push(exec);
+            
+            // Add the arguments targeting the application
+            slurmrun_args.extend(args.into_iter());
+
+            std::process::Command::new("srun")
+                .args(slurmrun_args)
+                .status()
+                .expect("failed to launch process");
+            #ret
+        }
+    }
+}
 
 #[proc_macro_attribute]
 pub fn lamellar_main(_args: TokenStream, item: TokenStream) -> TokenStream {
@@ -25,42 +104,29 @@ pub fn lamellar_main(_args: TokenStream, item: TokenStream) -> TokenStream {
     let ret_type = func.sig.output;
     let block = &func.block;
 
-    let res = quote! {
+    let launch_block = quote! {
+        if true {
+            panic!("No launch method selected");
+        }
+    };
+
+    #[cfg(feature = "use-prterun")]
+    let launch_block = launch_prterun(ret);
+    
+    #[cfg(feature = "use-srun")]
+    let launch_block = launch_srun(ret);
+    
+    let import = quote! {};
+    #[cfg(feature = "use-prterun")]
+    let import = quote! {
         use prrte_sys::prterun_path;
+    };
+
+    let res = quote! {
+        #import
         
         fn main() #ret_type {
-            let prte_launched = std::env::var("PRTE_LAUNCHED").is_ok();
-            if !prte_launched {
-                // Collect command line arguments
-                let mut args: Vec<String> = std::env::args().collect();
-
-                // Remove first argument (executable name) and maintain it for later
-                let exec = args.remove(0);
-
-                // Prepare arguments for prterun
-                let mut prterun_args = Vec::<String>::new();
-
-                // Collect any additional arguments after "--" to pass to prterun
-                let pos = args.iter().position(|x| x == "--");
-                if let Some(pos) = pos {
-                    args.split_off(pos).into_iter().skip(1).for_each(|x| {
-                        prterun_args.push(x.to_string());
-                    });
-                }
-                let end = args.len();
-
-                // After the prterun arguments, add the executable name
-                prterun_args.push(exec);
-                
-                // Add the arguments targeting the application
-                prterun_args.extend(args.into_iter());
-
-                std::process::Command::new(prterun_path())
-                    .args(prterun_args)
-                    .status()
-                    .expect("failed to launch process");
-                #ret
-            }
+            #launch_block
             else {
                 #block
             }
