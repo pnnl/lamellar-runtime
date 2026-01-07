@@ -6,11 +6,12 @@ use quote::quote;
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
 use quote::ToTokens;
 
+#[cfg(any(feature = "use-prterun", feature = "use-srun"))]
+fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Option<impl ToTokens>) -> impl ToTokens {
 
-#[cfg(feature = "use-prterun")]
-fn launch_prterun(ret: Option<impl ToTokens>) -> impl ToTokens {
+    let (env_var, launcher_path) = launcher_info;
     quote! {
-        let prte_launched = std::env::var("PRTE_LAUNCHED").is_ok();
+        let prte_launched = std::env::var(#env_var).is_ok();
         if !prte_launched {
             // Collect command line arguments
             let mut args: Vec<String> = std::env::args().collect();
@@ -36,47 +37,8 @@ fn launch_prterun(ret: Option<impl ToTokens>) -> impl ToTokens {
             // Add the arguments targeting the application
             prterun_args.extend(args.into_iter());
 
-            std::process::Command::new(prterun_path())
+            std::process::Command::new(#launcher_path)
                 .args(prterun_args)
-                .status()
-                .expect("failed to launch process");
-            #ret
-        }
-    }
-}
-
-
-#[cfg(feature = "use-srun")]
-fn launch_srun(ret: Option<impl ToTokens>) -> impl ToTokens {
-    quote! {
-        let slurm_launched = std::env::var("SLURM_LOCALID").is_ok();
-        if !slurm_launched {
-            // Collect command line arguments
-            let mut args: Vec<String> = std::env::args().collect();
-
-            // Remove first argument (executable name) and maintain it for later
-            let exec = args.remove(0);
-
-            // Prepare arguments for prterun
-            let mut slurmrun_args = Vec::<String>::new();
-
-            // Collect any additional arguments after "--" to pass to prterun
-            let pos = args.iter().position(|x| x == "--");
-            if let Some(pos) = pos {
-                args.split_off(pos).into_iter().skip(1).for_each(|x| {
-                    slurmrun_args.push(x.to_string());
-                });
-            }
-            let end = args.len();
-
-            // After the prterun arguments, add the executable name
-            slurmrun_args.push(exec);
-            
-            // Add the arguments targeting the application
-            slurmrun_args.extend(args.into_iter());
-
-            std::process::Command::new("srun")
-                .args(slurmrun_args)
                 .status()
                 .expect("failed to launch process");
             #ret
@@ -121,19 +83,18 @@ pub fn lamellar_main(_args: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
     
-
     #[cfg(feature = "use-prterun")]
-    let launch_block = launch_prterun(ret);
+    let launch_block = create_launch_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), ret);
     
     #[cfg(feature = "use-srun")]
-    let launch_block = launch_srun(ret);
+    let launch_block = create_launch_block((quote! {"SLURM_LOCALID"}, quote! {"srun"}), ret);
     
-    #[cfg(not(feature = "use-prterun"))]
-    let import = quote! {};
-
-    #[cfg(feature = "use-prterun")]
-    let import = quote! {
-        use prrte_sys::prterun_path;
+    let import = if cfg!(feature = "use-prterun") {
+        quote! {
+            use prrte_sys::prterun_path;
+        }
+    } else {
+        quote! {}
     };
 
     let res = quote! {
@@ -149,14 +110,15 @@ pub fn lamellar_main(_args: TokenStream, item: TokenStream) -> TokenStream {
     TokenStream::from(res)
 }
 
-#[cfg(feature = "use-prterun")]
-fn launch_prterun_test(test_attr: Attribute, vis: &syn::Visibility, sig: &syn::Signature, name: &syn::Ident) -> impl ToTokens {
+#[cfg(any(feature = "use-prterun", feature = "use-srun"))]
+fn create_launch_test_block(launcher_info: (impl ToTokens, impl ToTokens), test_attr: Attribute, vis: &syn::Visibility, sig: &syn::Signature, name: &syn::Ident, imports: impl ToTokens) -> impl ToTokens {
+    let (env_var, launcher_path) = launcher_info;
     quote! {
         #test_attr #vis #sig {
         fn type_name_of_val<T: ?Sized>(_val: &T) -> &'static str {
             std::any::type_name::<T>()
         }
-        use prrte_sys::prterun_path;
+        #imports
 
         let full_func_name = type_name_of_val(&#name);
         let func_name = full_func_name
@@ -166,7 +128,7 @@ fn launch_prterun_test(test_attr: Attribute, vis: &syn::Visibility, sig: &syn::S
             .collect::<Vec<&str>>()
             .join("::");
 
-        let prte_launched = std::env::var("PRTE_LAUNCHED").is_ok();
+        let prte_launched = std::env::var(#env_var).is_ok();
         if !prte_launched {
             // Collect command line arguments
             let mut args: Vec<String> = std::env::args().collect();
@@ -197,68 +159,8 @@ fn launch_prterun_test(test_attr: Attribute, vis: &syn::Visibility, sig: &syn::S
             // prterun_args.iter().for_each(|x| {
             //     println!("prterun arg: {}", x);
             // });
-            std::process::Command::new(prterun_path())
+            std::process::Command::new(#launcher_path)
                 .args(prterun_args)
-                .status()
-                .expect("failed to launch process");
-        }
-        }
-    }
-}
-
-#[cfg(feature = "use-srun")]
-fn launch_srun_test(test_attr: Attribute, vis: &syn::Visibility, sig: &syn::Signature, name: &syn::Ident) -> impl ToTokens {
-    quote! {
-
-        #test_attr #vis #sig {
-        fn type_name_of_val<T: ?Sized>(_val: &T) -> &'static str {
-            std::any::type_name::<T>()
-        }
-
-        let full_func_name = type_name_of_val(&#name);
-        let func_name = full_func_name
-            .split("::")
-            .into_iter()
-            .skip(1)
-            .collect::<Vec<&str>>()
-            .join("::");
-
-        let slurm_launched = std::env::var("SLURM_LOCALID").is_ok();
-        if !slurm_launched {
-            use std::process::Stdio;
-            // Collect command line arguments
-            let mut args: Vec<String> = std::env::args().collect();
-
-            // Remove first argument (executable name) and maintain it for later
-            let exec = args.remove(0);
-
-            // Prepare arguments for prterun
-            let mut slurmrun_args = Vec::<String>::new();
-
-            // Collect any additional arguments after "--" to pass to prterun
-            let pos = args.iter().position(|x| x == "--");
-            if let Some(pos) = pos {
-                args.split_off(pos).into_iter().skip(1).for_each(|x| {
-                    slurmrun_args.push(x.to_string());
-                });
-            }
-            let end = args.len();
-
-            // After the prterun arguments, add the executable name
-            slurmrun_args.push(exec);
-            slurmrun_args.push(func_name);
-            
-            // Add the arguments targeting the application
-            slurmrun_args.extend(args.into_iter());
-            slurmrun_args.push("--ignored".to_string());
-            slurmrun_args.push("--exact".to_string());
-            // slurmrun_args.iter().for_each(|x| {
-            //     println!("prterun arg: {}", x);
-            // });
-            std::process::Command::new("srun")
-                .args(slurmrun_args)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
                 .status()
                 .expect("failed to launch process");
         }
@@ -302,10 +204,10 @@ pub fn lamellar_test(_args: TokenStream, item: TokenStream) -> TokenStream {
 
     // let name = format!("{}_launched", name.to_string());
     #[cfg(feature = "use-prterun")]
-    let res = launch_prterun_test(test_attr, vis, sig, &name);
+    let res = create_launch_test_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), test_attr, vis, sig, &name, quote! {use prrte_sys::prterun_path;});
 
     #[cfg(feature = "use-srun")]
-    let res = launch_srun_test(test_attr, vis, sig, &name);
+    let res = create_launch_test_block((quote! {"SRUN_LAUNCHED"}, quote! {"srun"}), test_attr, vis, sig, &name, quote! {});
 
         
     let launched_attrs: Vec<Attribute> = parse_quote!{
