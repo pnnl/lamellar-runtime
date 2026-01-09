@@ -87,14 +87,24 @@ impl CommShutdown for LibfabricAsyncComm {
 }
 
 impl CommProgress for LibfabricAsyncComm {
-    fn flush(&self) {
+    fn flush_all(&self) {
         if let Err(e) = self.ofi.progress() {
             panic!("libfabric-async flush error: {}", e);
         }
     }
-    fn wait(&self) {
+    fn thread_flush(&self) {
+        if let Err(e) = self.ofi.progress() {
+            panic!("libfabric-async thread flush error: {}", e);
+        }
+    }
+    fn wait_all(&self) {
         if let Err(e) = self.ofi.wait_all() {
             panic!("libfabric-async wait error: {}", e);
+        }
+    }
+    fn thread_wait(&self) {
+        if let Err(e) = self.ofi.wait_all() {
+            panic!("libfabric-async thread wait error: {}", e);
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]

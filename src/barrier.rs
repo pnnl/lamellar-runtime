@@ -195,6 +195,7 @@ impl Barrier {
                         if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                             break;
                         }
+                        self.lamellae.comm().flush_all();
                     }
 
                     for round in 0..self.num_rounds {
@@ -278,7 +279,7 @@ impl Barrier {
                                             recv_pe,
                                             barrier_id,
                                         );
-                                        self.lamellae.comm().thread_flush();
+                                        self.lamellae.comm().flush_all();
                                         wait_func();
                                     }
                                 

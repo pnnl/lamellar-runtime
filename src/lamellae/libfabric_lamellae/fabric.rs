@@ -1,16 +1,12 @@
 use libfabric::{
     av::{AddressVector, AddressVectorBuilder, AvInAddress},
     av_set::AddressVectorSetBuilder,
-    av::{AddressVector, AddressVectorBuilder, AvInAddress},
-    av_set::AddressVectorSetBuilder,
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
         atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp},
-        collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
     },
-    mcast::{MultiCastGroup, MulticastGroupBuilder},
     mcast::{MultiCastGroup, MulticastGroupBuilder},
     connless_ep::ConnectionlessEndpoint,
     cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq},
@@ -74,6 +70,7 @@ struct CommGroup{
     info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
+    lock: Mutex<()>,
 }
 
 pub(crate) struct Ofi {
@@ -85,12 +82,12 @@ pub(crate) struct Ofi {
     _fabric: Fabric,
     _my_pmi: Arc<PmiX>,
      alloc_manager: Arc<AllocInfoManager>,
-    comm_groups: Vec<CommGroup>,
-    utility_comm_group: Mutex<CommGroup>,
+    comm_group: CommGroup,
 }
 
 impl CommGroup{
     fn wait_for_join_event(&self, ctx: &Context) -> Result<JoinCompleteEvent, libfabric::error::Error> {
+        let _lock = self.lock.lock();
         loop {
             let eq_res = self.eq.read();
 
@@ -112,7 +109,7 @@ impl CommGroup{
         }
     }
 
-    pub(crate) fn progress(&self) -> Result<(), libfabric::error::Error> {
+    fn progress(&self) -> Result<(), libfabric::error::Error> {
         let cq_res = self.cq.read(0);
 
         match cq_res {
@@ -128,6 +125,7 @@ impl CommGroup{
     }
 
     fn wait_for_completion(&self, ctx: &Context) -> Result<(), libfabric::error::Error> {
+        let _lock = self.lock.lock();
         loop {
             let cq_res = self.cq.read(1);
             match cq_res {
@@ -185,6 +183,7 @@ impl CommGroup{
         cntr: &Counter<WaitableCntr>,
         dir: &str,
     ) -> Result<(), libfabric::error::Error> {
+        let _lock = self.lock.lock();
         let mut prev_expected_cnt = pending.load(Ordering::SeqCst);
         let mut old_cnt = cntr.read();
         let mut expected_cnt = pending.load(Ordering::SeqCst);
@@ -235,6 +234,7 @@ impl CommGroup{
         blocking: bool,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
+        let _lock = self.lock.lock();
         self.put_cnt
             .fetch_max(self.put_cntr.read(), Ordering::SeqCst);
         loop {
@@ -263,6 +263,7 @@ impl CommGroup{
         blocking: bool,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
+        let _lock = self.lock.lock();
         let old_cnt = self
             .get_cnt
             .fetch_max(self.get_cntr.read(), Ordering::SeqCst);
@@ -371,9 +372,7 @@ impl Ofi {
 
         let info_entry = Arc::new(info_entry);
 
-        let mut comm_groups = Vec::with_capacity(num_threads + 1);
-
-        for tid in 0..num_threads + 1 {
+        
             let eq = EventQueueBuilder::new(&fabric)
                 .build()
                 .map_err(|e| FabricError::InitError(e.c_err))?;
@@ -427,14 +426,14 @@ impl Ofi {
             let address = ep.getname().map_err(|e| FabricError::InitError(e.c_err))?;
             let address_bytes = address.as_bytes();
 
-            my_pmi.put(&format!("epname_{}", tid), address_bytes).unwrap();
+            my_pmi.put(&format!("epname"), address_bytes).unwrap();
             my_pmi.exchange().unwrap();
 
             let unmapped_addresses: Vec<_> = my_pmi
                 .ranks()
                 .iter()
                 .map(|r| {
-                    let addr = my_pmi.get(&format!("epname_{}", tid), &address_bytes.len(), &r).unwrap();
+                    let addr = my_pmi.get(&format!("epname"), &address_bytes.len(), &r).unwrap();
                     unsafe { Address::from_bytes(&addr) }
                 })
                 .collect();
@@ -444,7 +443,7 @@ impl Ofi {
                 .map_err(|e| FabricError::InitError(e.c_err))?;
             let mapped_addresses: Vec<MappedAddress> =
                 mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
-            comm_groups.push(CommGroup{
+            let comm_group = CommGroup{
                 mapped_addresses,
                 ep,
                 cq,
@@ -455,10 +454,10 @@ impl Ofi {
                 info_entry: info_entry.clone(),
                 put_cnt: AtomicU64::new(0),
                 get_cnt: AtomicU64::new(0),
-            });
-        }
+                lock: Mutex::new(()),
+            };
+        
         let alloc_manager = AllocInfoManager::new();
-        let utility_comm_group = Mutex::new(comm_groups.pop().unwrap());
         let ofi = Arc::new(Self {
             num_pes: my_pmi.ranks().len(),
             my_pe: my_pmi.rank(),
@@ -468,8 +467,7 @@ impl Ofi {
             domain,
             alloc_manager: Arc::new(alloc_manager),
             barrier_impl: RwLock::new(BarrierImpl::Pmi(my_pmi)),
-            comm_groups,
-            utility_comm_group,
+            comm_group
         });
 
         // ofi.init_barrier()?;
@@ -478,7 +476,7 @@ impl Ofi {
     }
 
     fn atomic_avail_inner<T: AsFiType>(&self) -> bool {
-        let cg = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        let cg = &self.comm_group;
         unsafe {
             cg.ep.atomicvalid::<T>(AtomicOp::Sum).is_ok()
                 && cg
@@ -524,9 +522,8 @@ impl Ofi {
         &self,
         pes: &[usize],
     ) -> Result<MultiCastGroup, libfabric::error::Error> {
-    ) -> Result<MultiCastGroup, libfabric::error::Error> {
         // trace!("Creating MC group of len: {}", pes.len());
-        let cg = &self.utility_comm_group.lock(); 
+        let cg = &self.comm_group;
         let mut av_set = AddressVectorSetBuilder::new_from_range(
             &cg.av,
             &cg.mapped_addresses[pes[0]],
@@ -558,7 +555,7 @@ impl Ofi {
         mr: &MemoryRegion,
     ) -> Result<HashMap<usize, RemoteMemAddressInfo>, libfabric::error::Error> {
         let mc = self.create_mc_group(&pes)?;
-        let cg = &self.utility_comm_group.lock();
+        let cg = &self.comm_group;
 
         let mut mem_info = MemAddressInfo::from_slice(mem, 0, &mr.key().unwrap(), &self.info_entry);
 
@@ -690,7 +687,7 @@ impl Ofi {
                 match mr {
                     DisabledMemoryRegion::EpBind(mr) => {
                         // trace!("Binding memory region to endpoint");
-                        mr.enable(&self.utility_comm_group.lock().ep)
+                        mr.enable(&self.comm_group.ep)
                             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
                     }
                     DisabledMemoryRegion::RmaEvent(mr) => {
@@ -762,7 +759,7 @@ impl Ofi {
                 match mr {
                     DisabledMemoryRegion::EpBind(mr) => {
                         // trace!("Binding memory region to endpoint");
-                        mr.enable(&self.utility_comm_group.lock().ep)
+                        mr.enable(&self.comm_group.ep)
                             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?
                     }
                     DisabledMemoryRegion::RmaEvent(mr) => {
@@ -813,7 +810,7 @@ impl Ofi {
                 panic!("Barrier is not initialized");
             }
             BarrierImpl::Collective(mc) => {
-                let cg = &self.utility_comm_group.lock();
+                let cg = &self.comm_group;
                 let mut ctx = self.info_entry.allocate_context();
                 loop {
                     let ret = cg.ep.barrier_with_context(mc, &mut ctx);
@@ -851,6 +848,7 @@ impl Ofi {
                         };
                     }
 
+                    let _lock = self.comm_group.lock.lock();
                     for i in 1..=n {
                         let recv_pe = (self.my_pe as i64
                             - i as i64 * (n as i64 + 1).pow(round as u32))
@@ -861,7 +859,7 @@ impl Ofi {
                         let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
 
                         while my_barrier > barrier_vec[recv_pe as usize] {
-                            self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)].progress()?;
+                            self.comm_group.progress()?;
                             std::thread::yield_now();
                         }
                     }
@@ -989,25 +987,21 @@ impl Ofi {
     }
 
     pub(crate) fn wait_all(&self) -> Result<(), libfabric::error::Error> {
-        for cg in self.comm_groups.iter() {
-            cg.wait_all()?;
-        }
-        Ok(())
+        self.comm_group.wait_all()
     }
 
     pub(crate) fn thread_wait(&self)-> Result<(), libfabric::error::Error> {
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)].wait_all()
+        self.comm_group.wait_all()
     }
 
     pub(crate) fn progress_all(&self) -> Result<(), libfabric::error::Error> {
-        for cg in self.comm_groups.iter() {
-            cg.progress()?;
-        }
-        Ok(())
+       let _lock = self.comm_group.lock.lock();
+        self.comm_group.progress()
     }
 
     pub(crate) fn thread_progress(&self) -> Result<(), libfabric::error::Error> {
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)].progress()
+        let _lock = self.comm_group.lock.lock();
+        self.comm_group.progress()
     }
 
 }
@@ -1015,10 +1009,8 @@ impl Ofi {
 impl Drop for Ofi {
     fn drop(&mut self) {
         trace!(target: "libfabric", "Dropping OFI backend");
-        for cg in self.comm_groups.iter() {
-            cg.wait_all();
-        }
-        self.utility_comm_group.lock().wait_all();
+            let _ = self.comm_group.wait_all();
+
         self._my_pmi.barrier(false).expect("PMI Barrier failed during OFI drop");
     }
 }
@@ -1554,7 +1546,7 @@ impl LibfabricAlloc {
             std::mem::size_of_val(src_addr)
         );
         let remote_key = remote_alloc_info.key();
-        let cg = &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        let cg = &self.ofi.comm_group;
         if std::mem::size_of_val(src_addr) < self.ofi.info_entry.tx_attr().inject_size() {
             trace!(
                 target: "libfabric",
@@ -1625,7 +1617,7 @@ impl LibfabricAlloc {
         //     remote_src_addr.add(std::mem::size_of_val(dst_addr)),
         //     std::mem::size_of_val(dst_addr)
         // );
-        let cg = &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        let cg = &self.ofi.comm_group;
         if dst_addr.len() < self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>()
         {
             // trace!(
@@ -1698,7 +1690,7 @@ impl LibfabricAlloc {
 
         let mut remote_src_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
-        let cg = &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        let cg = &self.ofi.comm_group;
         cg.post_get(blocking, || unsafe {
             cg.ep.read_from(
                 dst_addr,
@@ -1764,7 +1756,7 @@ impl LibfabricAlloc {
         let src = &*(src as *const T as *const OFI);
         let buf = std::slice::from_ref(src);
         // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
-        let cg = &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        let cg = &self.ofi.comm_group;
         cg.post_put(false, || {
             cg.ep.atomic_inject_to(
                 buf,
@@ -1831,7 +1823,7 @@ impl LibfabricAlloc {
 
         // let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
         let res = &mut *(result as *mut [T] as *mut [OFI]);
-        let cg = &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        let cg = &self.ofi.comm_group;
 
         match op.src() {
             Some(src) => {
@@ -1870,10 +1862,7 @@ impl LibfabricAlloc {
     }
 
     pub(crate) fn wait(&self) -> Result<(), libfabric::error::Error> {
-        for cg in self.ofi.comm_groups.iter() {
-            cg.wait_all()?;
-        }
-        Ok(())
+        self.ofi.comm_group.wait_all()
     }
 }
 

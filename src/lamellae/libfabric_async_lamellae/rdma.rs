@@ -647,6 +647,9 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         }
         .into()
     }
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        unimplemented!();
+    }
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -670,6 +673,9 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         }
         .into()
     }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        unimplemented!();
+    }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -692,6 +698,14 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
             fut: None,
         }
         .into()
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        unimplemented!();
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
@@ -858,6 +872,9 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         }
         .into()
     }
+    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+        unimplemented!();
+    }
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -886,6 +903,9 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         }
         .into()
     }
+    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+        unimplemented!();
+    }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -913,6 +933,14 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
             fut: None,
         }
         .into()
+    }
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        mut dst: LamellarBuffer<T, B>,
+    ) {
+        unimplemented!();
     }
     fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
