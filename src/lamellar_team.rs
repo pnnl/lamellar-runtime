@@ -455,6 +455,35 @@ impl LamellarTeam {
     {
         self.team.exec_am_local_tg(am, None, Some(thread))
     }
+
+    
+    
+    pub fn spawn_am_all<F>(&self, am: F) ->MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        // trace!("[{:?}] team spawn am all request", self.team.world_pe);
+        self.team.spawn_am_all_tg(am, None)
+    }
+    pub fn spawn_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        self.team.spawn_am_pe_tg(pe, am, None)
+    }
+
+    pub fn spawn_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        assert!(self.panic.load(Ordering::SeqCst) == 0);
+
+        self.team.spawn_am_local_tg(am, None, None)
+    }
 }
 
 impl LamellarEnv for Arc<LamellarTeam> {
@@ -515,7 +544,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None)
     }
-
+    
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
@@ -1805,6 +1834,79 @@ impl Darc<LamellarTeamRT> {
     }
 
     #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) fn spawn_am_all_tg<F>(
+        &self,
+        am: F,
+        task_group_cnts: Option<Arc<AMCounters>>,
+    ) -> MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + crate::Serialize + 'static,
+    {
+        self.scheduler.increment_stall_mark();
+        // println!("team exec am all num_pes {:?}", self.num_pes);
+        // trace!("[{:?}] team exec am all request", self.world_pe);
+        // event!(Level::TRACE, "team exec am all request");
+        if let Some(task_group_cnts) = task_group_cnts.as_ref() {
+            task_group_cnts.inc_send_req(1);
+        }
+        let req = Arc::new(MultiAmHandleInner {
+            cnt: AtomicUsize::new(self.num_pes),
+            arch: self.arch.clone(),
+            data: Mutex::new(HashMap::new()),
+            waker: Mutex::new(None),
+            team_counters: self.team_counters.clone(),
+            world_counters: self.world_counters.clone(),
+            tg_counters: task_group_cnts,
+            user_handle: AtomicU8::new(1),
+            scheduler: self.scheduler.clone(),
+        });
+        let req_result = Arc::new(LamellarRequestResult::MultiAm(req.clone()));
+        let req_ptr = Arc::into_raw(req_result);
+        for _ in 0..(self.num_pes - 1) {
+            // -1 because of the arc we turned into raw
+            unsafe { Arc::increment_strong_count(req_ptr) } //each pe will return a result (which we turn back into an arc)
+        }
+        // println!("strong count recv: {:?} ",Arc::strong_count(&req));
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
+
+        self.world_counters.inc_outstanding(self.num_pes);
+        self.world_counters.inc_launched(self.num_pes);
+        self.world_counters.inc_send_req(self.num_pes);
+        self.team_counters.inc_outstanding(self.num_pes);
+        self.team_counters.inc_launched(self.num_pes);
+        self.team_counters.inc_send_req(self.num_pes);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
+        // println!("team counter: {:?}", self.team_counters.outstanding_reqs);
+        let func: LamellarArcAm = Arc::new(am);
+        let world = if let Some(world) = &self.world {
+            world.clone()
+        } else {
+            self.clone()
+        };
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: None,
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            // team_addr: Darc::into_raw_team(self.clone()).addr(),
+        };
+        // event!(Level::TRACE, "submitting request to scheduler");
+        // println!("[{:?}] team exec all", std::thread::current().id());
+        self.scheduler.submit_am(Am::All(req_data.clone(), func.clone()));
+        MultiAmHandle {
+            inner: req,
+            am: None,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn am_group_exec_am_all_tg<F, O>(
         &self,
         am: F,
@@ -2369,6 +2471,75 @@ impl Darc<LamellarTeamRT> {
         LocalAmHandle {
             inner: req,
             am: Some((Am::Local(req_data, func), 1)),
+            _phantom: PhantomData,
+            thread: thread,
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) fn spawn_am_local_tg<F>(
+        &self,
+        am: F,
+        task_group_cnts: Option<Arc<AMCounters>>,
+        thread: Option<usize>,
+    ) -> LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        // println!("team exec am local");
+        if let Some(task_group_cnts) = task_group_cnts.as_ref() {
+            task_group_cnts.inc_send_req(1);
+        }
+        let req = Arc::new(AmHandleInner {
+            ready: AtomicBool::new(false),
+            data: Cell::new(None),
+            waker: Mutex::new(None),
+            team_counters: self.team_counters.clone(),
+            world_counters: self.world_counters.clone(),
+            tg_counters: task_group_cnts,
+            user_handle: AtomicU8::new(1),
+            scheduler: self.scheduler.clone(),
+        });
+        let req_result = Arc::new(LamellarRequestResult::Am(req.clone()));
+        let req_ptr = Arc::into_raw(req_result);
+        let id = ReqId {
+            id: req_ptr as usize,
+            sub_id: 0,
+        };
+        self.world_counters.inc_outstanding(1);
+        self.world_counters.inc_launched(1);
+        self.world_counters.inc_send_req(1);
+        self.team_counters.inc_outstanding(1);
+        self.team_counters.inc_launched(1);
+        self.team_counters.inc_send_req(1);
+        // println!("cnts: t: {} w: {} tg: {:?}",self.team_counters.outstanding_reqs.load(Ordering::Relaxed),self.world_counters.outstanding_reqs.load(Ordering::Relaxed), tg_outstanding_reqs.as_ref().map(|x| x.load(Ordering::Relaxed)));
+
+        let func: LamellarArcLocalAm = Arc::new(am);
+
+        let world = if let Some(world) = &self.world {
+            world.clone()
+        } else {
+            self.clone()
+        };
+        let req_data = ReqMetaData {
+            src: self.world_pe,
+            dst: Some(self.world_pe),
+            id: id,
+            lamellae: self.lamellae.clone(),
+            world: world,
+            team: self.clone(),
+            // team_addr: Darc::into_raw_team(self.clone()).addr(),
+        };
+        // println!("[{:?}] team exec am local", std::thread::current().id());
+        self.scheduler.submit_am(Am::Local(req_data.clone(), func.clone()));
+
+        // Box::new(LamellarLocalRequestHandle {
+        //     inner: req,
+        //     _phantom: PhantomData,
+        // })
+        LocalAmHandle {
+            inner: req,
+            am: None,
             _phantom: PhantomData,
             thread: thread,
         }

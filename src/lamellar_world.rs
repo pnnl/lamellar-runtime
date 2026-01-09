@@ -67,6 +67,7 @@ impl ActiveMessaging for LamellarWorld {
     {
         self.team.exec_am_all(am)
     }
+    
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
@@ -75,6 +76,7 @@ impl ActiveMessaging for LamellarWorld {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
+    
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
@@ -82,6 +84,7 @@ impl ActiveMessaging for LamellarWorld {
     {
         self.team.exec_am_local(am)
     }
+    
     #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         self.team.wait_all();
@@ -295,6 +298,25 @@ impl LamellarWorld {
     // pub fn flush(&self) {
     //     self.team_rt.flush();
     // }
+    pub fn spawn_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
+    {
+        self.team.spawn_am_all(am)
+    }
+    pub fn spawn_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
+    where
+        F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
+    {
+        assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
+        self.team.spawn_am_pe(pe, am)
+    }
+    pub fn spawn_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
+    where
+        F: LamellarActiveMessage + LocalAM + 'static,
+    {
+        self.team.spawn_am_local(am)
+    }
 }
 
 impl LamellarEnv for LamellarWorld {

@@ -702,14 +702,15 @@ impl InnerCQ {
                     stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
                     debug!("sending cmd to dst({dst}) {:?}", send_buf[0]);
                     let _ = recv_buffer
-                        .put::<CmdMsg>(
-                            &self.scheduler,
-                            vec![],
+                        .put_unmanaged::<CmdMsg>(
+                            // &self.scheduler,
+                            // vec![],
                             send_buf[0], //send_buf.sub_slice(dst..=dst),
                             dst,
                             0,
-                        )
-                        .block();
+                        );
+                    recv_buffer.wait();
+                        // .block();
                     // .spawn();
                     self.put_amt
                         .fetch_add(send_buf[0].as_bytes().len(), Ordering::Relaxed);
