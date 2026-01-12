@@ -455,7 +455,7 @@ pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeB
             LamellaeBuilder::LibfabricAsyncBuilder(LibfabricAsyncBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-ucx")]
-        Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
+        Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new(num_threads)),
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }

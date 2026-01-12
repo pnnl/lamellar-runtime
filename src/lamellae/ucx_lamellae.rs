@@ -27,8 +27,8 @@ pub(crate) struct UcxBuilder {
 }
 
 impl UcxBuilder {
-    pub(crate) fn new() -> UcxBuilder {
-        let ucx_comm: Arc<Comm> = Arc::new(UcxComm::new().into());
+    pub(crate) fn new(num_threads: usize) -> UcxBuilder {
+        let ucx_comm: Arc<Comm> = Arc::new(UcxComm::new(num_threads).into());
         UcxBuilder {
             my_pe: ucx_comm.my_pe(),
             num_pes: ucx_comm.num_pes(),

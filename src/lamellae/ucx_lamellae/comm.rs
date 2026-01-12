@@ -35,11 +35,11 @@ pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 10
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl UcxComm {
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn new() -> UcxComm {
+    pub(crate) fn new(num_threads: usize) -> UcxComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
         }
-        let ucx = Arc::new(UcxWorld::new());
+        let ucx = Arc::new(UcxWorld::new(num_threads));
         trace!("ucx initialized: {:?}", ucx);
 
         ucx.barrier();
@@ -83,13 +83,16 @@ impl CommShutdown for UcxComm {
 
 impl CommProgress for UcxComm {
     fn flush_all(&self) {
-        self.ucx.progress();
+        self.ucx.progress_all();
+    }
+    fn thread_flush(&self) {
+        self.ucx.thread_progress();
     }
     fn wait_all(&self) {
         self.ucx.wait_all();
-        // while !self.ucx.wait_all() {
-        //     std::thread::yield_now();
-        // }
+    }
+    fn thread_wait(&self) {
+        self.ucx.thread_wait();
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
