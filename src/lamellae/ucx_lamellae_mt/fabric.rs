@@ -16,6 +16,7 @@ use crate::{
         CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
+    LAMELLAR_THREAD_ID,
 };
 
 use pmi::{pmi::Pmi, pmix::PmiX};
@@ -26,16 +27,22 @@ use std::sync::{
 };
 use tracing::{debug, trace};
 
+#[derive(Clone)]
+pub(crate) struct CommGroup {
+    worker: Arc<Worker>,
+    endpoints: Vec<Arc<Endpoint>>,
+}
+
 pub(crate) struct UcxWorld {
     pmi: Arc<PmiX>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
     context: Arc<Context>,
-    worker: Arc<Worker>,
-    endpoints: Vec<Arc<Endpoint>>,
-    mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
-    remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
-    exchange_buffer: Option<UcxAlloc>,
+    comm_groups: Vec<CommGroup>,
+    utility_comm_group: CommGroup,
+    mem_handles: Arc<Mutex<Vec<UcxMtAlloc>>>,
+    remote_keys: Arc<Mutex<Vec<(UcxMtAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    exchange_buffer: Option<UcxMtAlloc>,
 }
 
 impl std::fmt::Debug for UcxWorld {
@@ -48,7 +55,7 @@ impl std::fmt::Debug for UcxWorld {
 }
 
 impl UcxWorld {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(num_threads: usize) -> Self {
         let my_pmi = Arc::new(
             PmiX::new()
                 .map_err(|e| {
@@ -58,14 +65,20 @@ impl UcxWorld {
                 .unwrap(),
         );
         let context = Context::new(my_pmi.clone()).unwrap();
-        let worker = context.create_worker().unwrap();
+        let mut comm_groups = Vec::with_capacity(num_threads + 1);
+        // let mut comm_groups = Vec::with_capacity(1);
+        for tid in 0..num_threads {
+            let worker = context.create_worker().unwrap();
+            let addresses = worker.exchange_address(&my_pmi,tid).unwrap();
+            let endpoints = addresses
+                .iter()
+                .map(|a| Endpoint::new(worker.clone(), a).unwrap())
+                .collect::<Vec<_>>();
+            comm_groups.push(CommGroup { worker, endpoints });
+        }
+        let utility_comm_group = comm_groups.last().unwrap().clone();
 
-        let addresses = worker.exchange_address(&my_pmi).unwrap();
-
-        let endpoints = addresses
-            .iter()
-            .map(|a| Endpoint::new(worker.clone(), a).unwrap())
-            .collect::<Vec<_>>();
+       
 
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
@@ -73,8 +86,8 @@ impl UcxWorld {
         let remote_keys = Arc::new(Mutex::new(Vec::new()));
         let exchange_buffer = Self::initial_alloc(
             &context,
-            &endpoints,
-            &worker,
+            &utility_comm_group.endpoints,
+            &comm_groups,
             &my_pmi,
             num_pes,
             my_pe,
@@ -87,8 +100,8 @@ impl UcxWorld {
             my_pe,
             num_pes,
             context,
-            worker,
-            endpoints,
+            comm_groups,
+            utility_comm_group,
             mem_handles,
             remote_keys,
             exchange_buffer: Some(exchange_buffer),
@@ -125,14 +138,14 @@ impl UcxWorld {
 
     fn initial_alloc(
         context: &Arc<Context>,
-        endpoints: &Vec<Arc<Endpoint>>,
-        worker: &Arc<Worker>,
+        util_endpoints: &Vec<Arc<Endpoint>>,
+        comm_groups: &Vec<CommGroup>,
         pmi: &Arc<PmiX>,
         num_pes: usize,
         my_pe: usize,
-        mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
-        remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
-    ) -> AllocResult<UcxAlloc> {
+        mem_handles: Arc<Mutex<Vec<UcxMtAlloc>>>,
+        remote_keys: Arc<Mutex<Vec<(UcxMtAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+    ) -> AllocResult<UcxMtAlloc> {
         let mem_handle = MemoryHandleInner::alloc(context, 1024); //dummy allocation to get the size of the exchange buffer
         let mut data_size = mem_handle.addr.to_ne_bytes().len();
         data_size += mem_handle.pack().as_ref().len();
@@ -141,7 +154,9 @@ impl UcxWorld {
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, 8);
         // debug!("Initial alloc size: {}", size);
         let mem_handle = MemoryHandleInner::alloc(context, size * num_pes);
-        let buffer_keys = mem_handle.exchange_key_pmi(endpoints, pmi).unwrap();
+        let buffer_keys = mem_handle
+            .exchange_key_pmi(util_endpoints, pmi, comm_groups.len())
+            .unwrap();
 
         let mem = MemoryHandle {
             addr: mem_handle.addr,
@@ -149,15 +164,14 @@ impl UcxWorld {
             inner: mem_handle.clone(),
         };
 
-        let alloc = UcxAlloc::new(
+        let alloc = UcxMtAlloc::new(
             mem,
             data_size,
             padding,
             my_pe,
             num_pes,
             context.clone(),
-            worker.clone(),
-            endpoints.clone(),
+            comm_groups.clone(),
             buffer_keys.clone(),
             mem_handles.clone(),
             remote_keys.clone(),
@@ -175,16 +189,17 @@ impl UcxWorld {
         data_size: usize,
         align: usize,
         _alloc_type: AllocationType,
-    ) -> UcxAlloc {
+    ) -> UcxMtAlloc {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
 
         let mem_handle = MemoryHandleInner::alloc(&self.context, size);
         let buffer_keys = mem_handle
             .exchange_key_alloc(
-                &self.endpoints,
+                &self.utility_comm_group.endpoints,
                 &self.pmi,
                 &self.exchange_buffer.as_ref().unwrap(),
+                self.comm_groups.len(),
             )
             .unwrap();
 
@@ -194,20 +209,19 @@ impl UcxWorld {
             inner: mem_handle.clone(),
         };
 
-        let alloc = UcxAlloc::new(
+        let alloc = UcxMtAlloc::new(
             mem,
             data_size,
             padding,
             self.my_pe,
             self.num_pes,
             self.context.clone(),
-            self.worker.clone(),
-            self.endpoints.clone(),
+            self.comm_groups.clone(),
             buffer_keys.clone(),
             self.mem_handles.clone(),
             self.remote_keys.clone(),
         )
-        .expect("UcxAlloc::new failed");
+        .expect("UcxMtAlloc::new failed");
         self.mem_handles.lock().unwrap().push(alloc.clone());
         self.remote_keys
             .lock()
@@ -217,13 +231,30 @@ impl UcxWorld {
     }
 
     pub(crate) fn wait_all(&self) {
-        self.worker
+        for comm_group in &self.comm_groups {
+            comm_group
+                .worker
+                .wait_all()
+                .expect("UcxWorld::wait_all failed waiting on UCX requests");
+        }
+    }
+    pub(crate) fn thread_wait(&self) {
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+            .worker
             .wait_all()
-            .expect("UcxWorld::wait_all failed waiting on UCX requests");
+            .expect("UcxWorld::thread_wait failed waiting on UCX requests");
     }
 
-    pub(crate) fn progress(&self) {
-        self.worker.progress();
+    pub(crate) fn progress_all(&self) {
+        for comm_group in &self.comm_groups {
+            comm_group.worker.progress();
+        }
+    }
+
+    pub(crate) fn thread_progress(&self) {
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+            .worker
+            .progress();
     }
 
     pub(crate) fn barrier(&self) {
@@ -256,7 +287,7 @@ impl UcxWorld {
                 && remote_addr + num_bytes <= remote_pe_addr + alloc.data_num_bytes
             {
                 let offset = remote_addr - remote_pe_addr;
-                return OneSidedUcxAlloc {
+                return OneSidedUcxMtAlloc {
                     alloc: alloc
                         .clone()
                         .sub_alloc(offset, num_bytes)
@@ -306,7 +337,7 @@ impl UcxWorld {
     pub(crate) fn get_alloc_from_start_addr(
         &self,
         addr: CommAllocAddr,
-    ) -> Result<UcxAlloc, String> {
+    ) -> Result<UcxMtAlloc, String> {
         let allocs = self.mem_handles.lock().unwrap();
         for alloc in allocs.iter() {
             if alloc.mem.inner.addr == *addr {
@@ -354,18 +385,18 @@ impl Drop for UcxWorld {
 #[derive(Clone)]
 enum AllocTable {
     Fabric(
-        Arc<Mutex<Vec<UcxAlloc>>>,
-        Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+        Arc<Mutex<Vec<UcxMtAlloc>>>,
+        Arc<Mutex<Vec<(UcxMtAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ),
     Runtime(
         BTreeAlloc,
         usize,
-        Arc<Mutex<Vec<UcxAlloc>>>,
-        Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+        Arc<Mutex<Vec<UcxMtAlloc>>>,
+        Arc<Mutex<Vec<(UcxMtAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ), //the usize is the offset of the rt_alloc so that we can free it properly if a sub_alloc is the last reference
 }
 
-pub(crate) struct UcxAlloc {
+pub(crate) struct UcxMtAlloc {
     mem: MemoryHandle,
     data_num_bytes: usize,
     pub(crate) my_pe: usize,
@@ -373,13 +404,12 @@ pub(crate) struct UcxAlloc {
     fabric_ref_cnt_offset: usize,
     rt_ref_cnt_offset: usize,
     context: Arc<Context>,
-    worker: Arc<Worker>,
-    endpoints: Vec<Arc<Endpoint>>,
+    comm_groups: Vec<CommGroup>,
     remote_keys: Vec<(usize, Arc<RKey>)>,
     alloc_table: AllocTable,
 }
 
-impl Clone for UcxAlloc {
+impl Clone for UcxMtAlloc {
     fn clone(&self) -> Self {
         self.increment_fabric_ref_count();
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
@@ -393,31 +423,30 @@ impl Clone for UcxAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             context: self.context.clone(),
-            worker: self.worker.clone(),
-            endpoints: self.endpoints.clone(),
+            comm_groups: self.comm_groups.clone(),
             remote_keys: self.remote_keys.clone(),
             alloc_table: self.alloc_table.clone(),
         }
     }
 }
 
-impl From<UcxAlloc> for CommAlloc {
-    fn from(alloc: UcxAlloc) -> Self {
+impl From<UcxMtAlloc> for CommAlloc {
+    fn from(alloc: UcxMtAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::UcxAlloc(alloc),
+            inner_alloc: CommAllocInner::UcxMtAlloc(alloc),
             alloc_type: CommAllocType::Fabric,
         }
     }
 }
 
-impl std::fmt::Debug for UcxAlloc {
+impl std::fmt::Debug for UcxMtAlloc {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let fabric_ref_count = unsafe {
             (&*(self.mem.inner.as_ptr().add(self.fabric_ref_cnt_offset) as *const AtomicUsize))
                 .load(Ordering::SeqCst)
         };
 
-        let mut temp = f.debug_struct("UcxAlloc");
+        let mut temp = f.debug_struct("UcxMtAlloc");
         temp.field(
             "addr",
             &format_args!(
@@ -465,7 +494,7 @@ impl std::fmt::Debug for UcxAlloc {
     }
 }
 
-impl UcxAlloc {
+impl UcxMtAlloc {
     pub(crate) fn new(
         mem: MemoryHandle,
         data_num_bytes: usize,
@@ -473,11 +502,10 @@ impl UcxAlloc {
         my_pe: usize,
         num_pes: usize,
         context: Arc<Context>,
-        worker: Arc<Worker>,
-        endpoints: Vec<Arc<Endpoint>>,
+        comm_groups: Vec<CommGroup>,
         my_remote_keys: Vec<(usize, Arc<RKey>)>,
-        mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
-        remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
+        mem_handles: Arc<Mutex<Vec<UcxMtAlloc>>>,
+        remote_keys: Arc<Mutex<Vec<(UcxMtAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ) -> AllocResult<Self> {
         let ref_cnt_offset = data_num_bytes + padding;
         let fabric_ref_cnt_offset = data_num_bytes + padding;
@@ -490,8 +518,7 @@ impl UcxAlloc {
             fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context,
-            worker,
-            endpoints,
+            comm_groups,
             remote_keys: my_remote_keys,
             alloc_table: AllocTable::Fabric(mem_handles.clone(), remote_keys.clone()),
         };
@@ -521,7 +548,7 @@ impl UcxAlloc {
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
             self.increment_rt_ref_count();
         }
-        let alloc = UcxAlloc {
+        let alloc = UcxMtAlloc {
             mem: self.mem.sub_alloc(offset, size),
             data_num_bytes: size,
             my_pe: self.my_pe,
@@ -529,8 +556,7 @@ impl UcxAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             context: self.context.clone(),
-            worker: self.worker.clone(),
-            endpoints: self.endpoints.clone(),
+            comm_groups: self.comm_groups.clone(),
             remote_keys,
             alloc_table: self.alloc_table.clone(),
         };
@@ -572,7 +598,7 @@ impl UcxAlloc {
         let mem = self.mem.sub_alloc(offset, size);
         let addr = mem.addr;
 
-        let alloc = UcxAlloc {
+        let alloc = UcxMtAlloc {
             mem,
             data_num_bytes: size,
             my_pe: self.my_pe,
@@ -580,8 +606,7 @@ impl UcxAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context: self.context.clone(),
-            worker: self.worker.clone(),
-            endpoints: self.endpoints.clone(),
+            comm_groups: self.comm_groups.clone(),
             remote_keys: my_remote_keys,
             alloc_table: AllocTable::Runtime(
                 alloc_table,
@@ -630,8 +655,7 @@ impl UcxAlloc {
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context: self.context.clone(),
-            worker: self.worker.clone(),
-            endpoints: self.endpoints.clone(),
+            comm_groups: self.comm_groups.clone(),
             remote_keys: self.remote_keys.clone(),
             alloc_table: AllocTable::Runtime(
                 alloc_table,
@@ -703,20 +727,24 @@ impl UcxAlloc {
         );
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
+        let comm_group_id = LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len();
         trace!(target: "ucx",
-            "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x}",
+            "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x} comm group id {}",
             pe,
             remote_addr,
             offset,
-            remote_addr + offset
-        );
-        self.endpoints[pe].put(
-            src_addr.as_ptr() as _,
-            src_addr.len() * std::mem::size_of::<T>(),
             remote_addr + offset,
-            &rkey,
-            self.mem.inner.mem_handle(),
-            managed,
+            comm_group_id
+        );
+        self.comm_groups[comm_group_id]
+            .endpoints[pe]
+            .put(
+                src_addr.as_ptr() as _,
+                src_addr.len() * std::mem::size_of::<T>(),
+                remote_addr + offset,
+                &rkey,
+                self.mem.inner.handle,
+                managed,
         )
     }
 
@@ -738,13 +766,15 @@ impl UcxAlloc {
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
-        self.endpoints[pe].get(
-            dst_addr.as_mut_ptr() as _,
-            dst_addr.len() * std::mem::size_of::<T>(),
-            remote_addr + offset,
-            &rkey,
-            self.mem.inner.mem_handle(),
-        )
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+            .endpoints[pe]
+            .get(
+                dst_addr.as_mut_ptr() as _,
+                dst_addr.len() * std::mem::size_of::<T>(),
+                remote_addr + offset,
+                &rkey,
+                self.mem.inner.handle,
+            )
     }
 
     pub(crate) unsafe fn blocking_inner_get<T: Copy>(
@@ -766,13 +796,14 @@ impl UcxAlloc {
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe]
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+            .endpoints[pe]
             .blocking_get(
                 dst_addr.as_mut_ptr() as _,
                 dst_addr.len() * std::mem::size_of::<T>(),
                 remote_addr + offset,
                 &rkey,
-                self.mem.inner.mem_handle(),
+                self.mem.inner.handle,
             )
             .unwrap();
     }
@@ -789,7 +820,9 @@ impl UcxAlloc {
         match op {
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe].atomic_put(*val, remote_addr + offset, &rkey, self.mem.inner.mem_handle(), managed)
+                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+                    .endpoints[pe]
+                    .atomic_put(*val, remote_addr + offset, &rkey, managed, self.mem.inner.handle)
             }
             _ => panic!("Unsupported atomic operation"),
         }
@@ -807,17 +840,21 @@ impl UcxAlloc {
         match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.mem_handle())
+                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+                    .endpoints[pe]
+                    .atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.handle)
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                    self.endpoints[pe].atomic_swap(
-                    *val,
-                    result.as_mut_ptr(),
-                    remote_addr + offset,
-                    &rkey,
-                    self.mem.inner.mem_handle(),
-                )
+                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+                    .endpoints[pe]
+                    .atomic_swap(
+                        *val,
+                        result.as_mut_ptr(),
+                        remote_addr + offset,
+                        &rkey,
+                        self.mem.inner.handle,
+                    )
             }
             _ => panic!("Unsupported atomic operation"),
         }
@@ -835,14 +872,16 @@ impl UcxAlloc {
         match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe]
-                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.mem_handle())
+                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+                    .endpoints[pe]
+                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.handle)
                     .expect("blocking_atomic_get failed");
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe]
-                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.mem_handle())
+                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+                    .endpoints[pe]
+                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.handle)
                     .expect("blocking_atomic_swap failed");
             }
             _ => panic!("Unsupported atomic operation"),
@@ -854,21 +893,34 @@ impl UcxAlloc {
     }
 
     pub(crate) fn wait_all(&self) {
-        self.worker
+        for comm_group in &self.comm_groups {
+            comm_group
+                .worker
+                .wait_all()
+                .expect("UcxMtAlloc::wait_all failed waiting on UCX requests");
+        }
+    }
+
+    pub(crate) fn thread_wait(&self) {
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)% self.comm_groups.len()]
+            .worker
             .wait_all()
-            .expect("UcxAlloc::wait_all failed waiting on UCX requests");
+            .expect("UcxMtAlloc::thread_wait failed waiting on UCX requests");
     }
 
     pub(crate) fn wait(&self) {
-        self.worker
-            .wait_all()
-            .expect("UcxAlloc::wait failed waiting on UCX requests");
+        for comm_group in &self.comm_groups {
+            comm_group
+                .worker
+                .wait_all()
+                .expect("UcxMtAlloc::wait_all failed waiting on UCX requests");
+        }
     }
 }
 
-impl Drop for UcxAlloc {
+impl Drop for UcxMtAlloc {
     fn drop(&mut self) {
-        trace!(target: "ucx", "Dropping UcxAlloc mem: {:x} - ({:x}) {:x}",
+        trace!(target: "ucx", "Dropping UcxMtAlloc mem: {:x} - ({:x}) {:x}",
                 self.mem.addr,
                 self.mem.addr + self.data_num_bytes,
                 self.mem.addr + self.mem.size);
@@ -932,12 +984,12 @@ impl Drop for UcxAlloc {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct OneSidedUcxAlloc {
+pub(crate) struct OneSidedUcxMtAlloc {
     pub(crate) remote_pe: usize,
-    pub(crate) alloc: UcxAlloc,
+    pub(crate) alloc: UcxMtAlloc,
 }
 
-impl OneSidedUcxAlloc {
+impl OneSidedUcxMtAlloc {
     pub(crate) fn num_bytes(&self) -> usize {
         self.alloc.num_bytes()
     }
@@ -945,17 +997,17 @@ impl OneSidedUcxAlloc {
         self.alloc.start()
     }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> AllocResult<Self> {
-        Ok(OneSidedUcxAlloc {
+        Ok(OneSidedUcxMtAlloc {
             remote_pe: self.remote_pe,
             alloc: self.alloc.sub_alloc(offset, size)?,
         })
     }
 }
 
-impl From<OneSidedUcxAlloc> for CommAlloc {
-    fn from(alloc: OneSidedUcxAlloc) -> Self {
+impl From<OneSidedUcxMtAlloc> for CommAlloc {
+    fn from(alloc: OneSidedUcxMtAlloc) -> Self {
         CommAlloc {
-            inner_alloc: CommAllocInner::OneSidedUcxAlloc(alloc),
+            inner_alloc: CommAllocInner::OneSidedUcxMtAlloc(alloc),
             alloc_type: CommAllocType::Remote,
         }
     }

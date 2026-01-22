@@ -22,6 +22,8 @@ match_cfg::match_cfg! {
 pub(crate) mod libfabric_lamellae;
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabric_lamellae_mt;
+#[cfg(feature = "enable-ucx")]
+pub(crate) mod ucx_lamellae_mt;
 
 #[cfg(feature = "enable-libfabric-async")]
 pub(crate) mod libfabric_async_lamellae;
@@ -36,6 +38,10 @@ use {
 use {
     libfabric_lamellae_mt::{LibfabricMt, LibfabricMtBuilder},
 };
+#[cfg(feature = "enable-ucx")]
+use {
+    ucx_lamellae_mt::{UcxMt, UcxMtBuilder},
+};
 #[cfg(feature = "enable-libfabric-async")]
 use {
     libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
@@ -46,7 +52,7 @@ use ucx_lamellae::{Ucx, UcxBuilder};
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
 use std::sync::Arc;
-use tracing::{debug, trace};
+use tracing::trace;
 
 lazy_static! {
     static ref SERIALIZE_HEADER_LEN: usize =
@@ -66,6 +72,8 @@ pub enum Backend {
     LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
     Ucx,
+    #[cfg(feature = "enable-ucx")]
+    UcxMt,
     /// The Local backend -- intended for single process environments
     Local,
     /// The Shmem backend -- intended for multi process environments single node environments
@@ -127,6 +135,12 @@ impl Default for Backend {
                 return Backend::Ucx;
                 #[cfg(not(feature = "enable-ucx"))]
                 panic!("unable to set ucx backend, recompile with 'enable-ucx' feature")
+            }
+            "ucx-mt" => {
+                #[cfg(feature = "enable-ucx")]
+                return Backend::UcxMt;
+                #[cfg(not(feature = "enable-ucx"))]
+                panic!("unable to set ucx-mt backend, recompile with 'enable-ucx' feature")
             }
             "shmem" => {
                 return Backend::Shmem;
@@ -334,6 +348,8 @@ pub(crate) enum LamellaeBuilder {
     LibfabricAsyncBuilder,
     #[cfg(feature = "enable-ucx")]
     UcxBuilder,
+    #[cfg(feature = "enable-ucx")]
+    UcxMtBuilder,
     ShmemBuilder,
     LocalBuilder,
 }
@@ -373,6 +389,8 @@ pub(crate) enum Lamellae {
     LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
     Ucx,
+    #[cfg(feature = "enable-ucx")]
+    UcxMt,
     // #[cfg(feature = "enable-libfabric")]
     // LibfabricAsync,
     Shmem,
@@ -390,6 +408,8 @@ impl Lamellae {
             Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.comm(),
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.comm(),
+            #[cfg(feature = "enable-ucx")]
+            Lamellae::UcxMt(ucx_mt) => ucx_mt.comm(),
             Lamellae::Shmem(shmem) => shmem.comm(),
             Lamellae::Local(local) => local.comm(),
         }
@@ -405,6 +425,8 @@ impl Lamellae {
             Lamellae::LibfabricAsync(libfabric_async) => libfabric_async.wait_all_print(),
             #[cfg(feature = "enable-ucx")]
             Lamellae::Ucx(ucx) => ucx.wait_all_print(),
+            #[cfg(feature = "enable-ucx")]
+            Lamellae::UcxMt(ucx_mt) => ucx_mt.wait_all_print(),
             // #[cfg(feature = "enable-libfabric")]
             // Lamellae::LibfabricAsync => println!("libfabric async - nothing to print"),
             Lamellae::Shmem(shmem) => shmem.wait_all_print(),
@@ -434,7 +456,7 @@ pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeB
         Backend::Libfabric => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
-            LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain, num_threads))
+            LamellaeBuilder::LibfabricBuilder(LibfabricBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-libfabric")]
         Backend::LibfabricMt => {
@@ -455,7 +477,9 @@ pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeB
             LamellaeBuilder::LibfabricAsyncBuilder(LibfabricAsyncBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-ucx")]
-        Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new(num_threads)),
+        Backend::Ucx => LamellaeBuilder::UcxBuilder(UcxBuilder::new()),
+        #[cfg(feature = "enable-ucx")]
+        Backend::UcxMt => LamellaeBuilder::UcxMtBuilder(UcxMtBuilder::new(num_threads)),
         Backend::Shmem => LamellaeBuilder::ShmemBuilder(ShmemBuilder::new()),
         Backend::Local => LamellaeBuilder::LocalBuilder(LocalBuilder::new()),
     }

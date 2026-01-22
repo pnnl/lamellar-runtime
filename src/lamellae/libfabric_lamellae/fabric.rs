@@ -31,7 +31,6 @@ use crate::{
         AllocationType, AtomicOp as LamellarAtomicOp,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
-    LAMELLAR_THREAD_ID,
 };
 
 use parking_lot::{RwLock,Mutex};
@@ -188,7 +187,6 @@ impl CommGroup{
         let mut old_cnt = cntr.read();
         let mut expected_cnt = pending.load(Ordering::SeqCst);
         let mut cur_cnt = cntr.read();
-        let mut first = true;
         trace!(
                 "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
                 cntr.read(),
@@ -197,9 +195,7 @@ impl CommGroup{
         // drop(_guard);
 
         while cur_cnt < expected_cnt || prev_expected_cnt < expected_cnt || cur_cnt != old_cnt
-        // || first
         {
-            first = false;
             prev_expected_cnt = expected_cnt;
             old_cnt = cur_cnt;
             let _ = self.progress();
@@ -299,7 +295,7 @@ impl std::fmt::Debug for Ofi {
 }
 
 impl Ofi {
-    pub(crate) fn new(provider: Option<&str>, domain: Option<&str>, num_threads: usize) -> FabricResult<Arc<Self>> {
+    pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
         let my_pmi = Arc::new(PmiX::new().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
@@ -1419,7 +1415,7 @@ impl LibfabricAlloc {
             AllocTable::Fabric(_) => None, //only rt_allocs can be leaked
             AllocTable::Runtime(_, _, _) => {
                 self.increment_fabric_ref_count(); //increment the ref count to account for the leaked instance
-                let cnt = self.increment_rt_ref_count(); //increment the ref count to account for the leaked instance
+                let _cnt = self.increment_rt_ref_count(); //increment the ref count to account for the leaked instance
                 debug!(target: "libfabric", "Leaking Libfabric rt-allocation: {:?}", self);
                 // println!("Leaking allocation {:x} {:?}", self.start(), cnt);
                 Some(CommAllocAddr(self.start()))
@@ -1688,7 +1684,7 @@ impl LibfabricAlloc {
             pe
         ));
 
-        let mut remote_src_addr = remote_alloc_info.mem_address().add(offset);
+        let  remote_src_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
         let cg = &self.ofi.comm_group;
         cg.post_get(blocking, || unsafe {

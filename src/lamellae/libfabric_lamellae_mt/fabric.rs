@@ -185,7 +185,6 @@ impl CommGroup{
         let mut old_cnt = cntr.read();
         let mut expected_cnt = pending.load(Ordering::SeqCst);
         let mut cur_cnt = cntr.read();
-        let mut first = true;
         trace!(
                 "{dir} before.  expected_cnt {expected_cnt} prev_expected_cnt {prev_expected_cnt} cur_cnt {} old_cnt {old_cnt} ",
                 cntr.read(),
@@ -194,9 +193,7 @@ impl CommGroup{
         // drop(_guard);
 
         while cur_cnt < expected_cnt || prev_expected_cnt < expected_cnt || cur_cnt != old_cnt
-        // || first
         {
-            first = false;
             prev_expected_cnt = expected_cnt;
             old_cnt = cur_cnt;
             let _ = self.progress();

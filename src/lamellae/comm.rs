@@ -24,6 +24,8 @@ use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae_mt::comm::UcxMtComm;
 use crate::lamellae::{
     local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
     SerializedData,
@@ -52,6 +54,8 @@ pub(crate) enum Comm {
     LibfabricAsync(LibfabricAsyncComm),
     #[cfg(feature = "enable-ucx")]
     Ucx(UcxComm),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(UcxMtComm),
     Shmem(ShmemComm),
     Local(LocalComm),
 }

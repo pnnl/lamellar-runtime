@@ -12,6 +12,8 @@ use crate::lamellae::libfabric_async_lamellae::atomic::{
 };
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae_mt::atomic::{UcxMtAtomicFetchFuture, UcxMtAtomicFuture};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -108,6 +110,8 @@ pub(crate) enum AtomicOpFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
     Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -124,6 +128,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicOpFuture::UcxMt(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
             AtomicOpFuture::Local(f) => f.block(),
         }
@@ -144,6 +150,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicOpFuture::UcxMt(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
             AtomicOpFuture::Local(f) => f.spawn(),
         }
@@ -164,6 +172,8 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
             AtomicOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            AtomicOpFutureProj::UcxMt(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
             AtomicOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -187,6 +197,8 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncAtomicFetchFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
     Local(#[pin] LocalAtomicFetchFuture<T>),
 }
@@ -203,6 +215,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicFetchOpFuture::UcxMt(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
             AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -223,6 +237,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicFetchOpFuture::UcxMt(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -243,6 +259,8 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
             AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            AtomicFetchOpFutureProj::UcxMt(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }

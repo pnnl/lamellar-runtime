@@ -7,9 +7,10 @@ use std::{
     },
 };
 
-use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc};
+use super::{context::Context, endpoint::Endpoint, error::Error, UcxMtAlloc};
 use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
+use std::vec::Vec;
 
 #[derive(Debug, Clone)]
 pub(crate) struct MemoryHandle {
@@ -44,7 +45,7 @@ impl MemoryHandle {
 /// which is optimized for remote memory access operations.
 #[derive(Debug)]
 pub(crate) struct MemoryHandleInner {
-    handle: ucp_mem_h,
+    pub(crate) handle: ucp_mem_h,
     pub(crate) addr: usize,
     context: Arc<Context>,
 }
@@ -72,9 +73,6 @@ impl std::hash::Hash for MemoryHandleInner {
 impl MemoryHandleInner {
     pub(crate) fn as_ptr(&self) -> *const u8 {
         self.addr as *const u8
-    }
-    pub(crate) fn mem_handle(&self) -> ucp_mem_h {
-        self.handle
     }
     pub(crate) fn alloc(context: &Arc<Context>, size: usize) -> Arc<Self> {
         let params = ucp_mem_map_params_t {
@@ -133,8 +131,9 @@ impl MemoryHandleInner {
 
     pub(crate) fn exchange_key_pmi(
         &self,
-        endpoints: &[Arc<Endpoint>],
+        _endpoints: &[Arc<Endpoint>],
         pmi: &Arc<PmiX>,
+        slots: usize,
     ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
@@ -156,8 +155,8 @@ impl MemoryHandleInner {
             // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
             let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
-            let remote_rkey = RKey::unpack(&endpoints[pe], &res[8..]);
-            // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
+            let packed = res[8..].to_vec();
+            let remote_rkey = RKey::from_packed_with_slots(packed, slots);
             all_rkeys.push((remote_address, Arc::new(remote_rkey)));
         }
         Ok(all_rkeys)
@@ -165,9 +164,10 @@ impl MemoryHandleInner {
 
     pub(crate) fn exchange_key_alloc(
         &self,
-        endpoints: &[Arc<Endpoint>],
+        _endpoints: &[Arc<Endpoint>],
         pmi: &Arc<PmiX>,
-        exchange_buffer: &UcxAlloc,
+        exchange_buffer: &UcxMtAlloc,
+        slots: usize,
     ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
@@ -201,8 +201,8 @@ impl MemoryHandleInner {
             // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
             let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
-            let remote_rkey = RKey::unpack(&endpoints[pe], &res[8..]);
-            // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
+            let packed = res[8..].to_vec();
+            let remote_rkey = RKey::from_packed_with_slots(packed, slots);
             all_rkeys.push((remote_address, Arc::new(remote_rkey)));
         }
         ex_buff_slice.fill(0);
@@ -239,33 +239,75 @@ impl Drop for RKeyBuffer {
 /// Remote access key.
 #[derive(Debug)]
 pub(crate) struct RKey {
-    pub(crate) handle: ucp_rkey_h,
+    // packed rkey bytes from ucp_rkey_pack
+    packed: Vec<u8>,
+    // per-comm-group unpacked handles cached in slots indexed by LAMELLAR_THREAD_ID % slots
+    handles: Vec<AtomicUsize>,
 }
 
 unsafe impl Send for RKey {}
 unsafe impl Sync for RKey {}
 
 impl RKey {
-    /// Create remote access key from packed buffer.
-    pub(crate) fn unpack(endpoint: &Endpoint, rkey_buffer: &[u8]) -> Self {
+    /// Create RKey from packed buffer (do not unpack yet).
+    /// Create RKey from packed buffer and allocate `slots` cache entries.
+    pub(crate) fn from_packed_with_slots(rkey_buffer: Vec<u8>, slots: usize) -> Self {
+        let mut handles = Vec::with_capacity(slots);
+        for _ in 0..slots {
+            handles.push(AtomicUsize::new(0));
+        }
+        RKey {
+            packed: rkey_buffer,
+            handles,
+        }
+    }
+
+    /// Get or create an unpacked rkey handle for `endpoint`.
+    /// This is safe to call concurrently; unpacking for the same endpoint
+    /// is performed once and cached.
+    pub(crate) fn handle_for_endpoint(&self, endpoint: &Endpoint) -> ucp_rkey_h {
+        use crate::LAMELLAR_THREAD_ID;
+        let slots = self.handles.len();
+        let idx = LAMELLAR_THREAD_ID.with(|id| *id) % slots;
+        let cur = self.handles[idx].load(Ordering::Acquire);
+        if cur != 0 {
+            return cur as ucp_rkey_h;
+        }
+        // Unpack for this endpoint into a new handle
         let mut handle = MaybeUninit::uninit();
         let status = unsafe {
             ucp_ep_rkey_unpack(
                 endpoint.handle,
-                rkey_buffer.as_ptr() as _,
+                self.packed.as_ptr() as _,
                 handle.as_mut_ptr(),
             )
         };
         assert_eq!(status, ucs_status_t::UCS_OK);
-        // println!("unpacked rkey: {:?}", unsafe { handle.assume_init() });
-        RKey {
-            handle: unsafe { handle.assume_init() },
+        let handle = unsafe { handle.assume_init() } as usize;
+        // Attempt to publish our handle; if another thread already installed one, destroy ours and use theirs
+        match self.handles[idx].compare_exchange(0, handle, Ordering::AcqRel, Ordering::Acquire) {
+            Ok(_) => handle as ucp_rkey_h,
+            Err(existing) => {
+                // another thread beat us; destroy our handle and use existing
+                unsafe { ucp_rkey_destroy(handle as ucp_rkey_h) };
+                existing as ucp_rkey_h
+            }
         }
+    }
+
+    /// Expose packed bytes for exchange debug/use.
+    pub(crate) fn as_packed_slice(&self) -> &[u8] {
+        &self.packed
     }
 }
 
 impl Drop for RKey {
     fn drop(&mut self) {
-        unsafe { ucp_rkey_destroy(self.handle) }
+        for h in &self.handles {
+            let v = h.load(Ordering::Acquire);
+            if v != 0 {
+                unsafe { ucp_rkey_destroy(v as ucp_rkey_h) }
+            }
+        }
     }
 }

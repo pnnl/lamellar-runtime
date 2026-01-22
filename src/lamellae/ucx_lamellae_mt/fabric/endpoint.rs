@@ -2,16 +2,17 @@ use std::{
     mem::MaybeUninit,
     sync::{atomic::AtomicUsize, Arc},
 };
+use tracing::trace;
 
 // use ucx1_sys::*;
 
 use lamellar_ucx_sys::{
     ucp_atomic_op_nbx, ucp_atomic_op_t, ucp_dt_make_contig, ucp_ep_close_nbx, ucp_ep_create,
     ucp_ep_flush_nbx, ucp_ep_h, ucp_ep_params, ucp_ep_params_field, ucp_err_handler,
-    ucp_err_handling_mode_t, ucp_get_nbx, ucp_mem_h, ucp_op_attr_t, ucp_put_nbx, ucp_request_check_status,
-    ucp_request_free, ucp_request_param_t, ucp_request_param_t__bindgen_ty_1,
-    ucp_request_param_t__bindgen_ty_2, ucs_memory_type, ucs_sock_addr, ucs_status_ptr_t,
-    ucs_status_t, UCS_PTR_IS_PTR,
+    ucp_err_handling_mode_t, ucp_get_nbx, ucp_mem_h, ucp_op_attr_t, ucp_put_nbx,
+    ucp_request_check_status, ucp_request_free, ucp_request_param_t,
+    ucp_request_param_t__bindgen_ty_1, ucp_request_param_t__bindgen_ty_2, ucs_memory_type,
+    ucs_sock_addr, ucs_status_ptr_t, ucs_status_t, UCS_PTR_IS_PTR,
 };
 
 use super::{error::Error, memory_region::RKey, worker::Worker};
@@ -154,22 +155,23 @@ impl Endpoint {
         local_memh: ucp_mem_h,
         managed: bool,
     ) -> Option<UcxRequest> {
+
+        trace!(target: "ucx", "endpoint put to remote addr {:x}, size {}", remote_addr, size);
         // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
         //     let request = &mut *(request as *mut Request);
         //     request.waker.wake();
         // }
 
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_put_nbx(
                 self.handle,
                 buf as _,
                 size as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
-                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -213,17 +215,16 @@ impl Endpoint {
         //     let request = &mut *(request as *mut Request);
         //     request.waker.wake();
         // }
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_get_nbx(
                 self.handle,
                 buf as _,
                 size as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
-                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -248,17 +249,16 @@ impl Endpoint {
         rkey: &RKey,
         local_memh: ucp_mem_h,
     ) -> Result<(), Error> {
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_get_nbx(
                 self.handle,
                 buf as _,
                 size as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
-                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -297,12 +297,13 @@ impl Endpoint {
         value: T,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
         managed: bool,
+        local_memh: ucp_mem_h,
     ) -> Option<UcxRequest> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
 
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -310,12 +311,10 @@ impl Endpoint {
                 &value as *const T as _,
                 1 as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -348,6 +347,7 @@ impl Endpoint {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
         let zero: MaybeUninit<T> = MaybeUninit::uninit();
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -355,12 +355,10 @@ impl Endpoint {
                 zero.as_ptr() as _,
                 1 as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -387,6 +385,7 @@ impl Endpoint {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
         let zero: MaybeUninit<T> = MaybeUninit::uninit();
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -394,12 +393,10 @@ impl Endpoint {
                 zero.as_ptr() as _,
                 1 as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -444,6 +441,7 @@ impl Endpoint {
     ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -451,12 +449,10 @@ impl Endpoint {
                 &value as *const T as _,
                 1 as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -483,6 +479,7 @@ impl Endpoint {
         local_memh: ucp_mem_h,
     ) -> Result<(), Error> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
+        let rkey_handle = rkey.handle_for_endpoint(self);
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
@@ -490,12 +487,10 @@ impl Endpoint {
                 &value as *const T as _,
                 1 as _,
                 remote_addr as _,
-                rkey.handle,
+                rkey_handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },

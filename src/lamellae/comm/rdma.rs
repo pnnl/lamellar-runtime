@@ -31,6 +31,10 @@ use crate::lamellae::libfabric_async_lamellae::rdma::{
 use crate::lamellae::ucx_lamellae::rdma::{
     UcxGetBufferFuture, UcxGetFuture, UcxGetIntoBufferFuture, UcxPutFuture,
 };
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae_mt::rdma::{
+    UcxMtGetBufferFuture, UcxMtGetFuture, UcxMtGetIntoBufferFuture, UcxMtPutFuture,
+};
 
 use enum_dispatch::enum_dispatch;
 use futures_util::Future;
@@ -62,6 +66,8 @@ pub(crate) enum RdmaPutFuture<T: Remote> {
     LibfabricAsync(#[pin] LibfabricAsyncPutFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxPutFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtPutFuture<T>),
     Shmem(#[pin] ShmemFuture<T>),
     // Local(#[pin] LocalFuture<T>),
     Local(#[pin] LocalFuture<T>),
@@ -79,6 +85,8 @@ impl<T: Remote> RdmaHandle<T> {
             RdmaPutFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaPutFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaPutFuture::UcxMt(f) => f.block(),
             RdmaPutFuture::Shmem(f) => f.block(),
             RdmaPutFuture::Local(f) => f.block(),
         }
@@ -99,6 +107,8 @@ impl<T: Remote> RdmaHandle<T> {
             RdmaPutFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaPutFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaPutFuture::UcxMt(f) => f.spawn(),
             RdmaPutFuture::Shmem(f) => f.spawn(),
             RdmaPutFuture::Local(f) => f.spawn(),
         }
@@ -119,6 +129,8 @@ impl<T: Remote> Future for RdmaHandle<T> {
             RdmaPutFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaPutFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            RdmaPutFutureProj::UcxMt(f) => f.poll(cx),
             RdmaPutFutureProj::Shmem(f) => f.poll(cx),
             RdmaPutFutureProj::Local(f) => f.poll(cx),
         }
@@ -142,6 +154,8 @@ pub(crate) enum RdmaGetFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncGetFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxGetFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtGetFuture<T>),
     Shmem(#[pin] ShmemGetFuture<T>),
     Local(#[pin] LocalGetFuture<T>),
 }
@@ -158,6 +172,8 @@ impl<T: Remote> RdmaGetHandle<T> {
             RdmaGetFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetFuture::UcxMt(f) => f.block(),
             RdmaGetFuture::Shmem(f) => f.block(),
             RdmaGetFuture::Local(f) => f.block(),
         }
@@ -178,6 +194,8 @@ impl<T: Remote> RdmaGetHandle<T> {
             RdmaGetFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetFuture::UcxMt(f) => f.spawn(),
             RdmaGetFuture::Shmem(f) => f.spawn(),
             RdmaGetFuture::Local(f) => f.spawn(),
         }
@@ -198,6 +216,8 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
             RdmaGetFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaGetFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetFutureProj::UcxMt(f) => f.poll(cx),
             RdmaGetFutureProj::Shmem(f) => f.poll(cx),
             RdmaGetFutureProj::Local(f) => f.poll(cx),
         }
@@ -221,6 +241,8 @@ pub(crate) enum RdmaGetBufferFuture<T> {
     LibfabricAsync(#[pin] LibfabricAsyncGetBufferFuture<T>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxGetBufferFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtGetBufferFuture<T>),
     Shmem(#[pin] ShmemGetBufferFuture<T>),
     Local(#[pin] LocalGetBufferFuture<T>),
 }
@@ -237,6 +259,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
             RdmaGetBufferFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetBufferFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetBufferFuture::UcxMt(f) => f.block(),
             RdmaGetBufferFuture::Shmem(f) => f.block(),
             RdmaGetBufferFuture::Local(f) => f.block(),
         }
@@ -257,6 +281,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
             RdmaGetBufferFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetBufferFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetBufferFuture::UcxMt(f) => f.spawn(),
             RdmaGetBufferFuture::Shmem(f) => f.spawn(),
             RdmaGetBufferFuture::Local(f) => f.spawn(),
         }
@@ -277,6 +303,8 @@ impl<T: Remote> Future for RdmaGetBufferHandle<T> {
             RdmaGetBufFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaGetBufFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetBufFutureProj::UcxMt(f) => f.poll(cx),
             RdmaGetBufFutureProj::Shmem(f) => f.poll(cx),
             RdmaGetBufFutureProj::Local(f) => f.poll(cx),
         }
@@ -300,6 +328,8 @@ pub(crate) enum RdmaGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     LibfabricAsync(#[pin] LibfabricAsyncGetIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     Ucx(#[pin] UcxGetIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtGetIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemGetIntoBufferFuture<T, B>),
     // Local(#[pin] LocalFuture<T>),
     Local(#[pin] LocalGetIntoBufferFuture<T, B>),
@@ -317,6 +347,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
             RdmaGetIntoBufferFuture::LibfabricAsync(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetIntoBufferFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetIntoBufferFuture::UcxMt(f) => f.block(),
             RdmaGetIntoBufferFuture::Shmem(f) => f.block(),
             RdmaGetIntoBufferFuture::Local(f) => f.block(),
         }
@@ -337,6 +369,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
             RdmaGetIntoBufferFuture::LibfabricAsync(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetIntoBufferFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetIntoBufferFuture::UcxMt(f) => f.spawn(),
             RdmaGetIntoBufferFuture::Shmem(f) => f.spawn(),
             RdmaGetIntoBufferFuture::Local(f) => f.spawn(),
         }
@@ -357,6 +391,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for RdmaGetIntoBufferHandle<T, B>
             RdmaGetIntoBufferFutureProj::LibfabricAsync(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaGetIntoBufferFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            RdmaGetIntoBufferFutureProj::UcxMt(f) => f.poll(cx),
             RdmaGetIntoBufferFutureProj::Shmem(f) => f.poll(cx),
             RdmaGetIntoBufferFutureProj::Local(f) => f.poll(cx),
         }
