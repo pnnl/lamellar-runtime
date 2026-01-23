@@ -743,7 +743,6 @@ impl UcxMtAlloc {
                 src_addr.len() * std::mem::size_of::<T>(),
                 remote_addr + offset,
                 &rkey,
-                self.mem.inner.handle,
                 managed,
         )
     }
@@ -773,7 +772,6 @@ impl UcxMtAlloc {
                 dst_addr.len() * std::mem::size_of::<T>(),
                 remote_addr + offset,
                 &rkey,
-                self.mem.inner.handle,
             )
     }
 
@@ -803,7 +801,6 @@ impl UcxMtAlloc {
                 dst_addr.len() * std::mem::size_of::<T>(),
                 remote_addr + offset,
                 &rkey,
-                self.mem.inner.handle,
             )
             .unwrap();
     }
@@ -822,7 +819,7 @@ impl UcxMtAlloc {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_put(*val, remote_addr + offset, &rkey, managed, self.mem.inner.handle)
+                    .atomic_put(*val, remote_addr + offset, &rkey, managed)
             }
             _ => panic!("Unsupported atomic operation"),
         }
@@ -842,7 +839,7 @@ impl UcxMtAlloc {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.handle)
+                    .atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
@@ -853,7 +850,6 @@ impl UcxMtAlloc {
                         result.as_mut_ptr(),
                         remote_addr + offset,
                         &rkey,
-                        self.mem.inner.handle,
                     )
             }
             _ => panic!("Unsupported atomic operation"),
@@ -874,14 +870,14 @@ impl UcxMtAlloc {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.handle)
+                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
                     .expect("blocking_atomic_get failed");
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.handle)
+                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey)
                     .expect("blocking_atomic_swap failed");
             }
             _ => panic!("Unsupported atomic operation"),
