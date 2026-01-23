@@ -715,7 +715,6 @@ impl UcxAlloc {
             src_addr.len() * std::mem::size_of::<T>(),
             remote_addr + offset,
             &rkey,
-            self.mem.inner.mem_handle(),
             managed,
         )
     }
@@ -743,7 +742,6 @@ impl UcxAlloc {
             dst_addr.len() * std::mem::size_of::<T>(),
             remote_addr + offset,
             &rkey,
-            self.mem.inner.mem_handle(),
         )
     }
 
@@ -772,7 +770,6 @@ impl UcxAlloc {
                 dst_addr.len() * std::mem::size_of::<T>(),
                 remote_addr + offset,
                 &rkey,
-                self.mem.inner.mem_handle(),
             )
             .unwrap();
     }
@@ -789,7 +786,7 @@ impl UcxAlloc {
         match op {
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe].atomic_put(*val, remote_addr + offset, &rkey, self.mem.inner.mem_handle(), managed)
+                self.endpoints[pe].atomic_put(*val, remote_addr + offset, &rkey, managed)
             }
             _ => panic!("Unsupported atomic operation"),
         }
@@ -807,7 +804,7 @@ impl UcxAlloc {
         match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.mem_handle())
+                self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
@@ -816,7 +813,6 @@ impl UcxAlloc {
                     result.as_mut_ptr(),
                     remote_addr + offset,
                     &rkey,
-                    self.mem.inner.mem_handle(),
                 )
             }
             _ => panic!("Unsupported atomic operation"),
@@ -836,13 +832,13 @@ impl UcxAlloc {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.endpoints[pe]
-                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.mem_handle())
+                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
                     .expect("blocking_atomic_get failed");
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.endpoints[pe]
-                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey, self.mem.inner.mem_handle())
+                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey)
                     .expect("blocking_atomic_swap failed");
             }
             _ => panic!("Unsupported atomic operation"),

@@ -8,7 +8,7 @@ use std::{
 use lamellar_ucx_sys::{
     ucp_atomic_op_nbx, ucp_atomic_op_t, ucp_dt_make_contig, ucp_ep_close_nbx, ucp_ep_create,
     ucp_ep_flush_nbx, ucp_ep_h, ucp_ep_params, ucp_ep_params_field, ucp_err_handler,
-    ucp_err_handling_mode_t, ucp_get_nbx, ucp_mem_h, ucp_op_attr_t, ucp_put_nbx, ucp_request_check_status,
+    ucp_err_handling_mode_t, ucp_get_nbx, ucp_op_attr_t, ucp_put_nbx, ucp_request_check_status,
     ucp_request_free, ucp_request_param_t, ucp_request_param_t__bindgen_ty_1,
     ucp_request_param_t__bindgen_ty_2, ucs_memory_type, ucs_sock_addr, ucs_status_ptr_t,
     ucs_status_t, UCS_PTR_IS_PTR,
@@ -151,7 +151,6 @@ impl Endpoint {
         size: usize,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
         managed: bool,
     ) -> Option<UcxRequest> {
         // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
@@ -168,8 +167,7 @@ impl Endpoint {
                 rkey.handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -180,7 +178,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 } as _,
             )
         };
@@ -207,7 +205,6 @@ impl Endpoint {
         size: usize,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
     ) -> UcxRequest {
         // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
         //     let request = &mut *(request as *mut Request);
@@ -222,8 +219,7 @@ impl Endpoint {
                 rkey.handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -234,7 +230,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 } as _,
             )
         };
@@ -246,7 +242,6 @@ impl Endpoint {
         size: usize,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
     ) -> Result<(), Error> {
         let request = unsafe {
             ucp_get_nbx(
@@ -257,8 +252,7 @@ impl Endpoint {
                 rkey.handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -269,7 +263,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 } as _,
             )
         };
@@ -297,7 +291,6 @@ impl Endpoint {
         value: T,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
         managed: bool,
     ) -> Option<UcxRequest> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
@@ -314,8 +307,7 @@ impl Endpoint {
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
                         | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -326,7 +318,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
@@ -343,7 +335,6 @@ impl Endpoint {
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
     ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
@@ -359,8 +350,7 @@ impl Endpoint {
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
                         | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -371,7 +361,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
@@ -382,7 +372,6 @@ impl Endpoint {
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
     ) -> Result<(), Error> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
@@ -398,8 +387,7 @@ impl Endpoint {
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
                         | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -410,7 +398,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
@@ -440,7 +428,6 @@ impl Endpoint {
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
     ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
@@ -455,8 +442,7 @@ impl Endpoint {
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
                         | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -467,7 +453,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 },
             )
         };
@@ -480,7 +466,6 @@ impl Endpoint {
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
-        local_memh: ucp_mem_h,
     ) -> Result<(), Error> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         let request = unsafe {
@@ -494,8 +479,7 @@ impl Endpoint {
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
                         | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMH as u32,
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
@@ -506,7 +490,7 @@ impl Endpoint {
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
                     },
-                    memh: local_memh as *mut _,
+                    memh: std::ptr::null_mut(),
                 },
             )
         };

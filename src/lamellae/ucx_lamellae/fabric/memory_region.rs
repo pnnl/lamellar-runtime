@@ -73,9 +73,7 @@ impl MemoryHandleInner {
     pub(crate) fn as_ptr(&self) -> *const u8 {
         self.addr as *const u8
     }
-    pub(crate) fn mem_handle(&self) -> ucp_mem_h {
-        self.handle
-    }
+    // removed mem_handle method, no longer needed
     pub(crate) fn alloc(context: &Arc<Context>, size: usize) -> Arc<Self> {
         let params = ucp_mem_map_params_t {
             field_mask: (ucp_mem_map_params_field::UCP_MEM_MAP_PARAM_FIELD_LENGTH
