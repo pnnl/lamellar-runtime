@@ -1255,7 +1255,7 @@ impl LibfabricAlloc {
         mem: Arc<memmap::MmapMut>,
         mr: MemoryRegion,
         remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
-            : usize,
+        num_bytes: usize,
         padding: usize,
         alloc_table: Arc<AllocInfoManager>,
     ) -> Result<Self, libfabric::error::Error> {
