@@ -258,7 +258,6 @@ impl UcxWorld {
                 let offset = remote_addr - remote_pe_addr;
                 return OneSidedUcxAlloc {
                     alloc: alloc
-                        .clone()
                         .sub_alloc(offset, num_bytes)
                         .expect("one_sided_alloc_from_remote_pe_and_addr failed"),
                     remote_pe,

@@ -40,24 +40,6 @@ impl CommMem for UcxComm {
         Ok(comm_alloc)
     }
 
-    // #[tracing::instrument(skip(self), level = "debug")]
-    // fn free(&self, alloc: CommAlloc) {
-    //     assert!(alloc.alloc_type == CommAllocType::Fabric);
-    //     match alloc.inner_alloc {
-    //         CommAllocInner::Raw(addr, _) => {
-    //             println!("freeing raw alloc: {:x} should we ever be here?", addr);
-    //             self.ucx.free_addr(addr);
-    //         }
-    //         CommAllocInner::UcxAlloc(inner_alloc) => {
-    //             // println!("freeing ucx inner_alloc: {:?}", inner_alloc);
-    //             self.ucx.free_alloc(&inner_alloc);
-    //         }
-    //         _ => {
-    //             panic!("free should only be called with UcxAlloc or Raw addr");
-    //         }
-    //     }
-    // }
-
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
         // add space for ref count
@@ -104,36 +86,6 @@ impl CommMem for UcxComm {
         }
         false
     }
-
-    // #[tracing::instrument(skip(self), level = "debug")]
-    // fn rt_free(&self, alloc: CommAlloc) {
-    //     assert!(alloc.alloc_type == CommAllocType::RtHeap);
-    //     match alloc.inner_alloc {
-    //         CommAllocInner::Raw(addr, _) => {
-    //             trace!("freeing rt alloc: {:x}", addr);
-    //             let allocs = self.runtime_allocs.read();
-    //             for (_, alloc) in allocs.iter() {
-    //                 if let Ok(_) = alloc.free(addr) {
-    //                     return;
-    //                 }
-    //             }
-    //         }
-    //         CommAllocInner::UcxAlloc(inner_alloc) => {
-    //             trace!("freeing rt alloc: {:?}", inner_alloc);
-    //             let allocs = self.runtime_allocs.read();
-    //             for (_, alloc) in allocs.iter() {
-    //                 if let Ok(_) = alloc.free(inner_alloc.start()) {
-    //                     return;
-    //                 }
-    //             }
-    //             panic!("Error invalid free! {:?}", inner_alloc);
-    //         }
-    //         _ => panic!(
-    //             "unexpected allocation type {:?} in rt_free",
-    //             alloc.inner_alloc
-    //         ),
-    //     }
-    // }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {

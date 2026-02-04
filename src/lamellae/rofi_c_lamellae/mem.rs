@@ -1,4 +1,6 @@
 use std::{collections::HashMap, sync::atomic::Ordering};
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicUsize;
 
 use tracing::{debug, trace};
 
@@ -9,6 +11,7 @@ use crate::{
         comm::{
             error::{AllocError, AllocResult},
             CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
+            alloc::calc_alloc_padding_size_align,
         },
         AllocationType,
     },
@@ -16,8 +19,9 @@ use crate::{
 };
 
 use super::{
-    comm::{RofiCComm, ROFI_SIZE},
+    comm::{RofiCComm, HEAP_SIZE},
     fabric::*,
+    rofi::*
 };
 
 impl CommMem for RofiCComm {
@@ -28,75 +32,72 @@ impl CommMem for RofiCComm {
         alloc_type: AllocationType,
         align: usize,
     ) -> AllocResult<CommAlloc> {
-        // rofi_c allocs are aligned on page boundaries so no need to pass in alignment constraint
-        let addr = rofi_c_alloc(size, alloc_type)? as usize;
+        let inner_alloc = self.rofi_c.alloc(size, alloc_type, align)?;
+        // unsafe {
+        //     inner_alloc.zeroize_bytes();
+        // }
+        // println!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
-            inner_alloc: CommAllocInner::Raw(addr, size),
+            inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc),
             alloc_type: CommAllocType::Fabric,
         };
-        self.fabric_allocs.write().insert(addr, comm_alloc.clone());
+
+        // self.fabric_allocs.write().insert(addr,comm_alloc.clone());
         Ok(comm_alloc)
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
-    fn free(&self, alloc: CommAlloc) {
-        //maybe need to do something more intelligent on the drop of the rofi_c_alloc
-        assert!(alloc.alloc_type == CommAllocType::Fabric);
-        let addr = alloc.comm_addr().into();
-        rofi_c_release(addr);
-        self.fabric_allocs.write().remove(&addr);
-    }
-
-    #[tracing::instrument(skip(self), level = "debug")]
     fn rt_alloc(&self, size: usize, align: usize) -> AllocResult<CommAlloc> {
+        // add space for ref count
+        let (padding, size, align) = calc_alloc_padding_size_align(size, align);
+
         let allocs = self.runtime_allocs.read();
-        for alloc in allocs.iter() {
+        for (inner_alloc, alloc) in allocs.iter() {
             if let Some(addr) = alloc.try_malloc(size, align) {
-                trace!("new rt alloc: {:x} {}", addr, size);
-                return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::Raw(addr, size),
+                // trace!(
+                //     "new rt alloc: {:x} {} {}",
+                //     addr,
+                //     addr - inner_alloc.start(),
+                //     size
+                // );
+                let alloc = inner_alloc.rt_alloc(
+                    alloc.clone(),
+                    addr - inner_alloc.start(),
+                    padding,
+                    size,
+                )?;
+                let comm_alloc = CommAlloc {
+                    inner_alloc: CommAllocInner::RofiCAlloc(alloc),
                     alloc_type: CommAllocType::RtHeap,
-                });
+                };
+                return Ok(comm_alloc);
             }
         }
         Err(AllocError::OutOfMemoryError(size))
+       
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn rt_check_alloc(&self, size: usize, align: usize) -> bool {
+        // add space for ref count
+        let (_padding, size, align) = calc_alloc_padding_size_align(size, align);
+
         let allocs = self.runtime_allocs.read();
-        for alloc in allocs.iter() {
-            if alloc.fake_malloc(size, align) {
+        for (_inner_alloc, alloc) in allocs.iter() {
+            if let Some(_addr) = alloc.try_malloc(size, align) {
                 return true;
             }
         }
         false
     }
 
-    #[tracing::instrument(skip(self), level = "debug")]
-    fn rt_free(&self, alloc: CommAlloc) {
-        trace!("freeing rt alloc: {:x}", alloc.comm_addr());
-        assert!(alloc.alloc_type == CommAllocType::RtHeap);
-        if let CommAllocInner::Raw(addr, _) = alloc.info {
-            trace!("freeing raw alloc: {:x}", addr);
-            let allocs = self.runtime_allocs.read();
-            for alloc in allocs.iter() {
-                if let Ok(_) = alloc.free(addr) {
-                    return;
-                }
-            }
-            panic!("Error invalid free! {:?}", addr);
-        } else {
-            unreachable!("rt_free should only be called with Raw allocs, not AllocInfo");
-        }
-    }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
         let allocs = self.runtime_allocs.read();
         for alloc in allocs.iter() {
-            occupied += alloc.occupied();
+            occupied += alloc.1.occupied();
         }
         occupied
     }
@@ -106,18 +107,18 @@ impl CommMem for RofiCComm {
         if config().heap_mode == HeapMode::Static {
             panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
         }
-        let size = std::cmp::max(
-            min_size * 2 * self.num_pes,
-            ROFI_SIZE.load(Ordering::SeqCst),
-        );
+        let size = std::cmp::max(min_size * 2 * self.num_pes, HEAP_SIZE.load(Ordering::SeqCst));
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
-            if let CommAllocInner::Raw(addr, _) = alloc.info {
+
+            if let CommAllocInner::RofiCAlloc(inner_alloc) = alloc.inner_alloc {
                 let mut new_alloc = BTreeAlloc::new("rofi_c_mem".to_string());
-                new_alloc.init(addr, size);
-                self.runtime_allocs.write().push(new_alloc);
+                new_alloc.init(inner_alloc.start(), size);
+                self.runtime_allocs
+                    .write()
+                    .push((inner_alloc.clone(), new_alloc));
             } else {
-                panic!("rofi_c alloc_pool should only be called with Raw allocs, not AllocInfo");
+                panic!("rofi_c alloc pool should only be called with RofiCAlloc addr");
             }
         } else {
             panic!("[Error] out of system memory");
@@ -133,41 +134,84 @@ impl CommMem for RofiCComm {
     fn print_pools(&self) {
         let allocs = self.runtime_allocs.read();
         println!("num_pools {:?}", allocs.len());
-        for alloc in allocs.iter() {
-            println!(alloc.start_addr, alloc.max_size,);
+        for (_inner_alloc, alloc) in allocs.iter() {
+            println!("{:x} {:?}", alloc.start_addr, alloc.max_size,);
         }
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> CommAllocAddr {
-        rofi_c_local_addr(remote_pe, remote_addr)
-            .expect("unable to locate local memory addr for remote addr")
+        self.rofi_c
+            .local_addr(remote_pe, remote_addr)
+            .expect("local_addr failed")
             .into()
+    }
+
+    fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        _remote_pe: usize,
+        _remote_addr: usize,
+        _num_bytes: usize,
+    ) -> CommAlloc {
+        self. rofi_c
+            .one_sided_alloc_from_remote_pe_and_addr(_remote_pe, _remote_addr, _num_bytes)
+    }
+    fn local_alloc_and_offset_from_remote_pe_and_addr(
+        &self,
+        _remote_pe: usize,
+        _remote_addr: usize,
+    ) -> (CommAlloc, usize) {
+        self.rofi_c
+            .local_alloc_and_offset_from_remote_pe_and_addr(_remote_pe, _remote_addr)
+            .expect("local_alloc_and_offset_from_remote_pe_and_addr failed")
+    }
+
+    fn local_rt_alloc_from_local_addr(&self, addr: usize) -> AllocResult<CommAlloc> {
+        for (inner_alloc, alloc) in self.runtime_allocs.read().iter() {
+            if let Some(size) = alloc.find(addr) {
+                let comm_alloc = CommAlloc {
+                    inner_alloc: CommAllocInner::RofiCAlloc(
+                                inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?
+                            .as_rt_alloc(alloc.clone())?,
+                    ),
+                    alloc_type: CommAllocType::RtHeap,
+                };
+                return Ok(comm_alloc);
+            }
+        }
+        Err(AllocError::LocalNotFound(CommAllocAddr(addr)))
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn remote_addr(&self, pe: usize, local_addr: usize) -> CommAllocAddr {
-        rofi_c_remote_addr(pe, local_addr)
-            .expect("unable to locate remote memory addr for local addr")
+        self.rofi_c
+            .remote_addr(pe, local_addr)
+            .expect("remote_addr failed")
             .into()
     }
 
+    
+
     #[tracing::instrument(skip(self), level = "debug")]
     fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {
-        trace!("get_alloc_cloned: {:?}", addr);
-        let allocs = self.fabric_allocs.read();
-        if let Some(alloc) = allocs.get(&addr.0) {
-            return Ok(alloc.clone());
+        trace!("get_alloc: {:?}", addr);
+        if let Ok(inner_alloc) = self.rofi_c.get_alloc_from_start_addr(addr) {
+            return Ok(CommAlloc {
+                inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc),
+                alloc_type: CommAllocType::Fabric,
+            });
         }
+
         let allocs = self.runtime_allocs.read();
-        for alloc in allocs.iter() {
+        for (inner_alloc, alloc) in allocs.iter() {
             if let Some(size) = alloc.find(addr.0) {
                 return Ok(CommAlloc {
-                    inner_alloc: CommAllocInner::Raw(addr.0, size),
+                    inner_alloc: CommAllocInner::RofiCAlloc(inner_alloc.sub_alloc(addr.0, size)?),
                     alloc_type: CommAllocType::RtHeap,
                 });
             }
         }
+
         Err(AllocError::LocalNotFound(addr))
     }
 }

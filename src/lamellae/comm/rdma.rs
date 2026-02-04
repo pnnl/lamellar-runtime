@@ -1,5 +1,3 @@
-#[cfg(feature = "rofi-c")]
-use crate::lamellae::rofi_c_lamellae::rdma::RofiCFuture;
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -14,7 +12,6 @@ use crate::{
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     LamellarTask,
 };
-
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::rdma::{
     LibfabricGetBufferFuture, LibfabricGetFuture, LibfabricGetIntoBufferFuture, LibfabricPutFuture,
@@ -34,6 +31,10 @@ use crate::lamellae::ucx_lamellae::rdma::{
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae_mt::rdma::{
     UcxMtGetBufferFuture, UcxMtGetFuture, UcxMtGetIntoBufferFuture, UcxMtPutFuture,
+};
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::rdma::{
+    RofiCPutFuture, RofiCGetFuture, RofiCGetBufferFuture, RofiCGetIntoBufferFuture,
 };
 
 use enum_dispatch::enum_dispatch;
@@ -68,6 +69,8 @@ pub(crate) enum RdmaPutFuture<T: Remote> {
     Ucx(#[pin] UcxPutFuture<T>),
     #[cfg(feature = "enable-ucx")]
     UcxMt(#[pin] UcxMtPutFuture<T>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCPutFuture<T>),
     Shmem(#[pin] ShmemFuture<T>),
     // Local(#[pin] LocalFuture<T>),
     Local(#[pin] LocalFuture<T>),
@@ -87,6 +90,8 @@ impl<T: Remote> RdmaHandle<T> {
             RdmaPutFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaPutFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaPutFuture::RofiC(f) => f.block(),
             RdmaPutFuture::Shmem(f) => f.block(),
             RdmaPutFuture::Local(f) => f.block(),
         }
@@ -109,6 +114,8 @@ impl<T: Remote> RdmaHandle<T> {
             RdmaPutFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaPutFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaPutFuture::RofiC(f) => f.spawn(),
             RdmaPutFuture::Shmem(f) => f.spawn(),
             RdmaPutFuture::Local(f) => f.spawn(),
         }
@@ -131,6 +138,8 @@ impl<T: Remote> Future for RdmaHandle<T> {
             RdmaPutFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaPutFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaPutFutureProj::RofiC(f) => f.poll(cx),
             RdmaPutFutureProj::Shmem(f) => f.poll(cx),
             RdmaPutFutureProj::Local(f) => f.poll(cx),
         }
@@ -139,13 +148,13 @@ impl<T: Remote> Future for RdmaHandle<T> {
 
 #[must_use = " RdmaGetHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
-pub struct RdmaGetHandle<T> {
+pub struct RdmaGetHandle<T: Remote> {
     #[pin]
     pub(crate) future: RdmaGetFuture<T>,
 }
 
 #[pin_project(project = RdmaGetFutureProj)]
-pub(crate) enum RdmaGetFuture<T> {
+pub(crate) enum RdmaGetFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetFuture<T>),
     #[cfg(feature = "enable-libfabric")]
@@ -156,6 +165,8 @@ pub(crate) enum RdmaGetFuture<T> {
     Ucx(#[pin] UcxGetFuture<T>),
     #[cfg(feature = "enable-ucx")]
     UcxMt(#[pin] UcxMtGetFuture<T>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCGetFuture<T>),
     Shmem(#[pin] ShmemGetFuture<T>),
     Local(#[pin] LocalGetFuture<T>),
 }
@@ -174,6 +185,8 @@ impl<T: Remote> RdmaGetHandle<T> {
             RdmaGetFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetFuture::RofiC(f) => f.block(),
             RdmaGetFuture::Shmem(f) => f.block(),
             RdmaGetFuture::Local(f) => f.block(),
         }
@@ -196,6 +209,8 @@ impl<T: Remote> RdmaGetHandle<T> {
             RdmaGetFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetFuture::RofiC(f) => f.spawn(),
             RdmaGetFuture::Shmem(f) => f.spawn(),
             RdmaGetFuture::Local(f) => f.spawn(),
         }
@@ -218,6 +233,8 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
             RdmaGetFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaGetFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetFutureProj::RofiC(f) => f.poll(cx),
             RdmaGetFutureProj::Shmem(f) => f.poll(cx),
             RdmaGetFutureProj::Local(f) => f.poll(cx),
         }
@@ -226,13 +243,13 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
 
 #[must_use = " RdmaGetHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
-pub struct RdmaGetBufferHandle<T> {
+pub struct RdmaGetBufferHandle<T: Remote> {
     #[pin]
     pub(crate) future: RdmaGetBufferFuture<T>,
 }
 
 #[pin_project(project = RdmaGetBufFutureProj)]
-pub(crate) enum RdmaGetBufferFuture<T> {
+pub(crate) enum RdmaGetBufferFuture<T: Remote> {
     #[cfg(feature = "enable-libfabric")]
     Libfabric(#[pin] LibfabricGetBufferFuture<T>),
     #[cfg(feature = "enable-libfabric")]
@@ -243,6 +260,8 @@ pub(crate) enum RdmaGetBufferFuture<T> {
     Ucx(#[pin] UcxGetBufferFuture<T>),
     #[cfg(feature = "enable-ucx")]
     UcxMt(#[pin] UcxMtGetBufferFuture<T>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCGetBufferFuture<T>),
     Shmem(#[pin] ShmemGetBufferFuture<T>),
     Local(#[pin] LocalGetBufferFuture<T>),
 }
@@ -261,6 +280,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
             RdmaGetBufferFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetBufferFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetBufferFuture::RofiC(f) => f.block(),
             RdmaGetBufferFuture::Shmem(f) => f.block(),
             RdmaGetBufferFuture::Local(f) => f.block(),
         }
@@ -283,6 +304,8 @@ impl<T: Remote> RdmaGetBufferHandle<T> {
             RdmaGetBufferFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetBufferFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetBufferFuture::RofiC(f) => f.spawn(),
             RdmaGetBufferFuture::Shmem(f) => f.spawn(),
             RdmaGetBufferFuture::Local(f) => f.spawn(),
         }
@@ -305,6 +328,8 @@ impl<T: Remote> Future for RdmaGetBufferHandle<T> {
             RdmaGetBufFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaGetBufFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetBufFutureProj::RofiC(f) => f.poll(cx),
             RdmaGetBufFutureProj::Shmem(f) => f.poll(cx),
             RdmaGetBufFutureProj::Local(f) => f.poll(cx),
         }
@@ -330,6 +355,8 @@ pub(crate) enum RdmaGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     Ucx(#[pin] UcxGetIntoBufferFuture<T, B>),
     #[cfg(feature = "enable-ucx")]
     UcxMt(#[pin] UcxMtGetIntoBufferFuture<T, B>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCGetIntoBufferFuture<T, B>),
     Shmem(#[pin] ShmemGetIntoBufferFuture<T, B>),
     // Local(#[pin] LocalFuture<T>),
     Local(#[pin] LocalGetIntoBufferFuture<T, B>),
@@ -349,6 +376,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
             RdmaGetIntoBufferFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetIntoBufferFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetIntoBufferFuture::RofiC(f) => f.block(),
             RdmaGetIntoBufferFuture::Shmem(f) => f.block(),
             RdmaGetIntoBufferFuture::Local(f) => f.block(),
         }
@@ -371,6 +400,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RdmaGetIntoBufferHandle<T, B> {
             RdmaGetIntoBufferFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx")]
             RdmaGetIntoBufferFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetIntoBufferFuture::RofiC(f) => f.spawn(),
             RdmaGetIntoBufferFuture::Shmem(f) => f.spawn(),
             RdmaGetIntoBufferFuture::Local(f) => f.spawn(),
         }
@@ -393,6 +424,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for RdmaGetIntoBufferHandle<T, B>
             RdmaGetIntoBufferFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx")]
             RdmaGetIntoBufferFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            RdmaGetIntoBufferFutureProj::RofiC(f) => f.poll(cx),
             RdmaGetIntoBufferFutureProj::Shmem(f) => f.poll(cx),
             RdmaGetIntoBufferFutureProj::Local(f) => f.poll(cx),
         }

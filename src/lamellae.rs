@@ -11,12 +11,10 @@ pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
 
-match_cfg::match_cfg! {
-    #[cfg(feature = "rofi-c")] => {
-        pub(crate) mod rofi_c_lamellae;
-        use rofi_c_lamellae::{RofiC, RofiCBuilder};
-    }
-}
+#[cfg(feature = "enable-rofi-c")]
+pub(crate) mod rofi_c_lamellae;
+#[cfg(feature = "enable-rofi-c")]
+use rofi_c_lamellae::{RofiC, RofiCBuilder};
 
 #[cfg(feature = "enable-libfabric")]
 pub(crate) mod libfabric_lamellae;
@@ -64,6 +62,8 @@ lazy_static! {
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
     #[cfg(feature = "enable-libfabric")]
@@ -92,9 +92,9 @@ impl Default for Backend {
         println!("default backend: {}", config().backend);
         match config().backend.as_str() {
             "rofi_c" => {
-                #[cfg(feature = "rofi-c")]
+                #[cfg(feature = "enable-rofi-c")]
                 return Backend::RofiC;
-                #[cfg(not(feature = "rofi-c"))]
+                #[cfg(not(feature = "enable-rofi-c"))]
                 panic!("unable to set rofi C backend, recompile with 'enable-rofi-c' feature")
             }
             "rofi_rust" => {
@@ -340,6 +340,8 @@ pub(crate) trait Des {
 
 #[enum_dispatch(LamellaeInit)]
 pub(crate) enum LamellaeBuilder {
+    #[cfg(feature = "enable-rofi-c")]
+    RofiCBuilder,
     #[cfg(feature = "enable-libfabric")]
     LibfabricBuilder,
     #[cfg(feature = "enable-libfabric")]
@@ -381,6 +383,8 @@ pub(crate) trait Ser {
 #[enum_dispatch(Ser, LamellaeUtil, LamellaeShutdown)]
 #[derive(Debug)]
 pub(crate) enum Lamellae {
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC,
     #[cfg(feature = "enable-libfabric")]
     Libfabric,
     #[cfg(feature = "enable-libfabric")]
@@ -400,6 +404,8 @@ pub(crate) enum Lamellae {
 impl Lamellae {
     pub(crate) fn comm(&self) -> &Comm {
         match self {
+            #[cfg(feature = "enable-rofi-c")]
+            Lamellae::RofiC(rofi_c) => rofi_c.comm(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.comm(), 
             #[cfg(feature = "enable-libfabric")]
@@ -417,6 +423,8 @@ impl Lamellae {
 
     pub(crate) fn wait_all_print(&self) {
         match self {
+            #[cfg(feature = "enable-rofi-c")]
+            Lamellae::RofiC(rofi_c) => rofi_c.wait_all_print(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::Libfabric(libfabric) => libfabric.wait_all_print(),
             #[cfg(feature = "enable-libfabric")]
@@ -452,6 +460,12 @@ pub(crate) trait LamellaeUtil: Send {
 #[tracing::instrument(skip_all, level = "debug")]
 pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeBuilder {
     match backend {
+        #[cfg(feature = "enable-rofi-c")]
+        Backend::RofiC => {
+            let provider = config().rofi_provider.clone();
+            let domain = config().rofi_domain.clone();
+            return LamellaeBuilder::RofiCBuilder(RofiCBuilder::new(&provider, &domain));
+        }
         #[cfg(feature = "enable-libfabric")]
         Backend::Libfabric => {
             let provider = config().rofi_provider.clone();

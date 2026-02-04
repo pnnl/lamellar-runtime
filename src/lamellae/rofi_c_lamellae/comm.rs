@@ -11,9 +11,10 @@ use crate::{
     Backend,
 };
 
-use super::{fabric::*, CommandQueue};
+use super::{fabric::*, CommandQueue,rofi::*};
 
 use parking_lot::RwLock;
+use tracing::trace;
 
 use std::collections::HashMap;
 use std::env;
@@ -21,10 +22,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub(crate) struct RofiCComm {
-    // _rofi_c: MyRofiC, //the global handle
-    pub(crate) runtime_allocs: RwLock<Vec<BTreeAlloc>>, //runtime allocations
-    pub(crate) fabric_allocs: RwLock<HashMap<usize, CommAlloc>>,
+pub(crate) struct RofiCComm { 
+    pub(crate) rofi_c: Arc<RofiC>,    
+    pub(crate) runtime_allocs: RwLock<Vec<(RofiCAlloc, BTreeAlloc)>>, //runtime allocations
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
@@ -34,71 +34,62 @@ pub(crate) struct RofiCComm {
     pub(crate) get_cnt: Arc<AtomicUsize>,
 }
 
-pub(crate) static ROFI_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
+pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl RofiCComm {
     #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(provider: &str, domain: &str) -> RofiCComm {
         if let Some(size) = config().heap_size {
-            ROFI_SIZE.store(size, Ordering::SeqCst);
+            HEAP_SIZE.store(size, Ordering::SeqCst);
         }
-        rofi_c_init(provider, domain).expect("error in rofi_c init");
+        let rofi_c = RofiC::new(Some(provider), Some(domain)).expect("Rofi-C initialization failed");
+        trace!("rofi-c initialized: {:?}", rofi_c);
 
-        rofi_c_barrier();
-        let num_pes = rofi_c_get_size();
+        rofi_c.barrier();
+        let num_pes = rofi_c.num_pes;
         let cmd_q_mem = CommandQueue::mem_per_pe() * num_pes;
-        let total_mem = cmd_q_mem + RT_MEM + ROFI_SIZE.load(Ordering::SeqCst);
-        let mem_per_pe = total_mem; // / num_pes;
+        let total_mem = cmd_q_mem + RT_MEM + HEAP_SIZE.load(Ordering::SeqCst);
 
-        let addr = rofi_c_alloc(total_mem, AllocationType::Global).expect("error in rofi_c_alloc")
-            as usize;
-        let rofi_c = RofiCComm {
-            runtime_allocs: RwLock::new(vec![BTreeAlloc::new("rofi_c_mem".to_string())]),
-            fabric_allocs: RwLock::new(HashMap::new()),
+        let alloc_info = rofi_c
+            .alloc(total_mem, AllocationType::Global, std::mem::align_of::<u8>())
+            .expect("rofi rt alloc failed");
+        let mut first_alloc =  BTreeAlloc::new("rofi_c_rt_mem".to_string());
+        first_alloc.init(alloc_info.start(), total_mem);
+
+        let rofi_c_comm = RofiCComm {
+            rofi_c: rofi_c.clone(),
+            runtime_allocs: RwLock::new(vec![(alloc_info.clone(), first_alloc)]),
             _init: AtomicBool::new(true),
-            num_pes: num_pes,
-            my_pe: rofi_c_get_id(),
+            num_pes,
+            my_pe: rofi_c.my_pe,
             put_amt: Arc::new(AtomicUsize::new(0)),
             put_cnt: Arc::new(AtomicUsize::new(0)),
             get_amt: Arc::new(AtomicUsize::new(0)),
             get_cnt: Arc::new(AtomicUsize::new(0)),
         };
-        rofi_c.runtime_allocs.write()[0].init(addr, total_mem);
-        rofi_c.fabric_allocs.write().insert(
-            addr,
-            CommAlloc {
-                inner_alloc: CommAllocInner::Raw(addr, mem_per_pe),
-                alloc_type: CommAllocType::Fabric,
-            },
-        );
-        rofi_c
+        rofi_c_comm
     }
 
     pub(crate) fn heap_size() -> usize {
-        ROFI_SIZE.load(Ordering::SeqCst)
+        HEAP_SIZE.load(Ordering::SeqCst)
     }
 }
 
 impl CommShutdown for RofiCComm {
     fn force_shutdown(&self) {
-        let _res = rofi_c_finit();
     }
 }
 
 impl CommProgress for RofiCComm {
-    fn flush(&self) {
-        if rofi_c_flush() != 0 {
-            println!("rofi_c flush error");
-        }
+    fn flush_all(&self) {
+        self.rofi_c.progress_all();
     }
-    fn wait(&self) {
-        if rofi_c_wait() != 0 {
-            println!("rofi_c wait error");
-        }
+    fn wait_all(&self) {
+        self.rofi_c.wait_all();
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
-        rofi_c_barrier();
+        self.rofi_c.barrier();
     }
 }
 
@@ -116,6 +107,12 @@ impl CommInfo for RofiCComm {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64
             / 1_000_000.0
     }
+    fn atomic_avail<T: 'static>(&self) -> bool
+    where
+        Self: Sized,
+    {
+        false
+    }
 }
 
 impl Drop for RofiCComm {
@@ -125,12 +122,11 @@ impl Drop for RofiCComm {
             println!("dropping rofi_c -- memory in use {:?}", self.mem_occupied());
         }
         if self.runtime_allocs.read().len() > 1 {
-            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, ROFI_SIZE.load(Ordering::SeqCst));
+            println!("[LAMELLAR INFO] {:?} additional rt memory pools were allocated, performance may be increased using a larger initial pool, set using the LAMELLAR_HEAP_SIZE envrionment variable. Current initial size = {:?}",self.runtime_allocs.read().len()-1, HEAP_SIZE.load(Ordering::SeqCst));
         }
-        for (addr, _alloc) in self.fabric_allocs.read().iter() {
-            rofi_c_release(*addr);
-        }
-        rofi_c_barrier();
-        let _res = rofi_c_finit();
+        self.runtime_allocs.write().clear();
+        let world_ref_count = Arc::strong_count(&self.rofi_c);
+        trace!("dropping rofi_c comm, rofi_c world ref count {:?}", world_ref_count);
+        self.rofi_c.barrier();
     }
 }

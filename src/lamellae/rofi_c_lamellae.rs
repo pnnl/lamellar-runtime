@@ -3,6 +3,7 @@ pub(crate) mod comm;
 pub(crate) mod fabric;
 pub(crate) mod mem;
 pub(crate) mod rdma;
+pub(crate) mod rofi;
 
 use super::{
     comm::{CmdQStatus, CommInfo, CommShutdown},
@@ -114,6 +115,9 @@ impl RofiC {
     pub(crate) fn comm(&self) -> &Comm {
         &self.rofi_c_comm
     }
+    pub(crate) fn wait_all_print(&self) {
+        self.cq.wait_all_print();
+    }
 }
 
 impl LamellaeShutdown for RofiC {
@@ -152,14 +156,13 @@ impl LamellaeUtil for RofiC {
         team: Arc<LamellarArchRT>,
         data: SerializedData,
     ) {
-        let remote_data = data.into_remote();
         if let Some(pe) = pe {
-            self.cq.send_data(remote_data, pe).await;
+            self.cq.send_data(data, pe).await;
         } else {
             let mut futures = team
                 .team_iter()
                 .filter(|pe| pe != &self.my_pe)
-                .map(|pe| self.cq.send_data(remote_data.clone(), pe))
+                .map(|pe| self.cq.send_data(data.clone(), pe))
                 .collect::<FuturesUnordered<_>>(); //in theory this launches all the futures before waiting...
             while let Some(_) = futures.next().await {}
         }
@@ -171,7 +174,6 @@ impl LamellaeUtil for RofiC {
         }
         // println!("Requesting new pool of size: {} bytes", min_size);
         self.cq.send_alloc(min_size).await;
-        Ok(())
     }
 }
 

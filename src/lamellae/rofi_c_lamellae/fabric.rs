@@ -1,603 +1,538 @@
 extern crate libc;
 
-use crate::lamellae::{AllocError,AllocResult,RdmaError,RdmaResult,AllocationType};
+use crate::lamellae::{
+    AllocError, AllocResult, RdmaError, RdmaResult, AllocationType, CommAlloc, CommAllocInner,
+    CommAllocType, calc_alloc_padding_size_align, decode_padding, decode_ref_count,
+    decrement_ref_count, encode_ref_count_and_padding, increment_ref_count,
+    FabricResult,
+};
+use crate::lamellae::FabricError;
+use crate::lamellae::comm::alloc::CommAllocAddr;
+use crate::lamellar_alloc::BTreeAlloc;
 
 use std::any::type_name;
 use std::ffi::CString;
 use std::os::raw::c_ulong;
-use tracing::error;
+use tracing::{error, debug, trace};
+use std::sync::{Arc, Mutex};
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use crate::lamellar_alloc::LamellarAlloc;
 
-pub(crate) fn rofi_c_init(provider: &str, domain: &str) -> Result<(), &'static str> {
-    let prov_str = CString::new(provider).unwrap();
-    let domain_str = CString::new(domain).unwrap();
-    let retval = unsafe {
-        rofisys::rofi_init(prov_str.as_ptr() as *mut _, domain_str.as_ptr() as *mut _) as i32
-    };
-    if retval == 0 {
+
+#[derive(Debug)]
+pub(crate) struct RofiC{
+    pub(crate) num_pes: usize,
+    pub(crate) my_pe: usize,
+    mem_regions:  Arc<Mutex<Vec<RofiCAlloc>>>,
+}
+
+impl RofiC {
+    pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
+        let prov = provider.unwrap_or("");
+        let dom = domain.unwrap_or("");
+        if let Err(_) = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_init(prov, dom) {
+            return Err(FabricError::InitError(1));
+        }
+        let num_pes = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_get_size();
+        let my_pe = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_get_id();
+        let world = Arc::new(RofiC {
+            num_pes,
+            my_pe,
+            mem_regions: Arc::new(Mutex::new(Vec::new())),
+        });
+        Ok(world)
+    }
+    pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
+        false
+    }
+    pub(crate) fn alloc(
+        &self,
+        size: usize,
+        alloc: AllocationType,
+        align: usize,
+    ) -> AllocResult<RofiCAlloc> {
+        // compute padding and adjusted data size
+        let (padding, data_size, _align) = calc_alloc_padding_size_align(size, align);
+
+        // call into the rofi C allocator (allocate total bytes including refcount/padding)
+        let base_ptr = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_alloc(data_size, alloc)?;
+
+        // construct RofiCAlloc using the constructor that expects the original user data size
+        let alloc_info = RofiCAlloc::new(
+            base_ptr,
+            size,
+            padding,
+            self.my_pe,
+            self.num_pes,
+            AllocTable::Fabric(self.mem_regions.clone()),
+        )?;
+
+        // register in mem_regions
+        let mut regions = self.mem_regions.lock().unwrap();
+        regions.push(alloc_info.clone());
+        Ok(alloc_info)
+    }
+    pub(crate) fn get_alloc_from_start_addr(
+        &self,
+        addr: CommAllocAddr,
+    ) -> AllocResult<RofiCAlloc> {
+        let regions = self.mem_regions.lock().unwrap();
+        for a in regions.iter() {
+            if a.start() == addr.0 {
+                return Ok(a.clone());
+            }
+        }
+        Err(AllocError::LocalNotFound(addr))
+    }
+    pub(crate) fn clear_allocs(&self) -> Result<(), ()> {
+        let mut allocs = self.mem_regions.lock().unwrap();
+        // RofiCAlloc's Drop impl will handle freeing
+        allocs.clear();
         Ok(())
-    } else {
-        Err("unable to initialize rofi_c")
+    }
+    pub(crate) fn barrier(&self) -> Result<(), ()> {
+        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_barrier();
+        Ok(())
+    }
+    pub(crate) fn local_addr(&self, remote_pe: usize, remote_addr: usize) -> AllocResult<usize> {
+        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr)
+    }
+
+    pub(crate) fn one_sided_alloc_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+        num_bytes: usize,
+    ) -> CommAlloc {
+        if let Ok(local_addr) = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr) {
+            let regions = self.mem_regions.lock().unwrap();
+            for a in regions.iter() {
+                let start = a.start();
+                if start <= local_addr && local_addr + num_bytes <= start + a.num_bytes() {
+                    let offset = local_addr - start;
+                    if let Ok(sub) = a.sub_alloc(offset, num_bytes) {
+                        return OneSidedRofiCAlloc { alloc: sub }.into();
+                    }
+                }
+            }
+        }
+        panic!("unable to find allocation for remote pe: {} addr: {:x} num_bytes: {}", remote_pe, remote_addr, num_bytes);
+    }
+
+    pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
+        &self,
+        remote_pe: usize,
+        remote_addr: usize,
+    ) -> Option<(CommAlloc, usize)> {
+        if let Ok(local_addr) = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr) {
+            let regions = self.mem_regions.lock().unwrap();
+            for a in regions.iter() {
+                let start = a.start();
+                if start <= local_addr && local_addr < start + a.num_bytes() {
+                    let offset = local_addr - start;
+                    return Some((a.clone().into(), offset));
+                }
+            }
+        }
+        None
+    }
+
+     pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> AllocResult<usize> {
+         crate::lamellae::rofi_c_lamellae::rofi::rofi_c_remote_addr(pe, local_addr)
+     }
+
+    pub(crate) fn wait_all(&self) -> Result<(), ()> {
+        let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+        Ok(())
+    }
+
+    pub(crate) fn thread_wait(&self)-> Result<(), ()> {
+        let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+        Ok(())
+    }
+
+    pub(crate) fn progress_all(&self) -> Result<(), ()> {
+        let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_flush();
+        Ok(())
+    }
+
+    pub(crate) fn thread_progress(&self) -> Result<(), ()> {
+        let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_flush();
+        Ok(())
     }
 }
 
-//currently shows unused warning as we are debugging a hang in rofi_c_finit
-
-pub(crate) fn rofi_c_finit() -> Result<(), &'static str> {
-    let retval = unsafe { rofisys::rofi_finit() as i32 };
-    if retval == 0 {
-        Ok(())
-    } else {
-        Err("unable to finit rofi_c")
-    }
+#[derive(Clone)]
+enum AllocTable {
+    Fabric(Arc<Mutex<Vec<RofiCAlloc>>>),
+    Runtime(BTreeAlloc, usize, Arc<Mutex<Vec<RofiCAlloc>>>),
 }
 
-pub(crate) fn rofi_c_get_size() -> usize {
-    unsafe { rofisys::rofi_get_size() as usize }
+
+pub(crate) struct RofiCAlloc {
+    pub(crate) base_data: *mut u8,
+    pub(crate) base_data_num_bytes: usize,
+    pub(crate) sub_data: *mut u8,
+    pub(crate) sub_data_num_bytes: usize,
+    pub(crate) my_pe: usize,
+    pub(crate) num_pes: usize,
+    fabric_ref_cnt_offset: usize,
+    rt_ref_cnt_offset: usize,
+    alloc_table: AllocTable,
 }
 
-pub(crate) fn rofi_c_get_id() -> usize {
-    unsafe { rofisys::rofi_get_id() as usize }
-}
-
-pub(crate) fn rofi_c_barrier() {
-    unsafe { rofisys::rofi_barrier() };
-}
-
-pub(crate) fn rofi_c_alloc(size: usize, alloc: AllocationType) -> AllocResult<*mut u8> {
-    let mut base_ptr: *mut u8 = std::ptr::null_mut();
-    let base_ptr_ptr = (&mut base_ptr as *mut _) as *mut *mut std::ffi::c_void;
-    // println!("rofi_c_alloc");
-    unsafe {
-        let ret = match alloc {
-            AllocationType::Sub(pes) => rofisys::rofi_sub_alloc(
-                size,
-                0x0,
-                base_ptr_ptr,
-                pes.as_ptr() as *mut _,
-                pes.len() as u64,
+impl std::fmt::Debug for RofiCAlloc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let fabric_ref_count = unsafe {
+            (&*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize))
+                .load(Ordering::SeqCst)
+        };
+        let mut temp = f.debug_struct("RofiCAlloc");
+        temp.field(
+            "sub_data",
+            &format_args!("{:p}-{:p}, {}",self.sub_data, self.sub_data.wrapping_add(self.sub_data_num_bytes),self.sub_data_num_bytes),
+        )
+        .field("base_data", &format_args!("{:p}-{:p}, {}", self.base_data, self.base_data.wrapping_add(self.base_data_num_bytes), self.base_data_num_bytes  ))
+        .field("my_pe", &self.my_pe)
+        .field("num_pes", &self.num_pes)
+        .field(
+            "fabric_ref_cnt_offset",
+            &format_args!(
+                "{} ({:?}): {}",
+                self.fabric_ref_cnt_offset,
+                unsafe { self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize },
+                fabric_ref_count
             ),
-            AllocationType::Global => rofisys::rofi_alloc(size, 0x0, base_ptr_ptr),
-            _ => return Err(AllocError::UnexpectedAllocationType(alloc)),
-        };
+        );
+        if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
+            let rt_ref_count = unsafe {
+                (&*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize))
+                    .load(Ordering::SeqCst)
+            };
+            let padding = decode_padding(rt_ref_count);
+            let rt_ref_count = decode_ref_count(rt_ref_count);
+            temp.field(
+                "rt_ref_cnt_offset",
+                &format_args!(
+                    "{} ({:?}): {}, {}",
+                    self.rt_ref_cnt_offset,
+                    unsafe { self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize },
+                    rt_ref_count,
+                    padding,
+                ),
+            );
+        }
+        temp.finish()
+    }
+}
 
-        if ret != 0 {
-           return Err(AllocError::FabricAllocationError(ret));
+impl Clone for RofiCAlloc {
+    fn clone(&self) -> Self {
+        trace!("RofiCAlloc::clone start base={:p} sub={:p} bytes={}", self.base_data, self.sub_data, self.sub_data_num_bytes);
+        let fab = self.increment_fabric_ref_count();
+        trace!("RofiCAlloc::clone incremented fabric_ref_count={}", fab);
+        if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
+            let rt = self.increment_rt_ref_count();
+            trace!("RofiCAlloc::clone incremented rt_ref_count={}", rt);
+        }
+        RofiCAlloc {
+            base_data: self.base_data,
+            base_data_num_bytes: self.base_data_num_bytes,
+            sub_data: self.sub_data,
+            sub_data_num_bytes: self.sub_data_num_bytes,
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: self.rt_ref_cnt_offset,
+            alloc_table: self.alloc_table.clone(),
         }
     }
-    //println!("[{:?}] ({:?}:{:?}) rofi_c_alloc addr: {:x} size {:?}",rofi_c_get_id(),file!(),line!(),base_ptr as usize, size);
-
-    Ok(base_ptr)
 }
 
-#[allow(dead_code)]
-pub(crate) fn rofi_c_release(addr: usize) {
-    let base_ptr = addr as *mut u8;
-    // println!("rofi_c_release");
-    unsafe {
-        if rofisys::rofi_release(base_ptr as *mut std::ffi::c_void) != 0 {
-            panic!("unable to release memory region");
+unsafe impl Sync for RofiCAlloc {}
+unsafe impl Send for RofiCAlloc {}
+
+
+
+
+
+
+
+impl RofiCAlloc {
+    pub(crate) fn start(&self) -> usize {
+        self.sub_data as usize
+    }
+
+    pub(crate) fn new(
+        base_data: *mut u8,
+        data_num_bytes: usize,
+        padding: usize,
+        my_pe: usize,
+        num_pes: usize,
+        alloc_table: AllocTable,
+    ) -> AllocResult<RofiCAlloc> {
+        // data_num_bytes here is the user-requested data size (without refcount/padding)
+        let fabric_ref_cnt_offset = data_num_bytes + padding; // offset within base where refcount stored
+        let rt_ref_cnt_offset = fabric_ref_cnt_offset;
+        let sub_data = base_data;
+
+        // total bytes allocated at base_data = user data + padding -- padding includes the refcount size
+        let base_data_num_bytes = data_num_bytes + padding ;
+
+        let alloc = RofiCAlloc {
+            base_data,
+            base_data_num_bytes,
+            sub_data,
+            sub_data_num_bytes: base_data_num_bytes,
+            my_pe,
+            num_pes,
+            fabric_ref_cnt_offset,
+            rt_ref_cnt_offset,
+            alloc_table,
+        };
+
+        // initialize ref count: 1 with padding
+        let encoded = encode_ref_count_and_padding(1, padding);
+        unsafe {
+            (&*(alloc.base_data.add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
+        }
+
+        trace!(target: "rofi", "RofiCAlloc::new base={:p} base_bytes={} sub={:p} sub_bytes={} padding={} my_pe={} num_pes={}", base_data, base_data_num_bytes, sub_data, base_data_num_bytes, padding, my_pe, num_pes);
+        Ok(alloc)
+    }
+
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.sub_data_num_bytes
+    }
+
+    pub(crate) fn sub_alloc(&self, offset: usize, len: usize) -> AllocResult<RofiCAlloc> {
+        if offset + len > self.sub_data_num_bytes {
+            return Err(AllocError::InvalidSubAlloc(offset, len));
+        }
+        let new_data = unsafe { self.sub_data.add(offset) };
+        trace!("RofiCAlloc::sub_alloc offset={} len={} base={:p} sub={:p}", offset, len, self.base_data, self.sub_data);
+        let fab = self.increment_fabric_ref_count();
+        trace!("RofiCAlloc::sub_alloc fabric_ref_count={}", fab);
+        if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
+            let rt = self.increment_rt_ref_count();
+            trace!("RofiCAlloc::sub_alloc rt_ref_count={}", rt);
+        }
+        let alloc = RofiCAlloc {
+            base_data: self.base_data,
+            base_data_num_bytes: self.base_data_num_bytes,
+            sub_data: new_data,
+            sub_data_num_bytes: len,
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: self.rt_ref_cnt_offset,
+            alloc_table: self.alloc_table.clone(),
+        };
+        trace!(target: "rofi", "RofiCAlloc::sub_alloc created sub base={:p} sub={:p} bytes={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes);
+        Ok(alloc)
+    }
+
+    pub(crate) fn rt_alloc(
+        &self,
+        alloc_table: BTreeAlloc,
+        offset: usize,
+        padding: usize,
+        len: usize
+    ) -> AllocResult<RofiCAlloc> {
+        if offset + len > self.sub_data_num_bytes {
+            return Err(AllocError::InvalidSubAlloc(offset, len));
+        }
+        // we add a new ref count at the end of this allocation for the runtime allocation
+        let new_data_bytes = len - padding - std::mem::size_of::<AtomicUsize>();
+        let new_data = unsafe { self.sub_data.add(offset) };
+
+        trace!("RofiCAlloc::rt_alloc offset={} len={} padding={} base={:p}", offset, len, padding, self.base_data);
+        let fab = self.increment_fabric_ref_count();
+        trace!("RofiCAlloc::rt_alloc incremented fabric_ref_count={}", fab);
+        let ref_cnt_offset = offset + new_data_bytes + padding;
+        let encoded = encode_ref_count_and_padding(1, padding);
+
+        let allocs = match &self.alloc_table {
+            AllocTable::Fabric(at) => at.clone(),
+            AllocTable::Runtime(_, _, at) => at.clone(),
+        };
+
+        let alloc = RofiCAlloc {
+            base_data: self.base_data,
+            base_data_num_bytes: self.base_data_num_bytes,
+            sub_data: new_data,
+            sub_data_num_bytes: new_data_bytes,
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,  //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
+            alloc_table: AllocTable::Runtime(alloc_table, new_data as usize, allocs),
+        };
+        unsafe {
+            (&*(alloc.base_data.add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize)).store(encoded, Ordering::SeqCst);
+        }
+        trace!(target: "rofi", "RofiCAlloc::rt_alloc created rt alloc base={:p} sub={:p} sub_bytes={} rt_ref_offset={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes, alloc.rt_ref_cnt_offset);
+        Ok(alloc)
+    }
+
+    pub(crate) fn as_rt_alloc(self, alloc_table: BTreeAlloc) -> AllocResult<Self> {
+        let allocs = match &self.alloc_table {
+            AllocTable::Fabric(allocs) => allocs.clone(),
+            AllocTable::Runtime(_, _, allocs) => allocs.clone(),
+        };
+        let ref_cnt_offset = ((self.start() - self.base_data as usize) + self.num_bytes()) - std::mem::size_of::<AtomicUsize>();
+        let encoded_ref_count = unsafe { (&*(self.base_data.add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst) };
+        let padding = decode_padding(encoded_ref_count);
+
+        let alloc = RofiCAlloc {
+            base_data: self.base_data,
+            base_data_num_bytes: self.base_data_num_bytes,
+            sub_data: self.sub_data,
+            sub_data_num_bytes: self.sub_data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
+            my_pe: self.my_pe,
+            num_pes: self.num_pes,
+            fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
+            rt_ref_cnt_offset: ref_cnt_offset,
+            alloc_table: AllocTable::Runtime(alloc_table, self.sub_data as usize, allocs),
+        };
+        
+        trace!(target: "rofi", "RofiCAlloc::as_rt_alloc base={:p} sub={:p} new_sub_bytes={} rt_ref_offset={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes, alloc.rt_ref_cnt_offset);
+        Ok(alloc)
+    }
+
+    pub(crate) fn leak(self) -> Option<CommAllocAddr> {
+        match self.alloc_table {
+            AllocTable::Fabric(_) => None,
+            AllocTable::Runtime(_, _, _) => {
+                let fab = self.increment_fabric_ref_count();
+                let rt = self.increment_rt_ref_count();
+                trace!(target: "rofi", "RofiCAlloc::leak fabric_ref_count={} rt_ref_count={} addr={:x}", fab, rt, self.start());
+                Some(CommAllocAddr(self.start()))
+            }
         }
     }
-    //println!("[{:?}] ({:?}:{:?}) rofi_c_release addr: {:x} ",rofi_c_get_id(),file!(),line!(),base_ptr as usize);
-}
 
-pub(crate) fn rofi_c_local_addr(remote_pe: usize, remote_addr: usize) -> AllocResult<usize> {
-    let addr = unsafe {
-        // println!("{:x} {:?} {:?} {:?}",remote_addr,(remote_addr as *mut u8) as *mut std::ffi::c_void,remote_pe,remote_pe as u32);
-        rofisys::rofi_get_local_addr_from_remote_addr(
-            (remote_addr as *mut u8) as *mut std::ffi::c_void,
-            remote_pe as u32,
-        ) as usize
-    };
-
-    if addr == 0 {
-        error!("remote_pe: {remote_pe:?} {remote_addr:x}");
-        Err(AllocError::LocalNotFound(remote_addr.into()))
+    pub(crate) fn increment_fabric_ref_count(&self) -> usize {
+        let ref_count = unsafe { &*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+        increment_ref_count(ref_count)
     }
-    else{
-        Ok(addr)
+
+    pub(crate) fn decrement_fabric_ref_count(&self) -> usize {
+        let ref_count = unsafe { &*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+        decrement_ref_count(ref_count)
     }
-}
 
-pub(crate) fn rofi_c_remote_addr(pe: usize, local_addr: usize) ->  AllocResult<usize>  {
-    let addr = unsafe {
-        // println!("{:x} {:?} {:?} {:?}",local_addr,(local_addr as *mut u8) as *mut std::ffi::c_void,pe,pe as u32);
-        rofisys::rofi_get_remote_addr((local_addr as *mut u8) as *mut std::ffi::c_void, pe as u32) as usize
-    };
-    // println!("remote addr {:?} 0x{:x}", addr as *mut u8 ,addr as usize);
-    if addr == 0 {
-        error!("unable to locate local memory addr");
-        Err(AllocError::RemoteNotFound(local_addr.into()))
+    pub(crate) fn increment_rt_ref_count(&self) -> usize {
+        let ref_count = unsafe { &*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+        increment_ref_count(ref_count)
     }
-    else{
-        Ok(addr)
+
+    pub(crate) fn decrement_rt_ref_count(&self) -> usize {
+        let ref_count = unsafe { &*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+        decrement_ref_count(ref_count)
     }
-}
 
-pub(crate) fn rofi_c_flush() -> i32 {
-    unsafe { rofisys::rofi_flush() as i32 }
-}
-
-pub(crate) fn rofi_c_wait() -> i32 {
-    unsafe { rofisys::rofi_wait() }
-}
-
-// data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe
-pub(crate) unsafe fn rofi_c_put<T>(src: &[T], dst: usize, pe: usize) ->  RdmaResult {
-    let src_addr = src.as_ptr() as *mut std::ffi::c_void;
-    let size = src.len() * std::mem::size_of::<T>();
-
-    let mut ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0); 
-                                                                                                 //FI_EAGAIN should this be handled here, at c-rofi_c layer, or application layer?
-
-    while ret == -11 {
-        std::thread::yield_now();
-        ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
-        // println!("[{:?}] ({:?}:{:?}) rofi_c_put src_addr {:?} dst_addr 0x{:x} {:?}",rofi_c_get_id(),file!(),line!(),src.as_ptr(),dst,ret);
+    pub(crate) fn wait(&self) -> RdmaResult {
+        let ret = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
+        if ret == 0 {
+            Ok(())
+        } else {
+            Err(RdmaError::FabricWaitError(ret))
+        }
     }
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(RdmaError::FabricPutError(ret))
+
+    pub(crate) unsafe fn zeroize_bytes(&self) {
+        let u8_slice = std::slice::from_raw_parts_mut(self.sub_data, self.sub_data_num_bytes);
+        u8_slice.fill(0);
     }
 }
 
-#[allow(dead_code)]
-pub(crate) fn rofi_c_iput<T>(src: &[T], dst: usize, pe: usize) -> RdmaResult {
-    let src_addr = src.as_ptr() as *mut std::ffi::c_void;
-    let size = src.len() * std::mem::size_of::<T>();
-    let mut ret =
-        unsafe { rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0) };
-    //FI_EAGAIN should this be handled here, at c-rofi_c layer, or application layer?
-    // println!("putting {:?} to {:?} @ {:x}",src,pe,dst);
-    while ret == -11 {
-        std::thread::yield_now();
-        ret = unsafe {
-            rofisys::rofi_iput(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0)
-        };
-        //println!("[{:?}] ({:?}:{:?}) rofi_c_iput src_addr {:?} dst_addr 0x{:x} pe {:?} {:?}",rofi_c_get_id(),file!(),line!(),src_addr,dst,pe,ret);
-    }
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(RdmaError::FabricPutError(ret))
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) unsafe fn rofi_c_get<T>(src: usize, dst: &mut [T], pe: usize) -> RdmaResult {
-    let src_addr = src as *mut std::ffi::c_void;
-    let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
-    let size = dst.len() * std::mem::size_of::<T>();
-    let mut ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0); 
-    while ret == -11 {
-        std::thread::yield_now();
-        ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0); 
-                                                                         //println!("[{:?}] ({:?}:{:?}) rofi_c_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_c_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
-    }
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(RdmaError::FabricGetError(ret))
-    }
-}
-
-#[allow(dead_code)]
-pub(crate) fn rofi_c_iget<T>(src: usize, dst: &mut [T], pe: usize) -> RdmaResult {
-    let src_addr = src as *mut std::ffi::c_void;
-    let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
-    let size = dst.len() * std::mem::size_of::<T>();
-    // println!(
-    //     "[{:?}] ({:?}{:?}) rofi_c_iget src: {:x} dst: {:?} pe: {:?} size: {:?}",
-    //     rofi_c_get_id(),
-    //     file!(),
-    //     line!(),
-    //     src,
-    //     dst.as_ptr(),
-    //     pe,
-    //     size
-    // );
-    let mut ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0) }; //, &mut txid) };
-    while ret == -11 {
-        std::thread::yield_now();
-        ret = unsafe { rofisys::rofi_iget(dst_addr, src_addr, size, pe as u32, 0) };
-        // println!("[{:?}] ({:?}:{:?}) rofi_c_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_c_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
-    }
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(RdmaError::FabricGetError(ret))
+impl Drop for RofiCAlloc {
+    fn drop(&mut self) {
+        trace!("RofiCAlloc::drop enter base={:p} sub={:p} bytes={}", self.base_data, self.sub_data, self.sub_data_num_bytes);
+        let fabric_ref_count = self.decrement_fabric_ref_count();
+        trace!("RofiCAlloc::drop after decrement fabric_ref_count={}", fabric_ref_count);
+        match &self.alloc_table {
+            AllocTable::Fabric(allocs) => {
+                if fabric_ref_count == 2 {
+                        trace!("RofiCAlloc::drop freeing fabric alloc base={:p}", self.base_data);
+                        let mut allocs = allocs.lock().unwrap();
+                        let len = allocs.len();
+                        allocs.retain(|a| a.base_data != self.base_data);
+                        if len == allocs.len() {
+                            error!("RofiCAlloc::drop failed to free alloc: {:?}", self);
+                            panic!("failed to free alloc: {:?}", self);
+                        }
+                        unsafe { crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(self.base_data as usize) };
+                }
+            }
+            AllocTable::Runtime(rt_alloc_table, addr, allocs) => {
+                let rt_ref_count = self.decrement_rt_ref_count();
+                trace!("RofiCAlloc::drop after decrement rt_ref_count={}", rt_ref_count);
+                if rt_ref_count == 1 {
+                    trace!("RofiCAlloc::drop freeing runtime alloc addr={:x}", addr);
+                    rt_alloc_table.free(*addr).expect(&format!(
+                        "[{:?}] Error removing from runtime alloc table {:x}",
+                        std::thread::current().id(),
+                        addr
+                    ));
+                }
+                if fabric_ref_count == 2 {
+                    trace!("RofiCAlloc::drop freeing fabric alloc (runtime) base={:p}", self.base_data);
+                    let mut allocs = allocs.lock().unwrap();
+                    let len = allocs.len();
+                    allocs.retain(|a| a.base_data != self.base_data);
+                    if len == allocs.len() {
+                        error!("RofiCAlloc::drop failed to free alloc: {:?}", self);
+                        panic!("failed to free alloc: {:?}", self);
+                    }
+                }
+            }
+        }
     }
 }
 
-// fn get_rofi_c_dt<T>() -> Option<rofisys::rofi_datatype> {
-//     let dt = type_name::<T>();
-//     // println!("T type name:  {} {}",dt, type_name::<usize>());
-//     if dt == type_name::<u8>() {
-//         Some(rofisys::rofi_datatype_ROFI_U8)
-//     } else if dt == type_name::<u16>() {
-//         Some(rofisys::rofi_datatype_ROFI_U16)
-//     } else if dt == type_name::<u32>() {
-//         Some(rofisys::rofi_datatype_ROFI_U32)
-//     } else if dt == type_name::<u64>() {
-//         Some(rofisys::rofi_datatype_ROFI_U64)
-//     } else if dt == type_name::<usize>() {
-//         Some(rofisys::rofi_datatype_ROFI_U64)
-//     } else if dt == type_name::<i8>() {
-//         Some(rofisys::rofi_datatype_ROFI_I8)
-//     } else if dt == type_name::<i16>() {
-//         Some(rofisys::rofi_datatype_ROFI_I16)
-//     } else if dt == type_name::<i32>() {
-//         Some(rofisys::rofi_datatype_ROFI_I32)
-//     } else if dt == type_name::<i64>() {
-//         Some(rofisys::rofi_datatype_ROFI_I64)
-//     } else if dt == type_name::<isize>() {
-//         Some(rofisys::rofi_datatype_ROFI_I64)
-//     } else {
-//         None
-//     }
-// }
+impl From<RofiCAlloc> for CommAlloc {
+    fn from(alloc: RofiCAlloc) -> Self {
+        CommAlloc {
+            inner_alloc: CommAllocInner::RofiCAlloc(alloc),
+            alloc_type: CommAllocType::Fabric,
+        }
+    }
+}
 
-// pub(crate) fn rofi_c_atomic_avail<T>() -> bool {
-//     get_rofi_c_dt::<T>().is_some()
-// }
 
-// pub(crate) fn rofi_c_atomic_store<T>(local: &[T], remote: usize, pe: usize) -> Result<c_ulong, i32> {
-//     let local_addr = local.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = local.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
 
-//     let mut ret = unsafe {
-//         rofisys::rofi_atomic(
-//             rofisys::rofi_atomic_op_ROFI_STORE,
-//             dt,
-//             local_addr,
-//             remote_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     }; 
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_atomic(
-//                 rofisys::rofi_atomic_op_ROFI_STORE,
-//                 dt,
-//                 local_addr,
-//                 remote_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         };
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
 
-// pub(crate) fn rofi_c_atomic_load<T>(
-//     result: &mut [T],
-//     remote: usize,
-//     pe: usize,
-// ) -> Result<c_ulong, i32> {
-//     let result_addr = result.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = result.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
 
-//     let mut ret = unsafe {
-//         rofisys::rofi_atomic_fetch(
-//             rofisys::rofi_atomic_op_ROFI_LOAD,
-//             dt,
-//             std::ptr::null_mut(),
-//             remote_addr,
-//             result_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     }; 
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_atomic_fetch(
-//                 rofisys::rofi_atomic_op_ROFI_LOAD,
-//                 dt,
-//                 std::ptr::null_mut(),
-//                 remote_addr,
-//                 result_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         }; 
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
+#[derive(Clone, Debug)]
+pub(crate) struct OneSidedRofiCAlloc {
+    pub(crate) alloc: RofiCAlloc,
+}
 
-// pub(crate) fn rofi_c_atomic_swap<T>(
-//     operand: &[T],
-//     result: &mut [T],
-//     remote: usize,
-//     pe: usize,
-// ) -> Result<c_ulong, i32> {
-//     let operand_addr = operand.as_ptr() as *mut std::ffi::c_void;
-//     let result_addr = result.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = result.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
 
-//     let mut ret = unsafe {
-//         rofisys::rofi_atomic_fetch(
-//             rofisys::rofi_atomic_op_ROFI_STORE,
-//             dt,
-//             operand_addr,
-//             remote_addr,
-//             result_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     };
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_atomic_fetch(
-//                 rofisys::rofi_atomic_op_ROFI_STORE,
-//                 dt,
-//                 operand_addr,
-//                 remote_addr,
-//                 result_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         }; 
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
+impl OneSidedRofiCAlloc {
+    pub(crate) fn start(&self) -> usize {
+        self.alloc.start()
+    }
+    pub(crate) fn num_bytes(&self) -> usize {
+        self.alloc.num_bytes()
+    }
+    pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> Option<OneSidedRofiCAlloc> {
+        self.alloc.sub_alloc(offset, size).ok().map(|a| OneSidedRofiCAlloc { alloc: a })
+    }
+    pub(crate) fn wait(&self) {
+        self.alloc.wait().expect("error waiting on onesided rofi-c alloc");
+    }
+}
 
-// pub(crate) fn rofi_c_atomic_compare_exchange<T>(
-//     local: &[T],
-//     remote: usize,
-//     compare: &[T],
-//     result: &mut [T],
-//     pe: usize,
-// ) -> Result<c_ulong, i32> {
-//     let local_addr = local.as_ptr() as *mut std::ffi::c_void;
-//     let compare_addr = compare.as_ptr() as *mut std::ffi::c_void;
-//     let result_addr = result.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = local.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
-
-//     let mut ret = unsafe {
-//         rofisys::rofi_atomic_compare_exchange(
-//             dt,
-//             local_addr,
-//             remote_addr,
-//             compare_addr,
-//             result_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     }; 
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_atomic_compare_exchange(
-//                 dt,
-//                 local_addr,
-//                 remote_addr,
-//                 compare_addr,
-//                 result_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         };
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
-
-// pub(crate) fn rofi_c_iatomic_store<T>(local: &[T], remote: usize, pe: usize) -> Result<c_ulong, i32> {
-//     let local_addr = local.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = local.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
-
-//     let mut ret = unsafe {
-//         rofisys::rofi_iatomic(
-//             rofisys::rofi_atomic_op_ROFI_STORE,
-//             dt,
-//             local_addr,
-//             remote_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     }; 
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_iatomic(
-//                 rofisys::rofi_atomic_op_ROFI_STORE,
-//                 dt,
-//                 local_addr,
-//                 remote_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         }; 
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
-
-// pub(crate) fn rofi_c_iatomic_load<T>(
-//     result: &mut [T],
-//     remote: usize,
-//     pe: usize,
-// ) -> Result<c_ulong, i32> {
-//     let result_addr = result.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = result.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
-
-//     let mut ret = unsafe {
-//         rofisys::rofi_iatomic_fetch(
-//             rofisys::rofi_atomic_op_ROFI_LOAD,
-//             dt,
-//             std::ptr::null_mut(),
-//             remote_addr,
-//             result_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     }; 
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_iatomic_fetch(
-//                 rofisys::rofi_atomic_op_ROFI_LOAD,
-//                 dt,
-//                 std::ptr::null_mut(),
-//                 remote_addr,
-//                 result_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         }; 
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
-
-// pub(crate) fn rofi_c_iatomic_swap<T>(
-//     operand: &[T],
-//     result: &mut [T],
-//     remote: usize,
-//     pe: usize,
-// ) -> Result<c_ulong, i32> {
-//     let operand_addr = operand.as_ptr() as *mut std::ffi::c_void;
-//     let result_addr = result.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = result.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
-
-//     let mut ret = unsafe {
-//         rofisys::rofi_iatomic_fetch(
-//             rofisys::rofi_atomic_op_ROFI_STORE,
-//             dt,
-//             operand_addr,
-//             remote_addr,
-//             result_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     };
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_iatomic_fetch(
-//                 rofisys::rofi_atomic_op_ROFI_STORE,
-//                 dt,
-//                 operand_addr,
-//                 remote_addr,
-//                 result_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         }; 
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
-
-// pub(crate) fn rofi_c_iatomic_compare_exchange<T>(
-//     local: &[T],
-//     remote: usize,
-//     compare: &[T],
-//     result: &mut [T],
-//     pe: usize,
-// ) -> Result<c_ulong, i32> {
-//     let local_addr = local.as_ptr() as *mut std::ffi::c_void;
-//     let compare_addr = compare.as_ptr() as *mut std::ffi::c_void;
-//     let result_addr = result.as_ptr() as *mut std::ffi::c_void;
-//     let remote_addr = remote as *mut std::ffi::c_void;
-//     let size = local.len();
-//     let txid: c_ulong = 0;
-//     let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
-
-//     let mut ret = unsafe {
-//         rofisys::rofi_iatomic_compare_exchange(
-//             dt,
-//             local_addr,
-//             remote_addr,
-//             compare_addr,
-//             result_addr,
-//             size,
-//             pe as u32,
-//             0,
-//         )
-//     }; 
-//     while ret == -11 {
-//         std::thread::yield_now();
-//         ret = unsafe {
-//             rofisys::rofi_iatomic_compare_exchange(
-//                 dt,
-//                 local_addr,
-//                 remote_addr,
-//                 compare_addr,
-//                 result_addr,
-//                 size,
-//                 pe as u32,
-//                 0,
-//             )
-//         }; 
-//     }
-//     if ret == 0 {
-//         Ok(txid)
-//     } else {
-//         Err(ret)
-//     }
-// }
+impl From<OneSidedRofiCAlloc> for CommAlloc {
+    fn from(alloc: OneSidedRofiCAlloc) -> Self {
+        CommAlloc {
+            inner_alloc: CommAllocInner::OneSidedRofiCAlloc(alloc),
+            alloc_type: CommAllocType::Remote,
+        }
+    }
+}

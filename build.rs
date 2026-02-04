@@ -1,6 +1,4 @@
-#[cfg(any(feature = "enable-rofi-c-shared", feature = "enable-ucx"))]
 use std::env;
-#[cfg(any(feature = "enable-rofi-c-shared", feature = "enable-ucx"))]
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::Write;
@@ -46,12 +44,9 @@ fn main() {
         println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
         lib_paths.push(lib_path.display().to_string());
     } else {
-        panic!(
-            "unable to set pmi backend, recompile with 'pmi' feature {:?}",
-            env::vars()
-        )
+        println!("cargo:warning=DEP_PMINATIVE_ROOT not set; skipping PMI native lib path");
     }
-    println!("cargo:warning={:?}", env::vars());
+    // println!("cargo:warning={:?}", env::vars());
     
     // Generate bash script with library paths
     // Navigate from OUT_DIR to the workspace root (where cargo was invoked)

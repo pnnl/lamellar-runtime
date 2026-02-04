@@ -233,7 +233,7 @@ pub struct ArrayFetchOpHandle<R: Dist> {
 }
 
 #[pin_project(project = FetchOpStateProj)]
-pub(crate) enum FetchOpState<R> {
+pub(crate) enum FetchOpState<R: Remote> {
     Req(#[pin] AmHandle<Vec<R>>),
     Rdma(#[pin] RdmaGetHandle<R>),
     Network(#[pin] AtomicFetchOpHandle<R>),

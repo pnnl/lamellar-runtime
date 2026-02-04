@@ -86,27 +86,26 @@ impl std::error::Error for FabricError {}
 pub(crate) type FabricResult<T> = Result<T, FabricError>;
 
 // #[derive(Debug, Clone, Copy)]
-// pub(crate) enum RdmaError {
-//     FabricPutError(i32),
-//     FabricGetError(i32),
-// }
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum RdmaError {
+    FabricPutError(i32),
+    FabricGetError(i32),
+    FabricWaitError(i32),
+}
 
-// pub(crate) type RdmaResult = Result<(), RdmaError>;
+pub(crate) type RdmaResult = Result<(), RdmaError>;
 
-// impl std::fmt::Display for RdmaError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         match self {
-//             RdmaError::FabricPutError(err_no) => {
-//                 write!(f, "Fabric put error: {}", err_no)
-//             }
-//             RdmaError::FabricGetError(err_no) => {
-//                 write!(f, "Fabric get error: {}", err_no)
-//             }
-//         }
-//     }
-// }
+impl std::fmt::Display for RdmaError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            RdmaError::FabricPutError(err_no) => write!(f, "Fabric put error: {}", err_no),
+            RdmaError::FabricGetError(err_no) => write!(f, "Fabric get error: {}", err_no),
+            RdmaError::FabricWaitError(err_no) => write!(f, "Fabric wait error: {}", err_no),
+        }
+    }
+}
 
-// impl std::error::Error for RdmaError {}
+impl std::error::Error for RdmaError {}
 
 // #[cfg(feature = "rofi-c")]
 // #[derive(Debug, Clone, Copy)]

@@ -1094,7 +1094,6 @@ impl AllocInfoManager {
             .expect("Remote PE not part of the allocation");
         let remote_offset = remote_addr - remote_alloc_info.mem_address().as_ptr() as usize;
         let alloc = alloc_info
-            .clone()
             .sub_alloc(remote_offset, num_bytes)
             .expect("Failed to create one-sided allocation from remote PE and address");
         OneSidedLibfabricAlloc { alloc, remote_pe }.into()
@@ -1256,7 +1255,7 @@ impl LibfabricAlloc {
         mem: Arc<memmap::MmapMut>,
         mr: MemoryRegion,
         remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
-        num_bytes: usize,
+            : usize,
         padding: usize,
         alloc_table: Arc<AllocInfoManager>,
     ) -> Result<Self, libfabric::error::Error> {

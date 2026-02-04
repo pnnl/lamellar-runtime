@@ -21,14 +21,11 @@ use std::sync::Arc;
 pub(crate) struct UcxComm {
     pub(crate) ucx: Arc<UcxWorld>,
     pub(crate) runtime_allocs: RwLock<Vec<(UcxAlloc, BTreeAlloc)>>, //runtime allocations
-    // pub(crate) fabric_allocs: RwLock<HashMap<usize, CommAlloc>>,
     _init: AtomicBool,
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
     pub(crate) put_amt: Arc<AtomicUsize>,
-    // pub(crate) put_cnt: Arc<AtomicUsize>,
     pub(crate) get_amt: Arc<AtomicUsize>,
-    // pub(crate) get_cnt: Arc<AtomicUsize>,
 }
 
 pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 1024);

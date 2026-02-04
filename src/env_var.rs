@@ -58,7 +58,7 @@ fn default_dissemination_factor() -> usize {
 }
 
 fn default_backend() -> String {
-    if cfg!(feature = "rofi-c") {
+    if cfg!(feature = "enable-rofi-c") {
         println!("rofi_c");
         return "rofi_c".to_owned();
     } else if cfg!(feature = "enable-rofi-rust") {
