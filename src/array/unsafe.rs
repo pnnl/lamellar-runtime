@@ -4,6 +4,7 @@ pub(crate) mod handle;
 mod iteration;
 pub(crate) mod local_chunks;
 pub(crate) mod operations;
+mod collective;
 mod rdma;
 
 pub use handle::UnsafeArrayHandle;
@@ -16,7 +17,8 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
-use crate::lamellae::{AllocationType, AtomicOp, CommInfo, CommProgress};
+use crate::lamellae::collective::CollectiveAllReduceOpHandle;
+use crate::lamellae::{AllocationType, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
