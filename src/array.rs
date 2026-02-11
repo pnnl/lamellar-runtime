@@ -171,6 +171,8 @@ pub(crate) mod rdma;
 use rdma::private::{LamellarRdmaGet, LamellarRdmaPut, Sealed};
 pub use rdma::*;
 
+pub(crate) mod collective;
+
 pub(crate) type ReduceGen = fn(LamellarByteArray, usize) -> LamellarArcAm;
 
 lazy_static! {

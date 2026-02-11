@@ -1,6 +1,7 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
+use crate::lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle};
 use crate::lamellae::{AllocationType, LamellaeUtil, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
@@ -928,6 +929,132 @@ impl<T: Remote> SharedMemoryRegion<T> {
             self.sub_region_offset + index,
             AtomicOp::Write(Box::pin(val)),
         )
+    }
+    pub unsafe fn min_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all(ReduceOp::Min)
+    }
+    pub unsafe fn max_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+        .as_base::<T>()
+        .reduce_all(ReduceOp::Max)
+    }
+    pub unsafe fn sum_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all(ReduceOp::Sum)
+    }
+    pub unsafe fn prod_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all(ReduceOp::Prod)
+    }
+    pub unsafe fn bit_or_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all(ReduceOp::BitOr)
+    }
+    pub unsafe fn bit_xor_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all(ReduceOp::BitXor)
+    }
+    pub unsafe fn bit_and_all(&self) -> CollectiveAllReduceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all(ReduceOp::BitAnd)
+    }
+    pub unsafe fn min_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_into_buffer(ReduceOp::Min, buffer)
+    }
+    pub unsafe fn max_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+        .as_base::<T>()
+        .reduce_all_into_buffer(ReduceOp::Max, buffer)
+    }
+    pub unsafe fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_into_buffer(ReduceOp::Sum, buffer)
+    }
+    pub unsafe fn prod_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_into_buffer(ReduceOp::Prod, buffer)
+    }
+    pub unsafe fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_into_buffer(ReduceOp::BitOr, buffer)
+    }
+    pub unsafe fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_into_buffer(ReduceOp::BitXor, buffer)
+    }
+    pub unsafe fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_into_buffer(ReduceOp::BitAnd, buffer)
+    }
+    pub unsafe fn min_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_in_place(ReduceOp::Min)
+    }
+    pub unsafe fn max_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+        .as_base::<T>()
+        .reduce_all_in_place(ReduceOp::Max)
+    }
+    pub unsafe fn sum_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_in_place(ReduceOp::Sum)
+    }
+    pub unsafe fn prod_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_in_place(ReduceOp::Prod)
+    }
+    pub unsafe fn bit_or_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_in_place(ReduceOp::BitOr)
+    }
+    pub unsafe fn bit_xor_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_in_place(ReduceOp::BitXor)
+    }
+    pub unsafe fn bit_and_all_in_place(&self) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .reduce_all_in_place(ReduceOp::BitAnd)
     }
 
     /// Blocks until all outstanding RDMA operations issued by this PE on this memory region

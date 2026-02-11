@@ -3,6 +3,7 @@ pub(crate) mod atomic;
 pub(crate) mod error;
 pub(crate) mod rdma;
 pub(crate) mod slice;
+pub(crate) mod collective;
 
 pub(crate) use alloc::*;
 pub(crate) use atomic::*;

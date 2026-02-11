@@ -13,9 +13,7 @@ use crate::{
     },
     darc::Darc,
     lamellae::{
-        AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc,
-        CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice,
-        Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote,
+        collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, ReduceOp, CollectiveAllReduceOpHandle, CommAllocCollectiveAllReduce}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -1295,6 +1293,57 @@ impl<T: Remote> MemoryRegion<T> {
             .inner_alloc
             .atomic_fetch_op_blocking(&self.scheduler, op, pe, index)
     }
+
+    pub(crate) fn reduce_all(&self, op: ReduceOp) -> CollectiveAllReduceOpHandle<T> {
+        trace!(
+            "reduce_all memregion {:?} ",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .reduce_all(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op,
+            )
+    }
+
+    pub(crate) fn reduce_all_into_buffer<B: AsLamellarBuffer<T>>(
+        &self, 
+        op: ReduceOp, 
+        buffer: LamellarBuffer<T, B>,
+    ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
+        trace!(
+            "reduce_all into buffer memregion {:?} ",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .reduce_all_into_buffer(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op,
+                buffer
+            )
+    }
+
+    pub(crate) fn reduce_all_in_place(
+        &self, 
+        op: ReduceOp,
+    ) -> CollectiveAllReduceInPlaceOpHandle<T> {
+        trace!(
+            "reduce_all in place memregion {:?} ",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .reduce_all_in_place(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op,
+            )
+    }
+    
 
     pub(crate) fn wait_all(&self) {
         self.rdma.comm().wait_all();

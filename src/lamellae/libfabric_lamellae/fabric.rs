@@ -6,30 +6,16 @@ use libfabric::{
         atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
-    },
-    connless_ep::ConnectionlessEndpoint,
-    cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq},
-    domain::{Domain, DomainBuilder},
-    enums::{
-        AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp,
-        EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ResourceMgmt,
-        TrafficClass, TransferOptions,
-    },
-    ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder},
-    eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq},
-    fabric::{Fabric, FabricBuilder},
-    info::{libfabric_version, Info, InfoEntry},
-    infocapsoptions::InfoCaps,
-    mcast::{MultiCastGroup, MulticastGroupBuilder},
-    mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder},
-    *,
+    }, connless_ep::ConnectionlessEndpoint, cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq}, domain::{Domain, DomainBuilder}, enums::{
+        AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp, EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ReduceOp, ResourceMgmt, TrafficClass, TransferOptions
+    }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
 };
 
 use crate::{
     lamellae::{
         comm::alloc::*,
         comm::error::{AllocError, AllocResult, FabricError, FabricResult},
-        AllocationType, AtomicOp as LamellarAtomicOp,
+        AllocationType, AtomicOp as LamellarAtomicOp, collective::ReduceOp as LamellarReduceOp,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -42,7 +28,7 @@ use crate::{
 
 use libc::{sysconf, _SC_PAGESIZE, _SC_PHYS_PAGES};
 use parking_lot::{Mutex, RwLock};
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::{pmi::Pmi, pmi::PmiBuilder};
 use std::{
     collections::HashMap,
     env,
@@ -75,7 +61,7 @@ enum BarrierImpl {
     Uninit,
     // Collective(MultiCastGroup),
     // Manual(LibfabricAlloc, AtomicUsize),
-    Pmi(Arc<PmiX>),
+    Pmi(Arc<dyn Pmi>),
 }
 
 #[derive(Clone, Copy)]
@@ -104,6 +90,26 @@ struct CommGroup {
     put_cnt: AtomicU64,
     get_cnt: AtomicU64,
     lock: Mutex<()>,
+    contexts_cache: Arc<Mutex<Vec<CachedContext>>>,
+    contexts_cache_size_per_thread: usize,
+}
+
+
+pub(crate) struct CachedContext{
+    context: Option<libfabric::Context>,
+    cache: Arc<Mutex<Vec<CachedContext>>>,
+}
+
+impl Drop for CachedContext{
+    fn drop(&mut self) {
+        let mut cache = self.cache.lock();
+        cache.push(
+            CachedContext{
+                context: self.context.take(),
+                cache: self.cache.clone(),
+            }
+        );
+    }
 }
 
 #[derive(Clone)]
@@ -155,16 +161,34 @@ pub(crate) struct Ofi {
     info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     domain: Domain,
     _fabric: Fabric,
-    _my_pmi: Arc<PmiX>,
-    alloc_manager: Arc<AllocInfoManager>,
-    comm_group: CommGroup,
+    _my_pmi: Arc<dyn Pmi>,
+     alloc_manager: Arc<AllocInfoManager>,
+    pub(crate)comm_group: CommGroup,
 }
 
-impl CommGroup {
-    fn wait_for_join_event(
-        &self,
-        ctx: &Context,
-    ) -> Result<JoinCompleteEvent, libfabric::error::Error> {
+impl CommGroup{
+    
+    fn allocate_context(&self) -> CachedContext {
+        let mut cache = self.contexts_cache.lock();
+        if let Some(ctx) = cache.pop() {
+            ctx
+        } else {
+            for _ in 0..self.contexts_cache_size_per_thread - 1 {
+                cache.push(
+                    CachedContext{
+                        context: Some(self.info_entry.allocate_context()),
+                        cache: self.contexts_cache.clone(),
+                    }
+                );
+            }
+            CachedContext{
+                context: Some(self.info_entry.allocate_context()),
+                cache: self.contexts_cache.clone(),
+            }
+        }
+    }
+
+    fn wait_for_join_event(&self, ctx: &Context) -> Result<JoinCompleteEvent, libfabric::error::Error> {
         let _lock = self.lock.lock();
         loop {
             let eq_res = self.eq.read();
@@ -202,8 +226,12 @@ impl CommGroup {
         }
     }
 
-    fn wait_for_completion(&self, ctx: &Context) -> Result<(), libfabric::error::Error> {
+    pub(crate) fn wait_for_completion(&self, ctx: &CachedContext) -> Result<(), libfabric::error::Error> {
         let _lock = self.lock.lock();
+        self.wait_for_completion_inner(ctx.context.as_ref().unwrap())
+    }
+
+    fn wait_for_completion_inner(&self, ctx: &Context) -> Result<(), libfabric::error::Error> {
         loop {
             let cq_res = self.cq.read(1);
             match cq_res {
@@ -212,20 +240,32 @@ impl CommGroup {
                         if entries[0].is_op_context_equal(ctx) {
                             return Ok(());
                         }
+                        else {
+                            panic!("got completion for context that does not match expected context");
+                        }
                     }
                     Completion::Msg(entries) => {
                         if entries[0].is_op_context_equal(ctx) {
                             return Ok(());
+                        }
+                        else {
+                            panic!("got completion for context that does not match expected context");
                         }
                     }
                     Completion::Data(entries) => {
                         if entries[0].is_op_context_equal(ctx) {
                             return Ok(());
                         }
+                        else {
+                            panic!("got completion for context that does not match expected context");
+                        }
                     }
                     Completion::Tagged(entries) => {
                         if entries[0].is_op_context_equal(ctx) {
                             return Ok(());
+                        }
+                        else {
+                            panic!("got completion for context that does not match expected context");
                         }
                     }
                 },
@@ -235,6 +275,7 @@ impl CommGroup {
                     }
                 }
             }
+            std::thread::yield_now();
         }
     }
 
@@ -301,6 +342,32 @@ impl CommGroup {
         );
         // }
         Ok(())
+    }
+
+    fn post_collective(
+        &self,
+        blocking: bool,
+        mut fun: impl FnMut(&mut Context) -> Result<(), libfabric::error::Error>,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let _lock = self.lock.lock();
+        let mut cached_ctx = self.allocate_context();
+        let mut ctx = cached_ctx.context.as_mut().unwrap();
+        loop {
+            match fun(&mut ctx) {
+                Ok(_) => break,
+                Err(error) => {
+                    if matches!(error.kind, libfabric::error::ErrorKind::TryAgain) {
+                        self.progress()?;
+                    } else {
+                        return Err(error);
+                    }
+                }
+            }
+        }
+        if blocking {
+            self.wait_for_completion_inner(&ctx)?;
+        }
+        Ok(cached_ctx)
     }
 
     fn post_put(
@@ -377,7 +444,7 @@ impl std::fmt::Debug for Ofi {
 
 impl Ofi {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
-        let my_pmi = Arc::new(PmiX::new().map_err(|e| {
+        let my_pmi = Arc::new(PmiBuilder::init().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
         })?);
@@ -548,26 +615,42 @@ impl Ofi {
             })
             .collect();
 
-        let mapped_addresses = av
-            .insert(AvInAddress::Encoded(&unmapped_addresses), AVOptions::new())
-            .map_err(|e| FabricError::InitError(e.c_err))?;
-        let mapped_addresses: Vec<MappedAddress> =
-            mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
-        let comm_group = CommGroup {
-            mapped_addresses,
-            ep,
-            cq,
-            put_cntr,
-            get_cntr,
-            av,
-            eq,
-            // info_entry: info_entry.clone(),
-            put_cnt: AtomicU64::new(0),
-            get_cnt: AtomicU64::new(0),
-            lock: Mutex::new(()),
-        };
-
+            let mapped_addresses = av
+                .insert(AvInAddress::Encoded(&unmapped_addresses), AVOptions::new())
+                .map_err(|e| FabricError::InitError(e.c_err))?;
+            let mapped_addresses: Vec<MappedAddress> =
+                mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
+                    
+            
+            let mut contexts = Arc::new(Mutex::new(Vec::with_capacity(10)));
+            for _ in 0..10 {
+                contexts.lock().push(
+                    CachedContext{
+                        context: Some(info_entry.allocate_context()),
+                        cache: contexts.clone(),
+                    }
+                );
+            }
+            
+            let comm_group = CommGroup{
+                mapped_addresses,
+                ep,
+                cq,
+                put_cntr,
+                get_cntr,
+                av,
+                eq,
+                // info_entry: info_entry.clone(),
+                put_cnt: AtomicU64::new(0),
+                get_cnt: AtomicU64::new(0),
+                lock: Mutex::new(()),
+                contexts_cache: contexts,
+                contexts_cache_size_per_thread,
+            };
+        
         let alloc_manager = AllocInfoManager::new();
+
+        
         let ofi = Arc::new(Self {
             num_pes,
             my_pe: my_pmi.rank(),
@@ -655,6 +738,10 @@ impl Ofi {
                     .is_ok(),
             }
         }
+    }
+
+    fn allocate_context(&self) -> CachedContext {
+        self.comm_group.allocate_context()
     }
 
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
@@ -749,7 +836,8 @@ impl Ofi {
             av_set.insert(&cg.mapped_addresses[*pe]).unwrap();
         }
 
-        let mut ctx = self.info_entry.allocate_context();
+        let mut cached_ctx = self.allocate_context();
+        let mut ctx = cached_ctx.context.as_mut().unwrap();
         let mc = MulticastGroupBuilder::from_av_set(&av_set)
             .build()
             .join_collective_with_context(&cg.ep, JoinOptions::new(), &mut ctx)
@@ -774,20 +862,21 @@ impl Ofi {
 
         let mut mem_info_bytes = mem_info.to_bytes_mut();
         let mut all_mem_info_bytes = vec![0u8; mem_info_bytes.len() * pes.len()];
-        let mut ctx = self.info_entry.allocate_context();
 
-        cg.ep.allgather_with_context(
-            &mut mem_info_bytes,
-            None,
-            &mut all_mem_info_bytes,
-            None,
-            &mc,
-            CollectiveOptions::new(),
-            &mut ctx,
+        let ctx = cg.post_collective(
+            true,
+            |ctx|  {
+                cg.ep.allgather_with_context(
+                &mut mem_info_bytes,
+                None,
+                &mut all_mem_info_bytes,
+                None,
+                &mc,
+                CollectiveOptions::new(),
+                ctx,
+                )
+            }
         )?;
-
-        cg.wait_for_completion(&ctx)?;
-
         let all_mem_info: HashMap<_, _> = all_mem_info_bytes
             .chunks_exact(std::mem::size_of::<MemAddressInfo>())
             .enumerate()
@@ -976,6 +1065,9 @@ impl Ofi {
         let remote_alloc_infos = self
             .collective_exchange_mr_info(&(0..self.num_pes).collect::<Vec<_>>(), mem_slice, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
+        let mcast_group = self.create_mc_group(&(0..self.num_pes).collect::<Vec<_>>())
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         let alloc = LibfabricAlloc::new(
             self.clone(),
             mem,
@@ -988,6 +1080,7 @@ impl Ofi {
             data_size,
             padding,
             self.alloc_manager.clone(),
+            Some(mcast_group),
         )
         .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         self.alloc_manager.insert(alloc.clone());
@@ -1107,6 +1200,11 @@ impl Ofi {
             .collective_exchange_mr_info(pes, mem_slice, &mr)
             .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
 
+        
+        let mcast_group = self.create_mc_group(pes)
+            .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
+
+        
         let alloc = LibfabricAlloc::new(
             self.clone(),
             mem,
@@ -1119,6 +1217,7 @@ impl Ofi {
             data_size,
             padding,
             self.alloc_manager.clone(),
+            Some(mcast_group),
         )
         .map_err(|e| AllocError::FabricAllocationError(e.c_err as i32))?;
         self.alloc_manager.insert(alloc.clone());
@@ -1143,64 +1242,55 @@ impl Ofi {
             BarrierImpl::Uninit => {
                 panic!("Barrier is not initialized");
             }
-            // BarrierImpl::Collective(mc) => {
-            //     let cg = &self.comm_group;
-            //     let mut ctx = self.info_entry.allocate_context();
-            //     loop {
-            //         let ret = cg.ep.barrier_with_context(mc, &mut ctx);
-            //         match &ret {
-            //             Ok(_) => break,
-            //             Err(err) => {
-            //                 if !matches!(err.kind, libfabric::error::ErrorKind::TryAgain) {
-            //                     return ret;
-            //                 }
-            //             }
-            //         }
-            //     }
-            //     cg.wait_for_completion(&ctx)?;
-            //     // trace!("Done with barrier");
-            //     Ok(())
-            // }
-            // BarrierImpl::Manual(barrier_alloc, barrier_id) => {
-            //     let n = 2usize;
-            //     let pes = (0..self.num_pes).collect::<Vec<_>>();
-            //     let num_pes = pes.len();
-            //     let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
-            //     let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
-            //     for round in 0..num_rounds as usize {
-            //         for i in 1..=n {
-            //             let send_pe = (self.my_pe + i * (n + 1).pow(round as u32)) % num_pes;
+            BarrierImpl::Collective(mc) => {
+                let cg = &self.comm_group;
+                cg.post_collective(true, |ctx| {
+                    cg.ep.barrier_with_context(mc, ctx)
+                })?;
+                // trace!("Done with barrier");
+                Ok(())
+            }
+            BarrierImpl::Manual(barrier_alloc, barrier_id) => {
+                // panic!("Manual barrier is not implemented");
+                // let n = 2usize;
+                // let pes = (0..self.num_pes).collect::<Vec<_>>();
+                // let num_pes = pes.len();
+                // let num_rounds = ((num_pes as f64).log2() / (n as f64).log2()).ceil();
+                // let my_barrier = barrier_id.fetch_add(1, Ordering::SeqCst);
+                // for round in 0..num_rounds as usize {
+                //     for i in 1..=n {
+                //         let send_pe = (self.my_pe + i * (n + 1).pow(round as u32)) % num_pes;
 
-            //             // let dst = barrier_addr + 8 * self.my_pe;
-            //             unsafe {
-            //                 barrier_alloc.inner_put::<usize>(
-            //                     send_pe,
-            //                     self.my_pe,
-            //                     std::slice::from_ref(&my_barrier),
-            //                     false,
-            //                 )?
-            //             };
-            //         }
+                //         // let dst = barrier_addr + 8 * self.my_pe;
+                //         unsafe {
+                //             barrier_alloc.inner_put::<usize>(
+                //                 send_pe,
+                //                 self.my_pe,
+                //                 std::slice::from_ref(&my_barrier),
+                //                 false,
+                //             )?
+                //         };
+                //     }
 
-            //         let _lock = self.comm_group.lock.lock();
-            //         for i in 1..=n {
-            //             let recv_pe = (self.my_pe as i64
-            //                 - i as i64 * (n as i64 + 1).pow(round as u32))
-            //             .rem_euclid(num_pes as i64);
-            //             // let barrier_vec = unsafe {
-            //             //     std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
-            //             // };
-            //             let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
+                //     let _lock = self.comm_group.lock.lock();
+                //     for i in 1..=n {
+                //         let recv_pe = (self.my_pe as i64
+                //             - i as i64 * (n as i64 + 1).pow(round as u32))
+                //         .rem_euclid(num_pes as i64);
+                //         // let barrier_vec = unsafe {
+                //         //     std::slice::from_raw_parts(barrier_addr as *const usize, num_pes)
+                //         // };
+                //         let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
 
-            //             while my_barrier > barrier_vec[recv_pe as usize] {
-            //                 self.comm_group.progress()?;
-            //                 std::thread::yield_now();
-            //             }
-            //         }
-            //     }
+                //         while my_barrier > barrier_vec[recv_pe as usize] {
+                //             self.comm_group.progress()?;
+                //             std::thread::yield_now();
+                //         }
+                //     }
+                // }
 
-            //     Ok(())
-            // }
+                // Ok(())
+            }
             BarrierImpl::Pmi(pmi) => {
                 pmi.barrier(true).expect("PMI Barrier failed");
                 Ok(())
@@ -1247,6 +1337,14 @@ impl Ofi {
 
     pub(crate) fn wait_all(&self) -> Result<(), libfabric::error::Error> {
         self.comm_group.wait_all()
+    }
+
+    pub(crate) fn wait_for_completion(&self, ctx: &CachedContext) -> Result<(), libfabric::error::Error> {
+        self.comm_group.wait_for_completion(ctx)
+    }
+
+    pub(crate) fn wait_for_completion(&self, ctx: &CachedContext) -> Result<(), libfabric::error::Error> {
+        self.comm_group.wait_for_completion(ctx)
     }
 
     pub(crate) fn thread_wait(&self) -> Result<(), libfabric::error::Error> {
@@ -1427,6 +1525,7 @@ pub(crate) struct LibfabricAlloc {
     rt_ref_cnt_offset: usize,
     id: usize,
     alloc_table: AllocTable,
+    mcast_group: Option<MultiCastGroup>,
 }
 
 impl std::fmt::Debug for LibfabricAlloc {
@@ -1506,6 +1605,7 @@ impl Clone for LibfabricAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             id: self.id,
             alloc_table: self.alloc_table.clone(),
+            mcast_group: self.mcast_group.clone(),
         }
     }
 }
@@ -1596,6 +1696,7 @@ impl LibfabricAlloc {
         num_bytes: usize,
         padding: usize,
         alloc_table: Arc<AllocInfoManager>,
+        mcast_group: Option<MultiCastGroup>,
     ) -> Result<Self, libfabric::error::Error> {
         let start = mem.as_ptr() as usize;
         let end = start + num_bytes; //mem.len();
@@ -1618,6 +1719,7 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Fabric(alloc_table),
+            mcast_group: mcast_group,
         };
         //initialize ref count to 1
         // let encoded = encode_ref_count_and_padding(1, padding);
@@ -1662,6 +1764,7 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             id,
             alloc_table: self.alloc_table.clone(),
+            mcast_group: self.mcast_group.clone(),
         };
         debug!(target: "libfabric", "Created Libfabric sub-allocation: {:?}", alloc);
         Ok(alloc)
@@ -1709,6 +1812,7 @@ impl LibfabricAlloc {
             rt_ref_cnt_offset: ref_cnt_offset,
             id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start + offset, alloc_manager),
+            mcast_group: self.mcast_group.clone(),
         };
 
         unsafe {
@@ -1751,6 +1855,7 @@ impl LibfabricAlloc {
             remote_allocs: self.remote_allocs.clone(),
             id: self.id,
             alloc_table: AllocTable::Runtime(alloc_table, self.range.start, alloc_manager),
+            mcast_group: self.mcast_group.clone(),
         };
         get_ref_count(unsafe {
             &*(alloc.mem.as_ptr().add(alloc.fabric_ref_cnt_offset) as *const AtomicUsize)
@@ -2389,6 +2494,76 @@ impl LibfabricAlloc {
         Ok(())
     }
 
+    pub(crate) fn allreduce_inplace_inner<T: 'static>(        
+        &self,
+        op: &LamellarReduceOp,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let dst = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())};
+        self.allreduce_inner(op, dst, blocking)
+    }
+
+    pub(crate) fn allreduce_inner<T: 'static>(
+        &self,
+        op: &LamellarReduceOp,
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_allreduce::<T, u8>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_allreduce::<T, u16>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_allreduce::<T, u32>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_allreduce::<T, u64>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_allreduce::<T, usize>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_allreduce::<T, i8>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_allreduce::<T, i16>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_allreduce::<T, i32>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_allreduce::<T, i64>(op, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_allreduce::<T, isize>(op, result, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    fn typed_allreduce<T, OFI: AsFiType>(
+        &self,
+        op: &LamellarReduceOp,
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let cg = &self.ofi.comm_group;
+        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        let src = unsafe {std::slice::from_raw_parts(self.start() as *const T, self.num_bytes()/std::mem::size_of::<T>())};
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let ctx = cg.post_collective(blocking, |ctx| {
+                cg.ep.allreduce_with_context(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    op.into(),
+                    CollectiveOptions::default(),
+                    ctx,
+                )
+            }
+        )?;
+
+        Ok(ctx)
+    }
+
     pub(crate) fn wait(&self) -> Result<(), libfabric::error::Error> {
         self.ofi.comm_group.wait_all()
     }
@@ -2562,6 +2737,40 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::Read(_) => FetchAtomicOp::AtomicRead,
             LamellarAtomicOp::Cas => panic!("Cas conversion to FetchAtomicOp not supported"),
             _ => panic!("Non-fetch atomic ops must use non-fetch path"),
+        }
+    }
+}
+
+impl From<LamellarReduceOp> for ReduceOp {
+    fn from(op: LamellarReduceOp) -> Self {
+        match op {
+            LamellarReduceOp::Min => ReduceOp::Min,
+            LamellarReduceOp::Max => ReduceOp::Max,
+            LamellarReduceOp::Sum => ReduceOp::Sum,
+            LamellarReduceOp::Prod => ReduceOp::Prod,
+            // CollectiveReduceOp::LogicalOr => ReduceOp::Lor,
+            // CollectiveReduceOp::LogicalXor => ReduceOp::Lxor,
+            // CollectiveReduceOp::LogicalAnd => ReduceOp::Land,
+            LamellarReduceOp::BitOr => ReduceOp::Bor,
+            LamellarReduceOp::BitXor => ReduceOp::Bxor,
+            LamellarReduceOp::BitAnd => ReduceOp::Band,
+        }
+    }
+}
+
+impl From<&LamellarReduceOp> for ReduceOp {
+    fn from(op: &LamellarReduceOp) -> Self {
+        match op {
+            LamellarReduceOp::Min => ReduceOp::Min,
+            LamellarReduceOp::Max => ReduceOp::Max,
+            LamellarReduceOp::Sum => ReduceOp::Sum,
+            LamellarReduceOp::Prod => ReduceOp::Prod,
+            // CollectiveReduceOp::LogicalOr => ReduceOp::Lor,
+            // CollectiveReduceOp::LogicalXor => ReduceOp::Lxor,
+            // CollectiveReduceOp::LogicalAnd => ReduceOp::Land,
+            LamellarReduceOp::BitOr => ReduceOp::Bor,
+            LamellarReduceOp::BitXor => ReduceOp::Bxor,
+            LamellarReduceOp::BitAnd => ReduceOp::Band,
         }
     }
 }

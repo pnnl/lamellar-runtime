@@ -35,8 +35,8 @@ use crate::{
     LAMELLAR_THREAD_ID,
 };
 
-use parking_lot::{Mutex, RwLock};
-use pmi::{pmi::Pmi, pmix::PmiX};
+use parking_lot::{RwLock,Mutex};
+use pmi::{pmi::Pmi, pmi::PmiBuilder};
 use std::{
     collections::HashMap,
     sync::{
@@ -57,8 +57,9 @@ enum BarrierImpl {
     Uninit,
     // Collective(MultiCastGroup),
     // Manual(LibfabricMtAlloc, AtomicUsize),
-    Pmi(Arc<PmiX>),
+    Pmi(Arc<dyn Pmi>),
 }
+
 
 #[derive(Clone, Copy)]
 enum AtomicOpKind {
@@ -74,7 +75,7 @@ enum AtomicOpKind {
     Cas,
 }
 
-struct CommGroup {
+struct CommGroup{
     mapped_addresses: Vec<MappedAddress>,
     ep: ConnectionlessEndpoint<RmaAtomicCollEp>,
     cq: CompletionQueue<WaitableCq>,
@@ -94,8 +95,8 @@ pub(crate) struct Ofi {
     info_entry: Arc<InfoEntry<RmaAtomicCollEp>>,
     domain: Domain,
     _fabric: Fabric,
-    _my_pmi: Arc<PmiX>,
-    alloc_manager: Arc<AllocInfoManager>,
+    _my_pmi: Arc<dyn Pmi>,
+     alloc_manager: Arc<AllocInfoManager>,
     comm_groups: Vec<CommGroup>,
     utility_comm_group: Mutex<CommGroup>,
 }
@@ -312,7 +313,7 @@ impl Ofi {
         domain: Option<&str>,
         num_threads: usize,
     ) -> FabricResult<Arc<Self>> {
-        let my_pmi = Arc::new(PmiX::new().map_err(|e| {
+        let my_pmi = Arc::new(PmiBuilder::init().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
         })?);

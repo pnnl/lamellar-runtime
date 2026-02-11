@@ -3,6 +3,7 @@
 mod iteration;
 pub(crate) mod operations;
 pub(crate) mod rdma;
+pub(crate) mod collective;
 
 pub(crate) mod handle;
 pub use handle::AtomicArrayHandle;
