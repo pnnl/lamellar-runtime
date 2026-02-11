@@ -1,5 +1,4 @@
 use std::pin::Pin;
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::darc::handle::{
@@ -7,7 +6,7 @@ use crate::darc::handle::{
 };
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::GlobalLockArray;
+use crate::{Darc, GlobalLockArray};
 use crate::{Dist, LamellarTeamRT};
 
 use futures_util::Future;
@@ -37,7 +36,7 @@ use super::{
 /// let array: GlobalLockArray<usize> = GlobalLockArray::new(&world,100,Distribution::Cyclic).block();
 /// ```
 pub struct GlobalLockArrayHandle<T: Dist + ArrayOps + 'static> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future: Pin<Box<dyn Future<Output = GlobalLockArray<T>> + Send>>,
@@ -154,7 +153,14 @@ impl<T: Dist> GlobalLockReadHandle<T> {
         )
         .print();
 
-        self.array.lock.darc.team().scheduler.block_on(self)
+        self.array
+            .lock
+            .darc
+            .clone()
+            .inner()
+            .rt_team()
+            .scheduler
+            .block_on(self)
     }
 
     /// This method will spawn the associated active message to capture the lock on the work queue,
@@ -174,7 +180,7 @@ impl<T: Dist> GlobalLockReadHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalLockReadGuard<T>> {
-        self.array.lock.darc.team().spawn(self)
+        self.array.lock.darc.clone().inner().rt_team().spawn(self)
     }
 }
 
@@ -246,7 +252,14 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
         )
         .print();
 
-        self.array.lock.darc.team().scheduler.block_on(self)
+        self.array
+            .lock
+            .darc
+            .clone()
+            .inner()
+            .rt_team()
+            .scheduler
+            .block_on(self)
     }
     /// This method will spawn the associated active message to capture the lock and data on the work queue,
     /// initiating the remote operation.
@@ -267,7 +280,7 @@ impl<T: Dist> GlobalLockLocalDataHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalLockLocalData<T>> {
-        self.array.lock.darc.team().spawn(self)
+        self.array.lock.darc.clone().inner().rt_team().spawn(self)
     }
 }
 
@@ -343,7 +356,14 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
         )
         .print();
 
-        self.array.lock.darc.team().scheduler.block_on(self)
+        self.array
+            .lock
+            .darc
+            .clone()
+            .inner()
+            .rt_team()
+            .scheduler
+            .block_on(self)
     }
 
     /// This method will spawn the associated active message to capture the lock  on the work queue,
@@ -363,7 +383,7 @@ impl<T: Dist> GlobalLockWriteHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalLockWriteGuard<T>> {
-        self.array.lock.darc.team().spawn(self)
+        self.array.lock.darc.clone().inner().rt_team().spawn(self)
     }
 }
 
@@ -434,7 +454,14 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
         )
         .print();
 
-        self.array.lock.darc.team().scheduler.block_on(self)
+        self.array
+            .lock
+            .darc
+            .clone()
+            .inner()
+            .rt_team()
+            .scheduler
+            .block_on(self)
     }
 
     /// This method will spawn the associated active message to capture the lock and data on the work queue,
@@ -456,7 +483,7 @@ impl<T: Dist> GlobalLockMutLocalDataHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalLockMutLocalData<T>> {
-        self.array.lock.darc.team().spawn(self)
+        self.array.lock.darc.clone().inner().rt_team().spawn(self)
     }
 }
 
@@ -532,7 +559,14 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
         )
         .print();
 
-        self.array.lock.darc.team().scheduler.block_on(self)
+        self.array
+            .lock
+            .darc
+            .clone()
+            .inner()
+            .rt_team()
+            .scheduler
+            .block_on(self)
     }
 
     /// This method will spawn the associated active message to capture the lock and data on the work queue,
@@ -554,7 +588,7 @@ impl<T: Dist> GlobalLockCollectiveMutLocalDataHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalLockCollectiveMutLocalData<T>> {
-        self.array.lock.darc.team().spawn(self)
+        self.array.lock.darc.clone().inner().rt_team().spawn(self)
     }
 }
 

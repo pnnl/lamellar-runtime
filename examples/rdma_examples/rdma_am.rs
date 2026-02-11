@@ -28,29 +28,22 @@ struct RdmaLocalMRAM {
 impl LamellarAM for RdmaAM {
     async fn exec(&self) {
         unsafe {
-            println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice().unwrap()[0..10], &self.array.as_slice().unwrap()[ARRAY_LEN-10..]);
+            println!("\t in RdmaAM on pe {:?}, originating from pe {:?}\n\tlocal segement of array: {:?}..{:?}",lamellar::current_pe, self.orig_pe,  &self.array.as_slice()[0..10], &self.array.as_slice()[ARRAY_LEN-10..]);
         }
 
-        //get the original nodes data
-        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
-        let local_slice = unsafe { local.as_mut_slice().unwrap() };
-        local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
-        unsafe {
-            self.array.get_unchecked(self.orig_pe, 0, local.clone());
-        }
-        while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
-            async_std::task::yield_now().await;
+        let mut local = unsafe { self.array.get_buffer(self.orig_pe, 0, ARRAY_LEN).await };
+        if local[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
+            println!("get failure")
         }
 
         let my_index = self.index * lamellar::num_pes + lamellar::current_pe;
-        println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local_slice[0..10], &local_slice[ARRAY_LEN-10..],lamellar::current_pe, my_index, self.orig_pe);
+        println!("\tcurrent view of remote segment on pe {:?}: {:?}..{:?}\n\tpe: {:?} updating index {:?} on pe  {:?}", self.orig_pe, &local[0..10], &local[ARRAY_LEN-10..],lamellar::current_pe, my_index, self.orig_pe);
 
         //update an element on the original node
-        local_slice[0] = lamellar::current_pe as u8;
+        local[0] = lamellar::current_pe as u8;
         if my_index < ARRAY_LEN {
             unsafe {
-                self.array
-                    .put(self.orig_pe, my_index, local.sub_region(0..=0));
+                self.array.put(self.orig_pe, my_index, local[0]).await;
             }
         }
     }
@@ -66,14 +59,9 @@ impl LamellarAM for RdmaLocalMRAM {
         );
 
         //get the original nodes data
-        let local = lamellar::world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
-        let local_slice = unsafe { local.as_mut_slice().unwrap() };
-        local_slice[ARRAY_LEN - 1] = lamellar::num_pes as u8;
-        unsafe {
-            self.array.get_unchecked(0, local.clone());
-        }
-        while local_slice[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
-            async_std::task::yield_now().await;
+        let mut local = unsafe { self.array.get_buffer(0, ARRAY_LEN).await };
+        if local[ARRAY_LEN - 1] == lamellar::num_pes as u8 {
+            println!("get failure")
         }
 
         let my_index = self.index * lamellar::num_pes + lamellar::current_pe;
@@ -85,10 +73,10 @@ impl LamellarAM for RdmaLocalMRAM {
         );
 
         //update an element on the original node
-        local_slice[0] = lamellar::current_pe as u8;
+        local[0] = lamellar::current_pe as u8;
         if my_index < ARRAY_LEN {
             unsafe {
-                self.array.put(my_index, local.sub_region(0..=0));
+                self.array.put(my_index, local[0]).await;
             }
         }
     }
@@ -108,10 +96,10 @@ fn main() {
     let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
     let local_array = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
-        for i in array.as_mut_slice().unwrap() {
+        for i in array.as_mut_slice() {
             *i = 255_u8;
         }
-        for i in local_array.as_mut_slice().unwrap() {
+        for i in local_array.as_mut_slice() {
             *i = 255_u8;
         }
     }

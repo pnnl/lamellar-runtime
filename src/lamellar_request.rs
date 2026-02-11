@@ -1,12 +1,10 @@
-use crate::active_messaging::{
-    AmHandleInner, DarcSerde, LamellarAny, MultiAmHandleInner, RemotePtr,
-};
+use crate::active_messaging::{AmHandleInner, LamellarAny, MultiAmHandleInner, RemotePtr};
 use crate::darc::Darc;
-use crate::lamellae::SerializedData;
+use crate::lamellae::SubSerializedData;
 use crate::lamellar_task_group::{TaskGroupAmHandleInner, TaskGroupMultiAmHandleInner};
 use crate::memregion::one_sided::MemRegionHandleInner;
 
-use std::future::Future;
+use futures_util::Future;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::task::Waker;
@@ -14,7 +12,7 @@ use std::task::Waker;
 #[derive(Debug)]
 pub(crate) enum InternalResult {
     Local(LamellarAny), // a local result from a local am (possibly a returned one)
-    Remote(SerializedData, Vec<RemotePtr>), // a remte result from a remote am
+    Remote(SubSerializedData, Vec<RemotePtr>), // a remte result from a remote am
     Unit,
 }
 
@@ -64,7 +62,7 @@ impl std::fmt::Debug for LamellarRequestResult {
 }
 
 impl LamellarRequestResult {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn add_result_inner<T: LamellarRequestAddResult>(
         req: &Arc<T>,
         pe: usize,
@@ -85,8 +83,7 @@ impl LamellarRequestResult {
                 for darc in darcs {
                     match darc {
                         RemotePtr::NetworkDarc(darc) => {
-                            let temp: Darc<()> = darc.into();
-                            temp.des(Ok(0));
+                            let _temp: Darc<()> = darc.into();
                         }
                         RemotePtr::NetMemRegionHandle(mr) => {
                             let temp: Arc<MemRegionHandleInner> = mr.into();

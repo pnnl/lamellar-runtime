@@ -5,12 +5,12 @@ pub (crate) use handle::*;
 
 pub(crate) mod iteration;
 pub(crate) mod operations;
-mod rdma;
+pub(crate) mod rdma;
 use crate::array::atomic::AtomicElement;
 
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
-use crate::array::*;
+use crate::{array::*, Darc};
 // use crate::darc::Darc;
 use crate::array::private::ArrayExecAm;
 use crate::barrier::BarrierHandle;
@@ -905,6 +905,84 @@ impl<T: Dist> NativeAtomicLocalData<T> {
         }
     }
 
+    pub fn as_slice<A>(&self) -> Option<&[A]> {
+        unsafe {
+            let slice = self.array.__local_as_slice();
+            match self.array.orig_t {
+                NativeAtomicType::U8 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<u8>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::U16 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<u16>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::U32 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<u32>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::U64 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<u64>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::Usize => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<usize>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::I8 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<i8>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::I16 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<i16>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::I32 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<i32>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::I64 => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<i64>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+                NativeAtomicType::Isize => {
+                    if std::mem::align_of::<A>() - std::mem::align_of::<isize>() != 0 {
+                        return None;
+                    }
+                    let slice_ptr = slice.as_ptr() as *mut A;
+                    Some(std::slice::from_raw_parts(slice_ptr, slice.len()))
+                }
+            }
+        }
+    }
+
     // pub fn load_iter(&self) -> NativeAtomicLocalDataIter<T> {
     //     NativeAtomicLocalDataIter {
     //         array: self.array.clone(),
@@ -1125,6 +1203,17 @@ impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
     }
 }
 
+impl<T: Dist> From<&NativeAtomicByteArray> for NativeAtomicArray<T> {
+    fn from(array: &NativeAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
+impl<T: Dist> From<&mut NativeAtomicByteArray> for NativeAtomicArray<T> {
+    fn from(array: &mut NativeAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
 //#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
     fn from(array: NativeAtomicByteArray) -> Self {
@@ -1135,10 +1224,20 @@ impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
         .into()
     }
 }
+impl<T: Dist> From<&NativeAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &NativeAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
+impl<T: Dist> From<&mut NativeAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut NativeAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
 
 // //#[doc(hidden)]
 impl<T: Dist> private::ArrayExecAm<T> for NativeAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

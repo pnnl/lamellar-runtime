@@ -1,18 +1,18 @@
-use crate::env_var::config;
-use crate::lamellae::{AllocationType, Lamellae, LamellaeRDMA};
-use crate::lamellar_arch::LamellarArchRT;
-use crate::lamellar_request::LamellarRequest;
-use crate::memregion::MemoryRegion;
-use crate::scheduler::Scheduler;
-use crate::warnings::RuntimeWarning;
+use crate::{
+    utils::{ print_stats},
+    active_messaging::batching::{simple_batcher::io_task_stats, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS}, env_var::config, lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae}, lamellar_arch::LamellarArchRT, lamellar_request::LamellarRequest, memregion::MemoryRegion, scheduler::Scheduler, warnings::RuntimeWarning
+};
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU8, AtomicUsize, Ordering},
+    Arc,
+};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
+use tracing::trace;
 
 pub(crate) struct Barrier {
     my_pe: usize, // global pe id
@@ -24,8 +24,9 @@ pub(crate) struct Barrier {
     lamellae: Arc<Lamellae>,
     barrier_cnt: AtomicUsize,
     cur_barrier_id: Arc<AtomicUsize>,
-    barrier_buf: Arc<Vec<MemoryRegion<usize>>>,
-    send_buf: Option<MemoryRegion<usize>>,
+    barrier_mem_region: Option<MemoryRegion<usize>>, //keep mem region alive
+    barrier_buf: Arc<Vec<CommSlice<usize>>>,
+    // send_buf: Option<MemoryRegion<usize>>,
     panic: Arc<AtomicU8>,
 }
 
@@ -47,7 +48,7 @@ impl Barrier {
             n = 1;
             (num_pes as f64).log2() as usize
         };
-        let (buffs, send_buf) = if let Ok(_my_index) = arch.team_pe(my_pe) {
+        let (mem_region, buffs) = if let Ok(_my_index) = arch.team_pe(my_pe) {
             if num_pes > 1 {
                 let alloc = if global_pes == arch.num_pes() {
                     AllocationType::Global
@@ -56,35 +57,43 @@ impl Barrier {
                     pes.sort();
                     AllocationType::Sub(pes)
                 };
-                // println!("creating barrier {:?}", alloc);
-                let mut buffs = vec![];
-                for _ in 0..n {
-                    buffs.push(MemoryRegion::new(
-                        num_rounds,
-                        lamellae.clone(),
-                        alloc.clone(),
-                    ));
-                }
+                trace!("creating barrier {:?}", alloc);
 
-                let send_buf = MemoryRegion::new(1, lamellae.clone(), alloc);
+                let mem_region =
+                    MemoryRegion::new(num_rounds * n, &scheduler, vec![], &lamellae, alloc.clone());
+                    let mem_region_comm_slice = unsafe { mem_region.as_comm_slice().expect(
+                    "MemoryRegion should be registered and able to be converted to CommSlice",
+                ) };
+                let mut buffs = vec![];
+                for r in 0..n {
+                    trace!(
+                        "[r: {r}] creating barrier buff {:?}, num_rounds: {num_rounds}",
+                        alloc
+                    );
+                    buffs.push(
+                        mem_region_comm_slice.sub_slice(r * num_rounds.. (r + 1) * num_rounds),
+                    );
+
+                }
+                
+
+                // let send_buf = MemoryRegion::new(1, &scheduler, vec![], &lamellae, alloc);
 
                 unsafe {
-                    for buff in &buffs {
-                        for elem in buff.as_mut_slice().expect("Data should exist on PE") {
+                    for buff in &mut buffs {
+                        for elem in buff.as_mut_slice() {
                             *elem = 0;
                         }
                     }
-                    for elem in send_buf.as_mut_slice().expect("Data should exist on PE") {
-                        *elem = 0;
-                    }
                 }
-                (buffs, Some(send_buf))
+                (Some(mem_region), buffs)
             } else {
-                (vec![], None)
+                (None, vec![])
             }
         } else {
-            (vec![], None)
+            (None, vec![])
         };
+
 
         let bar = Barrier {
             my_pe,
@@ -95,9 +104,9 @@ impl Barrier {
             scheduler,
             lamellae,
             barrier_cnt: AtomicUsize::new(1),
+            barrier_mem_region: mem_region,
             cur_barrier_id: Arc::new(AtomicUsize::new(1)),
             barrier_buf: Arc::new(buffs),
-            send_buf,
             panic,
         };
         // bar.print_bar();
@@ -105,19 +114,18 @@ impl Barrier {
     }
 
     fn print_bar(&self) {
-        if let Some(send_buf) = &self.send_buf {
+        if let Some(_) = &self.barrier_mem_region {
             let buffs = self
                 .barrier_buf
                 .iter()
-                .map(|b| b.as_slice().unwrap())
+                .map(|b| b.as_slice())
                 .collect::<Vec<_>>();
             println!(
-                " [LAMELLAR BARRIER][{:?}][{:?}][{:x}] {:?} {:?} {:?}",
+                " [LAMELLAR BARRIER][{:?}][{:?}][{:?}] {:?}  {:?}",
                 std::thread::current().id(),
                 self.my_pe,
-                self.barrier_buf[0].addr().unwrap(),
+                self.barrier_buf[0],
                 buffs,
-                send_buf.as_slice().expect("Data should exist on PE"),
                 self.barrier_cnt.load(Ordering::SeqCst)
             );
         }
@@ -131,13 +139,15 @@ impl Barrier {
         i: usize,
         team_recv_pe: isize,
         recv_pe: usize,
-        send_buf_slice: &[usize],
+        barrier_id: usize,
     ) {
         RuntimeWarning::BarrierTimeout(s.elapsed().as_secs_f64()).print();
 
-        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+        if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+            self.lamellae.wait_all_print();
+            
             println!(
-                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?}",
+                "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?} AM send/recv counts: {:?} {:?} {:?}",
                 std::thread::current().id(),
                 self.my_pe,
                 my_index,
@@ -147,12 +157,13 @@ impl Barrier {
                     % self.num_pes,
                 team_recv_pe,
                 recv_pe,
-                send_buf_slice,
-                    unsafe {
-                        self.barrier_buf[i - 1]
-                            .as_mut_slice()
-                            .expect("Data should exist on PE")
-                    }
+                barrier_id,
+                    self.barrier_buf[i - 1]
+                        .as_slice(),
+                    print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
+                    print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
+                    io_task_stats(),
+                    
             );
             self.print_bar();
             *s = Instant::now();
@@ -162,63 +173,81 @@ impl Barrier {
     fn barrier_internal<F: Fn()>(&self, wait_func: F) {
         // println!("in barrier");
         // self.print_bar();
+        trace!(
+            "[{:?}] entering barrier cnt: {:?} cur_barrier_id: {:?}",
+            std::thread::current().id(),
+            self.barrier_cnt.load(Ordering::SeqCst),
+            self.cur_barrier_id.load(Ordering::SeqCst)
+        );
         let mut s = Instant::now();
         if self.panic.load(Ordering::SeqCst) == 0 {
-            if let Some(send_buf) = &self.send_buf {
+            if let Some(_) = &self.barrier_mem_region {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
-                    let send_buf_slice = unsafe {
-                        // im the only thread (remote or local) that can write to this buff
-                        send_buf.as_mut_slice().expect("Data should exist on PE")
-                    };
-
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                    send_buf_slice[0] = barrier_id;
-                    let barrier_slice = &[barrier_id];
-                    // println!(
-                    //     "[{:?}] barrier_id = {:?}",
-                    //     std::thread::current().id(),
-                    //     barrier_id
-                    // );
+
+                    trace!(
+                        "[{:?}] barrier_id = {:?}",
+                        std::thread::current().id(),
+                        barrier_id
+                    );
                     while barrier_id > self.cur_barrier_id.load(Ordering::SeqCst) {
                         wait_func();
-                        if s.elapsed().as_secs_f64() > config().deadlock_timeout {
+                        if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                             break;
                         }
+                        self.lamellae.comm().flush_all();
                     }
 
                     for round in 0..self.num_rounds {
+                        trace!(
+                            "[{:?}][ {:?} {:?}] round: {:?} barrier_id: {:?}",
+                            std::thread::current().id(),
+                            self.my_pe,
+                            my_index,
+                            round,
+                            barrier_id
+                        );
+                        // let mut reqs = vec![];
                         for i in 1..=self.n {
                             let team_send_pe =
                                 (my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
+                                trace!(
+                                    "[{:?}][ {:?} {:?}] round: {:?}  i: {:?} sending to [ ({:?}) ] id: {:?} buf {:?}",
+                                    std::thread::current().id(),
+                                    self.my_pe,
+                                    my_index,
+                                    round,
+                                    i,
+                                    team_send_pe,
+                                    barrier_id,
+                                        self.barrier_buf[i - 1]
+                                            .as_slice()
+                                    
+                                );
                             if team_send_pe != my_index {
                                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-                                // println!(
-                                //     "[{:?}][ {:?} {:?}] round: {:?}  i: {:?} sending to [{:?} ({:?}) ] id: {:?} buf {:?}",
-                                //     std::thread::current().id(),
-                                //     self.my_pe,
-                                //     my_index,
-                                //     round,
-                                //     i,
-                                //     send_pe,
-                                //     team_send_pe,
-                                //     send_buf_slice,
-                                //     unsafe {
-                                //         self.barrier_buf[i - 1]
-                                //             .as_mut_slice()
-                                //             .expect("Data should exist on PE")
-                                //     }
-                                // );
+                                
                                 // println!("barrier put_slice 1");
-                                unsafe {
-                                    self.barrier_buf[i - 1].put_slice(
-                                        send_pe,
-                                        round,
-                                        barrier_slice,
-                                    );
+                                    // reqs.push(
+                                    self.barrier_buf[i - 1]
+                                        .put_unmanaged(barrier_id, send_pe,round );
+                                    // );
+                                    // let _ = self.barrier_buf[i - 1]
+                                    //     .put_comm_slice(
+                                    //         send_pe,
+                                    //         round,
+                                    //         CommSlice::from_slice(barrier_slice),
+                                    //     )
+                                    //     .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
                                     //safe as we are the only ones writing to our index
-                                }
+                                
                             }
                         }
+                        // join_all(reqs).await;
+                        // for req in reqs.into_iter() {
+                        //     req.block();
+                        // }
+                        self.barrier_buf[0].wait();
                         for i in 1..=self.n {
                             let team_recv_pe = ((my_index as isize
                                 - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
@@ -228,25 +257,18 @@ impl Barrier {
                             let recv_pe =
                                 self.arch.single_iter(team_recv_pe as usize).next().unwrap();
                             if team_recv_pe as usize != my_index {
-                                // println!(
-                                //     "[{:?}][{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
-                                //     std::thread::current().id(),
-                                //     self.my_pe,
-                                //     recv_pe,
-                                //     team_recv_pe,
-                                //     send_buf_slice,
-                                //     unsafe {
-                                //         self.barrier_buf[i - 1]
-                                //             .as_mut_slice()
-                                //             .expect("Data should exist on PE")
-                                //     }
-                                // );
-                                unsafe {
+                                trace!(
+                                    "[{:?}][{:?} ] recv from [{:?} ({:?}) ] id: {:?} buf {:?}",
+                                    std::thread::current().id(),
+                                    self.my_pe,
+                                    recv_pe,
+                                    team_recv_pe,
+                                    barrier_id,
+                                    self.barrier_buf[i - 1].as_slice() 
+                                );
+                                
                                     //safe as  each pe is only capable of writing to its own index
-                                    while self.barrier_buf[i - 1]
-                                        .as_mut_slice()
-                                        .expect("Data should exist on PE")[round]
-                                        < barrier_id
+                                    while self.barrier_buf[i - 1].as_slice()[round] < barrier_id
                                     {
                                         self.barrier_timeout(
                                             &mut s,
@@ -255,12 +277,12 @@ impl Barrier {
                                             i,
                                             team_recv_pe,
                                             recv_pe,
-                                            send_buf_slice,
+                                            barrier_id,
                                         );
-                                        self.lamellae.flush();
+                                        self.lamellae.comm().flush_all();
                                         wait_func();
                                     }
-                                }
+                                
                             }
                         }
                     }
@@ -271,7 +293,7 @@ impl Barrier {
         }
 
         // self.print_bar();
-        // self.lamellae.flush();
+        // self.lamellae.comm().flush();
     }
 
     pub(crate) fn barrier(&self) {
@@ -300,6 +322,7 @@ impl Barrier {
         let mut handle = BarrierHandle {
             barrier_buf: self.barrier_buf.clone(),
             arch: self.arch.clone(),
+            scheduler: self.scheduler.clone(),
             lamellae: self.lamellae.clone(),
             my_index: 0,
             num_pes: self.num_pes,
@@ -310,13 +333,13 @@ impl Barrier {
             state: State::RoundInit(self.num_rounds),
             launched: false,
         };
-        // println!("in barrier handle");
+        trace!("in barrier handle");
         // self.print_bar();
         if self.panic.load(Ordering::SeqCst) == 0 {
-            if let Some(_) = &self.send_buf {
+            if let Some(_) = &self.barrier_mem_region {
                 if let Ok(my_index) = self.arch.team_pe(self.my_pe) {
                     let barrier_id = self.barrier_cnt.fetch_add(1, Ordering::SeqCst);
-                    // println!("barrier id: {:?}", barrier_id);
+                    trace!("barrier id: {:?}", barrier_id);
                     handle.barrier_id = barrier_id;
                     handle.my_index = my_index;
 
@@ -364,8 +387,9 @@ impl Barrier {
 /// A handle to a Lamellar barrier that can be used to wait on the barrier
 #[pin_project(PinnedDrop)]
 pub struct BarrierHandle {
-    barrier_buf: Arc<Vec<MemoryRegion<usize>>>,
+    barrier_buf: Arc<Vec<CommSlice<usize>>>,
     arch: Arc<LamellarArchRT>,
+    scheduler: Arc<Scheduler>,
     lamellae: Arc<Lamellae>,
     my_index: usize,
     num_pes: usize,
@@ -394,22 +418,26 @@ enum State {
 
 impl BarrierHandle {
     fn do_send_round(&self, round: usize) {
-        // println!("do send round {:?}", round);
-        let barrier_slice = &[self.barrier_id];
+        // trace!("do send round {:?}", round);
+        // let barrier_slice = &[self.barrier_id];
+        // let mut reqs = vec![];
         for i in 1..=self.n {
             let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-                unsafe {
-                    self.barrier_buf[i - 1].put_slice(send_pe, round, barrier_slice);
-                    //safe as we are the only ones writing to our index
-                }
+                
+                    self.barrier_buf[i - 1].put_unmanaged(self.barrier_id, send_pe, round);
+                
             }
         }
+        // for req in reqs.into_iter() {
+        //     req.block();
+        // }
+        self.barrier_buf[0].wait();
     }
 
     fn do_recv_round(&self, round: usize, recv_pe_index: usize) -> Option<usize> {
-        // println!("do recv round {:?}", round);
+        // trace!("do recv round {:?}", round);
         for i in recv_pe_index..=self.n {
             let team_recv_pe = ((self.my_index as isize
                 - (i as isize * (self.n as isize + 1).pow(round as u32) as isize))
@@ -417,19 +445,17 @@ impl BarrierHandle {
                 .rem_euclid(self.num_pes as isize) as isize;
             // let recv_pe = self.arch.single_iter(team_recv_pe as usize).next().unwrap();
             if team_recv_pe as usize != self.my_index {
-                unsafe {
+                
                     //safe as  each pe is only capable of writing to its own index
-                    if self.barrier_buf[i - 1]
-                        .as_mut_slice()
-                        .expect("Data should exist on PE")[round]
-                        < self.barrier_id
-                    {
-                        self.lamellae.flush();
+                    if self.barrier_buf[i - 1].as_slice()[round] < self.barrier_id {
+                        self.lamellae.comm().thread_flush();
+                        // trace!("waiting for recv pe: {:?} round: {:?} i: {:?}",  team_recv_pe, round, i);
                         return Some(i);
                     }
-                }
+                
             }
         }
+        // trace!("dont need to wait for any recv pe");
         None
     }
 }

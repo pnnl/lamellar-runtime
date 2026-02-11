@@ -5,6 +5,7 @@ use crate::array::iterator::{consumer::*, IterLockFuture};
 use crate::array::operations::ArrayOps;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::{AsyncTeamFrom, AsyncTeamInto, Distribution};
+use crate::darc::Darc;
 use crate::lamellar_env::LamellarEnv;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_task_group::TaskGroupLocalAmHandle;
@@ -70,7 +71,7 @@ where
     }
     fn create_handle(
         self,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerLocalIterCollectHandle {
@@ -135,7 +136,7 @@ where
     }
     fn create_handle(
         self,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerLocalIterCollectHandle {
@@ -172,7 +173,7 @@ where
 pub(crate) struct InnerLocalIterCollectHandle<T, A> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Vec<(usize, T)>>>,
     pub(crate) distribution: Distribution,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     spawned: bool,
     state: InnerState<T, A>,
 }
@@ -188,7 +189,7 @@ impl<T: Dist + ArrayOps, A: AsyncTeamFrom<(Vec<T>, Distribution)> + SyncSend + '
     async fn async_create_array(
         local_vals: Vec<T>,
         dist: Distribution,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
     ) -> A {
         let input = (local_vals, dist);
         AsyncTeamInto::team_into(input, &team.team()).await

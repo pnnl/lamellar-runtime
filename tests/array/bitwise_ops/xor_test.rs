@@ -90,7 +90,7 @@ macro_rules! xor_test{
             // array.print();
             #[allow(unused_unsafe)]
             for (i,elem) in unsafe{onesided_iter!($array,array).into_iter().enumerate()}{
-                let val = *elem;
+                let val = elem;
                 check_val!($array,val,final_val,success);
                 if !success{
                     eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
@@ -117,7 +117,7 @@ macro_rules! xor_test{
             // sub_array.print();
             #[allow(unused_unsafe)]
             for (i,elem) in unsafe{onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                let val = *elem;
+                let val = elem;
                 check_val!($array,val,final_val,success);
                 if !success{
                     eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);
@@ -145,7 +145,7 @@ macro_rules! xor_test{
                 // sub_array.print();
                 #[allow(unused_unsafe)]
                 for (i,elem) in unsafe {onesided_iter!($array,sub_array).into_iter().enumerate()}{
-                    let val = *elem;
+                    let val = elem;
                     check_val!($array,val,final_val,success);
                     if !success{
                         eprintln!("{:?} {:x} {:x} {:x}",i,my_val,val,final_val);

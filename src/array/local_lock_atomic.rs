@@ -4,18 +4,15 @@ mod iteration;
 pub(crate) mod local_chunks;
 pub use local_chunks::*;
 pub(crate) mod handle;
-pub use handle::*;
-// pub use handle::{
-//     LocalLockArrayHandle, LocalLockLocalChunksHandle, LocalLockLocalChunksMutHandle,
-//     LocalLockLocalDataHandle, LocalLockMutLocalDataHandle, LocalLockReadHandle,
-//     LocalLockWriteHandle,
-// };
+use handle::{
+    LocalLockArrayHandle, LocalLockLocalDataHandle, LocalLockMutLocalDataHandle,
+    LocalLockReadHandle, LocalLockWriteHandle,
+};
 pub(crate) mod operations;
 mod rdma;
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::array::AsyncFrom;
-use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
 use crate::darc::local_rw_darc::{LocalRwDarc, LocalRwDarcReadGuard};
@@ -25,6 +22,7 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
+use crate::{array::*, Darc};
 
 // use parking_lot::{
 //     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
@@ -778,10 +776,14 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for LocalLockArra
 impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
     async fn async_from(array: UnsafeArray<T>) -> Self {
         // println!("locallock from unsafe");
+        // let mut timer = std::time::Instant::now();
         array.await_on_outstanding(DarcMode::LocalLockArray).await;
+        // println!("await on outstanding {:?}", timer.elapsed());
+        // timer = std::time::Instant::now();
         let lock = LocalRwDarc::new(array.team_rt(), ())
             .await
             .expect("PE in team");
+        // println!("lock creation {:?}", timer.elapsed());
 
         LocalLockArray {
             lock: lock,
@@ -826,8 +828,20 @@ impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
     }
 }
 
+impl<T: Dist> From<&LocalLockByteArray> for LocalLockArray<T> {
+    fn from(array: &LocalLockByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
+impl<T: Dist> From<&mut LocalLockByteArray> for LocalLockArray<T> {
+    fn from(array: &mut LocalLockByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
 impl<T: Dist> private::ArrayExecAm<T> for LocalLockArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {

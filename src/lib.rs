@@ -1,4 +1,4 @@
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![warn(unreachable_pub)]
 #![doc(test(attr(deny(unused_must_use))))]
 //! Lamellar is an investigation of the applicability of the Rust systems programming language for HPC as an alternative to C and C++, with a focus on PGAS approaches.
@@ -54,7 +54,7 @@
 //! - `shmem` -  used for multi-PE (single system, multi-process) development, useful for emulating distributed environments (communicates through shared memory)
 //! - `rofi` - used for multi-PE (multi system, multi-process) distributed development, based on the Rust OpenFabrics Interface Transport Layer (ROFI) (<https://github.com/pnnl/rofi>).
 //!     - By default support for Rofi is disabled as using it relies on both the Rofi C-library and the libfabrics library, which may not be installed on your system.
-//!     - It can be enabled by adding ```features = ["enable-rofi"] or `features = ["enable-rofi-shared"]``` to the lamellar entry in your `Cargo.toml` file
+//!     - It can be enabled by adding ```features = ["enable-rofi-c"] or `features = ["enable-rofi-c-shared"]``` to the lamellar entry in your `Cargo.toml` file
 //!
 //! The long term goal for lamellar is that you can develop using the `local` backend and then when you are ready to run distributed switch to the `rofi` backend with no changes to your code.
 //! Currently the inverse is true, if it compiles and runs using `rofi` it will compile and run when using `local` and `shmem` with no changes.
@@ -79,7 +79,7 @@
 //! use lamellar::Backend;
 //! fn main(){
 //!  let mut world = lamellar::LamellarWorldBuilder::new()
-//!         .with_lamellae( Default::default() ) //if "enable-rofi" feature is active default is rofi, otherwise  default is `Local`
+//!         .with_lamellae( Default::default() ) //if "enable-rofi-c" feature is active default is rofi, otherwise  default is `Local`
 //!         //.with_lamellae( Backend::Rofi ) //explicity set the lamellae backend to rofi,
 //!         //.with_lamellae( Backend::Local ) //explicity set the lamellae backend to local
 //!         //.with_lamellae( Backend::Shmem ) //explicity set the lamellae backend to use shared memory
@@ -187,7 +187,7 @@
 //!
 //! If planning to use within a distributed HPC system copy the following to your Cargo.toml file:
 //!
-//! ``` lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi"]}```
+//! ``` lamellar = { version = "0.7.0-rc.1", features = ["enable-rofi-c"]}```
 //!
 //! NOTE: as of Lamellar 0.6.1 It is no longer necessary to manually install Libfabric, the build process will now try to automatically build libfabric for you.
 //! If this process fails, it is still possible to pass in a manual libfabric installation via the OFI_DIR envrionment variable.
@@ -225,20 +225,22 @@ pub extern crate serde;
 //#[doc(hidden)]
 pub use serde::*;
 
+#[doc(hidden)]
 pub extern crate serde_bytes;
-//#[doc(hidden)]
+// #[doc(hidden)]
 // pub use serde_bytes::*;
 
 // //#[doc(hidden)]
 pub extern crate serde_with;
 // pub use serde_with::*;
 
-// //#[doc(hidden)]
+//#[doc(hidden)]
 // pub extern crate tracing;
 //#[doc(hidden)]
 pub use parking_lot;
-// //#[doc(hidden)]
-// pub use tracing::*;
+//#[doc(hidden)]
+pub use ::tracing;
+pub use ::tracing::*;
 
 //#[doc(hidden)]
 pub use async_trait;
@@ -269,6 +271,7 @@ pub mod memregion;
 // //#[doc(hidden)]
 pub use memregion::prelude::*;
 mod scheduler;
+pub use scheduler::LAMELLAR_THREAD_ID;
 mod utils;
 //#[doc(hidden)]
 pub use utils::*;
@@ -279,6 +282,7 @@ pub mod env_var;
 pub use env_var::config;
 
 pub use crate::lamellae::Backend;
+pub use crate::lamellae::{AtomicFetchOpHandle, AtomicOpHandle, RdmaHandle};
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 // //#[doc(hidden)]
 pub use crate::lamellar_task_group::{

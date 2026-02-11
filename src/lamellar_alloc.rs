@@ -16,6 +16,7 @@ pub(crate) trait LamellarAlloc {
     fn try_malloc(&self, size: usize, align: usize) -> Option<usize>;
     fn fake_malloc(&self, size: usize, align: usize) -> bool;
     fn free(&self, addr: usize) -> Result<(), usize>;
+    fn find(&self, addr: usize) -> Option<usize>;
     fn space_avail(&self) -> usize;
     fn occupied(&self) -> usize;
 }
@@ -175,6 +176,17 @@ impl LamellarAlloc for LinearAlloc {
         }
         Err(addr)
     }
+
+    fn find(&self, addr: usize) -> Option<usize> {
+        let &(ref lock, ref _cvar) = &*self.entries;
+        let entries = lock.lock();
+        for i in 0..entries.len() {
+            if addr - entries[i].padding as usize == entries[i].addr as usize {
+                return Some(entries[i].size);
+            }
+        }
+        None
+    }
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
     }
@@ -279,11 +291,11 @@ impl LamellarAlloc for BTreeAlloc {
         let mut timer = std::time::Instant::now();
         while let None = val {
             val = self.try_malloc(size, align);
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                 println!("[WARNING]  Potential deadlock detected when trying to allocate more memory.\n\
                 The deadlock timeout can be set via the LAMELLAR_DEADLOCK_WARNING_TIMEOUT environment variable, the current timeout is {} seconds\n\
                 To view backtrace set RUST_LIB_BACKTRACE=1\n\
-                {}",config().deadlock_timeout,std::backtrace::Backtrace::capture());
+                {}",config().deadlock_warning_timeout,std::backtrace::Backtrace::capture());
                 timer = std::time::Instant::now();
             }
         }
@@ -497,6 +509,15 @@ impl LamellarAlloc for BTreeAlloc {
         }
     }
 
+    fn find(&self, addr: usize) -> Option<usize> {
+        let &(ref lock, ref _cvar) = &*self.allocated_addrs;
+        let allocated_addrs = lock.lock();
+        // println!("trying to free: {:x?} {:?}", addr, addr);
+        if let Some((size, _padding)) = allocated_addrs.get(&addr) {
+            return Some(*size);
+        }
+        None
+    }
     fn space_avail(&self) -> usize {
         self.free_space.load(Ordering::SeqCst)
     }
@@ -511,6 +532,7 @@ pub(crate) struct ObjAlloc<T: Copy> {
     free_entries: Arc<(Mutex<Vec<usize>>, Condvar)>,
     start_addr: usize,
     max_size: usize,
+    num_entries: usize,
     _id: String,
     phantom: PhantomData<T>,
 }
@@ -522,6 +544,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
             free_entries: Arc::new((Mutex::new(Vec::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
+            num_entries: 0,
             _id: id,
             phantom: PhantomData,
         }
@@ -537,6 +560,7 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         *free_entries = ((start_addr + padding)..(start_addr + size))
             .step_by(std::mem::size_of::<T>())
             .collect();
+        self.num_entries = free_entries.len();
     }
 
     fn malloc(&self, size: usize, align: usize) -> usize {
@@ -584,6 +608,16 @@ impl<T: Copy> LamellarAlloc for ObjAlloc<T> {
         free_entries.push(addr);
         cvar.notify_all();
         Ok(())
+    }
+
+    fn find(&self, addr: usize) -> Option<usize> {
+        assert!(addr < self.num_entries);
+        let &(ref lock, ref _cvar) = &*self.free_entries;
+        let free_entries = lock.lock();
+        match free_entries.iter().position(|x| *x == addr) {
+            Some(_i) => None, //means its available to be allocated
+            None => Some(1),
+        }
     }
 
     fn space_avail(&self) -> usize {

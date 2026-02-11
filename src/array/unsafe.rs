@@ -12,14 +12,13 @@ mod rdma;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::active_messaging::*;
-// use crate::array::r#unsafe::operations::BUFOPS;
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
 use crate::array::*;
 use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
-use crate::lamellae::AllocationType;
+use crate::lamellae::{AllocationType, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
@@ -29,15 +28,14 @@ use crate::LamellarTaskGroup;
 use core::marker::PhantomData;
 use futures_util::{future, StreamExt};
 use std::ops::Bound;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
 pub(crate) struct UnsafeArrayData {
-    mem_region: MemoryRegion<u8>,
+    pub(crate) mem_region: MemoryRegion<u8>,
     pub(crate) array_counters: Arc<AMCounters>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) task_group: Arc<LamellarTaskGroup>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
@@ -80,6 +78,20 @@ impl UnsafeByteArray {
         UnsafeByteArrayWeak {
             inner: UnsafeArrayInner::downgrade(&array.inner),
         }
+    }
+
+    pub fn mut_local_data<T: Dist>(&self) -> &mut [T] {
+        unsafe {
+            let u8_slice = self.inner.local_as_mut_slice();
+            // println!("u8 slice {:?} u8_len {:?} len {:?}",u8_slice,u8_slice.len(),u8_slice.len()/std::mem::size_of::<T>());
+            std::slice::from_raw_parts_mut(
+                u8_slice.as_mut_ptr() as *mut T,
+                u8_slice.len() / std::mem::size_of::<T>(),
+            )
+        }
+    }
+    pub fn local_data<T: Dist>(&self) -> &[T] {
+        self.mut_local_data()
     }
 }
 
@@ -128,19 +140,6 @@ pub(crate) struct UnsafeArrayInnerWeak {
     size: usize,                 //relative to size of T
     sub: bool,
 }
-
-// impl Drop for UnsafeArrayInner {
-//     fn drop(&mut self) {
-//         // println!("unsafe array inner dropping");
-//     }
-// }
-
-// impl<T: Dist> Drop for UnsafeArray<T> {
-//     fn drop(&mut self) {
-//         println!("Dropping unsafe array");
-//         // self.wait_all();
-//     }
-// }
 
 impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     #[doc(alias = "Collective")]
@@ -194,20 +193,28 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         if remaining_elems > 0 {
             per_pe_size += 1
         }
+        let mut team_counters = team.counters();
+        let array_counters = Arc::new(AMCounters::new());
+        team_counters.push(array_counters.clone());
         let rmr_t: MemoryRegion<T> = if team.num_world_pes == team.num_pes {
-            MemoryRegion::new(per_pe_size, team.lamellae.clone(), AllocationType::Global)
+            MemoryRegion::new(
+                per_pe_size,
+                &team.scheduler,
+                team_counters,
+                &team.lamellae,
+                AllocationType::Global,
+            )
         } else {
             MemoryRegion::new(
                 per_pe_size,
-                team.lamellae.clone(),
+                &team.scheduler,
+                team_counters,
+                &team.lamellae,
                 AllocationType::Sub(team.get_pes()),
             )
         };
 
         unsafe {
-            // for elem in rmr_t.as_mut_slice().expect("data should exist on pe") {
-            //     *elem = std::mem::zeroed();
-            // }
             if std::mem::needs_drop::<T>() {
                 // If `T` needs to be dropped then we have to do this one item at a time, in
                 // case one of the intermediate drops does a panic.
@@ -215,14 +222,15 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 panic!("Lamellar Arrays do not yet support elements that impl Drop");
             } else {
                 // Otherwise we can be really fast and just fill everthing with zeros.
-                let len = std::mem::size_of_val::<[T]>(
-                    rmr_t.as_mut_slice().expect("data should exist on pe"),
-                );
-                std::ptr::write_bytes(
-                    rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
-                    0u8,
-                    len,
-                )
+                // let len = std::mem::size_of_val::<[T]>(
+                //     rmr_t.as_mut_slice(), //.expect("data should exist on pe"),
+                // );
+                // std::ptr::write_bytes(
+                //     rmr_t.as_mut_ptr().expect("data should exist on pe") as *mut u8,
+                //     0u8,
+                //     len,
+                // )
+                rmr_t.as_mut_slice().fill(T::default());
             }
         }
         let rmr = unsafe { rmr_t.to_base::<u8>() };
@@ -231,7 +239,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             team.clone(),
             UnsafeArrayData {
                 mem_region: rmr,
-                array_counters: Arc::new(AMCounters::new()),
+                array_counters,
                 team: team.clone(),
                 task_group: Arc::new(task_group),
                 my_pe: my_pe,
@@ -256,21 +264,13 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
             },
             phantom: PhantomData,
         };
-        // println!("new unsafe");
-        // unsafe {println!("size {:?} bytes {:?}",array.inner.size, array.inner.data.mem_region.as_mut_slice().unwrap().len())};
-        // println!("elem per pe {:?}", elem_per_pe);
-        // for i in 0..num_pes{
-        //     println!("pe: {:?} {:?}",i,array.inner.num_elems_pe(i));
-        // }
-        // array.inner.data.print();
+
         if full_array_size != array_size {
             println!("WARNING: Array size {array_size} is less than number of pes {full_array_size}, each PE will not contain data");
             array.sub_array(0..array_size)
         } else {
             array
         }
-        // println!("after buffered ops");
-        // array.inner.data.print();
     }
 }
 impl<T: Dist + 'static> UnsafeArray<T> {
@@ -345,7 +345,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     ///```
     pub unsafe fn local_as_mut_slice(&self) -> &mut [T] {
         let u8_slice = self.inner.local_as_mut_slice();
-        // println!("u8 slice {:?} u8_len {:?} len {:?}",u8_slice,u8_slice.len(),u8_slice.len()/std::mem::size_of::<T>());
         std::slice::from_raw_parts_mut(
             u8_slice.as_mut_ptr() as *mut T,
             u8_slice.len() / std::mem::size_of::<T>(),
@@ -407,8 +406,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
 
     pub(crate) fn local_as_mut_ptr(&self) -> *mut T {
         let u8_ptr = unsafe { self.inner.local_as_mut_ptr() };
-        // self.inner.data.mem_region.as_casted_mut_ptr::<T>().unwrap();
-        // println!("ptr: {:?} {:?}", u8_ptr, u8_ptr as *const T);
         u8_ptr as *mut T
     }
 
@@ -430,11 +427,13 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         self.inner.offset..(self.inner.offset + self.inner.size)
     }
 
-    pub(crate) fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    pub(crate) fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.inner.data.team.clone()
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn await_all(&self) {
+        self.inner.data.team.lamellae.comm().wait_all(); //wait on operations from all threads
         let am_counters = self.inner.data.array_counters.clone();
 
         let mut temp_now = Instant::now();
@@ -450,7 +449,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
                 orig_reqs = am_counters.send_req_cnt.load(Ordering::SeqCst);
                 orig_launched = am_counters.launched_req_cnt.load(Ordering::SeqCst);
                 async_std::task::yield_now().await;
-                if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
+                if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                     println!(
                         "in darc await_all mype: {:?} cnt: {:?} {:?}",
                         self.team_rt().world_pe,
@@ -485,14 +484,10 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
 
         self.inner.data.task_group.await_all().await;
-        // println!("done in wait all {:?}",std::time::SystemTime::now());
     }
 
     pub(crate) async fn await_on_outstanding(&self, mode: DarcMode) {
         self.await_all().await;
-        // println!("block on outstanding");
-        // self.inner.data.print();
-        // let the_array: UnsafeArray<T> = self.clone();
         let array_darc = self.inner.data.clone();
         array_darc.block_on_outstanding(mode, 1).await;
     }
@@ -555,18 +550,12 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// ro_array.print();
     ///```
     pub fn into_read_only(self) -> IntoReadOnlyArrayHandle<T> {
-        // println!("unsafe into read only");
         IntoReadOnlyArrayHandle {
             team: self.team_rt(),
             launched: false,
             outstanding_future: Box::pin(self.async_into()),
         }
     }
-
-    // pub fn into_local_only(self) -> LocalOnlyArray<T> {
-    //     // println!("unsafe into local only");
-    //     self.into()
-    // }
 
     #[doc(alias = "Collective")]
     /// Convert this UnsafeArray into a (safe) [LocalLockArray]
@@ -625,9 +614,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// local_lock_array.print();
     ///```
     pub fn into_local_lock(self) -> IntoLocalLockArrayHandle<T> {
-        // println!("unsafe into local lock atomic");
-        // self.into()
-
         IntoLocalLockArrayHandle {
             team: self.team_rt(),
             launched: false,
@@ -692,7 +678,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// global_lock_array.print();
     ///```
     pub fn into_global_lock(self) -> IntoGlobalLockArrayHandle<T> {
-        // println!("readonly into_global_lock");
         IntoGlobalLockArrayHandle {
             team: self.team_rt(),
             launched: false,
@@ -763,7 +748,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
     /// atomic_array.print();
     ///```
     pub fn into_atomic(self) -> IntoAtomicArrayHandle<T> {
-        // println!("unsafe into atomic");
         IntoAtomicArrayHandle {
             team: self.team_rt(),
             launched: false,
@@ -771,16 +755,6 @@ impl<T: Dist + 'static> UnsafeArray<T> {
         }
     }
 }
-
-// use crate::array::private::LamellarArrayPrivate;
-// impl <T: Dist, A: LamellarArrayPrivate<T>> From<A> for UnsafeArray<T>{
-//     fn from(array: A) -> Self {
-//        let array = array.into_inner();
-//        array.block_on_outstanding(DarcMode::UnsafeArray);
-//        array.create_buffered_ops();
-//        array
-//     }
-// }
 
 impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
@@ -790,12 +764,10 @@ impl<T: Dist + ArrayOps> TeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     }
 }
 
-// #[async_trait]
 impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T> {
     async fn team_from(input: (Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (local_vals, distribution) = input;
         let team = team.team.clone();
-        // println!("local_vals len: {:?}", local_vals.len());
         team.async_barrier().await;
         let local_sizes = UnsafeArray::<usize>::async_new(
             team.clone(),
@@ -808,7 +780,6 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
             local_sizes.local_as_mut_slice()[0] = local_vals.len();
         }
         team.async_barrier().await;
-        // local_sizes.barrier();
         let mut size = 0;
         let mut my_start = 0;
         let my_pe = team.team_pe.expect("pe not part of team");
@@ -834,7 +805,7 @@ impl<T: Dist + ArrayOps> AsyncTeamFrom<(Vec<T>, Distribution)> for UnsafeArray<T
         )
         .await;
         if local_vals.len() > 0 {
-            unsafe { array.put(my_start, local_vals).await };
+            unsafe { array.put_buffer(my_start, local_vals).await };
         }
         team.async_barrier().await;
         array
@@ -845,8 +816,6 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
     fn team_from(input: (&Vec<T>, Distribution), team: &Arc<LamellarTeam>) -> Self {
         let (local_vals, distribution) = input;
         let team = team.team.clone();
-        // println!("local_vals len: {:?}", local_vals.len());
-        // team.tasking_barrier();
         let local_sizes =
             UnsafeArray::<usize>::new(team.clone(), team.num_pes, Distribution::Block).block();
         unsafe {
@@ -870,21 +839,12 @@ impl<T: Dist + ArrayOps> TeamFrom<(&Vec<T>, Distribution)> for UnsafeArray<T> {
         }
         let array = UnsafeArray::<T>::new(team.clone(), size, distribution).block();
         if local_vals.len() > 0 {
-            array.block_on(unsafe { array.put(my_start, local_vals) });
+            array.block_on(unsafe { array.put_buffer(my_start, local_vals) });
         }
         array.barrier();
         array
     }
 }
-
-// impl<T: Dist> From<AtomicArray<T>> for UnsafeArray<T> {
-//     fn from(array: AtomicArray<T>) -> Self {
-//         match array {
-//             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::from(array),
-//             AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::from(array),
-//         }
-//     }
-// }
 
 #[async_trait]
 impl<T: Dist> AsyncFrom<AtomicArray<T>> for UnsafeArray<T> {
@@ -892,6 +852,7 @@ impl<T: Dist> AsyncFrom<AtomicArray<T>> for UnsafeArray<T> {
         match array {
             AtomicArray::NativeAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
             AtomicArray::GenericAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
+            AtomicArray::NetworkAtomicArray(array) => UnsafeArray::<T>::async_from(array).await,
         }
     }
 }
@@ -951,6 +912,17 @@ impl<T: Dist> AsyncFrom<ReadOnlyArray<T>> for UnsafeArray<T> {
     }
 }
 
+#[async_trait]
+impl<T: Dist> AsyncFrom<NetworkAtomicArray<T>> for UnsafeArray<T> {
+    async fn async_from(array: NetworkAtomicArray<T>) -> Self {
+        array
+            .array
+            .await_on_outstanding(DarcMode::UnsafeArray)
+            .await;
+        array.array
+    }
+}
+
 impl<T: Dist> From<UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: UnsafeByteArray) -> Self {
         UnsafeArray {
@@ -1000,7 +972,7 @@ impl<T: Dist> From<LamellarByteArray> for UnsafeArray<T> {
 }
 
 impl<T: Dist> ArrayExecAm<T> for UnsafeArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -1065,29 +1037,12 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
         self.inner
             .data
             .team
-            .exec_am_local_tg(am, Some(self.team_counters()))
+            .exec_am_local_tg(am, Some(self.team_counters()), None)
     }
+    #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
+        self.inner.data.team.lamellae.comm().wait_all(); //wait on operations from all threads
         let mut temp_now = Instant::now();
-        // println!(
-        //     "in array wait_all  cnt: {:?} {:?} {:?}",
-        //     self.inner
-        //         .data
-        //         .array_counters
-        //         .send_req_cnt
-        //         .load(Ordering::SeqCst),
-        //     self.inner
-        //         .data
-        //         .array_counters
-        //         .outstanding_reqs
-        //         .load(Ordering::SeqCst),
-        //     self.inner
-        //         .data
-        //         .array_counters
-        //         .launched_req_cnt
-        //         .load(Ordering::SeqCst)
-        // );
-        // let mut first = true;
         while self
             .inner
             .data
@@ -1097,11 +1052,8 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
             > 0
             || self.inner.data.req_cnt.load(Ordering::SeqCst) > 0
         {
-            // std::thread::yield_now();
-            // self.inner.data.team.flush();
             self.inner.data.team.scheduler.exec_task(); //mmight as well do useful work while we wait
-            if temp_now.elapsed().as_secs_f64() > config().deadlock_timeout {
-                //|| first{
+            if temp_now.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                 println!(
                     "in array wait_all mype: {:?} cnt: {:?} {:?} {:?}",
                     self.inner.data.team.world_pe,
@@ -1118,7 +1070,6 @@ impl<T: Dist> ActiveMessaging for UnsafeArray<T> {
                     self.inner.data.req_cnt.load(Ordering::SeqCst)
                 );
                 temp_now = Instant::now();
-                // first = false;
             }
         }
         if self
@@ -1203,19 +1154,11 @@ impl<T: Dist> LamellarArray<T> for UnsafeArray<T> {
     fn num_elems_local(&self) -> usize {
         self.inner.num_elems_local()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)> {
         if self.inner.sub {
-            // println!("sub array {index}");
             let pe = self.inner.pe_for_dist_index(index)?;
-            // println!("pe: {pe}");
             let offset = self.inner.pe_sub_offset_for_dist_index(pe, index)?;
-            // println!(
-            //     "sub array index {index} pe {pe} offset {offset} size {} {} {}",
-            //     self.inner.size,
-            //     self.inner.num_elems_pe(0),
-            //     self.inner.num_elems_pe(1)
-            // );
             Some((pe, offset))
         } else {
             self.inner.full_pe_and_offset_for_global_index(index)
@@ -1275,14 +1218,6 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
                 start, end, self.inner.size
             );
         }
-        // println!(
-        //     "new inner start {:?} end {:?} size {:?} cur offset {:?} cur size {:?}",
-        //     start,
-        //     end,
-        //     end - start,
-        //     self.inner.offset,
-        //     self.inner.size
-        // );
         let mut inner = self.inner.clone();
         inner.offset += start;
         inner.size = end - start;
@@ -1339,6 +1274,7 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for UnsafeArray<T> {
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
+        self.inner.data.team.tasking_barrier();
     }
 }
 
@@ -1647,9 +1583,8 @@ impl UnsafeArrayInner {
     }
 
     //index is relative to (sub)array (i.e. index=0 doesnt necessarily live on pe=0)
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn pe_for_dist_index(&self, index: usize) -> Option<usize> {
-        // println!("pe_for_dist_index {index} {}", self.size);
         if self.size > index {
             let global_index = index + self.offset;
 
@@ -1673,14 +1608,12 @@ impl UnsafeArrayInner {
     }
 
     //index relative to subarray, return offset relative to subarray
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn pe_full_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
-        // println!("pe_full_offset_for_dist_index pe {pe} index {index}");
         let global_index = self.offset + index;
         match self.distribution {
             Distribution::Block => {
                 let rem_index = self.orig_remaining_elems * (self.orig_elem_per_pe + 1);
-                // println!("\tindex: {index} offset {} size {} global_index {global_index} rem_index {rem_index}",self.offset, self.size);
                 let offset = if global_index < rem_index {
                     //index is on a pe with extra elems
                     global_index - (pe * (self.orig_elem_per_pe + 1))
@@ -1706,10 +1639,6 @@ impl UnsafeArrayInner {
 
     //index relative to subarray, return offset relative to subarray
     pub(crate) fn pe_sub_offset_for_dist_index(&self, pe: usize, index: usize) -> Option<usize> {
-        // println!(
-        //     "pe_sub_offset_for_dist_index index {index} pe {pe} offset {}",
-        //     self.offset
-        // );
         let start_pe = self.pe_for_dist_index(0)?;
 
         match self.distribution {
@@ -1737,7 +1666,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns local offset relative to full array
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn pe_full_offset_for_local_index(&self, pe: usize, index: usize) -> Option<usize> {
         let global_index = self.global_index_from_local(index)?;
         match self.distribution {
@@ -1766,7 +1695,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to original full length array
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn global_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         match self.distribution {
@@ -1813,7 +1742,6 @@ impl UnsafeArrayInner {
                 };
 
                 let mut num_elems = self.size / num_pes;
-                // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);
 
                 if self.size % num_pes != 0 {
                     //we have leftover elements
@@ -1829,7 +1757,6 @@ impl UnsafeArrayInner {
                         }
                     }
                 }
-                // println!("{:?} {:?} {:?} {:?}",num_pes,start_pe,end_pe,num_elems);
 
                 if index < num_elems {
                     if start_pe <= my_pe {
@@ -1846,7 +1773,7 @@ impl UnsafeArrayInner {
 
     //index is local with respect to subarray
     //returns index with respect to subarrayy
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn subarray_index_from_local(&self, index: usize) -> Option<usize> {
         let my_pe = self.data.my_pe;
         let my_start_index = self.start_index_for_pe(my_pe)?; //None means subarray doesnt exist on this PE
@@ -1885,7 +1812,7 @@ impl UnsafeArrayInner {
         }
     }
     //return index relative to the subarray
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn start_index_for_pe(&self, pe: usize) -> Option<usize> {
         match self.distribution {
             Distribution::Block => {
@@ -1940,7 +1867,7 @@ impl UnsafeArrayInner {
     }
 
     //return index relative to the subarray
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn end_index_for_pe(&self, pe: usize) -> Option<usize> {
         let start_i = self.start_index_for_pe(pe)?;
         match self.distribution {
@@ -1962,7 +1889,7 @@ impl UnsafeArrayInner {
         }
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_elems_pe(&self, pe: usize) -> usize {
         match self.distribution {
             Distribution::Block => {
@@ -2014,12 +1941,12 @@ impl UnsafeArrayInner {
             }
         }
     }
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn num_elems_local(&self) -> usize {
         self.num_elems_pe(self.data.my_pe)
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn local_as_mut_slice(&self) -> &mut [u8] {
         let slice =
             self.data.mem_region.as_casted_mut_slice::<u8>().expect(
@@ -2044,10 +1971,6 @@ impl UnsafeArrayInner {
                     0
                 };
                 let end_index = start_index + num_elems_local;
-                // println!(
-                //     "nel {:?} sao {:?} as slice si: {:?} ei {:?} elemsize {:?}",
-                //     num_elems_local, self.offset, start_index, end_index, self.elem_size
-                // );
                 &mut slice[start_index * self.elem_size..end_index * self.elem_size]
             }
             Distribution::Cyclic => {
@@ -2059,23 +1982,19 @@ impl UnsafeArrayInner {
                         1
                     };
                 let end_index = start_index + num_elems_local;
-                // println!("si {:?}  ei {:?}",start_index,end_index);
                 &mut slice[start_index * self.elem_size..end_index * self.elem_size]
             }
         }
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) unsafe fn local_as_mut_ptr(&self) -> *mut u8 {
         let ptr =
             self.data.mem_region.as_casted_mut_ptr::<u8>().expect(
                 "memory doesnt exist on this pe (this should not happen for arrays currently)",
             );
-        // println!("u8 ptr: {:?}", ptr);
-        // let len = self.size;
         let my_pe = self.data.my_pe;
         let num_pes = self.data.num_pes;
-        // let num_elems_local = self.num_elems_local();
         match self.distribution {
             Distribution::Block => {
                 let start_pe = self
@@ -2090,8 +2009,6 @@ impl UnsafeArrayInner {
                 } else {
                     0
                 };
-
-                // println!("nel {:?} sao {:?} as slice si: {:?} ei {:?}",num_elems_local,self.offset,start_index,end_index);
                 ptr.offset((start_index * self.elem_size) as isize)
             }
             Distribution::Cyclic => {
@@ -2102,7 +2019,6 @@ impl UnsafeArrayInner {
                     } else {
                         1
                     };
-                // println!("si {:?}  ei {:?}",start_index,end_index);
                 ptr.offset((start_index * self.elem_size) as isize)
             }
         }

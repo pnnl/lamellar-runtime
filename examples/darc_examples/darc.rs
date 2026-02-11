@@ -3,6 +3,9 @@ use lamellar::darc::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
+
 #[lamellar::AmData(Clone)]
 struct DarcAm {
     darc: Darc<AtomicUsize>, //each pe has a local atomicusize
@@ -45,6 +48,16 @@ struct WrappedWrappedWrappedDarc {
 }
 
 fn main() {
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true),
+        )
+        .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();

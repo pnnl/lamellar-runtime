@@ -43,9 +43,9 @@ impl LamellarAm for RecvAm {
             let end = start + self.buffer_size;
             let my_start = lamellar::current_pe * self.buffer_size;
             let res_send_buf = self.buffer.res_send_buffer.sub_region(start..end);
-            // let res_send_slice = res_send_buf.as_mut_slice().unwrap();
+            // let res_send_slice = res_send_buf.as_mut_slice();
             let idx_recv_buf = self.buffer.idx_recv_buffer.sub_region(start..end);
-            let idx_recv_slice = idx_recv_buf.as_mut_slice().unwrap();
+            let idx_recv_slice = idx_recv_buf.as_mut_slice();
 
             while self.finished.load(Ordering::SeqCst) == 0 {
                 // let mut first = true;
@@ -77,7 +77,7 @@ impl LamellarAm for RecvAm {
                 //         //             self.remote_pe,
                 //         //             i,
                 //         //             *r == usize::MAX,
-                //         //             &self.buffer.idx_recv_buffer.as_mut_slice().unwrap()[s..e]
+                //         //             &self.buffer.idx_recv_buffer.as_mut_slice()[s..e]
                 //         //         );
                 //         //     }
                 //         //     timer = std::time::Instant::now();
@@ -101,12 +101,13 @@ impl LamellarAm for RecvAm {
                 //     lamellar::current_pe,
                 //     self.remote_pe,
                 //     my_start / self.buffer_size,
-                //     &res_send_buf.as_mut_slice().unwrap()[0..5],
+                //     &res_send_buf.as_mut_slice()[0..5],
                 //     &res_send_slice[0..5]
                 // );
                 self.buffer
                     .res_recv_buffer
-                    .put(self.remote_pe, my_start, res_send_buf.clone());
+                    .put_buffer(self.remote_pe, my_start, res_send_buf.clone())
+                    .await;
             }
             println!("{} recv_cnt: {}", self.remote_pe, cnt);
         }
@@ -164,26 +165,22 @@ impl LamellarAm for SendAm {
             //     my_start / self.buffer_size
             // );
             let _comm = self.comm_lock.acquire().await;
-            buffer.idx_recv_buffer.put(
-                self.remote_pe,
-                my_start,
-                buffer.idx_send_buffer.sub_region(start..end),
-            );
+            buffer
+                .idx_recv_buffer
+                .put_buffer(
+                    self.remote_pe,
+                    my_start,
+                    buffer.idx_send_buffer.sub_region(start..end),
+                )
+                .await;
 
-            while buffer
-                .res_recv_buffer
-                .sub_region(start..end)
-                .as_mut_slice()
-                .unwrap()[self.buffer_size - 1]
+            while buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1]
                 == usize::MAX
             {
                 async_std::task::yield_now().await;
             }
-            buffer
-                .res_recv_buffer
-                .sub_region(start..end)
-                .as_mut_slice()
-                .unwrap()[self.buffer_size - 1] = usize::MAX;
+            buffer.res_recv_buffer.sub_region(start..end).as_mut_slice()[self.buffer_size - 1] =
+                usize::MAX;
             // for _i in 0..self.indices.len() {
             // let mut first = true;
             // for (i, elem) in buffer
@@ -259,7 +256,7 @@ struct MyAm {
 impl LamellarAm for MyAm {
     async fn exec(self) {
         // let timer = std::time::Instant::now();
-        let indices_slice = unsafe { self.indices.as_mut_slice().unwrap() };
+        let indices_slice = unsafe { self.indices.as_mut_slice() };
 
         println!("my_am: {:?} {:?}", indices_slice.len(), self.buffer_size);
 
@@ -353,27 +350,22 @@ fn main() {
     unsafe {
         index_send_buffers
             .as_mut_slice()
-            .unwrap()
             .iter_mut()
             .for_each(|x| *x = usize::MAX);
         index_recv_buffers
             .as_mut_slice()
-            .unwrap()
             .iter_mut()
             .for_each(|x| *x = usize::MAX);
         result_send_buffers
             .as_mut_slice()
-            .unwrap()
             .iter_mut()
             .for_each(|x| *x = my_pe);
         result_recv_buffers
             .as_mut_slice()
-            .unwrap()
             .iter_mut()
             .for_each(|x| *x = usize::MAX);
         indices
             .as_mut_slice()
-            .unwrap()
             .iter_mut()
             .for_each(|x| *x = rng.gen_range(0..global_size));
     }
@@ -440,5 +432,5 @@ fn main() {
         ((indices.len() * num_pes) as f64 / 1000000.0) / timer.elapsed().as_secs_f64()
     );
     finished.store(1, Ordering::SeqCst);
-    // unsafe { println!("{:?}", recv_buffer.as_slice().unwrap()) };
+    // unsafe { println!("{:?}", recv_buffer.as_slice()) };
 }

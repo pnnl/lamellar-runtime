@@ -1,7 +1,9 @@
 pub use crate::memregion::{
-    Dist, LamellarMemoryRegion, MemoryRegionRDMA, OneSidedMemoryRegion, RegisteredMemoryRegion,
-    RemoteMemoryRegion, SharedMemoryRegion, SubRegion,
+    AsLamellarBuffer, Dist, LamellarBuffer, LamellarMemoryRegion, MemregionRdmaInput,
+    OneSidedMemoryRegion, RemoteMemoryRegion, SharedMemoryRegion, SubRegion,
 };
+
+pub use crate::lamellae::comm::Remote;
 
 pub use crate::active_messaging::ActiveMessaging;
 pub use crate::lamellar_team::LamellarTeam;

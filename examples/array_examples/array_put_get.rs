@@ -3,13 +3,14 @@ use lamellar::memregion::prelude::*;
 
 async fn initialize_array(array: &UnsafeArray<usize>) {
     unsafe { array.dist_iter_mut().for_each(|x| *x = 0).await };
-    array.async_barrier().await;
+    // array.async_barrier().await;
 }
 
-fn initialize_mem_region(memregion: &LamellarMemoryRegion<usize>) {
+fn initialize_mem_region<M: Into<LamellarMemoryRegion<usize>> + Clone>(memregion: &M) {
+    let memregion: LamellarMemoryRegion<usize> = memregion.clone().into();
     unsafe {
         let mut i = 0; //(len_per_pe * my_pe as f32).round() as usize;
-        for elem in memregion.as_mut_slice().unwrap() {
+        for elem in memregion.as_mut_slice() {
             *elem = i;
             i += 1
         }
@@ -31,10 +32,12 @@ fn main() {
             UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block).await;
         let cyclic_array =
             UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).await;
-        let shared_mem_region = world.alloc_shared_mem_region(total_len).await.into(); //Convert into abstract LamellarMemoryRegion
-        let local_mem_region = world.alloc_one_sided_mem_region(total_len).into();
+        let shared_mem_region = world.alloc_shared_mem_region(total_len).await;
+        let local_mem_region = world.alloc_one_sided_mem_region(total_len);
         initialize_array(&block_array).await;
+        world.async_barrier().await;
         initialize_array(&cyclic_array).await;
+        world.async_barrier().await;
         initialize_mem_region(&shared_mem_region);
         initialize_mem_region(&local_mem_region);
         println!("data initialized");
@@ -48,7 +51,7 @@ fn main() {
             world.async_barrier().await;
             let start = std::time::Instant::now();
             if my_pe == 0 {
-                block_array.put(0, &shared_mem_region).await
+                block_array.put_buffer(0, &shared_mem_region).await
             }; //uses the local data of the shared memregion
             world.async_barrier().await;
             block_array.print();
@@ -58,7 +61,7 @@ fn main() {
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                block_array.put(0, &local_mem_region).await
+                block_array.put_buffer(0, &local_mem_region).await
             };
             world.async_barrier().await;
             block_array.print();
@@ -68,7 +71,7 @@ fn main() {
             cyclic_array.print();
             world.async_barrier().await;
             if my_pe == 0 {
-                cyclic_array.put(0, &shared_mem_region).await
+                cyclic_array.put_buffer(0, &shared_mem_region).await
             };
             world.async_barrier().await;
             cyclic_array.print();
@@ -78,7 +81,7 @@ fn main() {
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                cyclic_array.put(0, &local_mem_region).await
+                cyclic_array.put_buffer(0, &local_mem_region).await
             };
             world.async_barrier().await;
             cyclic_array.print();
@@ -99,13 +102,22 @@ fn main() {
             println!("PE{my_pe}, smr {:?}", shared_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                block_array.get_unchecked(0, shared_mem_region.sub_region(0..total_len / 2))
-            }; //uses local data of the shared memregion
+                let mut buffer =
+                    LamellarBuffer::<usize, SharedMemoryRegion<usize>>::from_shared_memory_region(
+                        shared_mem_region.sub_region(0..total_len / 2),
+                    );
+                println!("PE{my_pe}, get buffer slice {:?} buffer", buffer.as_mut_slice());
+                block_array.get_into_buffer(0, buffer).await;
+            } //uses local data of the shared memregion
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
             world.async_barrier().await;
             if my_pe == 0 {
-                block_array.get_unchecked(0, local_mem_region.sub_region(0..total_len / 2))
-            };
+                let buffer =
+                    LamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::from_one_sided_memory_region(
+                        local_mem_region.sub_region(0..total_len / 2),
+                    );
+                block_array.get_into_buffer(0, buffer).await;
+            }
             world.async_barrier().await;
             block_array.print();
             println!("PE{my_pe}, lmr {:?}", local_mem_region.as_slice());
@@ -115,20 +127,22 @@ fn main() {
         let start = std::time::Instant::now();
 
         unsafe {
-            cyclic_array
-                .get(0, shared_mem_region.sub_region(0..total_len / 2))
-                .await;
-            cyclic_array
-                .get(0, local_mem_region.sub_region(0..total_len / 2))
-                .await;
+            let buffer = LamellarBuffer::<usize, SharedMemoryRegion<usize>>::from_shared_memory_region(
+                    shared_mem_region.sub_region(0..total_len / 2),
+                );
+            cyclic_array.get_into_buffer(0, buffer).await;
+            let buffer = LamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::from_one_sided_memory_region(
+                    local_mem_region.sub_region(0..total_len / 2),
+                );
+            cyclic_array.get_into_buffer(0, buffer).await;
         }
 
         println!("get elapsed {:?}", start.elapsed().as_secs_f64());
         world.async_barrier().await;
         // puts/gets using single values
         unsafe {
-            block_array.put(total_len - 1, &12345).await;
-            cyclic_array.put(total_len - 1, &12345).await;
+            block_array.put(total_len - 1, 12345).await;
+            cyclic_array.put(total_len - 1, 12345).await;
         }
         world.async_barrier().await;
     });

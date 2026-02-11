@@ -11,6 +11,8 @@ pub mod consumer;
 
 use crate::memregion::Dist;
 
+use futures_util::Future;
+
 // //#[doc(hidden)]
 // #[async_trait]
 // pub trait IterRequest {
@@ -19,7 +21,7 @@ use crate::memregion::Dist;
 //     fn wait(self: Box<Self>) -> Self::Output;
 // }
 
-pub(crate) type IterLockFuture = Pin<Box<dyn std::future::Future<Output = ()> + Send>>;
+pub(crate) type IterLockFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
 pub(crate) mod private {
     use super::IterLockFuture;
 

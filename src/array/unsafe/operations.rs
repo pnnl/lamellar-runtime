@@ -4,12 +4,32 @@ use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
+use crate::lamellae::{AtomicOp, CommInfo};
 use crate::AmHandle;
+use core::panic;
 use parking_lot::Mutex;
 use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
+type MultiValMultiIdxFnNew =
+    fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8, BatchReturnType) -> LamellarArcAm;
+type SingleValMultiIdxFnNew = fn(
+    LamellarByteArray,
+    ArrayOpCmd<Vec<u8>>,
+    Vec<u8>,
+    Vec<u8>,
+    u8,
+    BatchReturnType,
+) -> LamellarArcAm;
+type MultiValSingleIdxFnNew = fn(
+    LamellarByteArray,
+    ArrayOpCmd<Vec<u8>>,
+    (*const u8, usize, usize),
+    usize,
+    BatchReturnType,
+) -> LamellarArcAm;
 
 type MultiValMultiIdxFn = fn(LamellarByteArray, ArrayOpCmd<Vec<u8>>, Vec<u8>, u8) -> LamellarArcAm;
 type SingleValMultiIdxFn =
@@ -19,10 +39,34 @@ type MultiValSingleIdxFn =
 
 lazy_static! {
 
+    pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS_NEW: HashMap<TypeId, MultiValMultiIdxFnNew> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<multi_val_multi_idx_ops_new> {
+            map.insert((op.id)(), op.op);
+        }
+        map
+    };
+
+    pub(crate) static ref SINGLE_VAL_MULTI_IDX_OPS_NEW: HashMap<TypeId, SingleValMultiIdxFnNew> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<single_val_multi_idx_ops_new> {
+            map.insert((op.id)(), op.op);
+        }
+        map
+    };
+    pub(crate) static ref MULTI_VAL_SINGLE_IDX_OPS_NEW: HashMap<TypeId, MultiValSingleIdxFnNew> = {
+        let mut map = HashMap::new();
+        for op in crate::inventory::iter::<multi_val_single_idx_ops_new> {
+            map.insert((op.id)(), op.op);
+        }
+        map
+    };
 
     pub(crate) static ref MULTI_VAL_MULTI_IDX_OPS: HashMap<(TypeId,TypeId,BatchReturnType), MultiValMultiIdxFn> = {
         let mut map = HashMap::new();
         for op in crate::inventory::iter::<multi_val_multi_idx_ops> {
+            // println!("{:?} {:?} {:?} -- {:?} ",op.id, op.batch_type, op.op,(op.id)(op.batch_type));
+            // println!("{:?}",);
             map.insert((op.id)(op.batch_type), op.op);
         }
         map
@@ -241,6 +285,26 @@ impl IndexBuf {
     }
 }
 
+type IdGenNew = fn() -> TypeId;
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+pub struct multi_val_multi_idx_ops_new {
+    pub id: IdGenNew,
+    pub op: MultiValMultiIdxFnNew,
+}
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+pub struct single_val_multi_idx_ops_new {
+    pub id: IdGenNew,
+    pub op: SingleValMultiIdxFnNew,
+}
+#[doc(hidden)]
+#[allow(non_camel_case_types)]
+pub struct multi_val_single_idx_ops_new {
+    pub id: IdGenNew,
+    pub op: MultiValSingleIdxFnNew,
+}
+
 type IdGen = fn(BatchReturnType) -> (TypeId, TypeId, BatchReturnType);
 #[doc(hidden)]
 #[allow(non_camel_case_types)]
@@ -266,27 +330,37 @@ pub struct multi_val_single_idx_ops {
     pub op: MultiValSingleIdxFn,
 }
 
+crate::inventory::collect!(multi_val_multi_idx_ops_new);
+crate::inventory::collect!(single_val_multi_idx_ops_new);
+crate::inventory::collect!(multi_val_single_idx_ops_new);
 crate::inventory::collect!(multi_val_multi_idx_ops);
 crate::inventory::collect!(single_val_multi_idx_ops);
 crate::inventory::collect!(multi_val_single_idx_ops);
 
 impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
     pub(crate) fn dummy_val(&self) -> T {
-        let slice = self
-            .inner
-            .data
-            .mem_region
-            .as_slice()
-            .expect("array data should be on PE");
-        unsafe {
-            std::slice::from_raw_parts(
-                slice.as_ptr() as *const T,
-                slice.len() / std::mem::size_of::<T>(),
-            )[0]
+        unsafe { self.inner.data.mem_region.as_base::<T>() }.as_slice()[0]
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) fn initiate_op<'a>(
+        &self,
+        val: T,
+        index: usize,
+        op: ArrayOpCmd<T>,
+        byte_array: LamellarByteArray,
+    ) -> ArrayOpHandle<T> {
+        let (am, _) = self
+            .initiate_batch_op_inner(val, index, op, byte_array.clone())
+            .pop_front()
+            .unwrap();
+        ArrayOpHandle {
+            array: byte_array,
+            state: OpState::Am(am),
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_op<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -294,6 +368,21 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         op: ArrayOpCmd<T>,
         byte_array: LamellarByteArray,
     ) -> ArrayBatchOpHandle {
+        let res = self.initiate_batch_op_inner(val, index, op, byte_array.clone());
+        ArrayBatchOpHandle {
+            array: byte_array,
+            state: BatchOpState::Reqs(res),
+        }
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn initiate_batch_op_inner<'a>(
+        &self,
+        val: impl OpInput<'a, T>,
+        index: impl OpInput<'a, usize>,
+        op: ArrayOpCmd<T>,
+        byte_array: LamellarByteArray,
+    ) -> VecDeque<(AmHandle<()>, Vec<usize>)> {
         let (indices, i_len) = index.as_op_input();
         let (vals, v_len) = val.as_op_input();
 
@@ -346,13 +435,10 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
             //no vals no indices
             VecDeque::new()
         };
-        ArrayBatchOpHandle {
-            array: byte_array,
-            state: BatchOpState::Reqs(res),
-        }
+        res
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_fetch_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -415,7 +501,7 @@ impl<T: AmDist + Dist + 'static> UnsafeArray<T> {
         ArrayFetchBatchOpHandle::new(byte_array, res, std::cmp::max(i_len, v_len))
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn initiate_batch_result_op_2<'a>(
         &self,
         val: impl OpInput<'a, T>,
@@ -881,22 +967,53 @@ impl SingleValMultiIndex {
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
         // println!("{:?} {:?} {:?}",self.array.type_id(),TypeId::of::<T>(),ret);
-        SINGLE_VAL_MULTI_IDX_OPS
-            .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-            .unwrap()(
-            self.array,
-            self.op,
-            self.val,
-            self.idx,
-            self.index_size.len() as u8,
-        )
+        match SINGLE_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
+            Some(op) => op(
+                self.array,
+                self.op,
+                self.val,
+                self.idx,
+                self.index_size.len() as u8,
+                ret,
+            ),
+            None => SINGLE_VAL_MULTI_IDX_OPS
+                .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                .unwrap()(
+                self.array,
+                self.op,
+                self.val,
+                self.idx,
+                self.index_size.len() as u8,
+            ),
+        }
+        // match std::env::var("TEST_OPS") {
+        //     Ok(_) => SINGLE_VAL_MULTI_IDX_OPS_NEW
+        //         .get(&TypeId::of::<T>())
+        //         .unwrap()(
+        //         self.array,
+        //         self.op,
+        //         self.val,
+        //         self.idx,
+        //         self.index_size.len() as u8,
+        //         ret,
+        //     ),
+        //     Err(_) => SINGLE_VAL_MULTI_IDX_OPS
+        //         .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+        //         .unwrap()(
+        //         self.array,
+        //         self.op,
+        //         self.val,
+        //         self.idx,
+        //         self.index_size.len() as u8,
+        //     ),
+        // }
     }
 }
 
 struct MultiValSingleIndex {
     array: LamellarByteArray,
     idx: usize,
-    val: Vec<u8>,
+    val: (*const u8, usize, usize),
     op: ArrayOpCmd<Vec<u8>>,
 }
 
@@ -907,23 +1024,68 @@ impl MultiValSingleIndex {
         index: usize,
         val: Vec<T>,
     ) -> Self {
-        let val_u8 = val.as_ptr() as *const u8;
+        // let val_u8 = val.as_ptr() as *const u8;
+
+        // Prevent running `val`'s destructor so we are in complete control
+        // of the allocation.
+        let mut val = std::mem::ManuallyDrop::new(val);
+
+        // Pull out the various important pieces of information about `v`
+        let p = val.as_mut_ptr() as *const u8;
+        let len = val.len();
+        let cap = val.capacity();
 
         Self {
             array: array.into(),
             idx: index,
-            val: unsafe {
-                std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
-            }
-            .to_vec(),
+            val: (p, len, cap),
             op: op.into(),
         }
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        MULTI_VAL_SINGLE_IDX_OPS
-            .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-            .unwrap()(self.array, self.op, self.val, self.idx)
+        match MULTI_VAL_SINGLE_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
+            Some(op) => op(self.array, self.op, self.val, self.idx, ret),
+            None => {
+                let val =
+                    unsafe { Vec::from_raw_parts(self.val.0 as *mut T, self.val.1, self.val.2) };
+                let val_u8 = val.as_ptr() as *const u8;
+
+                MULTI_VAL_SINGLE_IDX_OPS
+                    .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                    .unwrap()(
+                    self.array,
+                    self.op,
+                    unsafe {
+                        std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
+                    }
+                    .to_vec(),
+                    self.idx,
+                )
+            }
+        }
+        // match std::env::var("TEST_OPS") {
+        //     Ok(_) => MULTI_VAL_SINGLE_IDX_OPS_NEW
+        //         .get(&TypeId::of::<T>())
+        //         .unwrap()(self.array, self.op, self.val, self.idx, ret),
+        //     Err(_) => {
+        //         let val =
+        //             unsafe { Vec::from_raw_parts(self.val.0 as *mut T, self.val.1, self.val.2) };
+        //         let val_u8 = val.as_ptr() as *const u8;
+
+        //         MULTI_VAL_SINGLE_IDX_OPS
+        //             .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+        //             .unwrap()(
+        //             self.array,
+        //             self.op,
+        //             unsafe {
+        //                 std::slice::from_raw_parts(val_u8, std::mem::size_of::<T>() * val.len())
+        //             }
+        //             .to_vec(),
+        //             self.idx,
+        //         )
+        //     }
+        // }
     }
 }
 
@@ -950,20 +1112,143 @@ impl MultiValMultiIndex {
     }
 
     fn into_am<T: Dist>(self, ret: BatchReturnType) -> LamellarArcAm {
-        MULTI_VAL_MULTI_IDX_OPS
-            .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
-            .unwrap()(
-            self.array,
-            self.op,
-            self.idxs_vals,
-            self.index_size.len() as u8,
-        )
+        // println!(
+        //     "{:?} {:?} {:?} {:?}",
+        //     self.array.type_id(),
+        //     TypeId::of::<T>(),
+        //     ret,
+        //     std::any::type_name::<T>(),
+        // );
+        match MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()) {
+            Some(op) => op(
+                self.array,
+                self.op,
+                self.idxs_vals,
+                self.index_size.len() as u8,
+                ret,
+            ),
+            None => MULTI_VAL_MULTI_IDX_OPS
+                .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+                .unwrap()(
+                self.array,
+                self.op,
+                self.idxs_vals,
+                self.index_size.len() as u8,
+            ),
+        }
+        // match std::env::var("TEST_OPS") {
+        //     Ok(_) => MULTI_VAL_MULTI_IDX_OPS_NEW.get(&TypeId::of::<T>()).unwrap()(
+        //         self.array,
+        //         self.op,
+        //         self.idxs_vals,
+        //         self.index_size.len() as u8,
+        //         ret,
+        //     ),
+        //     Err(_) => MULTI_VAL_MULTI_IDX_OPS
+        //         .get(&(self.array.type_id(), TypeId::of::<T>(), ret))
+        //         .unwrap()(
+        //         self.array,
+        //         self.op,
+        //         self.idxs_vals,
+        //         self.index_size.len() as u8,
+        //     ),
+        // }
     }
 }
 
-impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {}
+impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
+    unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
+        // println!("in Network atomic store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                let handle = self.inner.data.mem_region.as_base::<T>().get(pe, offset);
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Rdma(handle),
+                }
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+}
 
-impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {}
+impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
+    unsafe fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        // println!("in Network atomic store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            // let mut buf: OneSidedMemoryRegion<T> =
+            //     self.array.team_rt().alloc_one_sided_mem_region(1);
+            unsafe {
+                // buf.as_mut_slice()[0] = val;
+                let handle = self
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .put(pe, offset, val);
+                ArrayOpHandle {
+                    array: self.clone().into(),
+                    state: OpState::Rdma(handle),
+                }
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+    unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        // println!("in Network atomic swap");
+        //add the check for atomic statement
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+                let handle = self.inner.data.mem_region.as_base::<T>().atomic_fetch_op(
+                    pe,
+                    offset,
+                    AtomicOp::Write(val),
+                );
+                ArrayFetchOpHandle {
+                    array: self.clone().into(),
+                    state: FetchOpState::Network(handle),
+                }
+            } else {
+                self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())
+                    .into()
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+    unsafe fn blocking_swap(&self, index: usize, val: T) -> T {
+        // println!("in Network atomic blocking swap");
+        //add the check for atomic statement
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+                self.inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
+            } else {
+                self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())
+                    .block()[0]
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+}
 
 impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T> {}
 

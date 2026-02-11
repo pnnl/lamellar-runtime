@@ -3,15 +3,15 @@
 use async_lock::{RwLock, RwLockReadGuardArc, RwLockWriteGuardArc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
-use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use crate::active_messaging::RemotePtr;
-use crate::darc::{Darc, DarcInner, DarcMode, WrappedInner, __NetworkDarc};
-use crate::lamellae::LamellaeRDMA;
-use crate::lamellar_team::IntoLamellarTeam;
-use crate::{IdError, LamellarEnv, LamellarTeam};
+use crate::{
+    active_messaging::RemotePtr,
+    darc::{Darc, DarcInner, DarcMode, __NetworkDarc},
+    lamellar_team::IntoLamellarTeam,
+    LamellarEnv, LamellarTeam,
+};
 
 use super::handle::LocalRwDarcHandle;
 pub(crate) use super::handle::{
@@ -142,16 +142,16 @@ impl<T> crate::active_messaging::DarcSerde for LocalRwDarc<T> {
         // }
         darcs.push(RemotePtr::NetworkDarc(self.darc.clone().into()));
     }
-    fn des(&self, cur_pe: Result<usize, IdError>) {
-        match cur_pe {
-            Ok(_) => {
-                self.darc.deserialize_update_cnts();
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
-    }
+    // fn des(&self, cur_pe: Result<usize, IdError>) {
+    // match cur_pe {
+    //     Ok(_) => {
+    //         self.darc.deserialize_update_cnts();
+    //     }
+    //     Err(err) => {
+    //         panic!("can only access darcs within team members ({:?})", err);
+    //     }
+    // }
+    // }
 }
 
 impl<T> LocalRwDarc<T> {
@@ -175,6 +175,11 @@ impl<T> LocalRwDarc<T> {
     pub fn deserialize_update_cnts(&self) {
         // println!("deserialize darc? cnts");
         // if self.darc.src_pe != cur_pe{
+        tracing::trace!(
+            "localrwdarc[{:?}] deserialize_update_cnts {:?}",
+            self.darc.id,
+            self.inner()
+        );
         self.inner().inc_pe_ref_count(self.darc.src_pe, 1); // we need to increment by 2 cause bincode calls the serialize function twice when serializing...
                                                             // }
         self.inner().local_cnt.fetch_add(1, Ordering::SeqCst);
@@ -184,13 +189,10 @@ impl<T> LocalRwDarc<T> {
 
     #[doc(hidden)]
     pub fn print(&self) {
-        let rel_addr =
-            unsafe { self.darc.inner as usize - (*self.inner().team).lamellae.base_addr() };
         println!(
-            "--------\norig: {:?} {:?} (0x{:x}) {:?}\n--------",
+            "--------\norig: {:?} 0x{:x} {:?}\n--------",
             self.darc.src_pe,
-            self.darc.inner,
-            rel_addr,
+            self.darc.inner.addr(),
             self.inner()
         );
     }
@@ -350,17 +352,18 @@ impl<T: Sync + Send> LocalRwDarc<T> {
     /// let five_as_globaldarc = world.block_on(async move {five.into_globalrw().await});
     /// ```
     pub fn into_globalrw(self) -> IntoGlobalRwDarcHandle<T> {
-        let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                .expect("invalid darc pointer"),
-        };
-        let team = self.darc.inner().team().clone();
+        // let wrapped_inner = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+        //         .expect("invalid darc pointer"),
+        // };
+        let inner = self.darc.inner.clone();
+        let team = self.darc.inner().darc_rt_team();
         IntoGlobalRwDarcHandle {
             darc: self.into(),
             team,
             launched: false,
             outstanding_future: Box::pin(DarcInner::block_on_outstanding(
-                wrapped_inner,
+                inner,
                 DarcMode::GlobalRw,
                 0,
             )),
@@ -391,17 +394,18 @@ impl<T: Send + Sync> LocalRwDarc<T> {
     /// let five_as_darc = five.into_darc().block();
     /// ```
     pub fn into_darc(self) -> IntoDarcHandle<T> {
-        let wrapped_inner = WrappedInner {
-            inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
-                .expect("invalid darc pointer"),
-        };
-        let team = self.darc.inner().team().clone();
+        // let wrapped_inner = WrappedInner {
+        //     inner: NonNull::new(self.darc.inner as *mut DarcInner<T>)
+        //         .expect("invalid darc pointer"),
+        // };
+        let inner = self.darc.inner.clone();
+        let team = self.darc.inner().darc_rt_team();
         IntoDarcHandle {
             darc: self.into(),
             team,
             launched: false,
             outstanding_future: Box::pin(async move {
-                DarcInner::block_on_outstanding(wrapped_inner, DarcMode::Darc, 0).await;
+                DarcInner::block_on_outstanding(inner, DarcMode::Darc, 0).await;
             }),
         }
     }
@@ -410,6 +414,11 @@ impl<T: Send + Sync> LocalRwDarc<T> {
 impl<T> Clone for LocalRwDarc<T> {
     fn clone(&self) -> Self {
         // self.inner().local_cnt.fetch_add(1,Ordering::SeqCst);
+        tracing::trace!(
+            "LocalRwDarc[{:?}] Clone {:?}",
+            self.darc.id,
+            self.darc.inner()
+        );
         LocalRwDarc {
             darc: self.darc.clone(),
         }
@@ -468,7 +477,7 @@ pub(crate) fn localrw_from_ndarc2<'de, D, T>(
 where
     D: Deserializer<'de>,
 {
-    // println!("lrwdarc2 from net darc");
+    tracing::trace!("lrwdarc2 from net darc");
     let ndarc: __NetworkDarc = Deserialize::deserialize(deserializer)?;
     // let rwdarc = LocalRwDarc {
     //     darc: ,
@@ -485,7 +494,7 @@ where
 //         let team = &darc.inner().team();
 //         let ndarc = __NetworkDarc {
 //             inner_addr: darc.inner as *const u8 as usize,
-//             backend: team.lamellae.backend(),
+//             backend: team.lamellae.comm().backend(),
 //             orig_world_pe: team.world_pe,
 //             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
 //         };
@@ -500,7 +509,7 @@ where
 //         let team = &darc.inner().team();
 //         let ndarc = __NetworkDarc {
 //             inner_addr: darc.inner as *const u8 as usize,
-//             backend: team.lamellae.backend(),
+//             backend: team.lamellae.comm().backend(),
 //             orig_world_pe: team.world_pe,
 //             orig_team_pe: team.team_pe.expect("darcs only valid on team members"),
 //         };
@@ -514,7 +523,7 @@ where
 
 //         if let Some(lamellae) = LAMELLAES.read().get(&ndarc.backend) {
 //             let darc = Darc {
-//                 inner: lamellae.local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
+//                 inner: lamellae.comm().local_addr(ndarc.orig_world_pe, ndarc.inner_addr)
 //                     as *mut DarcInner<Arc<RwLock<T>>>,
 //                 src_pe: ndarc.orig_team_pe,
 //                 // phantom: PhantomData,

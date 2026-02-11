@@ -10,13 +10,13 @@ use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 // use tracing_flame::FlameLayer;
-// use tracing_subscriber::{fmt, prelude::*, registry::Registry};
+use tracing_subscriber::fmt::{self, SubscriberBuilder};
 
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
 struct AmNoReturn {
     my_pe: usize,
-    #[AmGroup(static)]
+    // #[AmGroup(static)]
     test_var: u16,
 }
 
@@ -51,6 +51,7 @@ fn main() {
     //     .with_max_level(Level::TRACE)
     //     .init();
     // let _guard = setup_global_subscriber();
+    let subscriber = fmt::init();
     let start = std::time::Instant::now();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local
@@ -77,11 +78,6 @@ fn main() {
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
         println!("-----------------------------------");
-        println!("Testing remote am no return");
-        // for i in 0..1 {
-        //     world.exec_am_pe(num_pes - 1, am.clone());
-        // }
-        // world.wait_all();
         let res = world.exec_am_pe(num_pes - 1, am.clone()).block();
         assert_eq!(res, ());
         println!("no return result: {:?}", res);
@@ -137,4 +133,5 @@ fn main() {
             println!("PE[{:?}] return result: {:?}", my_pe, r);
         }
     }
+    println!("PE[{:?}] done", my_pe);
 }

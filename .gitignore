@@ -4,4 +4,16 @@ Cargo.lock
 /.vscode
 /impl/target
 *.out
-expanded*.rs
+*expanded*.rs
+/bin
+/output
+run*.sh
+*.ansi
+*.log
+*.tmp
+*.swp
+.DS_Store
+TODO
+/.cargo
+/test_results
+/stable

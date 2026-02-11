@@ -2,26 +2,28 @@
 
 
 # target_dir=/home/scratch/$USER
-target_dir=$PWD/target
+# target_dir=$PWD/target/x86_64-unknown-linux-
+target_dir=$PWD/target/
 output_dir=/home/scratch/$USER
 
 root=$PWD
 # . $root/../junction-prep.rc
 
-local_results_dir=v0.7.0
-results_dir=${output_dir}/rofiverbs_lamellae/${local_results_dir}
+local_results_dir=v0.8.0
+lamellae_dir=libfabric_lamellae
+results_dir=${output_dir}/${lamellae_dir}/${local_results_dir}
 ### test using rofi verbs lamellae
 rm -r ${results_dir}
 
-rm -r rofiverbs_lamellae
+rm -r ${lamellae_dir}
 mkdir -p ${results_dir}
-ln -s ${output_dir}/rofiverbs_lamellae rofiverbs_lamellae
+ln -s ${output_dir}/${lamellae_dir} ${lamellae_dir}
 
 
-cargo build --release --features enable-rofi --features tokio-executor --features runtime-warnings-panic --examples -j 20
+# cargo build --release --features enable-rofi --features tokio-executor --features runtime-warnings-panic --examples -j 20
 
 
-cd rofiverbs_lamellae/${local_results_dir}
+cd ${lamellae_dir}/${local_results_dir}
 for toolchain in stable; do #nightly; do
   features=""
   if [ "${toolchain}" = "nightly" ]; then

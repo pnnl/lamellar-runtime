@@ -120,7 +120,7 @@ fn main() {
                 for (j, col) in b_block.iter().enumerate() {
                     //(index, LocalMemRegion)
                     let b_block_col = &mut b_block_vec[j * blocksize..(j + 1) * blocksize];
-                    b_block_col.copy_from_slice(unsafe { col.as_slice().unwrap() });
+                    b_block_col.copy_from_slice(unsafe { col.as_slice() });
                 }
                 let b_block_vec = Arc::new(b_block_vec); //we will be sharing this submatrix in multiple tasks
                                                          //--------------

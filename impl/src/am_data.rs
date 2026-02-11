@@ -248,12 +248,12 @@ pub(crate) fn derive_am_data(
         };
 
         let mut full_ser = quote! {};
-        let mut full_des = quote! {};
+        // let mut full_des = quote! {};
         if !local {
             full_ser.extend(fields.ser());
             full_ser.extend(static_fields.ser());
-            full_des.extend(fields.des());
-            full_des.extend(static_fields.des());
+            // full_des.extend(fields.des());
+            // full_des.extend(static_fields.des());
         }
 
         let (orig_am, orig_am_traits) = create_am_struct(
@@ -265,7 +265,7 @@ pub(crate) fn derive_am_data(
             &name,
             &full_fields,
             &full_ser,
-            &full_des,
+            // &full_des,
             &lamellar,
             local,
         );

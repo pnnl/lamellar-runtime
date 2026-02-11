@@ -283,7 +283,7 @@ pub struct GenericAtomicByteArray {
 
 impl GenericAtomicByteArray {
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_,()> {
         let index = self
             .array
             .inner
@@ -428,7 +428,7 @@ impl<T: Dist + ArrayOps + std::default::Default> GenericAtomicArray<T> {
                     team.clone(),
                     array_size,
                     distribution,
-                    DarcMode::LocalLockArray,
+                    DarcMode::GenericAtomicArray,
                 )
                 .await;
                 let mut vec = vec![];
@@ -524,19 +524,7 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<()> {
-        // if let Some(ref locks) = *self.locks {
-        //     let start_index = (index * std::mem::size_of::<T>()) / self.orig_t_size;
-        //     let end_index = ((index + 1) * std::mem::size_of::<T>()) / self.orig_t_size;
-        //     let mut guards = vec![];
-        //     for i in start_index..end_index {
-        //         guards.push(locks[i].lock())
-        //     }
-        //     Some(guards)
-        // } else {
-        //     None
-        // }
-        // println!("trying to lock {:?}",index);
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         let index = self
             .array
             .inner
@@ -626,6 +614,18 @@ impl<T: Dist> From<GenericAtomicByteArray> for GenericAtomicArray<T> {
         }
     }
 }
+
+impl<T: Dist> From<&GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: &GenericAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
+impl<T: Dist> From<&mut GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: &mut GenericAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
 impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
     fn from(array: GenericAtomicByteArray) -> Self {
         GenericAtomicArray {
@@ -635,9 +635,20 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
         .into()
     }
 }
+impl<T: Dist> From<&GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &GenericAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
+
+impl<T: Dist> From<&mut GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut GenericAtomicByteArray) -> Self {
+        array.clone().into()
+    }
+}
 
 impl<T: Dist> private::ArrayExecAm<T> for GenericAtomicArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -724,7 +735,7 @@ impl<T: Dist> ActiveMessaging for GenericAtomicArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for GenericAtomicArray<T> {
-    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    // fn team_rt(&self) -> Darc<LamellarTeamRT> {
     //     self.array.team_rt()
     // }
     // fn my_pe(&self) -> usize {

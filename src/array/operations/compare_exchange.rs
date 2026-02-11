@@ -14,7 +14,8 @@ pub trait ElementCompareEqOps: std::cmp::Eq + Dist + Sized //+ AmDist
 
 /// Supertrait specifying elements of the array support remote Partial Equality operations
 pub trait ElementComparePartialEqOps:
-    std::cmp::PartialEq + std::cmp::PartialOrd + Dist + Sized //+ AmDist
+    std::cmp::PartialEq + std::cmp::PartialOrd + std::ops::Sub<Output = Self> + Dist + Sized
+//+ AmDist
 {
 }
 // impl<T> ElementComparePartialEqOps for T where
@@ -121,7 +122,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let req = array.compare_exchange(idx,current,val);
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn compare_exchange<'a>(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
         self.inner_array()
             .initiate_batch_result_op_2(
@@ -161,7 +162,7 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
     /// let req = array.batch_compare_exchange(indices,current,10);
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -287,7 +288,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = array.compare_exchange_epsilon(idx,current,val,epsilon);
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
@@ -334,7 +335,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon);
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -449,7 +450,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let req = unsafe{ array.compare_exchange(idx,current,val)};
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn compare_exchange<'a>(
         &self,
         index: usize,
@@ -494,7 +495,7 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
     /// let req = unsafe{ array.batch_compare_exchange(indices,current,10)};
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_compare_exchange<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -617,7 +618,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = unsafe{ array.compare_exchange_epsilon(idx,current,val,epsilon)};
     /// let result = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn compare_exchange_epsilon<'a>(
         &self,
         index: usize,
@@ -664,7 +665,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
     /// let req = unsafe{ array.batch_compare_exchange_epsilon(indices,current,10.321,epsilon)};
     /// let results = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_compare_exchange_epsilon<'a>(
         &self,
         index: impl OpInput<'a, usize>,
@@ -678,5 +679,131 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
             ArrayOpCmd::CompareExchangeEps(current, eps),
             self.as_lamellar_byte_array(),
         )
+    }
+}
+
+#[doc(hidden)]
+pub trait LocalCompareExchangeOps<T: ElementCompareEqOps> {
+    fn local_compare_exchange(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        current: T,
+    ) -> Vec<Result<T, T>>;
+}
+
+impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for LamellarMutLocalData<'_, T> {
+    fn local_compare_exchange(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        current: T,
+    ) -> Vec<Result<T, T>> {
+        match self {
+            LamellarMutLocalData::Slice(data) => data.local_compare_exchange(idx_vals, current),
+            LamellarMutLocalData::LocalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_compare_exchange(idx_vals, current)
+            }
+            LamellarMutLocalData::GlobalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_compare_exchange(idx_vals, current)
+            }
+            LamellarMutLocalData::NativeAtomic(ref mut data) => {
+                data.local_compare_exchange(idx_vals, current)
+            }
+            LamellarMutLocalData::GenericAtomic(ref mut data) => {
+                data.local_compare_exchange(idx_vals, current)
+            }
+            LamellarMutLocalData::NetworkAtomic(ref mut data) => {
+                data.local_compare_exchange(idx_vals, current)
+            }
+        }
+    }
+}
+
+impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for &mut [T] {
+    fn local_compare_exchange(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        current: T,
+    ) -> Vec<Result<T, T>> {
+        idx_vals
+            .map(|(idx, val)| {
+                if self[idx] == current {
+                    self[idx] = val;
+                    Ok(current)
+                } else {
+                    Err(self[idx])
+                }
+            })
+            .collect()
+    }
+}
+
+#[doc(hidden)]
+pub trait LocalCompareExchangeOpsEpsilon<T: ElementComparePartialEqOps> {
+    fn local_compare_exchange_epsilon(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        current: T,
+        eps: T,
+    ) -> Vec<Result<T, T>>;
+}
+
+impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
+    for LamellarMutLocalData<'_, T>
+{
+    fn local_compare_exchange_epsilon(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        current: T,
+        eps: T,
+    ) -> Vec<Result<T, T>> {
+        match self {
+            LamellarMutLocalData::Slice(data) => {
+                data.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+            LamellarMutLocalData::LocalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+            LamellarMutLocalData::GlobalLock(ref mut data) => {
+                let mut slice: &mut [T] = &mut *data;
+                slice.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+            LamellarMutLocalData::NativeAtomic(ref mut data) => {
+                data.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+            LamellarMutLocalData::GenericAtomic(ref mut data) => {
+                data.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+            LamellarMutLocalData::NetworkAtomic(ref mut data) => {
+                data.local_compare_exchange_epsilon(idx_vals, current, eps)
+            }
+        }
+    }
+}
+
+impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T> for &mut [T] {
+    fn local_compare_exchange_epsilon(
+        &mut self,
+        idx_vals: impl Iterator<Item = (usize, T)>,
+        current: T,
+        eps: T,
+    ) -> Vec<Result<T, T>> {
+        idx_vals
+            .map(|(idx, val)| {
+                let same = if current < self[idx] {
+                    self[idx] - current < eps
+                } else {
+                    current - self[idx] < eps
+                };
+                if same {
+                    self[idx] = val;
+                    Ok(current)
+                } else {
+                    Err(self[idx])
+                }
+            })
+            .collect()
     }
 }

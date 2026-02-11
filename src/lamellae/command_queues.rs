@@ -1,27 +1,46 @@
-use crate::env_var::config;
-use crate::lamellae::comm::*;
-use crate::lamellae::{
-    Des, Lamellae, LamellaeComm, LamellaeRDMA, SerializedData, SerializedDataOps,
+use super::{
+    comm::{CmdQStatus, CommAlloc, CommInfo, CommMem, CommProgress, CommSlice},
+    Comm, Lamellae, SerializedData,
 };
-use crate::scheduler::Scheduler;
-
-use parking_lot::Mutex;
-// use thread_local::ThreadLocal;
-
+use crate::{
+    env_var::config, lamellae::CommAllocRdma, print_stats, scheduler::Scheduler, stats,
+    LamellarBuffer,
+};
+use core::panic;
+// use parking_lot::Mutex;
+use async_lock::{Mutex, RwLock};
 use std::collections::HashMap;
 use std::num::Wrapping;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::{debug, info, trace, warn};
 
-//use tracing::*;
+static MSG_ID: AtomicUsize = AtomicUsize::new(1);
 
-// const CMD_BUF_LEN: usize = 50000; // this is the number of slots for each PE
-// const NUM_REQ_SLOTS: usize = CMD_Q_LEN; // max requests at any given time -- probably have this be a multiple of num PES
-// const CMD_BUFS_PER_PE: usize = 2;
-
-// lazy_static! {
-//     static ref CNTS: ThreadLocal<AtomicUsize> = ThreadLocal::new();
-// }
+lazy_static! {
+    static ref PE_SENDS: Vec<Vec<AtomicUsize>> = {
+        let mut v = Vec::with_capacity(2);
+        for _ in 0..2 {
+            let mut t = Vec::with_capacity(32);
+            for _ in 0..32 {
+                t.push(AtomicUsize::new(0));
+            }
+            v.push(t);
+        }
+        v
+    };
+    static ref PE_RECVS: Vec<Vec<AtomicUsize>> = {
+        let mut v = Vec::with_capacity(2);
+        for _ in 0..2 {
+            let mut t = Vec::with_capacity(32);
+            for _ in 0..32 {
+                t.push(AtomicUsize::new(0));
+            }
+            v.push(t);
+        }
+        v
+    };
+}
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -29,13 +48,13 @@ struct CmdMsg {
     // we send this to remote nodes
     daddr: usize,
     dsize: usize,
-    cmd: Cmd,
     msg_hash: usize,
     cmd_hash: usize,
+    cmd: Cmd,
 }
 
 impl Default for CmdMsg {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn default() -> Self {
         CmdMsg {
             daddr: 0,
@@ -53,18 +72,24 @@ enum Cmd {
     Clear = 1,
     Free,
     Release,
-    Print,
+    // Print,
     Tx,
     Alloc,
     Panic,
 }
+impl Default for Cmd {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn default() -> Self {
+        Cmd::Clear
+    }
+}
 
-//#[tracing::instrument(skip_all)]
-fn calc_hash(addr: usize, len: usize) -> usize {
+#[tracing::instrument(skip_all, level = "debug")]
+fn calc_hash(addr: usize, num_bytes: usize) -> usize {
     //we split into a u64 slice and a u8 slice as u64 seems to compute faster.
-    let num_usizes = len / std::mem::size_of::<usize>();
+    let num_usizes = num_bytes / std::mem::size_of::<usize>();
     //let u64_slice = unsafe { std::slice::from_raw_parts(addr as *const u64, num_u64s) };
-    let num_u8s = len % std::mem::size_of::<usize>();
+    let num_u8s = num_bytes % std::mem::size_of::<usize>();
     let u8_slice = unsafe {
         std::slice::from_raw_parts(
             (addr + num_usizes * std::mem::size_of::<usize>()) as *const u8,
@@ -94,25 +119,15 @@ fn calc_hash(addr: usize, len: usize) -> usize {
 }
 
 impl CmdMsg {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_bytes(&self) -> &[u8] {
         let pointer = self as *const Self as *const u8;
         let size = std::mem::size_of::<Self>();
         let slice: &[u8] = unsafe { std::slice::from_raw_parts(pointer, size) };
         slice
     }
-    //#[tracing::instrument(skip_all)]
-    fn as_addr(&self) -> usize {
-        self as *const CmdMsg as usize
-    }
-    //#[tracing::instrument(skip_all)]
-    fn cmd_as_bytes(&self) -> &[u8] {
-        let pointer = &self.cmd as *const Cmd as *const u8;
-        let size = std::mem::size_of::<Cmd>();
-        let slice: &[u8] = unsafe { std::slice::from_raw_parts(pointer, size) };
-        slice
-    }
-    //#[tracing::instrument(skip_all)]
+
+    #[tracing::instrument(skip_all, level = "debug")]
     fn hash(&self) -> usize {
         let mut res = self
             .daddr
@@ -124,11 +139,11 @@ impl CmdMsg {
         }
         res
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn calc_hash(&mut self) {
         self.cmd_hash = self.hash()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn check_hash(&self) -> bool {
         if self.cmd_hash == self.hash() && self.cmd_hash != 0 {
             true
@@ -139,7 +154,7 @@ impl CmdMsg {
 }
 
 impl std::fmt::Debug for CmdMsg {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -150,17 +165,18 @@ impl std::fmt::Debug for CmdMsg {
 }
 
 struct CmdBuf {
-    buf: Box<[CmdMsg]>,
+    buf: CommSlice<CmdMsg>,
     addr: usize,
-    // base_addr: usize,
     index: usize,
     allocated_cnt: usize,
     max_size: usize,
 }
 
 impl CmdBuf {
-    //#[tracing::instrument(skip_all)]
-    fn push(&mut self, daddr: usize, dsize: usize, hash: usize) {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn push(&mut self, data: CommSlice<u8>, hash: usize) {
+        let daddr = data.usize_addr();
+        let dsize = data.len();
         if daddr == 0 || dsize == 0 {
             panic!("this shouldnt happen! {:?} {:?}", daddr, dsize);
         }
@@ -170,61 +186,51 @@ impl CmdBuf {
         cmd.cmd = Cmd::Tx;
         cmd.msg_hash = hash;
         cmd.calc_hash();
+        trace!("pushing cmd {:?} to index {}", cmd, self.index);
         self.index += 1;
         if dsize > 0 {
             self.allocated_cnt += 1;
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn full(&self) -> bool {
         self.index == self.max_size
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn reset(&mut self) {
         self.index = 0;
         self.allocated_cnt = 0;
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn addr(&self) -> usize {
         self.addr
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn size(&self) -> usize {
         self.index * std::mem::size_of::<CmdMsg>()
     }
-    //#[tracing::instrument(skip_all)]
-    fn iter(&self) -> std::slice::Iter<CmdMsg> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn iter(&self) -> std::slice::Iter<'_, CmdMsg> {
         self.buf[0..self.index].iter()
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn state(&self) -> Cmd {
         self.buf[0].cmd
     }
 }
 
 impl std::fmt::Debug for CmdBuf {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "addr {:#x}({:?}) hash {:?} index {:?} a_cnt {:?}",
             self.addr,
             self.addr,
-            // calc_hash(self.addr + self.base_addr, self.size()),
             calc_hash(self.addr, self.size()),
             self.index,
             self.allocated_cnt
         )
-    }
-}
-
-impl Drop for CmdBuf {
-    //#[tracing::instrument(skip_all)]
-    fn drop(&mut self) {
-        // println!("dropping cmd buf");
-        let old = std::mem::take(&mut self.buf);
-        let _ = Box::into_raw(old);
-        // println!("dropped cmd buf");
     }
 }
 
@@ -236,26 +242,16 @@ struct CmdMsgBuffer {
     cur_buf: Option<CmdBuf>,
     num_bufs: usize,
     pe: usize,
-    // base_addr: usize,
 }
 
 impl CmdMsgBuffer {
-    // fn new(addrs: Arc<Vec<usize>>, base_addr: usize, pe: usize) -> CmdMsgBuffer {
-    //#[tracing::instrument(skip_all)]
-    fn new(addrs: Arc<Vec<usize>>, pe: usize) -> CmdMsgBuffer {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn new(addrs: Arc<Vec<CommAlloc>>, pe: usize) -> CmdMsgBuffer {
         let mut bufs = vec![];
-        for addr in addrs.iter() {
-            // println!("CmdMsgBuffer {:x} {:?}",addr,addr);
+        for alloc in addrs.iter() {
             bufs.push(CmdBuf {
-                buf: unsafe {
-                    Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                        // (*addr + base_addr) as *mut CmdMsg,
-                        *addr as *mut CmdMsg,
-                        config().cmd_buf_len,
-                    ))
-                },
-                addr: *addr,
-                // base_addr: base_addr,
+                buf: alloc.as_comm_slice(),
+                addr: alloc.comm_addr().into(),
                 index: 0,
                 allocated_cnt: 0,
                 max_size: config().cmd_buf_len,
@@ -269,16 +265,16 @@ impl CmdMsgBuffer {
             cur_buf: None,
             num_bufs: addrs.len(),
             pe: pe,
-            // base_addr: base_addr,
         }
     }
-    //#[tracing::instrument(skip_all)]
-    fn try_push(&mut self, addr: usize, len: usize, hash: usize) -> bool {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn try_push(&mut self, data: CommSlice<u8>, hash: usize) -> bool {
+        // debug!("trying to push data {:?} to buffer", data);
         if self.cur_buf.is_none() {
             self.cur_buf = self.empty_bufs.pop();
         }
         if let Some(buf) = &mut self.cur_buf {
-            buf.push(addr, len, hash);
+            buf.push(data, hash);
             if buf.full() {
                 self.full_bufs
                     .push(std::mem::replace(&mut self.cur_buf, None).unwrap());
@@ -288,44 +284,40 @@ impl CmdMsgBuffer {
             false
         }
     }
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn flush_buffer(&mut self, cmd: &mut CmdMsg) {
-        // println!("flush buffer before: {:?}",self);
+        trace!("flush buffer before: {:?}", self);
         if let Some(buf) = self.full_bufs.pop() {
-            // println!("flushing {:?} {:?}",buf.addr(),buf.size());
             cmd.daddr = buf.addr();
             cmd.dsize = buf.size();
             cmd.cmd = Cmd::Tx;
-            // cmd.msg_hash = calc_hash(cmd.daddr + self.base_addr, cmd.dsize);
             cmd.msg_hash = calc_hash(cmd.daddr, cmd.dsize);
 
             cmd.calc_hash();
             self.tx_bufs.insert(buf.addr(), buf);
         } else if let Some(buf) = std::mem::replace(&mut self.cur_buf, None) {
-            // println!("flushing {:?} {:?}",buf.addr(),buf.size());
             cmd.daddr = buf.addr();
             cmd.dsize = buf.size(); // + std::mem::size_of::<usize>();
             cmd.cmd = Cmd::Tx;
-            // cmd.msg_hash = calc_hash(cmd.daddr + self.base_addr, cmd.dsize);
             cmd.msg_hash = calc_hash(cmd.daddr, cmd.dsize);
             cmd.calc_hash();
             self.tx_bufs.insert(buf.addr(), buf);
         }
         // else {} all buffers are currently busy
-        // println!("flush buffer after: {:?}",self);
+        trace!("flush buffer after: {:?}", self);
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn check_transfer(&mut self, addr: usize) -> bool {
+    #[tracing::instrument(skip(self), level = "debug")]
+    fn check_transfer(&mut self, addr: usize, pe: usize) -> bool {
         if let Some(buf) = self.tx_bufs.remove(&addr) {
             match buf.state() {
                 Cmd::Tx => {
+                    // trace!("transfer in progress {:x} {:?} !!", addr, buf.state());
                     self.tx_bufs.insert(addr, buf);
                     false
                 }
                 Cmd::Release | Cmd::Free => {
-                    //free is valid still but we need to make sure we release the send_buffer
-                    //     println!("transfer complete!!");
+                    debug!("transfer complete {:x} {:?} {pe}!!", addr, buf.state());
                     if buf.allocated_cnt > 0 {
                         self.waiting_bufs.insert(buf.addr(), buf);
                         true
@@ -334,8 +326,6 @@ impl CmdMsgBuffer {
                     }
                 }
                 Cmd::Clear => panic!("should not clear before release"),
-                // Cmd::Free => panic!("should not free before release"),
-                Cmd::Print => panic!("shoud not encounter Print here"),
                 Cmd::Alloc => panic!("should not encounter alloc here"),
                 Cmd::Panic => panic!("should not encounter panic here"),
             }
@@ -344,51 +334,59 @@ impl CmdMsgBuffer {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn check_free_data(&mut self, comm: Arc<Comm>) {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn check_free_data(&mut self, comm: &Arc<Comm>) {
         let mut freed_bufs = vec![];
 
         for (addr, buf) in self.waiting_bufs.iter() {
             match buf.state() {
                 Cmd::Release => {} //do nothing
-                Cmd::Free => freed_bufs.push(*addr),
+                Cmd::Free => {
+                    debug!("freeing buffer {:x} {:?}", addr, buf.state());
+                    freed_bufs.push(*addr)
+                }
                 Cmd::Tx => panic! {"should not be transerring if in waiting bufs"},
                 Cmd::Clear => panic!("should not clear before release"),
-                Cmd::Print => panic!("shoud not encounter Print here"),
+                // Cmd::Print => panic!("shoud not encounter Print here"),
                 Cmd::Alloc => panic!("should not encounter alloc here"),
                 Cmd::Panic => panic!("should not encounter panic here"),
             }
         }
+
         for buf_addr in freed_bufs {
             if let Some(mut buf) = self.waiting_bufs.remove(&buf_addr) {
                 for cmd in buf.iter() {
                     if cmd.dsize > 0 {
-                        let ref_cnt_addr = cmd.daddr as usize - std::mem::size_of::<AtomicUsize>();
-                        //+ comm.base_addr();
-                        let cnt = unsafe {
-                            (*(ref_cnt_addr as *const AtomicUsize)).fetch_sub(1, Ordering::SeqCst)
-                        };
-                        if cnt == 1 {
-                            comm.rt_free(ref_cnt_addr); // - comm.base_addr());
-                        }
+                        // let ser_data_addr = cmd.daddr;
+                        // debug!(
+                        //     "need to decrement  data with ser_data addr: {:x} ",
+                        //     ser_data_addr
+                        // );
+
+                        // unsafe { SerializedData::decrement_cnt_from_addr(comm, ser_data_addr) };
+                        let _alloc = comm
+                            .local_rt_alloc_from_local_addr(cmd.daddr)
+                            .expect("failed to find local alloc from addr");
+                        //creates and then drops to decrement the reference count
                     }
                 }
+                trace!("freeing buffer back to empty bufs {:x}", buf.addr());
                 buf.reset();
                 self.empty_bufs.push(buf);
             } else {
-                println!("free_data should this be possible?");
+                warn!("free_data should this be possible?");
             }
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn empty(&self) -> bool {
         self.empty_bufs.len() == self.num_bufs
     }
 }
 
 impl std::fmt::Debug for CmdMsgBuffer {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -411,192 +409,185 @@ impl std::fmt::Debug for CmdMsgBuffer {
 }
 
 impl Drop for CmdMsgBuffer {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        // println!("dropping CmdMsgBuffer");
         while !self.empty() {
             std::thread::yield_now()
         }
-        self.empty_bufs.clear();
-        // println!("dropped CmdMsgBuffer");
     }
 }
 
 struct InnerCQ {
-    send_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    recv_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    free_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    alloc_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
-    panic_buffer: Arc<Mutex<Box<[CmdMsg]>>>,
+    send_buffer: Arc<Vec<Mutex<CommSlice<CmdMsg>>>>,
+    recv_buffer: Arc<Vec<RwLock<CommSlice<CmdMsg>>>>,
+    // free_buffer: Arc<Vec<Mutex<CommSlice<CmdMsg>>>,
+    alloc_buffer: Arc<Vec<Mutex<CommSlice<CmdMsg>>>>,
+    panic_buffer: Arc<Mutex<CommSlice<CmdMsg>>>,
     cmd_buffers: Vec<Mutex<CmdMsgBuffer>>,
     release_cmd: Arc<Box<CmdMsg>>,
     clear_cmd: Arc<Box<CmdMsg>>,
     free_cmd: Arc<Box<CmdMsg>>,
     comm: Arc<Comm>,
+    scheduler: Arc<Scheduler>,
     my_pe: usize,
     num_pes: usize,
     send_waiting: Vec<Arc<AtomicBool>>,
     pending_cmds: Arc<AtomicUsize>,
+    pending_alloc: Arc<AtomicBool>,
     _active_cnt: Arc<AtomicUsize>,
     sent_cnt: Arc<AtomicUsize>,
     recv_cnt: Arc<AtomicUsize>,
     put_amt: Arc<AtomicUsize>,
-    get_amt: Arc<AtomicUsize>,
+    // get_amt: Arc<AtomicUsize>,
     alloc_id: Arc<AtomicUsize>,
     active: Arc<AtomicU8>,
 }
 
 impl InnerCQ {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn new(
-        send_buffer_addr: usize,
-        recv_buffer_addr: usize,
-        free_buffer_addr: usize,
-        alloc_buffer_addr: usize,
-        panic_buffer_addr: usize,
-        cmd_buffers_addrs: &Vec<Arc<Vec<usize>>>,
-        release_cmd_addr: usize,
-        clear_cmd_addr: usize,
-        free_cmd_addr: usize,
+        send_buffer_alloc: CommAlloc,
+        recv_buffer_alloc: CommAlloc,
+        // free_buffer_alloc: CommAlloc,
+        alloc_buffer_alloc: CommAlloc,
+        panic_buffer_alloc: CommAlloc,
+        cmd_buffers_alloc: &Vec<Arc<Vec<CommAlloc>>>,
+        release_cmd_alloc: CommAlloc,
+        clear_cmd_alloc: CommAlloc,
+        free_cmd_alloc: CommAlloc,
         comm: Arc<Comm>,
+        scheduler: Arc<Scheduler>,
         my_pe: usize,
         num_pes: usize,
         active: Arc<AtomicU8>,
     ) -> InnerCQ {
         let mut cmd_buffers = vec![];
         let mut pe = 0;
-        for addrs in cmd_buffers_addrs.iter() {
-            cmd_buffers.push(Mutex::new(CmdMsgBuffer::new(
-                addrs.clone(),
-                // comm.base_addr(),
-                pe,
-            )));
+        for addrs in cmd_buffers_alloc.iter() {
+            cmd_buffers.push(Mutex::new(CmdMsgBuffer::new(addrs.clone(), pe)));
             pe += 1;
         }
-        let mut send_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                send_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
-        for cmd in send_buffer.iter_mut() {
+        trace!("cmd_buffers {:?}", cmd_buffers);
+        let send_buffer: CommSlice<CmdMsg> = send_buffer_alloc.as_comm_slice();
+        let mut send_buffers = vec![];
+
+        // here we split the send buffers by PE so each PE has its own send buffer to avoid locking
+        // as we write locally into these buffers.
+        for (i, cmd) in send_buffer.clone().iter_mut().enumerate() {
+            (*cmd).daddr = 0;
+            (*cmd).dsize = 0;
+            (*cmd).cmd = Cmd::Clear;
+            (*cmd).msg_hash = 0;
+            (*cmd).calc_hash();
+            send_buffers.push(Mutex::new(send_buffer.sub_slice(i..=i)));
+        }
+        trace!("send_buffer init {:?}", send_buffer);
+
+        let recv_buffer: CommSlice<CmdMsg> = recv_buffer_alloc.as_comm_slice();
+        let mut recv_buffers = vec![];
+
+        //for recv buffers we lock each PE's buffer when we read from it, and we lock our own buffer when we are sending data to a remote PE
+        for (i, cmd) in recv_buffer.clone().iter_mut().enumerate() {
+            (*cmd).daddr = 0;
+            (*cmd).dsize = 0;
+            (*cmd).cmd = Cmd::Clear;
+            (*cmd).msg_hash = 0;
+            (*cmd).calc_hash();
+            recv_buffers.push(RwLock::new(recv_buffer.sub_slice(i..=i)));
+        }
+        trace!("recv_buffer init {:?}", recv_buffer);
+
+        // let mut free_buffer: CommSlice<CmdMsg> = free_buffer_alloc.as_comm_slice();
+        // for cmd in free_buffer.iter_mut() {
+        //     (*cmd).daddr = 0;
+        //     (*cmd).dsize = 0;
+        //     (*cmd).cmd = Cmd::Clear;
+        //     (*cmd).msg_hash = 0;
+        //     (*cmd).calc_hash();
+        // }
+        // trace!("free_buffer init {:?}", free_buffer);
+
+        let alloc_buffer: CommSlice<CmdMsg> = alloc_buffer_alloc.as_comm_slice();
+        let mut alloc_buffers = vec![];
+        for (i, cmd) in alloc_buffer.clone().iter_mut().enumerate() {
+            (*cmd).daddr = 0;
+            (*cmd).dsize = 0;
+            (*cmd).cmd = Cmd::Clear;
+            (*cmd).msg_hash = 0;
+            (*cmd).calc_hash();
+            alloc_buffers.push(Mutex::new(alloc_buffer.sub_slice(i..=i)));
+        }
+        trace!("alloc_buffer init {:?}", alloc_buffer);
+
+        let panic_buffer: CommSlice<CmdMsg> = panic_buffer_alloc.as_comm_slice();
+        for (_, cmd) in panic_buffer.clone().iter_mut().enumerate() {
             (*cmd).daddr = 0;
             (*cmd).dsize = 0;
             (*cmd).cmd = Cmd::Clear;
             (*cmd).msg_hash = 0;
             (*cmd).calc_hash();
         }
+        trace!("panic_buffer init {:?}", panic_buffer);
 
-        let mut recv_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                recv_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
-        for cmd in recv_buffer.iter_mut() {
-            (*cmd).daddr = 0;
-            (*cmd).dsize = 0;
-            (*cmd).cmd = Cmd::Clear;
-            (*cmd).msg_hash = 0;
-            (*cmd).calc_hash();
-        }
-
-        let mut free_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                free_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
-        for cmd in free_buffer.iter_mut() {
-            (*cmd).daddr = 0;
-            (*cmd).dsize = 0;
-            (*cmd).cmd = Cmd::Clear;
-            (*cmd).msg_hash = 0;
-            (*cmd).calc_hash();
-        }
-
-        let mut alloc_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                alloc_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
-        for cmd in alloc_buffer.iter_mut() {
-            (*cmd).daddr = 0;
-            (*cmd).dsize = 0;
-            (*cmd).cmd = Cmd::Clear;
-            (*cmd).msg_hash = 0;
-            (*cmd).calc_hash();
-        }
-
-        let mut panic_buffer = unsafe {
-            Box::from_raw(std::ptr::slice_from_raw_parts_mut(
-                panic_buffer_addr as *mut CmdMsg,
-                num_pes,
-            ))
-        };
-        for cmd in panic_buffer.iter_mut() {
-            (*cmd).daddr = 0;
-            (*cmd).dsize = 0;
-            (*cmd).cmd = Cmd::Clear;
-            (*cmd).msg_hash = 0;
-            (*cmd).calc_hash();
-        }
-
-        let mut release_cmd = unsafe { Box::from_raw(release_cmd_addr as *mut CmdMsg) };
+        let mut release_cmd = unsafe { Box::from_raw(release_cmd_alloc.as_mut_ptr::<CmdMsg>()) };
         release_cmd.daddr = 1;
         release_cmd.dsize = 1;
         release_cmd.cmd = Cmd::Release;
         release_cmd.msg_hash = 1;
         release_cmd.calc_hash();
+        trace!("release_cmd init {:?}", release_cmd);
 
-        let mut clear_cmd = unsafe { Box::from_raw(clear_cmd_addr as *mut CmdMsg) };
+        let mut clear_cmd = unsafe { Box::from_raw(clear_cmd_alloc.as_mut_ptr::<CmdMsg>()) };
         clear_cmd.daddr = 0;
         clear_cmd.dsize = 0;
         clear_cmd.cmd = Cmd::Clear;
         clear_cmd.msg_hash = 0;
         clear_cmd.calc_hash();
+        trace!("clear_cmd init {:?}", clear_cmd);
 
-        let mut free_cmd = unsafe { Box::from_raw(free_cmd_addr as *mut CmdMsg) };
+        let mut free_cmd = unsafe { Box::from_raw(free_cmd_alloc.as_mut_ptr::<CmdMsg>()) };
         free_cmd.daddr = 0;
         free_cmd.dsize = 0;
         free_cmd.cmd = Cmd::Free;
         free_cmd.msg_hash = 0;
         free_cmd.calc_hash();
+        trace!("free_cmd init {:?}", free_cmd);
 
         let mut send_waiting = vec![];
         for _pe in 0..num_pes {
             send_waiting.push(Arc::new(AtomicBool::new(false)));
         }
+        trace!("send_waiting init {:?}", send_waiting);
         InnerCQ {
-            send_buffer: Arc::new(Mutex::new(send_buffer)),
-            recv_buffer: Arc::new(Mutex::new(recv_buffer)),
-            free_buffer: Arc::new(Mutex::new(free_buffer)),
-            alloc_buffer: Arc::new(Mutex::new(alloc_buffer)),
+            send_buffer: Arc::new(send_buffers),
+            recv_buffer: Arc::new(recv_buffers),
+            alloc_buffer: Arc::new(alloc_buffers),
             panic_buffer: Arc::new(Mutex::new(panic_buffer)),
-            cmd_buffers: cmd_buffers,
+            cmd_buffers,
             release_cmd: Arc::new(release_cmd),
             clear_cmd: Arc::new(clear_cmd),
             free_cmd: Arc::new(free_cmd),
-            comm: comm,
-            my_pe: my_pe,
-            num_pes: num_pes,
-            send_waiting: send_waiting,
+            comm,
+            scheduler,
+            my_pe,
+            num_pes,
+            send_waiting,
             pending_cmds: Arc::new(AtomicUsize::new(0)),
+            pending_alloc: Arc::new(AtomicBool::new(false)),
             _active_cnt: Arc::new(AtomicUsize::new(0)),
             sent_cnt: Arc::new(AtomicUsize::new(0)),
             recv_cnt: Arc::new(AtomicUsize::new(0)),
             put_amt: Arc::new(AtomicUsize::new(0)),
-            get_amt: Arc::new(AtomicUsize::new(0)),
+            // get_amt: Arc::new(AtomicUsize::new(0)),
             alloc_id: Arc::new(AtomicUsize::new(0)),
             active: active,
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn empty(&self) -> bool {
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn empty(&self) -> bool {
         for buf in &self.cmd_buffers {
-            let buf = buf.lock();
+            let buf = buf.lock().await;
             if !buf.empty() {
                 return false;
             }
@@ -604,21 +595,21 @@ impl InnerCQ {
         true
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready(&self, src: usize) -> Option<CmdMsg> {
-        let mut recv_buffer = self.recv_buffer.lock();
-        let cmd = recv_buffer[src].clone();
+        let mut recv_buffer = self.recv_buffer[src].write_blocking(); //.await;
+        let cmd = recv_buffer[0].clone();
         if cmd.check_hash() {
             match cmd.cmd {
                 Cmd::Clear => None,
                 // Cmd::Free => panic!("should not see free in recv buffer"),
-                Cmd::Tx | Cmd::Print | Cmd::Free | Cmd::Release => {
+                Cmd::Tx | Cmd::Free | Cmd::Release => {
                     if cmd.daddr == 0 {
-                        println!("received cmd src {:?} {:?} ", src, cmd);
                         return None;
                     }
+                    trace!("received  cmd:{:?} from pe {} -- [{:?}]", cmd.cmd, src, cmd);
                     let res = Some(cmd.clone());
-                    let cmd = &mut recv_buffer[src];
+                    let cmd = &mut recv_buffer[0];
                     cmd.daddr = 0;
                     cmd.dsize = 0;
                     cmd.cmd = Cmd::Clear;
@@ -634,38 +625,52 @@ impl InnerCQ {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn check_alloc(&self) {
-        if let Some(mut alloc_buf) = self.alloc_buffer.try_lock() {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn check_alloc(&self, print: bool) {
+        if let Ok(_) =
+            self.pending_alloc
+                .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        {
+            if print {
+                trace!("checking alloc buffer");
+            }
             let mut do_alloc = false;
             let mut min_size = 0;
             for pe in 0..self.num_pes {
-                if alloc_buf[pe].check_hash() && alloc_buf[pe].cmd == Cmd::Alloc {
-                    do_alloc = true;
-                    min_size = alloc_buf[pe].dsize;
-                    break;
+                if let Some(alloc_buf) = self.alloc_buffer[pe].try_lock() {
+                    if alloc_buf[0].cmd == Cmd::Alloc && alloc_buf[0].check_hash() {
+                        info!("pe {} (allegedly) needs alloc {:?}", pe, alloc_buf[0]);
+                        do_alloc = true;
+                        min_size = std::cmp::max(min_size, alloc_buf[0].dsize);
+                        // break;
+                    }
                 }
             }
             if do_alloc {
-                // println!(
-                //     "need to alloc new pool {:?}",
-                //     std::backtrace::Backtrace::capture()
-                // );
-                self.send_alloc_inner(&mut alloc_buf, min_size);
+                info!(
+                    "need to alloc new pool {:?}",
+                    std::backtrace::Backtrace::capture()
+                );
+                self.send_alloc_inner(min_size); //.await;
             }
+            self.pending_alloc.store(false, Ordering::SeqCst);
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn check_panic(&self) -> bool {
         if let Some(panic_buf) = self.panic_buffer.try_lock() {
             let mut paniced = false;
             for pe in 0..self.num_pes {
                 if panic_buf[pe].cmd != Cmd::Clear {
-                    println!("panic_buf {:?}", panic_buf[pe]);
+                    debug!(
+                        "pe {} panic_buf not clear {:?}",
+                        pe, &panic_buf[pe] as *const CmdMsg
+                    );
+                    debug!("panic_buf {:?}", panic_buf[pe]);
                 }
                 if panic_buf[pe].check_hash() && panic_buf[pe].cmd == Cmd::Panic {
-                    println!("panic_buf passed hash check{:?}", panic_buf[pe]);
+                    debug!("panic_buf passed hash check{:?}", panic_buf[pe]);
                     paniced = true;
                     break;
                 }
@@ -679,101 +684,144 @@ impl InnerCQ {
         return false;
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn try_sending_buffer(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) -> bool {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn try_sending_buffer(
+        &self,
+        dst: usize,
+        cmd_buffer: &mut CmdMsgBuffer,
+        printed: &mut bool,
+    ) -> bool {
         if self.pending_cmds.load(Ordering::SeqCst) == 0 || cmd_buffer.full_bufs.len() > 0 {
-            let mut send_buf = self.send_buffer.lock();
-            if send_buf[dst].hash() == self.clear_cmd.hash() {
-                cmd_buffer.flush_buffer(&mut send_buf[dst]);
-                // println!{"send_buf  after{:?}",send_buf[dst]};
-                if send_buf[dst].dsize > 0 {
-                    let recv_buffer = self.recv_buffer.lock();
-                    // println! {"sending data to dst {:?} {:?} {:?} {:?}",recv_buffer[self.my_pe].as_addr()-self.comm.base_addr(),send_buf[dst],send_buf[dst].as_bytes(),send_buf};
-                    // println!("sending cmd {:?}", send_buf);
-                    // println!("Command Queue sending buffer");
-                    self.comm.put(
-                        dst,
-                        send_buf[dst].as_bytes(),
-                        recv_buffer[self.my_pe].as_addr(),
-                    );
+            let mut send_buf = self.send_buffer[dst].lock_blocking();
+            if send_buf[0].hash() == self.clear_cmd.hash() {
+                cmd_buffer.flush_buffer(&mut send_buf[0]);
+                if send_buf[0].dsize > 0 {
+                    let recv_buffer = self.recv_buffer[self.my_pe].read_blocking(); //we can safely read here as the send_buffer lock prevents any other thread from writing to our recv buffer on the dst PE
+                                                                                    // debug! {"sending data to dst({dst}) {:x}    sending cmd {:?} {:?} {:?}",
+                                                                                    // recv_buffer.index_addr(0),send_buf, send_buf[0],send_buf[0].as_bytes()};
+                    stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
+                    debug!("sending cmd to dst({dst}) {:?}", send_buf[0]);
+                    let _ = recv_buffer
+                        .put_unmanaged::<CmdMsg>(
+                            // &self.scheduler,
+                            // vec![],
+                            send_buf[0], //send_buf.sub_slice(dst..=dst),
+                            dst,
+                            0,
+                        );
+                    recv_buffer.wait();
+                        // .block();
+                    // .spawn();
                     self.put_amt
-                        .fetch_add(send_buf[dst].as_bytes().len(), Ordering::Relaxed);
+                        .fetch_add(send_buf[0].as_bytes().len(), Ordering::Relaxed);
+                    // debug!("sent cmd to dst({dst})");
                 }
                 true
             } else {
+                if !*printed {
+                    *printed = true;
+                    debug!(
+                        "unable to send buffer to dst({dst}) hash not clear {:?} {:?} {:?} {:?}",
+                        send_buf[0],
+                        self.clear_cmd,
+                        send_buf[0].hash(),
+                        self.clear_cmd.hash()
+                    );
+                }
                 false
             }
         } else {
+            if !*printed {
+                *printed = true;
+                debug!("unable to send buffer to dst({dst}) pending cmds > 0 or no full bufs");
+            }
             false
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn progress_transfers(&self, dst: usize, cmd_buffer: &mut CmdMsgBuffer) {
-        let mut send_buf = self.send_buffer.lock();
-        if cmd_buffer.check_transfer(send_buf[dst].daddr) {
-            send_buf[dst].daddr = 0;
-            send_buf[dst].dsize = 0;
-            send_buf[dst].cmd = Cmd::Clear;
-            send_buf[dst].msg_hash = 0;
-            send_buf[dst].calc_hash();
+        let mut send_buf = self.send_buffer[dst].lock_blocking();
+        if cmd_buffer.check_transfer(send_buf[0].daddr, dst) {
+            send_buf[0].daddr = 0;
+            send_buf[0].dsize = 0;
+            send_buf[0].cmd = Cmd::Clear;
+            send_buf[0].msg_hash = 0;
+            send_buf[0].calc_hash();
         }
-        cmd_buffer.check_free_data(self.comm.clone());
+        cmd_buffer.check_free_data(&self.comm);
     }
 
-    //#[tracing::instrument(skip_all)]
-    async fn send(&self, addr: usize, len: usize, dst: usize, hash: usize) {
-        let mut timer = std::time::Instant::now();
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn send(&self, data: CommSlice<u8>, dst: usize, hash: usize) {
+        stats!(PE_SENDS[0][dst].fetch_add(1, Ordering::SeqCst));
+        debug!("want to send data {:?} {:?} {:x}", data, dst, hash);
+        // if hash != calc_hash(data.usize_addr(), data.len())
+        // {
+        //     panic!(
+        //         "[{:?}] 0. hash mismatch! {:?} {dst} {:x} {:x} ",
+        //         std::thread::current().id(),
+        //         data,
+        //         hash,
+        //         calc_hash(data.usize_addr(), data.len())
+        //     );
+        // }
+        // let mut timer = std::time::Instant::now();
         self.pending_cmds.fetch_add(1, Ordering::SeqCst);
+        // let mut had_to_wait = false;
+        let mut printed = false;
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
                 //this is to tell the compiler we wont hold the mutex lock if we have to yield
-                // let span = trace_span!("send loop 1");
-                // let _guard = span.enter();
-
-                // let mut cmd_buffer = trace_span!("lock").in_scope(|| self.cmd_buffers[dst].lock());
-                let mut cmd_buffer = self.cmd_buffers[dst].lock();
-                if cmd_buffer.try_push(addr, len, hash) {
+                let mut cmd_buffer = self.cmd_buffers[dst].lock_blocking();
+                if cmd_buffer.try_push(data.clone(), hash) {
                     self.sent_cnt.fetch_add(1, Ordering::SeqCst);
-                    self.put_amt.fetch_add(len, Ordering::Relaxed);
+                    self.put_amt.fetch_add(data.len(), Ordering::Relaxed);
                     let _cnt = self.pending_cmds.fetch_sub(1, Ordering::SeqCst);
+                    debug!(
+                        "pushed data to cmd buffer for dst({dst}) hash {:x} pending cmds {:?} {:?}",
+                        hash,
+                        self.pending_cmds.load(Ordering::SeqCst),
+                        data
+                    );
                     break;
                 }
-                // let span1 = trace_span!("send loop 1.1");
-                // let _guard1 = span1.enter();
+                // had_to_wait = true;
                 //while we are waiting to push our data might as well try to advance the buffers
                 self.progress_transfers(dst, &mut cmd_buffer);
-                self.try_sending_buffer(dst, &mut cmd_buffer);
-                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    let send_buf = self.send_buffer.lock();
-                    println!("waiting to add cmd to cmd buffer {:?}", cmd_buffer);
-                    println!("send_buf: {:?}", send_buf);
-                    // drop(send_buf);
-                    let recv_buf = self.recv_buffer.lock();
-                    println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
-                    println!("free_buf: {:?}", free_buf);
-                    timer = std::time::Instant::now();
-                }
+                self.try_sending_buffer(dst, &mut cmd_buffer, &mut printed);
             }
             async_std::task::yield_now().await;
         }
+
+        // if hash != calc_hash(data.usize_addr(), data.len())
+        // {
+        //     panic!(
+        //         "[{:?}] 1. hash mismatch! {:?} {dst} {:x} {:x} had to wait {had_to_wait}",
+        //         std::thread::current().id(),
+        //         data,
+        //         hash,
+        //         calc_hash(data.usize_addr(), data.len())
+        //     );
+        // }
         let mut im_waiting = false;
+        printed = false;
+        let mut timer = std::time::Instant::now();
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
             {
-                // let span = trace_span!("send loop 2");
-                // let _guard = span.enter();
                 //this is to tell the compiler we wont hold the mutex lock if we have to yield
-                let mut cmd_buffer = self.cmd_buffers[dst].lock();
+                let mut cmd_buffer = self.cmd_buffers[dst].lock_blocking();
                 if !cmd_buffer.empty() {
                     //data to send
                     self.progress_transfers(dst, &mut cmd_buffer);
-                    if self.try_sending_buffer(dst, &mut cmd_buffer) {
+                    if self.try_sending_buffer(dst, &mut cmd_buffer, &mut printed) {
                         self.send_waiting[dst].store(false, Ordering::SeqCst);
+                        debug!("finished sending to dst({dst}) {:?}", data);
                         break;
                     }
                 } else {
                     self.send_waiting[dst].store(false, Ordering::SeqCst);
+                    debug!("no more data to send to dst({dst}) {:?}", data);
                     break;
                 }
                 if !im_waiting {
@@ -783,118 +831,175 @@ impl InnerCQ {
                         Ordering::SeqCst,
                         Ordering::Relaxed,
                     ) {
+                        debug!("im waiting to send to dst({dst}) {:?}", data);
                         //ensure only a single task is waiting per destination
                         im_waiting = true;
                     } else {
+                        debug!(
+                            "someone else is already waiting to send to dst({dst}) {:?}",
+                            data
+                        );
                         break;
                     }
-                }
-                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    println!("waiting to send cmd buffer {:?}", cmd_buffer);
-                    let send_buf = self.send_buffer.lock();
-                    println!("send_buf addr {:?}", send_buf.as_ptr());
-                    println!("send_buf: {:?}", send_buf);
-                    let recv_buf = self.recv_buffer.lock();
-                    println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
-                    println!("free_buf: {:?}", free_buf);
-                    timer = std::time::Instant::now();
+                } else {
+                    if timer.elapsed().as_secs_f32() > 10.0 {
+                        timer = std::time::Instant::now();
+                        debug!("im still waiting to send to dst({dst}) {:?}", data);
+                    }
                 }
             }
             async_std::task::yield_now().await;
         }
-        // self.active_cnt.fetch_sub(1, Ordering::SeqCst);
+        // if hash != calc_hash(data.usize_addr(), data.len())
+        // {
+        //     panic!(
+        //         "[{:?}] 2. hash mismatch! {:x} {:x} im_waiting {im_waiting} had_to_wait {had_to_wait}",
+        //         std::thread::current().id(),
+        //         hash,
+        //         calc_hash(data.usize_addr(), data.len())
+        //     );
+        // }
     }
 
-    //#[tracing::instrument(skip_all)]
+    //TODO make this async, and have an atomic variable to check if an alloc is already in progress
+    // because we are probably deadlocking on this lock...
+    #[tracing::instrument(skip_all, level = "debug")]
     fn send_alloc(&self, min_size: usize) {
-        let prev_cnt = self.comm.num_pool_allocs();
-        let mut alloc_buf = self.alloc_buffer.lock();
-        if !self
-            .comm
-            .rt_check_alloc(min_size, std::mem::align_of::<CmdMsg>())
-        {
-            // println!(" {:?} {:?}",prev_cnt,self.comm.num_pool_allocs());
-            if prev_cnt == self.comm.num_pool_allocs() {
-                // println!("im responsible for the new alloc");
-                self.send_alloc_inner(&mut alloc_buf, min_size);
+        if let Ok(_) = self.pending_alloc.compare_exchange_weak(
+            false,
+            true,
+            Ordering::SeqCst,
+            Ordering::Relaxed,
+        ) {
+            let prev_cnt = self.comm.num_pool_allocs();
+
+            if !self
+                .comm
+                .rt_check_alloc(min_size, std::mem::align_of::<CmdMsg>())
+            {
+                trace!(" {:?} {:?}", prev_cnt, self.comm.num_pool_allocs());
+                if prev_cnt == self.comm.num_pool_allocs() {
+                    info!(
+                        "im responsible for the new alloc of at least {:?}",
+                        min_size
+                    );
+                    self.send_alloc_inner(min_size);
+                }
+            }
+            self.pending_alloc.store(false, Ordering::SeqCst);
+        } else {
+            // someone else is already doing an alloc...
+            // wait for them to finish and then we will return so we can use the new pool
+            while self.pending_alloc.load(Ordering::Relaxed) {
+                // async_std::task::yield_now().await;
+                std::thread::yield_now();
             }
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn send_panic(&self) {
-        let mut panic_buf = self.panic_buffer.lock();
+        let mut panic_buf = self.panic_buffer.lock_blocking();
         self.send_panic_inner(&mut panic_buf);
     }
 
     // need to include  a "barrier" count...
-    //#[tracing::instrument(skip_all)]
-    fn send_alloc_inner(&self, alloc_buf: &mut Box<[CmdMsg]>, min_size: usize) {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn send_alloc_inner(&self, min_size: usize) {
+        debug!("in send_alloc_inner");
         let mut new_alloc = true;
         while new_alloc {
             new_alloc = false;
             let alloc_id = self.alloc_id.fetch_add(1, Ordering::SeqCst);
+            //scoping for the lock
+
+            let mut my_alloc_buf = self.alloc_buffer[self.my_pe].lock_blocking();
             // need to loop incase a new alloc comes in aftet this one, but recursion and mut& T dont play nicely...
-            if alloc_buf[self.my_pe].hash() == self.clear_cmd.hash() {
-                let cmd = &mut alloc_buf[self.my_pe];
-                cmd.daddr = alloc_id;
-                cmd.dsize = min_size;
-                cmd.cmd = Cmd::Alloc;
-                cmd.msg_hash = 0;
-                cmd.calc_hash();
+            if my_alloc_buf[0].hash() == self.clear_cmd.hash() {
+                my_alloc_buf[0].daddr = alloc_id;
+                my_alloc_buf[0].dsize = min_size;
+                my_alloc_buf[0].cmd = Cmd::Alloc;
+                my_alloc_buf[0].msg_hash = 0;
+                my_alloc_buf[0].calc_hash();
                 for pe in 0..self.num_pes {
                     if pe != self.my_pe {
-                        // println!("putting alloc cmd to pe {:?}", pe);
-                        self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
+                        info!("putting alloc cmd to pe {:?}", pe);
+                        let _ = my_alloc_buf.put_unmanaged::<CmdMsg>(my_alloc_buf[0], pe, 0);
+                        // .spawn();
                     }
                 }
             }
+
+            // self.comm.wait();
             let mut start = std::time::Instant::now();
             for pe in 0..self.num_pes {
-                while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Alloc {
-                    self.comm.flush();
-                    std::thread::yield_now();
-                    if start.elapsed().as_secs_f64() > config().deadlock_timeout {
-                        println!("waiting to alloc: {:?} {:?}", alloc_buf, alloc_id);
-                        start = std::time::Instant::now();
-                    }
-                }
-                // println!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
-            }
-            // panic!("exiting");
-
-            self.comm.alloc_pool(min_size);
-            let cmd = &mut alloc_buf[self.my_pe];
-            cmd.daddr = 0;
-            cmd.dsize = 0;
-            cmd.cmd = Cmd::Clear;
-            cmd.msg_hash = 0;
-            cmd.calc_hash();
-            for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    // println!("putting clear cmd to pe {:?}", pe);
-                    self.comm.put(pe, cmd.as_bytes(), cmd.as_addr());
-                }
-            }
-            for pe in 0..self.num_pes {
-                while !alloc_buf[pe].check_hash() || alloc_buf[pe].cmd != Cmd::Clear {
-                    if alloc_buf[pe].cmd == Cmd::Alloc {
-                        if alloc_buf[pe].daddr > alloc_id {
-                            new_alloc = true;
-                            break;
+                    let alloc_buf = self.alloc_buffer[pe].lock_blocking();
+                    while !alloc_buf[0].check_hash() || alloc_buf[0].cmd != Cmd::Alloc {
+                        self.comm.thread_flush();
+                        std::thread::yield_now();
+                        if start.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                            info!(
+                                "waiting to alloc from[{pe}]: {:?} {:?} {:?}",
+                                alloc_buf[0].cmd,
+                                alloc_buf.as_slice(),
+                                alloc_id,
+                            );
+                            start = std::time::Instant::now();
                         }
                     }
-                    std::thread::yield_now();
+                    info!(" pe {:?} ready to alloc {:?} {:?}", pe, alloc_id, min_size);
                 }
-                // println!(" pe {:?} has alloced", pe);
             }
-            // println!("created new alloc pool");
+            // panic!("exiting");
+            info!("all pes ready to alloc");
+
+            self.comm.alloc_pool(min_size);
+            info!("allocated new pool of at least {:?}", min_size);
+            // let cmd = &mut alloc_buf[self.my_pe];
+
+            my_alloc_buf[0].daddr = 0;
+            my_alloc_buf[0].dsize = 0;
+            my_alloc_buf[0].cmd = Cmd::Clear;
+            my_alloc_buf[0].msg_hash = 0;
+            my_alloc_buf[0].calc_hash();
+            for pe in 0..self.num_pes {
+                if pe != self.my_pe {
+                    let _ = my_alloc_buf.put_unmanaged::<CmdMsg>(my_alloc_buf[0], pe, 0);
+                    // .spawn();
+                }
+            }
+            info!("sent clear cmds");
+            // self.comm.wait();
+            for pe in 0..self.num_pes {
+                if pe == self.my_pe {
+                    while !my_alloc_buf[0].check_hash() || my_alloc_buf[0].cmd != Cmd::Clear {
+                        if my_alloc_buf[0].cmd == Cmd::Alloc {
+                            if my_alloc_buf[0].daddr > alloc_id {
+                                new_alloc = true;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    let alloc_buf = self.alloc_buffer[pe].lock_blocking();
+                    while !alloc_buf[0].check_hash() || alloc_buf[0].cmd != Cmd::Clear {
+                        if alloc_buf[0].cmd == Cmd::Alloc {
+                            if alloc_buf[0].daddr > alloc_id {
+                                new_alloc = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                std::thread::yield_now();
+            }
+            info!("created new alloc pool");
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn send_panic_inner(&self, panic_buf: &mut Box<[CmdMsg]>) {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn send_panic_inner(&self, panic_buf: &mut CommSlice<CmdMsg>) {
         if panic_buf[self.my_pe].hash() == self.clear_cmd.hash() {
             let cmd = &mut panic_buf[self.my_pe];
             cmd.daddr = 0;
@@ -904,251 +1009,249 @@ impl InnerCQ {
             cmd.calc_hash();
             for pe in 0..self.num_pes {
                 if pe != self.my_pe {
-                    println!("putting panic cmd to pe {:?} {cmd:?}", pe);
-                    self.comm.iput(pe, cmd.as_bytes(), cmd.as_addr()); // not sure if we need to make this put incase the other PEs are already down
-                }
-            }
-        }
-    }
-
-    //#[tracing::instrument(skip_all)]
-    fn send_release(&self, dst: usize, cmd: CmdMsg) {
-        // let cmd_buffer = self.cmd_buffers[dst].lock();
-        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
-        let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-        // println!("sending release to {dst}");
-        self.comm.put(
-            dst,
-            self.release_cmd.cmd_as_bytes(),
-            local_daddr + offset_of!(CmdMsg, cmd),
-        ); // + self.comm.base_addr(),);
-    }
-
-    //#[tracing::instrument(skip_all)]
-    fn send_free(&self, dst: usize, cmd: CmdMsg) {
-        // let cmd_buffer = self.cmd_buffers[dst].lock();
-        // println!("sending release: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",self.release_cmd,cmd,self.release_cmd.cmd_as_bytes(), cmd.cmd_as_bytes(),self.release_cmd.cmd_as_addr(),cmd.daddr + offset_of!(CmdMsg,cmd));
-        let local_daddr = self.comm.local_addr(dst, cmd.daddr);
-        // println!("sending free to {dst}");
-        self.comm.put(
-            dst,
-            self.free_cmd.cmd_as_bytes(),
-            local_daddr + offset_of!(CmdMsg, cmd),
-        ); // + self.comm.base_addr(),);
-    }
-
-    //#[tracing::instrument(skip_all)]
-    async fn send_print(&self, dst: usize, cmd: CmdMsg) {
-        let mut timer = std::time::Instant::now();
-        while self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
-            {
-                // let mut cmd_buffer = self.cmd_buffers[dst].lock();
-                let mut send_buf = self.send_buffer.lock();
-                if send_buf[dst].hash() == self.clear_cmd.hash() {
-                    send_buf[dst].daddr = cmd.daddr;
-                    send_buf[dst].dsize = cmd.dsize;
-                    send_buf[dst].cmd = Cmd::Print;
-                    send_buf[dst].msg_hash = cmd.msg_hash;
-                    send_buf[dst].calc_hash();
-                    // println!("sending print {:?} (s: {:?} r: {:?})",addr,self.sent_cnt.load(Ordering::SeqCst),self.recv_cnt.load(Ordering::SeqCst));
-                    let recv_buffer = self.recv_buffer.lock();
-                    // println!("sending cmd {:?}",send_buf);
-                    println!("sending print to {dst}");
-                    self.comm.put(
-                        dst,
-                        send_buf[dst].as_bytes(),
-                        recv_buffer[self.my_pe].as_addr(),
+                    let _ = panic_buf.put_unmanaged::<CmdMsg>(
+                        // &self.scheduler,
+                        // vec![],
+                        panic_buf[self.my_pe], //panic_buf.sub_slice(self.my_pe..=self.my_pe),
+                        pe,
+                        self.my_pe,
                     );
-                    // self.put_amt.fetch_add(send_buf[dst].as_bytes().len(),Ordering::Relaxed);
-                    break;
-                }
-                if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                    let send_buf = self.send_buffer.lock();
-                    // println!("waiting to add cmd to cmd buffer {:?}",cmd_buffer);
-                    println!("send_buf: {:?}", send_buf);
-                    // drop(send_buf);
-                    let recv_buf = self.recv_buffer.lock();
-                    println!("recv_buf: {:?}", recv_buf);
-                    let free_buf = self.free_buffer.lock();
-                    println!("free_buf: {:?}", free_buf);
-                    timer = std::time::Instant::now();
+                    // .spawn();
                 }
             }
-            async_std::task::yield_now().await;
+            self.comm.thread_wait(); //only need to wait on puts issued by this thread
+            // join_all(txs).await;
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn check_transfers(&self, src: usize) {
-        let mut cmd_buffer = self.cmd_buffers[src].lock();
-        self.progress_transfers(src, &mut cmd_buffer);
+    // We can run into a race condition between send_release and send_free so lets only use send_free.
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // fn send_release(&self, dst: usize, local_daddr_alloc: CommAlloc) {
+    //     // let cmd_buffer = self.cmd_buffers[dst].lock();
+    //     // debug!(
+    //     //     "sending release to dst[{dst}]: {:?} cmd: {:?} {:?} {:?} 0x{:x} 0x{:x}",
+    //     //     self.release_cmd,
+    //     //     cmd,
+    //     //     self.release_cmd.cmd_as_bytes(),
+    //     //     cmd.cmd_as_bytes(),
+    //     //     self.release_cmd.as_addr(),
+    //     //     cmd.daddr + offset_of!(CmdMsg, cmd)
+    //     // );
+    //     // let local_daddr = self.comm.local_addr(dst, cmd.daddr);
+
+    //     // let (local_daddr_alloc, offset) =
+    //     //     self.comm.local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
+    //     // let local_daddr_slice =
+    //     //     local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
+    //     // local_daddr_slice
+    //     //     .put::<Cmd>(&self.scheduler, vec![], self.release_cmd.cmd, dst, 0)
+    //     //     .spawn();
+
+    //     let local_cmd_slice =
+    //         local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset_of!(CmdMsg, cmd), 1);
+    //     local_cmd_slice.put_unmanaged::<Cmd>(
+    //         // &self.scheduler, vec![],
+    //         self.release_cmd.cmd,
+    //         dst,
+    //         0,
+    //     );
+    // }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn send_free(&self, dst: usize, cmd: CmdMsg) {
+        trace!(
+            "sending free to dst[{dst}]: {:?} cmd: {:?} ",
+            self.free_cmd,
+            cmd,
+        );
+        let (local_daddr_alloc, offset) = self
+            .comm
+            .local_alloc_and_offset_from_remote_pe_and_addr(dst, cmd.daddr);
+        let local_daddr_slice =
+            local_daddr_alloc.comm_slice_at_byte_offset::<Cmd>(offset + offset_of!(CmdMsg, cmd), 1);
+        let _ = local_daddr_slice.put_unmanaged::<Cmd>(self.free_cmd.cmd, dst, 0);
     }
 
-    //#[tracing::instrument(skip_all)]
-    fn print_data(&self, src: usize, cmd: CmdMsg) {
-        let cmd_buffer = self.cmd_buffers[src].lock();
-        println!("print data -- cmd {:?}", cmd);
-        println!("print data -- cmd_buffer {:?}", cmd_buffer);
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn check_transfers(&self, src: usize) {
+        let mut cmd_buffer = self.cmd_buffers[src].lock_blocking(); //.await;
+                                                                    // trace!("checking transfers for {src}");
+        self.progress_transfers(src, &mut cmd_buffer); //.await;
     }
 
     //update cmdbuffers to include a hash the wait on that here
-    //#[tracing::instrument(skip_all)]
-    async fn get_data(&self, src: usize, cmd: CmdMsg, data_slice: &mut [u8]) {
-        let local_daddr = self.comm.local_addr(src, cmd.daddr);
-        // println!("command queue getting data from {src}");
-        self.comm.iget(src, local_daddr as usize, data_slice);
-        // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
+    // #[tracing::instrument(skip(self), level = "debug")]
+    async fn get_data(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> Vec<CmdMsg> {
+        let (local_daddr_alloc, offset) = self
+            .comm
+            .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
+        let num_cmds = cmd.dsize / std::mem::size_of::<CmdMsg>();
+        let remote_cmd_buffer =
+            local_daddr_alloc.comm_slice_at_byte_offset::<CmdMsg>(offset, num_cmds);
+        trace!(
+            "msg_id: {msg_id} command queue getting data from {src}, {:x} local_alloc: {:?} offset ({:?}, {:x}) {:?}",
+            cmd.daddr,
+            local_daddr_alloc,
+            offset,
+            offset,
+            remote_cmd_buffer,
+        );
+
+        let data = vec![CmdMsg::default(); num_cmds];
+        let mut buffer = LamellarBuffer::<CmdMsg, Vec<CmdMsg>>::from_vec(data);
+
+        let task = remote_cmd_buffer
+            .get_into_buffer(&self.scheduler, vec![], src, 0, buffer.split_off(0))
+            .spawn(); //maybe we do a block here?
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, data_slice.len()) != cmd.msg_hash
-            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        while calc_hash(
+            unsafe { buffer.orig_as_ptr() } as usize,
+            buffer.orig_num_bytes(),
+        ) != cmd.msg_hash
         {
-            async_std::task::yield_now().await;
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                println!(
-                    "stuck waiting for data from {:?}!!! {:?} {:?} {:?} {:?} -- calced hash {:?}",
+            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
+                trace!(
+                    "msg_id: {msg_id} data hash mismatch from {:?}!!! {:?} {:?} {:?} -- calced hash {:x} expected {:x}",
                     src,
                     cmd,
-                    data_slice.len(),
-                    cmd.dsize,
-                    &data_slice,
-                    calc_hash(data_slice.as_ptr() as usize, data_slice.len())
+                    buffer.orig_num_bytes(),
+                    unsafe{ buffer.orig_as_casted_slice::<u8>() },
+                    calc_hash(
+                       unsafe{buffer.orig_as_ptr() } as usize,
+                        buffer.orig_num_bytes()
+                    ),
+                    cmd.msg_hash,
+
                 );
-                self.send_print(src, cmd).await;
                 timer = std::time::Instant::now();
             }
+            async_std::task::yield_now().await;
         }
-        // println!("got data {:?}", data_slice);
+        task.await;
+        let data = buffer
+            .try_unwrap()
+            .expect("Multiple copies of data still exist");
+
+        stats!(PE_RECVS[1][src].fetch_add(1, Ordering::SeqCst));
+        debug!("got data from {src} -- {:?} cmds", data.len());
+        data
     }
 
-    //#[tracing::instrument(skip_all)]
-    async fn get_serialized_data(&self, src: usize, cmd: CmdMsg, ser_data: &SerializedData) {
-        let data_slice = ser_data.header_and_data_as_bytes();
-        let local_daddr = self.comm.local_addr(src, cmd.daddr);
-        // println!("command queue getting serialized data from {src}");
-        self.comm.iget(src, local_daddr as usize, data_slice);
-        // self.get_amt.fetch_add(data_slice.len(),Ordering::Relaxed);
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn get_serialized_data(
+        &self,
+        src: usize,
+        cmd: CmdMsg,
+        ser_data: &mut SerializedData,
+        msg_id: usize,
+    ) {
+        let len = ser_data.len();
+        // let vec = vec![0u8; len];
+        let mut buffer = unsafe {
+            LamellarBuffer::<u8, CommSlice<u8>>::from_comm_slice(
+                ser_data.header_and_data_as_bytes_mut(),
+            )
+        };
+        // let mut buffer = LamellarBuffer::<u8, Vec<u8>>::from_vec(vec);
+        trace!("get_serialized_data {:?} {:?} {:x}", src, cmd, cmd.daddr);
+        let (local_daddr_alloc, offset) = self
+            .comm
+            .local_alloc_and_offset_from_remote_pe_and_addr(src, cmd.daddr);
+        let task = local_daddr_alloc
+            .get_into_buffer(&self.scheduler, vec![], src, offset, buffer.split_off(0))
+            .spawn();
+        // let data_slice = buffer.try_unwrap().unwrap();
+        // let data_slice = &tmp_data;
+        // let orig_thread = std::thread::current().id();
+        let data_slice = ser_data.header_and_data_as_bytes_mut();
+
         let mut timer = std::time::Instant::now();
-        while calc_hash(data_slice.as_ptr() as usize, ser_data.len()) != cmd.msg_hash
+        trace!(
+            "msg_id: {msg_id} tmp_data_addr: {:?} calced hash: {:x} cmd msg hash {:x} {:?} {:?}",
+            data_slice.as_ptr(),
+            calc_hash(data_slice.as_ptr() as usize, len),
+            cmd.msg_hash,
+            &data_slice.as_slice()[0..std::cmp::min(32, len)],
+            &data_slice.as_slice()[len.saturating_sub(32)..len],
+        );
+
+        while calc_hash(data_slice.as_ptr() as usize, len) != cmd.msg_hash
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
-            async_std::task::yield_now().await;
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+            if timer.elapsed().as_secs_f64() > 10.0 {
+                //config().deadlock_warning_timeout {
                 println!(
-                    "stuck waiting for serialized data from {:?} !!! {:?} {:?} {:?} {:?}",
+                    "msg_id: {msg_id} data hash mismatch from {:?}!!! cmd: {:?} l: {:?} l(): {:?} -- calced hash {:x} expected {:x} [{:?}..{:?}] cur_thread: {:?}",
                     src,
                     cmd,
+                    len,
                     data_slice.len(),
-                    cmd.dsize,
-                    &data_slice
+                    calc_hash(data_slice.as_ptr() as usize, len),
+                    cmd.msg_hash,
+
+                    &data_slice.as_slice()[0..32],
+                    &data_slice.as_slice()[len.saturating_sub(32)..len],
+                    std::thread::current().id(),
+                    // orig_thread,
                 );
-                self.send_print(src, cmd).await;
                 timer = std::time::Instant::now();
             }
+            async_std::task::yield_now().await;
         }
+        task.await;
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(
+        //         data_slice.as_ptr(),
+        //         ser_data.header_and_data_as_bytes_mut().as_mut_ptr(),
+        //         len,
+        //     );
+        // }
+        trace!(
+            "after msg_id: {msg_id} calced hash: {:x} cmd msg hash {:x} ",
+            calc_hash(data_slice.as_ptr() as usize, len),
+            cmd.msg_hash,
+        );
+        stats!(PE_RECVS[0][src].fetch_add(1, Ordering::SeqCst));
+        debug!(
+            "got serialized data from {src} {:x} -- {} bytes",
+            cmd.daddr,
+            ser_data.len()
+        );
     }
 
-    //#[tracing::instrument(skip_all)]
-    async fn get_cmd(&self, src: usize, cmd: CmdMsg) -> SerializedData {
+    #[tracing::instrument(skip_all, level = "debug")]
+    async fn get_cmd(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> SerializedData {
+        trace!("getting cmd from {}", src);
         let mut ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
-        let mut timer = std::time::Instant::now();
-        // let mut print = false;
+        let mut print = true;
+
         while ser_data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
+            if print {
+                debug!("msg_id: {msg_id} get cmd buf stuck waiting for alloc");
+                print = false;
+            }
             async_std::task::yield_now().await;
-            // println!("cq 848 need to alloc memory {:?}",cmd.dsize);
             self.send_alloc(cmd.dsize);
             ser_data = self.comm.new_serialized_data(cmd.dsize as usize);
-            // println!("cq 851 data {:?}",ser_data.is_ok());
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout && ser_data.is_err() {
-                println!(
-                    "get cmd stuck waiting for alloc {:?} {:?}",
-                    cmd.dsize,
-                    self.comm
-                        .rt_check_alloc(cmd.dsize, std::mem::align_of::<u8>())
-                );
-                self.comm.print_pools();
-                timer = std::time::Instant::now();
-            }
-            // print = true;
-            // ser_data = match ser_data{
-            //     Ok(ser_data) => {
-            //                         ser_data.print();
-            //                         Ok(ser_data)
-            //     },
-            //     Err(err) => Err(err),
-
-            // };
         }
-        let ser_data = ser_data.unwrap();
-        // if print{
-        // ser_data.print();
-        // }
-        self.get_serialized_data(src, cmd, &ser_data).await;
-        // println!(
-        //     "received data {:?}",
-        //     &ser_data.header_and_data_as_bytes()[0..10]
-        // );
+        let mut ser_data = ser_data.unwrap();
+        self.get_serialized_data(src, cmd, &mut ser_data, msg_id)
+            .await;
         self.recv_cnt.fetch_add(1, Ordering::SeqCst);
-        // println!("received: {:?} {:?} cmd: {:?} {:?}",cmd.dsize,ser_data.len(),cmd,&ser_data.header_and_data_as_bytes()[0..20]);
-        // SerializedData::RofiData(ser_data)
         ser_data
     }
 
-    //#[tracing::instrument(skip_all)]
-    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg) -> usize {
-        let mut data = self
-            .comm
-            .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
-        let mut timer = std::time::Instant::now();
-        while data.is_err() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
-            async_std::task::yield_now().await;
-            // println!("cq 871 need to alloc memory {:?}",cmd.dsize);
-            self.send_alloc(cmd.dsize);
-            data = self
-                .comm
-                .rt_alloc(cmd.dsize as usize, std::mem::align_of::<CmdMsg>());
-            // println!("cq 874 data {:?}",data.is_ok());
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
-                println!("get cmd buf stuck waiting for alloc");
-                timer = std::time::Instant::now();
-            }
-        }
-        // println!("getting into {:?} 0x{:x} ",data, data.unwrap() + self.comm.base_addr());
-        let data = data.unwrap();
-        let data_slice =
-            unsafe { std::slice::from_raw_parts_mut(data as *mut u8, cmd.dsize as usize) };
-        self.get_data(src, cmd, data_slice).await;
-        // println!("received cmd_buf {:?}", data_slice);
-        // println!(
-        //     "sending release to src: {:?} {:?} (s: {:?} r: {:?})",
-        //     src,
-        //     cmd.daddr,
-        //     self.sent_cnt.load(Ordering::SeqCst),
-        //     self.recv_cnt.load(Ordering::SeqCst)
-        // );
-        self.send_release(src, cmd);
+    // #[tracing::instrument(skip_all, level = "debug")]
+    async fn get_cmd_buf(&self, src: usize, cmd: CmdMsg, msg_id: usize) -> Vec<CmdMsg> {
+        // trace!("getting cmd buf from {}", src);
+        let data = self.get_data(src, cmd, msg_id).await;
         data
     }
 }
 
 impl Drop for InnerCQ {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        // println!("dropping InnerCQ");
-        let mut send_buf = self.send_buffer.lock();
-        let old = std::mem::take(&mut *send_buf);
-        let _ = Box::into_raw(old);
-        let mut recv_buf = self.recv_buffer.lock();
-        let old = std::mem::take(&mut *recv_buf);
-        let _ = Box::into_raw(old);
-        let mut free_buf = self.free_buffer.lock();
-        let old = std::mem::take(&mut *free_buf);
-        let _ = Box::into_raw(old);
-        let mut alloc_buffer = self.alloc_buffer.lock();
-        let old = std::mem::take(&mut *alloc_buffer);
-        let _ = Box::into_raw(old);
-        let mut panic_buffer = self.panic_buffer.lock();
-        let old = std::mem::take(&mut *panic_buffer);
-        let _ = Box::into_raw(old);
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
             Box::new(CmdMsg {
@@ -1183,95 +1286,91 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         self.cmd_buffers.clear();
-        // println!("dropped InnerCQ");
     }
 }
 
 pub(crate) struct CommandQueue {
     cq: Arc<InnerCQ>,
-    send_buffer_addr: usize,
-    recv_buffer_addr: usize,
-    free_buffer_addr: usize,
-    alloc_buffer_addr: usize,
-    panic_buffer_addr: usize,
-    release_cmd_addr: usize,
-    clear_cmd_addr: usize,
-    free_cmd_addr: usize,
-    cmd_buffers_addrs: Vec<Arc<Vec<usize>>>,
-    comm: Arc<Comm>,
+    _send_buffer: CommAlloc,
+    _recv_buffer: CommAlloc,
+    _alloc_buffer: CommAlloc,
+    _panic_buffer: CommAlloc,
+    _release_cmd: CommAlloc,
+    _clear_cmd: CommAlloc,
+    _free_cmd: CommAlloc,
+    _cmd_buffers: Vec<Arc<Vec<CommAlloc>>>,
+    _comm: Arc<Comm>,
+    scheduler: Arc<Scheduler>,
     active: Arc<AtomicU8>,
 }
 
 impl CommandQueue {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn new(
         comm: Arc<Comm>,
+        scheduler: Arc<Scheduler>,
         my_pe: usize,
         num_pes: usize,
         active: Arc<AtomicU8>,
     ) -> CommandQueue {
-        let send_buffer_addr = comm
+        let send_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        // + comm.base_addr();
-        // println!("send_buffer_addr{:x} {:x}",send_buffer_addr,send_buffer_addr-comm.base_addr());
-        let recv_buffer_addr = comm
+        debug!("send_buffer {:?}", send_buffer);
+        let recv_buffer = comm
             .rt_alloc(
                 num_pes * std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
             .unwrap();
-        // + comm.base_addr();
-        // println!("recv_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
-        let free_buffer_addr = comm
-            .rt_alloc(
-                num_pes * std::mem::size_of::<CmdMsg>(),
-                std::mem::align_of::<CmdMsg>(),
-            )
-            .unwrap();
-        // + comm.base_addr();
-        // println!("free_buffer_addr {:x} {:x}",recv_buffer_addr,recv_buffer_addr-comm.base_addr());
-        let alloc_buffer_addr = comm
-            .rt_alloc(
-                num_pes * std::mem::size_of::<CmdMsg>(),
-                std::mem::align_of::<CmdMsg>(),
-            )
-            .unwrap();
-        // println!("alloc_buffer_addr {:x}",alloc_buffer_addr);
-        let panic_buffer_addr = comm
-            .rt_alloc(
-                num_pes * std::mem::size_of::<CmdMsg>(),
-                std::mem::align_of::<CmdMsg>(),
-            )
-            .unwrap();
-        // println!("panic_buffer_addr {:x}",panic_buffer_addr);
-        let release_cmd_addr = comm
-            .rt_alloc(
-                std::mem::size_of::<CmdMsg>(),
-                std::mem::align_of::<CmdMsg>(),
-            )
-            .unwrap(); // + comm.base_addr();
-                       // println!("release_cmd_addr {:x}",release_cmd_addr-comm.base_addr());
+        debug!("recv_buffer {:?}", recv_buffer);
 
-        let clear_cmd_addr = comm
+        let alloc_buffer = comm
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap();
+        debug!("alloc_buffer {:?}", alloc_buffer);
+        let panic_buffer = comm
+            .rt_alloc(
+                num_pes * std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap();
+        debug!("panic_buffer {:?}", panic_buffer);
+        let release_cmd = comm
             .rt_alloc(
                 std::mem::size_of::<CmdMsg>(),
                 std::mem::align_of::<CmdMsg>(),
             )
-            .unwrap(); // + comm.base_addr();
-                       // println!("clear_cmd_addr {:x}",clear_cmd_addr-comm.base_addr());
-        let free_cmd_addr = comm
-            .rt_alloc(
-                std::mem::size_of::<CmdMsg>(),
-                std::mem::align_of::<CmdMsg>(),
-            )
-            .unwrap(); // + comm.base_addr();
-                       // println!("free_cmd_addr {:x}",free_cmd_addr-comm.base_addr());
+            .unwrap();
+        debug!(
+            "release_cmd {:?} {:?} {:?}",
+            release_cmd,
+            std::mem::size_of::<CmdMsg>(),
+            std::mem::align_of::<CmdMsg>()
+        );
 
-        let mut cmd_buffers_addrs = vec![];
+        let clear_cmd = comm
+            .rt_alloc(
+                std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap();
+        debug!("clear_cmd {:?}", clear_cmd);
+        let free_cmd = comm
+            .rt_alloc(
+                std::mem::size_of::<CmdMsg>(),
+                std::mem::align_of::<CmdMsg>(),
+            )
+            .unwrap();
+        debug!("free_cmd {:?}", free_cmd);
+
+        let mut cmd_buffers = vec![];
         for _pe in 0..num_pes {
             let mut addrs = vec![];
             for _i in 0..config().cmd_buf_cnt {
@@ -1280,134 +1379,236 @@ impl CommandQueue {
                         config().cmd_buf_len * std::mem::size_of::<CmdMsg>() + 1,
                         std::mem::align_of::<CmdMsg>(),
                     )
-                    .unwrap(); //+ comm.base_addr();
-                               // println!("{:x} {:x} {:x}",_pe,_i,addr,);
+                    .unwrap();
                 addrs.push(addr);
             }
-            cmd_buffers_addrs.push(Arc::new(addrs));
+            cmd_buffers.push(Arc::new(addrs));
         }
-        // let cmd_buffers_addrs=Arc::new(cmd_buffers_addrs);
+        trace!("cmd_buffers: {:?}", cmd_buffers);
+        // let cmd_buffers=Arc::new(cmd_buffers);
         let cq = InnerCQ::new(
-            send_buffer_addr,
-            recv_buffer_addr,
-            free_buffer_addr,
-            alloc_buffer_addr,
-            panic_buffer_addr,
-            &cmd_buffers_addrs.clone(),
-            release_cmd_addr,
-            clear_cmd_addr,
-            free_cmd_addr,
+            send_buffer.clone(),
+            recv_buffer.clone(),
+            alloc_buffer.clone(),
+            panic_buffer.clone(),
+            &cmd_buffers.clone(),
+            release_cmd.clone(),
+            clear_cmd.clone(),
+            free_cmd.clone(),
             comm.clone(),
+            scheduler.clone(),
             my_pe,
             num_pes,
             active.clone(),
         );
+        trace!("created InnerCQ");
         CommandQueue {
             cq: Arc::new(cq),
-            send_buffer_addr: send_buffer_addr,
-            recv_buffer_addr: recv_buffer_addr,
-            free_buffer_addr: free_buffer_addr,
-            alloc_buffer_addr: alloc_buffer_addr,
-            panic_buffer_addr: panic_buffer_addr,
-            release_cmd_addr: release_cmd_addr,
-            clear_cmd_addr: clear_cmd_addr,
-            free_cmd_addr: free_cmd_addr,
-            cmd_buffers_addrs: cmd_buffers_addrs,
-            comm: comm,
-            active: active,
+            _send_buffer: send_buffer,
+            _recv_buffer: recv_buffer,
+            _alloc_buffer: alloc_buffer,
+            _panic_buffer: panic_buffer,
+            _release_cmd: release_cmd,
+            _clear_cmd: clear_cmd,
+            _free_cmd: free_cmd,
+            _cmd_buffers: cmd_buffers,
+            _comm: comm,
+            scheduler,
+            active,
         }
     }
 
-    //#[tracing::instrument(skip_all)]
-    pub(crate) fn send_alloc(&self, min_size: usize) {
-        self.cq.send_alloc(min_size)
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) async fn send_alloc(&self, min_size: usize) {
+        self.cq.send_alloc(min_size); //.await;
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn send_panic(&self) {
-        self.cq.send_panic()
+        self.cq.send_panic();
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) async fn send_data(&self, data: SerializedData, dst: usize) {
-        match data {
-            #[cfg(feature = "rofi")]
-            SerializedData::RofiData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
-
-                // println!(
-                //     "[{:?}] send_data: {:?} {:?} {:?} {:?}",
-                //     std::thread::current().id(),
-                //     data.relative_addr,
-                //     data.len,
-                //     hash,
-                //     &data.header_and_data_as_bytes()[0..20]
-                // );
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}", data.header_and_data_as_bytes());
-
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            SerializedData::ShmemData(ref data) => {
-                // println!("sending: {:?} {:?}",data.relative_addr,data.len);
-                // let hash = calc_hash(data.relative_addr + self.comm.base_addr(), data.len);
-                let hash = calc_hash(data.relative_addr, data.len);
-
-                // println!("send_data: {:?} {:?} {:?}",data.relative_addr,data.len,hash);
-                data.increment_cnt(); //or we could implement something like an into_raw here...
-                                      // println!("sending data {:?}",data.header_and_data_as_bytes());
-                self.cq.send(data.relative_addr, data.len, dst, hash).await;
-            }
-            _ => {}
-        }
+        let hash = calc_hash(data.ser_data_bytes.usize_addr(), data.len());
+        // debug!(
+        //     "sending data: {:?} {:?} {} {:x} {:?}..{:?}",
+        //     data,
+        //     dst,
+        //     hash,
+        //     hash,
+        //     data.ser_data_bytes.as_slice().get(0..32),
+        //     data.ser_data_bytes
+        //         .as_slice()
+        //         .get(data.len().saturating_sub(32)..data.len())
+        // );
+        self.cq.send(data.ser_data_bytes.clone(), dst, hash).await;
+        data.leak_alloc()
+            .leak()
+            .expect("failed to leak alloc in send_data");
     }
 
-    //#[tracing::instrument(skip_all)]
-    pub(crate) async fn alloc_task(&self, scheduler: Arc<Scheduler>) {
-        while scheduler.active() && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8 {
-            self.cq.check_alloc();
+    pub(crate) fn wait_all_print(&self) {
+        println!("command queue");
+        println!(
+            "sends {:?}",
+            print_stats!(PE_SENDS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
+        println!(
+            "recvs {:?}",
+            print_stats!(PE_RECVS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
+        for pe in 0..self.cq.num_pes {
+            let mut sends = Vec::new();
+            stats!(
+                sends = PE_SENDS
+                    .iter()
+                    .map(|x| x[pe].load(Ordering::SeqCst))
+                    .collect::<Vec<_>>()
+            );
+            let mut recvs = Vec::new();
+            stats!(
+                recvs = PE_RECVS
+                    .iter()
+                    .map(|x| x[pe].load(Ordering::SeqCst))
+                    .collect::<Vec<_>>()
+            );
+            println!("PE {pe} sends: {:?} recvs: {:?}", sends, recvs);
+            let cmd_buffer = self.cq.cmd_buffers[pe].lock_blocking();
+            println!("cmd buffer for pe {pe}: {:?}", cmd_buffer);
+            // if !cmd_buffer.waiting_bufs.empty() {
+            println!("tx bufs: {:?}", cmd_buffer.tx_bufs);
+            for (addr, buf) in cmd_buffer.tx_bufs.iter() {
+                println!("tx buf: {:?} {:?}", addr, buf);
+                for cmd in buf.iter() {
+                    println!("tx cmd: {:?} {:?}", cmd, cmd.dsize);
+                    if cmd.dsize > 0 {
+                        println!(
+                            "active cmd: {:?} new calced hash: {:x} {:?} {:?}",
+                            cmd,
+                            calc_hash(cmd.daddr, cmd.dsize),
+                            unsafe {
+                                std::slice::from_raw_parts(
+                                    cmd.daddr as *const u8,
+                                    std::cmp::min(32, cmd.dsize),
+                                )
+                            },
+                            unsafe {
+                                std::slice::from_raw_parts(
+                                    (cmd.daddr + cmd.dsize.saturating_sub(32)) as *const u8,
+                                    std::cmp::min(32, cmd.dsize),
+                                )
+                            },
+                        );
+                    }
+                }
+            }
+            for (_, buf) in cmd_buffer.waiting_bufs.iter() {
+                // println!("waiting buf: {:?}", buf);
+                for cmd in buf.iter() {
+                    if cmd.dsize > 0 {
+                        debug!(
+                            "waiting cmd: {:?} new calced hash: {:x}",
+                            cmd,
+                            calc_hash(cmd.daddr, cmd.dsize)
+                        );
+                    }
+                }
+            }
+            // }
+            let send_buffer = self.cq.send_buffer[pe].lock_blocking();
+            let recv_buffer = self.cq.recv_buffer[pe].read_blocking();
+            println!(
+                "recv_buffer outer ptr for pe {pe}: {:?}",
+                &*recv_buffer as *const CommSlice<CmdMsg>
+            );
+            println!(
+                "send_buffer outer ptr for pe {pe}: {:?}",
+                &*send_buffer as *const CommSlice<CmdMsg>
+            );
+            println!(
+                "recv_buffer ptr for pe {pe}: {:x}",
+                recv_buffer.usize_addr()
+            );
+            println!(
+                "send_buffer ptr for pe {pe}: {:x}",
+                send_buffer.usize_addr()
+            );
+            println!("recv buffer: {:?}", recv_buffer[0]);
+            println!("send buffer: {:?}", send_buffer[0]);
+        }
+        panic!("finished command queue wait_all_print");
+    }
+
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) async fn alloc_task(&self) {
+        let mut timer = std::time::Instant::now();
+        let mut print = false;
+        while self.scheduler.active()
+            && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
+        {
+            if timer.elapsed().as_secs_f64() > 1.0 {
+                trace!("alloc_task still running");
+                timer = std::time::Instant::now();
+                print = true;
+            }
+            self.cq.check_alloc(print);
+            print = false;
             async_std::task::yield_now().await;
         }
-        // println!("leaving alloc_task task {:?}", scheduler.active());
-        // println!("sechduler_new: {:?}", Arc::strong_count(&scheduler));
     }
 
-    //#[tracing::instrument(skip_all)]
-    pub(crate) async fn panic_task(&self, scheduler: Arc<Scheduler>) {
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) async fn panic_task(&self) {
         let mut panic = false;
-        while scheduler.active() && !panic {
+        while self.scheduler.active() && !panic {
             panic = self.cq.check_panic();
             async_std::task::yield_now().await;
         }
 
         if panic {
-            println!("received panic from other PE");
+            warn!("received panic from other PE");
             // scheduler.force_shutdown();
             panic!("received panic from other PE");
         }
-        // println!("leaving panic_task task {:?}", scheduler.active());
-        // println!("sechduler_new: {:?}", Arc::strong_count(&scheduler));
     }
 
-    //#[tracing::instrument(skip_all)]
-    pub(crate) async fn recv_data(&self, scheduler: Arc<Scheduler>, lamellae: Arc<Lamellae>) {
-        let num_pes = lamellae.num_pes();
-        let my_pe = lamellae.my_pe();
-        // let mut timer= std::time::Instant::now();
+    #[tracing::instrument(skip_all, level = "debug")]
+    pub(crate) async fn recv_data(&self, lamellae: Arc<Lamellae>) {
+        let comm = lamellae.comm();
+        let num_pes = comm.num_pes();
+        let my_pe = comm.my_pe();
+        let mut timer = std::time::Instant::now();
         while self.active.load(Ordering::SeqCst) == CmdQStatus::Active as u8
-            || !self.cq.empty()
-            || scheduler.active()
+            || !self.cq.empty().await
+            || self.scheduler.active()
         {
-            // CNTS.get_or(|| AtomicUsize::new(0))
-            //     .fetch_add(1, Ordering::Relaxed);
+            if timer.elapsed().as_secs_f64() > 5.0 {
+                trace!(
+                    "recv_data still running -- cq empty? {:?}  scheduler active? {:?}",
+                    self.cq.empty().await,
+                    self.scheduler.active()
+                );
+                timer = std::time::Instant::now();
+            }
             for src in 0..num_pes {
                 if src != my_pe {
                     if let Some(cmd_buf_cmd) = self.cq.ready(src) {
                         // timer =  std::time::Instant::now();
                         let cmd_buf_cmd = cmd_buf_cmd;
-                        // println!("recv_data {:?}", cmd_buf_cmd);
+                        trace!("recv_data {:?}", cmd_buf_cmd);
                         match cmd_buf_cmd.cmd {
                             Cmd::Alloc => panic!("should not encounter alloc here"),
                             Cmd::Panic => panic!("should not encounter panic here"),
@@ -1415,66 +1616,45 @@ impl CommandQueue {
                                 panic!("should not be possible to see cmd clear or release here")
                             }
                             Cmd::Free => panic!("should not be possible to see free here"),
-                            // self.cq.free_data(src,cmd_buf_cmd.daddr as usize),
-                            Cmd::Print => self.cq.print_data(src, cmd_buf_cmd),
                             Cmd::Tx => {
+                                trace!("got tx");
                                 let cq = self.cq.clone();
                                 let lamellae = lamellae.clone();
-                                let scheduler1 = scheduler.clone();
-                                let comm = self.comm.clone();
+                                let scheduler1 = self.scheduler.clone();
                                 let task = async move {
-                                    // println!(
-                                    //     "going to get cmd_buf {:?} from {:?}",
-                                    //     cmd_buf_cmd, src
-                                    // );
-                                    let data = cq.get_cmd_buf(src, cmd_buf_cmd).await;
-                                    let cmd_buf = unsafe {
-                                        std::slice::from_raw_parts(
-                                            data as *const CmdMsg,
-                                            cmd_buf_cmd.dsize as usize
-                                                / std::mem::size_of::<CmdMsg>(),
-                                        )
-                                    };
-                                    // println!("cmd_buf {:?}", cmd_buf);
+                                    trace!("going to get cmd_buf {:?} from {:?}", cmd_buf_cmd, src);
+                                    let msg_id = MSG_ID.fetch_add(1, Ordering::SeqCst);
+                                    let data = cq.get_cmd_buf(src, cmd_buf_cmd, msg_id).await;
                                     let mut i = 0;
-                                    let len = cmd_buf.len();
-                                    let cmd_cnt = Arc::new(AtomicUsize::new(len));
-                                    // println!("src: {:?} cmd_buf len {:?}", src, len);
+                                    let len = data.len();
+                                    let cmd_cnt: Arc<AtomicUsize> = Arc::new(AtomicUsize::new(len));
 
-                                    for cmd in cmd_buf {
-                                        let cmd = *cmd;
+                                    trace!("src: {:?} cmd_buf len {:?} msg_id: {msg_id}", src, len);
+                                    // let scheduler2 = scheduler1.clone();
+                                    // let task = async move {
+                                    for cmd in data.into_iter() {
                                         if cmd.dsize != 0 {
                                             let cq = cq.clone();
                                             let lamellae = lamellae.clone();
                                             let scheduler2 = scheduler1.clone();
-                                            // cmd_cnt.fetch_add(1,Ordering::SeqCst);
                                             let cmd_cnt_clone = cmd_cnt.clone();
                                             let task = async move {
-                                                // println!(
-                                                //     "getting cmd {:?} [{:?}/{:?}]",
-                                                //     cmd, i, len
-                                                // );
-                                                let work_data = cq.get_cmd(src, cmd).await;
-
-                                                // println!(
-                                                //     "[{:?}] recv_data submitting work",
-                                                //     std::thread::current().id(),
-                                                // );
+                                                let work_data = cq.get_cmd(src, cmd, msg_id).await;
+                                                debug!("msg_id: {msg_id} submitting remote am for cmd {:?} [{:?}/{:?}] from {src}", cmd, i, len);
                                                 scheduler2
                                                     .submit_remote_am(work_data, lamellae.clone());
                                                 if cmd_cnt_clone.fetch_sub(1, Ordering::SeqCst) == 1
                                                 {
+                                                    //     debug!(
+                                                    //         "done with all cmds for msg_id: {msg_id}"
+                                                    //     );
                                                     cq.send_free(src, cmd_buf_cmd);
-                                                    // println!(
-                                                    //     "sending clear cmd {:?} [{:?}/{:?}]",
-                                                    //     cmd_buf_cmd.daddr, i, len
-                                                    // );
                                                 }
                                             };
-                                            // println!(
-                                            //     "[{:?}] recv_data submitting get command task",
-                                            //     std::thread::current().id(),
-                                            // );
+                                            trace!(
+                                                "[{:?}] recv_data submitting get command task",
+                                                std::thread::current().id(),
+                                            );
                                             scheduler1.submit_io_task(task);
                                             i += 1;
                                         } else {
@@ -1484,81 +1664,60 @@ impl CommandQueue {
                                             );
                                         }
                                     }
-                                    // comm.rt_free(data - comm.base_addr());
-                                    comm.rt_free(data);
+                                    // debug!("done with all cmds for msg_id: {msg_id}");
+                                    // cq.send_free(src, cmd_buf_cmd);
+                                    // };
+                                    // scheduler1.submit_io_task(task);
                                 };
-                                // println!(
-                                //     "[{:?}] recv_data submitting tx task",
-                                //     std::thread::current().id()
-                                // );
-                                scheduler.submit_io_task(task);
+                                self.scheduler.submit_io_task(task);
                             }
                         }
                     }
                     self.cq.check_transfers(src);
-                    // self.cq.check_buffers(src);//process any finished buffers
                 }
             }
-            // if timer.elapsed().as_secs_f64() > 30.0{
-            //     println!("waiting for requests");
-            //     self.cq.print_recv_buffers();
-            //     timer = std::time::Instant::now();
-            // }
-            // self.comm.process_dropped_reqs();
-            // if active.load(Ordering::SeqCst) != 1 {
-            //     println!(
-            //         "command queue sched active? {:?}  {:?}",
-            //         scheduler.active(),
-            //         self.cq.empty()
-            //     );
-            // }
-            lamellae.flush();
+
+            comm.thread_flush();
             async_std::task::yield_now().await;
         }
-        // println!(
-        //     "[{:?}] leaving recv_data task {:?}",
-        //     std::thread::current().id(),
-        //     scheduler.active()
-        // );
         self.active
             .store(CmdQStatus::Finished as u8, Ordering::SeqCst);
-        // println!("recv_data thread shutting down");
-        // for cnt in CNTS.iter() {
-        //     print!("{:?} ", cnt.load(Ordering::Relaxed));
-        // }
-        // println!("");
-        // println!("sechduler_new: {:?}", Arc::strong_count(&scheduler));
     }
 
-    //#[tracing::instrument(skip_all)]
-    pub(crate) fn tx_amount(&self) -> usize {
-        // println!("cq put: {:?} get {:?}",self.cq.put_amt.load(Ordering::SeqCst) ,self.cq.get_amt.load(Ordering::SeqCst));
-        self.cq.put_amt.load(Ordering::SeqCst) + self.cq.get_amt.load(Ordering::SeqCst)
-    }
+    // #[tracing::instrument(skip_all, level = "debug")]
+    // pub(crate) fn tx_amount(&self) -> usize {
+    //     // println!("cq put: {:?} get {:?}",self.cq.put_amt.load(Ordering::SeqCst) ,self.cq.get_amt.load(Ordering::SeqCst));
+    //     self.cq.put_amt.load(Ordering::SeqCst) + self.cq.get_amt.load(Ordering::SeqCst)
+    // }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn mem_per_pe() -> usize {
         (config().cmd_buf_len * config().cmd_buf_cnt + 4) * std::mem::size_of::<CmdMsg>()
     }
 }
 
 impl Drop for CommandQueue {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        // println!("dropping rofi command queue");
-        self.comm.rt_free(self.send_buffer_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.recv_buffer_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.free_buffer_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.alloc_buffer_addr);
-        self.comm.rt_free(self.panic_buffer_addr);
-        self.comm.rt_free(self.release_cmd_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.clear_cmd_addr); // - self.comm.base_addr());
-        self.comm.rt_free(self.free_cmd_addr); // - self.comm.base_addr());
-        for bufs in self.cmd_buffers_addrs.iter() {
-            for buf in bufs.iter() {
-                self.comm.rt_free(*buf);
-            }
-        }
-        // println!("rofi command queue dropped");
+        debug!(
+            "sends {:?}",
+            print_stats!(PE_SENDS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
+        debug!(
+            "recvs {:?}",
+            print_stats!(PE_RECVS
+                .iter()
+                .map(|x| x
+                    .iter()
+                    .map(|y| y.load(Ordering::SeqCst))
+                    .collect::<Vec<_>>())
+                .collect::<Vec<_>>())
+        );
     }
 }

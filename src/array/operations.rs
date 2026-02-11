@@ -4,6 +4,7 @@ use crate::array::generic_atomic::*;
 use crate::array::global_lock_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
+use crate::array::NetworkAtomicLocalData;
 use crate::array::{AmDist, Dist, LamellarEnv, LamellarWriteArray};
 use crate::config;
 
@@ -17,7 +18,7 @@ pub use handle::*;
 //     ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
 // };
 pub(crate) mod access;
-pub use access::{AccessOps, LocalAtomicOps, UnsafeAccessOps};
+pub use access::{AccessOps, LocalAccessOps, UnsafeAccessOps};
 pub(crate) mod arithmetic;
 pub use arithmetic::{
     ArithmeticOps, ElementArithmeticOps, LocalArithmeticOps, UnsafeArithmeticOps,
@@ -27,10 +28,11 @@ pub use bitwise::{BitWiseOps, ElementBitWiseOps, LocalBitWiseOps, UnsafeBitWiseO
 pub(crate) mod compare_exchange;
 pub use compare_exchange::{
     CompareExchangeEpsilonOps, CompareExchangeOps, ElementCompareEqOps, ElementComparePartialEqOps,
-    UnsafeCompareExchangeEpsilonOps, UnsafeCompareExchangeOps,
+    LocalCompareExchangeOps, LocalCompareExchangeOpsEpsilon, UnsafeCompareExchangeEpsilonOps,
+    UnsafeCompareExchangeOps,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyOps, UnsafeReadOnlyOps};
+pub use read_only::{LocalReadOnlyOps, ReadOnlyOps, UnsafeReadOnlyOps};
 pub(crate) mod shift;
 pub use shift::{ElementShiftOps, LocalShiftOps, ShiftOps, UnsafeShiftOps};
 
@@ -211,20 +213,74 @@ impl<T: Dist> From<ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
 }
 
 #[doc(hidden)]
-#[repr(C)] //required as we reinterpret as bytes
+#[repr(C, packed)] //required as we reinterpret as bytes
 #[lamellar_impl::AmLocalDataRT]
 pub struct IdxVal<I, T> {
     pub index: I,
     pub val: T,
 }
 
-impl<I, T> IdxVal<I, T> {
+impl<I, T: Dist> IdxVal<I, T> {
     pub fn as_bytes(&self) -> &[u8] {
         unsafe {
             std::slice::from_raw_parts(
                 self as *const Self as *const u8,
                 std::mem::size_of::<Self>(),
             )
+        }
+    }
+
+    pub fn bytes_len() -> usize {
+        std::mem::size_of::<Self>()
+    }
+
+    pub fn iter_from_bytes<'a>(
+        index_size: usize,
+        bytes: &'a [u8],
+    ) -> impl Iterator<Item = (usize, T)> + 'a {
+        unsafe {
+            match index_size {
+                1 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u8, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u8, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                2 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u16, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u16, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                4 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u32, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u32, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                8 => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<u64, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<u64, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+                _ => Box::new(
+                    std::slice::from_raw_parts(
+                        bytes.as_ptr() as *const IdxVal<usize, T>,
+                        bytes.len() / std::mem::size_of::<IdxVal<usize, T>>(),
+                    )
+                    .iter()
+                    .map(|idx_val| (idx_val.index as usize, idx_val.val)),
+                ) as Box<dyn Iterator<Item = (usize, T)>>,
+            }
         }
     }
 }
@@ -239,6 +295,7 @@ pub enum OpInputEnum<'a, T: Dist> {
     GenericAtomicLocalData(GenericAtomicLocalData<T>),
     LocalLockLocalData(LocalLockLocalData<T>),
     GlobalLockLocalData(GlobalLockLocalData<T>),
+    NetworkAtomicLocalData(NetworkAtomicLocalData<T>),
     // Iter(Box<dyn Iterator<Item = T> + 'a>),
 
     // while it would be convienient to directly use the following, doing so
@@ -283,6 +340,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::GenericAtomicLocalData(a) => a.len(),
             OpInputEnum::LocalLockLocalData(a) => a.len(),
             OpInputEnum::GlobalLockLocalData(a) => a.len(),
+            OpInputEnum::NetworkAtomicLocalData(a) => a.len(),
             // OpInputEnum::MemoryRegion(mr) => {
             //     unsafe { mr.as_slice() }.expect("memregion not local").len()
             // }
@@ -292,7 +350,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
         }
     }
 
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn first(&self) -> T {
         match self {
             OpInputEnum::Val(v) => *v,
@@ -302,6 +360,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::GenericAtomicLocalData(a) => a.at(0).load(),
             OpInputEnum::LocalLockLocalData(a) => *a.first().expect("array is empty"),
             OpInputEnum::GlobalLockLocalData(a) => *a.first().expect("array is empty"),
+            OpInputEnum::NetworkAtomicLocalData(a) => a.at(0).load(),
             // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
             //     .expect("memregion not local")
             //     .first()
@@ -309,7 +368,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
         }
     }
 
-    // //#[tracing::instrument(skip_all)]
+    // #[tracing::instrument(skip_all, level = "debug")]
     pub(crate) fn into_vec_chunks(self, chunk_size: usize) -> Vec<Vec<T>> {
         match self {
             OpInputEnum::Val(v) => vec![vec![v]],
@@ -354,6 +413,23 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             }
             OpInputEnum::GlobalLockLocalData(a) => {
                 a.chunks(chunk_size).map(|chunk| chunk.to_vec()).collect()
+            }
+            OpInputEnum::NetworkAtomicLocalData(a) => {
+                let mut data = Vec::with_capacity(chunk_size);
+
+                a.iter()
+                    .enumerate()
+                    .filter_map(move |(i, elem)| {
+                        data.push(elem.load());
+                        if data.len() == chunk_size || i == a.len() - 1 {
+                            let mut new_data = Vec::with_capacity(chunk_size);
+                            std::mem::swap(&mut data, &mut new_data);
+                            Some(new_data)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
             } // OpInputEnum::MemoryRegion(mr) => *unsafe { mr.as_slice() }
               //     .expect("memregion not local")
               //     .first()
@@ -370,6 +446,7 @@ impl<'a, T: Dist> OpInputEnum<'a, T> {
             OpInputEnum::GenericAtomicLocalData(a) => a.iter().map(|elem| elem.load()).collect(),
             OpInputEnum::LocalLockLocalData(a) => a.to_vec(),
             OpInputEnum::GlobalLockLocalData(a) => a.to_vec(),
+            OpInputEnum::NetworkAtomicLocalData(a) => a.iter().map(|elem| elem.load()).collect(),
         }
     }
 }
@@ -451,7 +528,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &T {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a [T] {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("slice as op input");
         let len = self.len();
@@ -507,7 +584,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut (dyn Iterator<Item = T> + 'a) {
 // }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("slice as mut op input");
         let len = self.len();
@@ -542,7 +619,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut [T] {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec ref as op input");
         (&self[..]).as_op_input()
@@ -550,7 +627,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a Vec<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec ref mut as op input");
         (&self[..]).as_op_input()
@@ -558,7 +635,7 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a mut Vec<T> {
 }
 
 impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // println!("vec as op input");
         let len = self.len();
@@ -585,7 +662,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = unsafe { self.as_slice() }.expect("mem region not local");
 //         let len = slice.len();
@@ -609,14 +686,14 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // // impl<'a, T: Dist> OpInput<'a, T> for &OneSidedMemoryRegion<T> {
-// //     //#[tracing::instrument(skip_all)]
+// //     #[tracing::instrument(skip_all, level = "debug")]
 // //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 // //         LamellarMemoryRegion::from(self).as_op_input()
 // //     }
 // // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for OneSidedMemoryRegion<T> {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         // LamellarMemoryRegion::from(self).as_op_input()
 //         (&self).as_op_input()
@@ -624,21 +701,21 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &SharedMemoryRegion<T> {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         LamellarMemoryRegion::from(self).as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for SharedMemoryRegion<T> {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         LamellarMemoryRegion::from(self).as_op_input()
 //     }
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &'a UnsafeArray<T> {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = unsafe { self.local_as_slice() };
 //         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -653,7 +730,7 @@ impl<'a, T: Dist> OpInput<'a, T> for Vec<T> {
 // }
 
 // impl<'a, T: Dist> OpInput<'a, T> for &'a ReadOnlyArray<T> {
-//     //#[tracing::instrument(skip_all)]
+//     #[tracing::instrument(skip_all, level = "debug")]
 //     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
 //         let slice = self.local_as_slice();
 //         // let slice = unsafe { std::mem::transmute::<&'_ [T], &'a [T]>(slice) }; //this is safe in the context of buffered_ops because we know we wait for all the requests to submit before we return
@@ -754,21 +831,23 @@ impl<'a, T: Dist> OpInput<'a, T> for &'a GlobalLockLocalData<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &AtomicLocalData<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array.clone() {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
             AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::NetworkAtomicArray(a) => a.local_data().as_op_input(),
         }
     }
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         match self.array {
             AtomicArray::GenericAtomicArray(a) => a.local_data().as_op_input(),
             AtomicArray::NativeAtomicArray(a) => a.local_data().as_op_input(),
+            AtomicArray::NetworkAtomicArray(a) => a.local_data().as_op_input(),
         }
     }
 }
@@ -780,7 +859,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
 // }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
 
@@ -824,7 +903,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
         // let len = slice.len();
@@ -867,6 +946,55 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
 }
 
 impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        (&self).as_op_input()
+    }
+}
+
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NetworkAtomicLocalData<T> {
+    #[tracing::instrument(skip_all, level = "debug")]
+    fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
+        // let slice = unsafe { self.__local_as_slice() };
+        // let len = slice.len();
+        // let local_data = self.local_data();
+        let local_data = self.clone();
+        let len = local_data.len();
+        let mut iters = vec![];
+        if len == 0 {
+            return (iters, len);
+        }
+        let my_pe = self.array.my_pe();
+        if let Some(_start_index) = self.array.array.inner.start_index_for_pe(my_pe) {
+            let num = if len < 1000 {
+                1
+            } else {
+                match config().batch_op_threads {
+                    Some(n) => n,
+                    None => std::cmp::max(1, config().threads / 4),
+                }
+            };
+            let num_per_batch = len / num;
+            // println!("num: {} len {:?} npb {:?}", num, len, num_per_batch);
+            for i in 0..num {
+                // let sub_array = self.sub_array((start_index+(i*num_per_batch))..(start_index+((i+1)*num_per_batch)));
+                let sub_data = local_data.sub_data(i * num_per_batch, (i + 1) * num_per_batch);
+                // for j in sub_data.clone().into_iter() {
+                //     println!("{:?} {:?}",i, j);
+                // }
+                iters.push(OpInputEnum::NetworkAtomicLocalData(sub_data));
+            }
+            let rem = len % num_per_batch;
+            if rem > 0 {
+                // let sub_array = self.sub_array((start_index+(num*num_per_batch))..(start_index+(num*num_per_batch) + rem));
+                let sub_data = local_data.sub_data(num * num_per_batch, len);
+                iters.push(OpInputEnum::NetworkAtomicLocalData(sub_data));
+            }
+        }
+        (iters, len)
+    }
+}
+
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NetworkAtomicLocalData<T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }

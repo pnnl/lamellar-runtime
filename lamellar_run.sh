@@ -1,11 +1,22 @@
 #!/bin/bash
+
+#caputure ctrl-c
+trap ctrl_c INT
+
+ctrl_c() {
+  echo "ctrl-c detected, cleaning up"
+  pkill -9 -P $$ #kill all child processes
+  rm -rf /dev/shm/lamellar_*  2> /dev/null
+  exit
+}
+
 rm -rf /dev/shm/lamellar_*  2> /dev/null #cleanup incase any previous run failed unexpectedly
 
 # mkdir -p output
 
 NUMPES=1
-# NPROC=`nproc --all`
-NPROC=16
+NPROC=`nproc --all`
+# NPROC=16
 
 for i in "$@"; do
   case $i in
@@ -34,7 +45,9 @@ for pe in $(seq 0 $ENDPE); do
     echo "more threads ${E_CORE} than cores ${NPROC} "
     exit
   fi
-  LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  $bin  "${@:2}" & 
+  # LAMELLAR_BACKEND="libfab" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) srun -N ${NUMPES} --output=%t_out.txt $bin  "${@:2}" 
+  LD_LIBRARY_PATH=/people/frie869/pmix/lib RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((1*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  taskset -c $S_CORE-$((E_CORE-1)) $bin  "${@:2}"  >& ./outputs/lamellar_${pe}.out &
+  # LD_LIBRARY_PATH=/people/frie869/pmix/lib RUST_BACKTRACE=full LAMELLAR_BACKEND="shmem" LAMELLAR_MEM_SIZE=$((4*1024*1024*1024)) LAMELLAR_THREADS=$((THREADS)) LAMELLAR_NUM_PES=$NUMPES LAMELLAR_PE_ID=$pe LAMELLAR_JOB_ID=$JOBID  taskset -c $S_CORE-$((E_CORE-1)) gdb --ex run --ex "thread apply all where"  --ex quit --args $bin  "${@:2}" >&  ./outputs/lamellar_${pe}.out& 
   S_CORE=$(($E_CORE ))
   E_CORE=$(($S_CORE + $THREADS))
 done

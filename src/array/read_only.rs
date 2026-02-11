@@ -10,6 +10,7 @@ mod rdma;
 use crate::array::private::ArrayExecAm;
 use crate::array::*;
 use crate::barrier::BarrierHandle;
+use crate::darc::Darc;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
@@ -33,6 +34,9 @@ impl ReadOnlyByteArray {
         ReadOnlyByteArrayWeak {
             array: UnsafeByteArray::downgrade(&array.array),
         }
+    }
+    pub fn local_data<T: Dist>(&self) -> &[T] {
+        self.array.local_data()
     }
 }
 
@@ -623,7 +627,7 @@ impl<T: Dist + AmDist + ElementComparePartialEqOps + 'static> ReadOnlyArray<T> {
 }
 
 impl<T: Dist> private::ArrayExecAm<T> for ReadOnlyArray<T> {
-    fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    fn team_rt(&self) -> Darc<LamellarTeamRT> {
         self.array.team_rt()
     }
     fn team_counters(&self) -> Arc<AMCounters> {
@@ -710,7 +714,7 @@ impl<T: Dist> ActiveMessaging for ReadOnlyArray<T> {
 }
 
 impl<T: Dist> LamellarArray<T> for ReadOnlyArray<T> {
-    // fn team_rt(&self) -> Pin<Arc<LamellarTeamRT>> {
+    // fn team_rt(&self) -> Darc<LamellarTeamRT> {
     //     self.array.team_rt()
     // }
     // fn my_pe(&self) -> usize {

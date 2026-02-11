@@ -1,13 +1,12 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
-use crate::lamellae::AllocationType;
+use crate::lamellae::{AllocationType, LamellaeUtil, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
 // use crate::active_messaging::AmDist;
 use core::marker::PhantomData;
 // use serde::ser::Serialize;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use std::ops::Bound;
@@ -39,14 +38,14 @@ use std::ops::Bound;
 /// let world_mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
 /// ```
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub struct SharedMemoryRegion<T: Dist> {
+pub struct SharedMemoryRegion<T: Remote> {
     pub(crate) mr: Darc<MemoryRegion<u8>>,
     sub_region_offset: usize,
     sub_region_size: usize,
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist> LamellarEnv for SharedMemoryRegion<T> {
+impl<T: Remote> LamellarEnv for SharedMemoryRegion<T> {
     fn my_pe(&self) -> usize {
         self.mr.team().my_pe()
     }
@@ -64,30 +63,17 @@ impl<T: Dist> LamellarEnv for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
+impl<T: Remote> crate::active_messaging::DarcSerde for SharedMemoryRegion<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
-        // println!("in shared ser");
         self.mr.serialize_update_cnts(num_pes);
         darcs.push(RemotePtr::NetworkDarc(self.mr.clone().into()));
     }
-    fn des(&self, cur_pe: Result<usize, crate::IdError>) {
-        // println!("in shared des");
-        match cur_pe {
-            Ok(_) => {
-                self.mr.deserialize_update_cnts();
-            }
-            Err(err) => {
-                panic!("can only access darcs within team members ({:?})", err);
-            }
-        }
-        // self.mr.print();
-    }
 }
 
-impl<T: Dist> SharedMemoryRegion<T> {
+impl<T: Remote> SharedMemoryRegion<T> {
     // pub(crate) fn new(
     //     size: usize,
-    //     team: Pin<Arc<LamellarTeamRT>>,
+    //     team: Darc<LamellarTeamRT>,
     //     alloc: AllocationType,
     // ) -> SharedMemoryRegionHandle<T> {
     //     SharedMemoryRegion::try_new(size, team, alloc).expect("Out of memory")
@@ -95,7 +81,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
 
     pub(crate) fn new(
         size: usize,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> SharedMemoryRegionHandle<T> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
@@ -105,12 +91,25 @@ impl<T: Dist> SharedMemoryRegion<T> {
             launched: false,
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
-                let mut mr_t =
-                    MemoryRegion::<T>::try_new(size, team.lamellae.clone(), alloc.clone());
+                let mut mr_t = MemoryRegion::<T>::try_new(
+                    size,
+                    &team.scheduler,
+                    team.counters(),
+                    &team.lamellae,
+                    alloc.clone(),
+                );
                 while let Err(_e) = mr_t {
                     async_std::task::yield_now().await;
-                    team.lamellae.alloc_pool(size * std::mem::size_of::<T>());
-                    mr_t = MemoryRegion::try_new(size, team.lamellae.clone(), alloc.clone());
+                    team.lamellae
+                        .request_new_alloc(size * std::mem::size_of::<T>())
+                        .await;
+                    mr_t = MemoryRegion::try_new(
+                        size,
+                        &team.scheduler,
+                        team.counters(),
+                        &team.lamellae,
+                        alloc.clone(),
+                    );
                 }
 
                 let mr = unsafe {
@@ -136,7 +135,7 @@ impl<T: Dist> SharedMemoryRegion<T> {
 
     pub(crate) fn try_new(
         size: usize,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         alloc: AllocationType,
     ) -> FallibleSharedMemoryRegionHandle<T> {
         // println!("creating new shared mem region {:?} {:?}",size,alloc);
@@ -146,8 +145,13 @@ impl<T: Dist> SharedMemoryRegion<T> {
             launched: false,
             creation_future: Box::pin(async move {
                 team.async_barrier().await;
-                let mr_t: MemoryRegion<T> =
-                    MemoryRegion::try_new(size, team.lamellae.clone(), alloc)?;
+                let mr_t: MemoryRegion<T> = MemoryRegion::try_new(
+                    size,
+                    &team.scheduler,
+                    team.counters(),
+                    &team.lamellae,
+                    alloc,
+                )?;
                 let mr = unsafe { mr_t.to_base::<u8>() };
                 let res: Result<SharedMemoryRegion<T>, anyhow::Error> = Ok(SharedMemoryRegion {
                     mr: Darc::async_try_new_with_drop(
@@ -166,10 +170,237 @@ impl<T: Dist> SharedMemoryRegion<T> {
             }),
         }
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
+    /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_slice(&self) -> &[T] {
+        RegisteredMemoryRegion::as_slice(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a mutable slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
+    /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_mut_slice(&self) -> &mut [T] {
+        RegisteredMemoryRegion::as_mut_slice(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
+    /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_ptr(&self) -> MemResult<*const T> {
+        RegisteredMemoryRegion::as_ptr(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a mutable ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(1000).block();
+    /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        RegisteredMemoryRegion::as_mut_ptr(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Create a sub region of this RegisteredMemoryRegion using the provided range
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Panics
+    /// panics if the end range is larger than the length of the memory region
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: SharedMemoryRegion<usize> = world.alloc_shared_mem_region(100).block();
+    ///
+    /// let sub_region = mem_region.sub_region(30..70);
+    ///```
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
+        SubRegion::sub_region(self, range)
+    }
+
+    /// Return the length of the memory region
+    pub fn len(&self) -> usize {
+        self.sub_region_size
+    }
+
+    pub unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put(self, pe, index, data)
+    }
+
+    pub unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_unmanaged(self, pe, index, data)
+    }
+
+    pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put_buffer(self, pe, index, data.into())
+    }
+
+    pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: U,
+    ) {
+        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self, pe, index, data.into())
+    }
+
+    pub unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put_all(self, index, data)
+    }
+    pub unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_all_unmanaged(self, index, data)
+    }
+    pub unsafe fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put_all_buffer(self, index, data.into())
+    }
+    pub unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) {
+        RTMemoryRegionRDMA::<T>::put_all_buffer_unmanaged(self, index, data.into());
+    }
+
+    pub unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
+        RTMemoryRegionRDMA::<T>::get(self, pe, index)
+    }
+    pub unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
+        RTMemoryRegionRDMA::<T>::get_buffer(self, pe, index, len)
+    }
+    pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        RTMemoryRegionRDMA::<T>::get_into_buffer(self, pe, index, data)
+    }
+    pub unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        RTMemoryRegionRDMA::<T>::get_into_buffer_unmanaged(self, pe, index, data);
+    }
+
+    pub unsafe fn atomic_store(&self, pe: usize, index: usize, val: T) -> AtomicOpHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .atomic_op(pe, self.sub_region_offset + index, AtomicOp::Write(val))
+    }
+    pub unsafe fn atomic_store_unmanaged(&self, pe: usize, index: usize, val: T) {
+        //we need to do the offsetting here since we are going directly through the inner alloc
+
+        self.mr.as_base::<T>().atomic_op_unmanaged(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(val),
+        );
+    }
+    pub unsafe fn atomic_load(&self, pe: usize, index: usize) -> AtomicFetchOpHandle<T> {
+        // let res = MaybeUninit::uninit().assume_init();
+        self.mr
+            .as_base::<T>()
+            .atomic_fetch_op(pe, self.sub_region_offset + index, AtomicOp::Read)
+    }
+    pub unsafe fn atomic_swap(&self, pe: usize, index: usize, val: T) -> AtomicFetchOpHandle<T> {
+        // let res = MaybeUninit::uninit().assume_init();
+        self.mr.as_base::<T>().atomic_fetch_op(
+            pe,
+            self.sub_region_offset + index,
+            AtomicOp::Write(val),
+        )
+    }
+    pub fn wait_all(&self) {
+        self.mr.wait_all();
+    }
 }
 
 // This could be useful for if we want to transfer the actual data instead of the pointer
-// impl<T: Dist + serde::Serialize> SharedMemoryRegion<T> {
+// impl<T: Remote + serde::Serialize> SharedMemoryRegion<T> {
 //     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
 //     where
 //         S: serde::Serializer,
@@ -179,59 +410,44 @@ impl<T: Dist> SharedMemoryRegion<T> {
 // }
 
 //account for subregion stuff
-impl<T: Dist> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
+impl<T: Remote> RegisteredMemoryRegion<T> for SharedMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
-    fn addr(&self) -> MemResult<usize> {
-        if let Ok(addr) = self.mr.addr() {
-            Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
-        } else {
-            Err(MemNotLocalError {})
-        }
+    fn addr(&self) -> MemResult<CommAllocAddr> {
+        let addr = self.mr.addr()?;
+        Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
     }
-    unsafe fn at(&self, index: usize) -> MemResult<&T> {
-        self.mr.casted_at::<T>(index)
+    unsafe fn as_slice(&self) -> &[T] {
+        self.as_mut_slice()
     }
-    unsafe fn as_slice(&self) -> MemResult<&[T]> {
-        if let Ok(slice) = self.mr.as_casted_slice::<T>() {
-            Ok(&slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
+    unsafe fn as_mut_slice(&self) -> &mut [T] {
+        let slice = self
+            .mr
+            .as_casted_mut_slice::<T>()
+            .expect("should be aligned");
+        if slice.len() >= self.sub_region_size + self.sub_region_offset {
+            &mut slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)]
         } else {
-            Err(MemNotLocalError {})
-        }
-    }
-    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
-        if let Ok(slice) = self.mr.as_casted_mut_slice::<T>() {
-            Ok(&mut slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
-        } else {
-            Err(MemNotLocalError {})
+            &mut slice[self.sub_region_offset..]
         }
     }
     unsafe fn as_ptr(&self) -> MemResult<*const T> {
-        if let Ok(addr) = self.addr() {
-            Ok(addr as *const T)
-        } else {
-            Err(MemNotLocalError {})
-        }
+        self.addr().map(|addr| addr.as_ptr())
     }
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
-        if let Ok(addr) = self.addr() {
-            Ok(addr as *mut T)
-        } else {
-            Err(MemNotLocalError {})
-        }
+        self.addr().map(|addr| addr.as_mut_ptr())
     }
 }
 
-impl<T: Dist> MemRegionId for SharedMemoryRegion<T> {
+impl<T: Remote> MemRegionId for SharedMemoryRegion<T> {
     fn id(&self) -> usize {
         self.mr.id()
     }
 }
 
-impl<T: Dist> SubRegion<T> for SharedMemoryRegion<T> {
-    type Region = SharedMemoryRegion<T>;
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
+impl<T: Remote> SubRegion<T> for SharedMemoryRegion<T> {
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         let start = match range.start_bound() {
             //inclusive
             Bound::Included(idx) => *idx,
@@ -260,78 +476,121 @@ impl<T: Dist> SubRegion<T> for SharedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> AsBase for SharedMemoryRegion<T> {
-    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
-        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
-        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
-        // println!("to_base");
-        SharedMemoryRegion {
-            mr: self.mr.clone(),
-            sub_region_offset: u8_offset / std::mem::size_of::<B>(),
-            sub_region_size: u8_size / std::mem::size_of::<B>(),
-            phantom: PhantomData,
-        }
-        .into()
+impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
+    unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .put(pe, self.sub_region_offset + index, data)
     }
-}
-
-impl<T: Dist> MemoryRegionRDMA<T> for SharedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        self.mr.put(pe, self.sub_region_offset + index, data);
+    unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+        self.mr
+            .alloc
+            .inner_alloc
+            .put_unmanaged(data, pe, self.sub_region_offset + index);
     }
-    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn put_buffer(
         &self,
         pe: usize,
         index: usize,
-        data: U,
-    ) {
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T> {
         self.mr
-            .blocking_put(pe, self.sub_region_offset + index, data);
+            .as_base::<T>()
+            .put_buffer(pe, self.sub_region_offset + index, data)
     }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        self.mr.put_all(self.sub_region_offset + index, data);
-    }
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn put_buffer_unmanaged(
         &self,
         pe: usize,
         index: usize,
-        data: U,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
         self.mr
-            .get_unchecked(pe, self.sub_region_offset + index, data);
+            .alloc
+            .inner_alloc
+            .put_buffer_unmanaged(data, pe, self.sub_region_offset + index);
     }
-    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .put_all(self.sub_region_offset + index, data)
+    }
+    unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
+        self.mr
+            .alloc
+            .inner_alloc
+            .put_all_unmanaged(data, self.sub_region_offset + index);
+    }
+    unsafe fn put_all_buffer(
+        &self,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .put_all_buffer(self.sub_region_offset + index, data)
+    }
+    unsafe fn put_all_buffer_unmanaged(
+        &self,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) {
+        self.mr
+            .alloc
+            .inner_alloc
+            .put_all_buffer_unmanaged(data, self.sub_region_offset + index);
+    }
+
+    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .get(pe, self.sub_region_offset + index)
+    }
+    unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
+        self.mr
+            .as_base::<T>()
+            .get_buffer(pe, self.sub_region_offset + index, len)
+    }
+    unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         pe: usize,
         index: usize,
-        data: U,
+        data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        self.mr
+            .as_base::<T>()
+            .get_into_buffer(pe, self.sub_region_offset + index, data)
+    }
+    unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
     ) {
         self.mr
-            .blocking_get(pe, self.sub_region_offset + index, data);
+            .as_base::<T>()
+            .get_into_buffer_unmanaged(pe, self.sub_region_offset + index, data);
     }
+    // unsafe fn put_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
+    //     self.mr
+    //         .put_comm_slice(pe, self.sub_region_offset + index, data)
+    // }
+    // unsafe fn get_comm_slice(&self, pe: usize, index: usize, data: CommSlice<T>) -> RdmaHandle<T> {
+    //     // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);
+    //     self.mr
+    //         .get_comm_slice(pe, self.sub_region_offset + index, data)
+    // }
 }
 
-impl<T: Dist> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
-        self.mr.put_slice(pe, self.sub_region_offset + index, data)
-    }
-    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]) {
-        // println!("iget_slice {:?} {:?}",pe,self.sub_region_offset + index);
-        self.mr
-            .blocking_get_slice(pe, self.sub_region_offset + index, data)
-    }
-}
-
-impl<T: Dist> std::fmt::Debug for SharedMemoryRegion<T> {
+impl<T: Remote> std::fmt::Debug for SharedMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "[{:?}] shared mem region:  {:?} ", self.mr.pe, self.mr,)
     }
 }
 
-impl<T: Dist> LamellarWrite for SharedMemoryRegion<T> {}
-impl<T: Dist> LamellarRead for SharedMemoryRegion<T> {}
+impl<T: Remote> LamellarWrite for SharedMemoryRegion<T> {}
+impl<T: Remote> LamellarRead for SharedMemoryRegion<T> {}
 
-impl<T: Dist> From<&SharedMemoryRegion<T>> for LamellarMemoryRegion<T> {
+impl<T: Remote> From<&SharedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     fn from(smr: &SharedMemoryRegion<T>) -> Self {
         LamellarMemoryRegion::Shared(smr.clone())
     }
@@ -381,8 +640,8 @@ impl<T: Dist> TeamTryFrom<&SharedMemoryRegion<T>> for LamellarArrayRdmaInput<T> 
     }
 }
 
-// impl<T: Dist> Drop for SharedMemoryRegion<T> {
-//     fn drop(&mut self) {
-//         println!("dropping shared memory region");
-//     }
-// }
+impl<T: Remote> Drop for SharedMemoryRegion<T> {
+    fn drop(&mut self) {
+        // println!("dropping shared memory region");
+    }
+}

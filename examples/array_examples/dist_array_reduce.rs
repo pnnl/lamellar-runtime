@@ -40,20 +40,20 @@ fn main() {
         UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Block).block();
     let cyclic_array =
         UnsafeArray::<usize>::new(world.team(), total_len, Distribution::Cyclic).block();
-    let local_mem_region = world.alloc_one_sided_mem_region(total_len);
+    let mut local_mem_region = world.alloc_one_sided_mem_region(total_len);
     world.barrier();
     if my_pe == 0 {
         unsafe {
             let mut i = 0; //(len_per_pe * my_pe as f32).round() as usize;
-            for elem in local_mem_region.as_mut_slice().unwrap() {
+            for elem in local_mem_region.as_mut_slice() {
                 *elem = i;
                 i += 1
             }
-            println!("{:?}", local_mem_region.as_slice().unwrap());
+            println!("{:?}", local_mem_region.as_slice());
             // let index = ((len_per_pe * (my_pe) as f32).round() as usize) % total_len;
 
-            block_array.put(0, &local_mem_region).block();
-            cyclic_array.put(0, &local_mem_region).block();
+            block_array.put_buffer(0, &local_mem_region).block();
+            cyclic_array.put_buffer(0, &local_mem_region).block();
         }
     }
     world.barrier();
@@ -66,25 +66,64 @@ fn main() {
     cyclic_array.print();
     println!();
     unsafe {
-        for elem in local_mem_region.as_mut_slice().unwrap() {
+        for elem in local_mem_region.as_mut_slice() {
             *elem = 0;
         }
     }
-    unsafe { block_array.get(0, &local_mem_region).block() };
+    let mut buffer_handle = unsafe {
+        LamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::from_one_sided_memory_region(
+            local_mem_region,
+        )
+    };
+    println!("after buffer creation");
+    let buffer = buffer_handle.split_off(0); // we want to keep an empty buffer handle so that we  can retrieve the mem region later
+    println!("after buffer split");
+    unsafe { block_array.get_into_buffer(0, buffer).block() };
+    println!("here");
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
+    local_mem_region = buffer_handle
+        .try_unwrap()
+        .expect("should be sole owner of buffer so unwrap should work");
     if my_pe == 0 {
-        println!("[{:?}] get from block array {:?}", my_pe, unsafe {
+        println!("[{:?}] get_into from block array {:?}", my_pe, unsafe {
             local_mem_region.as_slice()
         });
     }
 
     unsafe {
-        for elem in local_mem_region.as_mut_slice().unwrap() {
+        for elem in local_mem_region.as_mut_slice() {
             *elem = 0;
         }
     }
-    unsafe { cyclic_array.get(0, &local_mem_region).block() };
+
+    let vec_data = unsafe { block_array.get_buffer(0, total_len).block() };
+    world.barrier();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    if my_pe == 0 {
+        println!(
+            "[{:?}] get_buffer from block array {:?}",
+            my_pe,
+            vec_data.as_slice()
+        );
+    }
+    let buffer: LamellarBuffer<_, OneSidedMemoryRegion<_>> =
+        unsafe { LamellarBuffer::from_one_sided_memory_region(local_mem_region.clone()) };
+    unsafe { cyclic_array.get_into_buffer(0, buffer).block() };
+    world.barrier();
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    if my_pe == 0 {
+        println!("[{:?}] get from cyclic array {:?}", my_pe, unsafe {
+            local_mem_region.as_slice()
+        });
+    }
+
+    let buffer = unsafe {
+        LamellarBuffer::<usize, OneSidedMemoryRegion<usize>>::from_one_sided_memory_region(
+            local_mem_region.clone(),
+        )
+    };
+    unsafe { cyclic_array.get_into_buffer(0, buffer).block() };
     world.barrier();
     std::thread::sleep(std::time::Duration::from_secs(1));
     if my_pe == 0 {

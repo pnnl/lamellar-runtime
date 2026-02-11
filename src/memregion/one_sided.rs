@@ -1,23 +1,18 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
-use crate::lamellae::{AllocationType, Lamellae};
-use crate::lamellar_team::LamellarTeamRemotePtr;
-use crate::IdError;
+use crate::darc::Darc;
+use crate::lamellae::{AllocationType, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
+// use crate::lamellar_team::LamellarTeamRemotePtr;
 use crate::LamellarTeamRT;
-use crate::LAMELLAES;
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
-// use crate::active_messaging::AmDist;
 
 use core::marker::PhantomData;
 use parking_lot::Mutex;
-// use serde::ser::Serialize;
 use std::collections::HashMap;
 use std::ops::Bound;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
-// //use tracing::*;
-// use serde::ser::{Serialize, Serializer, SerializeStruct};
+use tracing::trace;
 
 lazy_static! {
     pub(crate) static ref ONE_SIDED_MEM_REGIONS: Mutex<HashMap<(usize, usize), Arc<MemRegionHandleInner>>> =
@@ -32,47 +27,57 @@ pub struct NetMemRegionHandle {
     mr_addr: usize,
     mr_size: usize,
     mr_pe: usize,
-    team: LamellarTeamRemotePtr,
+    team: Darc<LamellarTeamRT>, //LamellarTeamRemotePtr,
     my_id: (usize, usize),
     parent_id: (usize, usize),
 }
 
 impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
     fn from(net_handle: NetMemRegionHandle) -> Self {
-        // let net_handle: NetMemRegionHandle = Deserialize::deserialize(remote).expect("error deserializing, expected NetMemRegionHandle");
-        // println!("received handle: pid {:?} gpid{:?}",net_handle.my_id,net_handle.parent_id);
+        trace!(
+            "received handle: pid {:?} gpid{:?} mr_pe: {:?} 0x{:x} {:?}",
+            net_handle.my_id,
+            net_handle.parent_id,
+            net_handle.mr_pe,
+            net_handle.mr_addr,
+            net_handle.mr_size,
+        );
         let grand_parent_id = net_handle.parent_id;
         let parent_id = net_handle.my_id;
-        let lamellae = if let Some(lamellae) = LAMELLAES.read().get(&net_handle.team.backend) {
-            lamellae.clone()
-        } else {
-            panic!(
-                "unexepected lamellae backend {:?}",
-                &net_handle.team.backend
-            );
-        };
+        let lamellae = net_handle.team.lamellae.clone();
+        // let lamellae = if let Some(lamellae) = LAMELLAES.read().get(&net_handle.team.backend) {
+        //     lamellae.clone()
+        // } else {
+        //     panic!(
+        //         "unexepected lamellae backend {:?}",
+        //         &net_handle.team.backend
+        //     );
+        // };
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
-        // for elem in mrh_map.iter(){
-        //     println!("elem: {:?}",elem);
-        // }
         let mrh = match mrh_map.get(&parent_id) {
-            Some(mrh) => mrh.clone(),
+            Some(mrh) => {
+                trace!("already existed");
+                mrh.clone()
+            }
             None => {
-                let local_mem_region_addr = lamellae.local_addr(parent_id.1, net_handle.mr_addr); //the address is with respect to the PE that sent the memregion handle
+                let team: Darc<LamellarTeamRT> = net_handle.team.into();
                 let mem_region = MemoryRegion::from_remote_addr(
-                    local_mem_region_addr,
+                    net_handle.mr_addr,
                     net_handle.mr_pe,
                     net_handle.mr_size,
-                    lamellae.clone(),
+                    team.clone(),
+                    lamellae,
                 )
                 .unwrap();
-                let team: Pin<Arc<LamellarTeamRT>> = net_handle.team.into();
+
                 let mrh = Arc::new(MemRegionHandleInner {
                     mr: mem_region,
                     team: team.clone(),
                     local_ref: AtomicUsize::new(0),
                     remote_sent: AtomicUsize::new(0),
                     remote_recv: AtomicUsize::new(0),
+                    orig_pe: net_handle.mr_pe,
+                    orig_addr: net_handle.mr_addr,
                     my_id: (
                         ID_COUNTER.fetch_add(1, Ordering::Relaxed),
                         team.team_pe.expect("pe not part of team"),
@@ -82,23 +87,35 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                     local_dropped: AtomicBool::new(false),
                 });
                 mrh_map.insert(parent_id, mrh.clone());
-                // println!("inserting onesided mem region {:?} {:?} 0x{:x} {:?}",parent_id,net_handle.mr_pe,net_handle.mr_addr,mrh);
+                trace!(
+                    "inserting onesided mem region {:?} {:?} 0x{:x} {:?}",
+                    parent_id,
+                    net_handle.mr_pe,
+                    net_handle.mr_addr,
+                    mrh
+                );
                 mrh
             }
         };
+        mrh.remote_recv.fetch_add(1, Ordering::SeqCst);
         mrh.local_ref.fetch_add(1, Ordering::SeqCst);
-        // println!("recived mrh: {:?}",mrh);
+        trace!("recived mrh: {:?}", mrh);
         mrh
     }
 }
 
 impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
     fn from(mem_reg: Arc<MemRegionHandleInner>) -> Self {
-        // println!("creating net handle {:?}",mem_reg);
+        trace!("creating net handle {:?}", mem_reg);
+        trace!(
+            "creating net handle mem region addr 0x{:x} orig_pe: {:?}",
+            mem_reg.orig_addr,
+            mem_reg.orig_pe
+        );
         NetMemRegionHandle {
-            mr_addr: mem_reg.mr.addr,
-            mr_size: mem_reg.mr.size,
-            mr_pe: mem_reg.mr.pe,
+            mr_addr: mem_reg.orig_addr,
+            mr_size: mem_reg.mr.alloc.num_bytes(),
+            mr_pe: mem_reg.orig_pe,
             team: mem_reg.team.clone().into(),
             my_id: mem_reg.my_id,
             parent_id: mem_reg.parent_id,
@@ -109,11 +126,13 @@ impl From<Arc<MemRegionHandleInner>> for NetMemRegionHandle {
 #[derive(Debug)]
 pub(crate) struct MemRegionHandleInner {
     mr: MemoryRegion<u8>,
-    team: Pin<Arc<LamellarTeamRT>>,
+    team: Darc<LamellarTeamRT>,
     pub(crate) local_ref: AtomicUsize,
     remote_sent: AtomicUsize,
     remote_recv: AtomicUsize,
-    my_id: (usize, usize),           //id,pe
+    orig_pe: usize,
+    orig_addr: usize,
+    my_id: (usize, usize),           //id, pe
     parent_id: (usize, usize),       //id, parent pe
     grand_parent_id: (usize, usize), //id, grand parent pe
     local_dropped: AtomicBool,
@@ -128,6 +147,7 @@ struct MemRegionHandle {
 pub(crate) mod memregion_handle_serde {
     use serde::Serialize;
     use std::sync::Arc;
+    use tracing::trace;
 
     pub(crate) fn serialize<S>(
         inner: &Arc<super::MemRegionHandleInner>,
@@ -136,8 +156,15 @@ pub(crate) mod memregion_handle_serde {
     where
         S: serde::Serializer,
     {
+        trace!(
+            "serializing memregion handle id {:?} pid {:?} gpid {:?} orig_pe {:?} mr_addr 0x{:x}",
+            inner.my_id,
+            inner.parent_id,
+            inner.grand_parent_id,
+            inner.orig_pe,
+            inner.orig_addr,
+        );
         let nethandle = super::NetMemRegionHandle::from(inner.clone());
-        // println!("nethandle {:?} {:?}",crate::serialized_size(&nethandle,false),crate::serialized_size(&nethandle,true));
         nethandle.serialize(serializer)
     }
 
@@ -147,7 +174,7 @@ pub(crate) mod memregion_handle_serde {
     where
         D: serde::Deserializer<'de>,
     {
-        // println!("in deserialize memregion_handle_serde");
+        trace!("in deserialize memregion_handle_serde");
         let net_handle: super::NetMemRegionHandle = serde::Deserialize::deserialize(deserializer)?;
         Ok(net_handle.into())
     }
@@ -155,27 +182,15 @@ pub(crate) mod memregion_handle_serde {
 
 impl crate::active_messaging::DarcSerde for MemRegionHandle {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
-        //TODO need to be able to return NetMemRegionHandle
-        // match cur_pe {
-        //     Ok(cur_pe) => {
+        trace!(
+            "in ser id {:?} pid {:?} gpid {:?}",
+            self.inner.my_id,
+            self.inner.parent_id,
+            self.inner.grand_parent_id
+        );
         self.inner.remote_sent.fetch_add(num_pes, Ordering::SeqCst);
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access MemRegionHandles within team members ({:?})", err);
-        //     }
-        // }
+        self.inner.team.ser(num_pes, darcs);
         darcs.push(RemotePtr::NetMemRegionHandle(self.inner.clone().into()));
-    }
-    fn des(&self, _cur_pe: Result<usize, IdError>) {
-        // match cur_pe {
-        //     Ok(cur_pe) => {
-        self.inner.remote_recv.fetch_add(1, Ordering::SeqCst);
-        //     }
-        //     Err(err) => {
-        //         panic!("can only access MemRegionHandles within team members ({:?})", err);
-        //     }
-        // }
-        // println!("deserailized mrh: {:?}",self.inner);
     }
 }
 
@@ -191,10 +206,9 @@ impl Clone for MemRegionHandle {
 impl Drop for MemRegionHandle {
     fn drop(&mut self) {
         //this means all local instances of this handle have been dropped
-
         let mut mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let cnt = self.inner.local_ref.fetch_sub(1, Ordering::SeqCst);
-        // println!("mem region dropping {:?}",self.inner);
+        trace!("mem region dropping {:?}", self.inner);
         if cnt == 1
             && self
                 .inner
@@ -203,10 +217,10 @@ impl Drop for MemRegionHandle {
                 .is_ok()
         {
             //last local reference (for the first time)
-            // println!("last local ref {:?}", self.inner);
+            trace!("last local ref {:?}", self.inner);
             if self.inner.remote_sent.load(Ordering::SeqCst) == 0 {
                 mrh_map.remove(&self.inner.parent_id);
-                // println!("removed {:?}",self.inner);
+                trace!("removed {:?}", self.inner);
                 if self.inner.my_id != self.inner.parent_id {
                     let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                     if cnt > 0 {
@@ -214,7 +228,11 @@ impl Drop for MemRegionHandle {
                             cnt: cnt,
                             parent_id: self.inner.grand_parent_id,
                         };
-                        // println!("sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
+                        trace!(
+                            "sending finished am {:?} pe: {:?}",
+                            temp,
+                            self.inner.parent_id.1
+                        );
                         let _ = self
                             .inner
                             .team
@@ -245,19 +263,19 @@ struct MemRegionFinishedAm {
 #[lamellar_impl::rt_am]
 impl LamellarAM for MemRegionFinishedAm {
     async fn exec(self) {
-        // println!("in finished am {:?}",self);
+        trace!("in finished am {:?}", self);
         let mrh_map = ONE_SIDED_MEM_REGIONS.lock();
         let _mrh = match mrh_map.get(&self.parent_id) {
             Some(mrh) => {
                 mrh.remote_sent.fetch_sub(self.cnt, Ordering::SeqCst);
-                // println!("in finished am {:?} mrh {:?}",self,mrh);
+                trace!("in finished am {:?} mrh {:?}", self, mrh);
             }
-            None => println!(
+            None => trace!(
                 "in finished am this should only be possible on the original pe? {:?} ",
                 self
             ), //or we are on the original node?
         };
-        // println!("leaving finished am");
+        trace!("leaving finished am");
     }
 }
 
@@ -269,7 +287,6 @@ struct MemRegionDropWaitAm {
 #[lamellar_impl::rt_am_local]
 impl LamellarAM for MemRegionDropWaitAm {
     async fn exec(self) {
-        // println!("in drop wait {:?}", self.inner);
         loop {
             while self.inner.remote_sent.load(Ordering::SeqCst) != 0
                 || self.inner.local_ref.load(Ordering::SeqCst) != 0
@@ -292,7 +309,6 @@ impl LamellarAM for MemRegionDropWaitAm {
                                 cnt: cnt,
                                 parent_id: self.inner.grand_parent_id,
                             };
-                            // println!("waited sending finished am {:?} pe: {:?}",temp, self.inner.parent_id.1);
                             let _ = self
                                 .inner
                                 .team
@@ -305,7 +321,6 @@ impl LamellarAM for MemRegionDropWaitAm {
             }
             async_std::task::yield_now().await;
         }
-        // println!("leaving drop wait {:?}", self.inner);
     }
 }
 
@@ -335,7 +350,7 @@ impl LamellarAM for MemRegionDropWaitAm {
 /// let world_mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region::<usize>(1000);
 /// ```
 #[lamellar_impl::AmDataRT(Clone)]
-pub struct OneSidedMemoryRegion<T: Dist> {
+pub struct OneSidedMemoryRegion<T: Remote> {
     mr: MemRegionHandle,
     pe: usize, // the original pe
     sub_region_offset: usize,
@@ -343,7 +358,7 @@ pub struct OneSidedMemoryRegion<T: Dist> {
     phantom: PhantomData<T>,
 }
 
-impl<T: Dist> LamellarEnv for OneSidedMemoryRegion<T> {
+impl<T: Remote> LamellarEnv for OneSidedMemoryRegion<T> {
     fn my_pe(&self) -> usize {
         self.mr.inner.team.my_pe()
     }
@@ -361,15 +376,21 @@ impl<T: Dist> LamellarEnv for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> OneSidedMemoryRegion<T> {
+impl<T: Remote> OneSidedMemoryRegion<T> {
     pub(crate) fn try_new(
         size: usize,
-        team: &std::pin::Pin<Arc<LamellarTeamRT>>,
-        lamellae: Arc<Lamellae>,
+        team: &Darc<LamellarTeamRT>,
     ) -> Result<OneSidedMemoryRegion<T>, anyhow::Error> {
-        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(size, lamellae, AllocationType::Local)?;
+        let mr_t: MemoryRegion<T> = MemoryRegion::try_new(
+            size,
+            &team.scheduler,
+            team.counters(),
+            &team.lamellae,
+            AllocationType::Local,
+        )?;
         let mr = unsafe { mr_t.to_base::<u8>() };
         let pe = mr.pe;
+        let orig_addr = mr.addr().unwrap().into();
 
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let mrh = MemRegionHandle {
@@ -379,15 +400,14 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
                 local_ref: AtomicUsize::new(1),
                 remote_sent: AtomicUsize::new(0),
                 remote_recv: AtomicUsize::new(0),
+                orig_pe: pe,
+                orig_addr,
                 my_id: (id, pe),
                 parent_id: (id, pe),
                 grand_parent_id: (id, pe),
                 local_dropped: AtomicBool::new(false),
             }),
         };
-
-        // println!("new local memory region {:?} ", mrh);
-
         ONE_SIDED_MEM_REGIONS
             .lock()
             .insert(mrh.inner.my_id, mrh.inner.clone());
@@ -398,6 +418,14 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
             sub_region_size: size,
             phantom: PhantomData,
         })
+    }
+
+    pub unsafe fn put(&self, index: usize, data: T) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put(self, self.pe, index, data)
+    }
+
+    pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_unmanaged(self, self.pe, index, data)
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -452,185 +480,96 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     ///             std::thread::yield_now();
     ///         }
     ///         assert_eq!(pe,*elem);
-    ///     }      
-    /// }
-    ///```
-    pub unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::put(self, self.pe, index, data);
-    }
-
-    #[doc(alias("One-sided", "onesided"))]
-    /// Blocking "Puts" (copies) data from a local memory location into a remote memory location on the specified PE.
-    ///
-    /// This function blocks until the data in the data buffer has been transfered out of this PE, this does not imply that it has arrived at the remote destination though
-    /// # Arguments
-    ///
-    /// the data buffer is free to be reused upon return of this function.
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Panics
-    /// Panics if "data" does not have any local data on this PE
-    /// Panics if index is out of bounds
-    /// Panics if PE is out of bounds
-    /// # Examples
-    ///```
-    /// use lamellar::active_messaging::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    ///
-    /// #[AmData]
-    /// struct MemRegionAm{
-    ///     mem_region: OneSidedMemoryRegion<usize>,
-    /// }
-    ///
-    /// #[am]
-    /// impl LamellarAm for MemRegionAm{
-    ///     async fn exec(self){
-    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(10);
-    ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.blocking_put(lamellar::current_pe*temp_buffer.len(),temp_buffer)};
     ///     }
     /// }
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion "){*elem = num_pes};}
-    ///
-    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).spawn();
-    ///
-    /// unsafe {
-    ///     for (i,elem) in mem_region.iter().enumerate(){
-    ///         let pe = i / 10;
-    ///         while *elem == num_pes{
-    ///             std::thread::yield_now();
-    ///         }
-    ///         assert_eq!(pe,*elem);
-    ///     }      
-    /// }
     ///```
-    pub unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::blocking_put(self, self.pe, index, data);
+    pub unsafe fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put_buffer(self, self.pe, index, data.into())
     }
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// "Gets" (copies) data from (this) memory region into the provided `data` buffer.
-    /// After calling this function, the data may or may not have actually arrived into the data buffer.
-    /// The user is responsible for transmission termination detection
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Panics
-    /// Panics if "data" does not have any local data on this PE
-    /// Panics if index is out of bounds
-    /// Panics if PE is out of bounds
-    /// # Examples
-    ///```
-    /// use lamellar::active_messaging::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    /// use std::time::{Duration, Instant};
-    ///
-    /// #[AmData]
-    /// struct MemRegionAm{
-    ///     mem_region: OneSidedMemoryRegion<usize>,
-    /// }
-    ///
-    /// #[am]
-    /// impl LamellarAm for MemRegionAm{
-    ///     async fn exec(self){
-    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
-    ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
-    ///         unsafe {
-    ///             for elem in temp_buffer.iter(){
-    ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
-    ///                 }
-    ///                 let num_pes = lamellar::num_pes;
-    ///                 assert_eq!(num_pes,*elem);
-    ///             }
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    ///
-    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
-    ///```
-    pub unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::get_unchecked(self, self.pe, index, data);
+    pub unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        index: usize,
+        data: U,
+    ) {
+        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self, self.pe, index, data.into())
     }
 
-    #[doc(alias("One-sided", "onesided"))]
-    /// Blocking "Gets" (copies) data from (this) memory region into the provided `data` buffer.
-    /// After calling this function, the data is guaranteed to be placed in the data buffer
-    ///
-    /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
-    ///
-    /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
-    ///
-    /// # Panics
-    /// Panics if "data" does not have any local data on this PE
-    /// Panics if index is out of bounds
-    /// Panics if PE is out of bounds
-    /// # Examples
-    ///```
-    /// use lamellar::active_messaging::prelude::*;
-    /// use lamellar::memregion::prelude::*;
-    /// use std::time::{Duration, Instant};
-    ///
-    /// #[AmData]
-    /// struct MemRegionAm{
-    ///     mem_region: OneSidedMemoryRegion<usize>,
-    /// }
-    ///
-    /// #[am]
-    /// impl LamellarAm for MemRegionAm{
-    ///     async fn exec(self){
-    ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
-    ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
-    ///         unsafe{ self.mem_region.get_unchecked(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
-    ///         unsafe {
-    ///             for elem in temp_buffer.iter(){
-    ///                 while *elem == lamellar::current_pe{
-    ///                     async_std::task::sleep(Duration::from_millis(100)).await;
-    ///                 }
-    ///                 let num_pes = lamellar::num_pes;
-    ///                 assert_eq!(num_pes,*elem);
-    ///             }
-    ///         }
-    ///     }
-    /// }
-    ///
-    /// let world = LamellarWorldBuilder::new().build();
-    /// let my_pe = world.my_pe();
-    /// let num_pes = world.num_pes();
-    ///
-    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
-    /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
-    ///
-    /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
-    ///```
-    pub unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        MemoryRegionRDMA::<T>::blocking_get(self, self.pe, index, data);
+    // #[doc(alias("One-sided", "onesided"))]
+    // /// Blocking "Gets" (copies) data from (this) memory region into the provided `data` buffer.
+    // /// After calling this function, the data is guaranteed to be placed in the data buffer
+    // ///
+    // /// # Safety
+    // /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    // ///
+    // /// # One-sided Operation
+    // /// the calling PE initaites the remote transfer
+    // ///
+    // /// # Panics
+    // /// Panics if "data" does not have any local data on this PE
+    // /// Panics if index is out of bounds
+    // /// Panics if PE is out of bounds
+    // /// # Examples
+    // ///```
+    // /// use lamellar::active_messaging::prelude::*;
+    // /// use lamellar::memregion::prelude::*;
+    // /// use std::time::{Duration, Instant};
+    // ///
+    // /// #[AmData]
+    // /// struct MemRegionAm{
+    // ///     mem_region: OneSidedMemoryRegion<usize>,
+    // /// }
+    // ///
+    // /// #[am]
+    // /// impl LamellarAm for MemRegionAm{
+    // ///     async fn exec(self){
+    // ///         let temp_buffer: OneSidedMemoryRegion<usize> = lamellar::world.alloc_one_sided_mem_region(self.mem_region.len());
+    // ///         unsafe{ for elem in temp_buffer.as_mut_slice().expect("PE just created memregion"){ *elem = lamellar::current_pe}}
+    // ///         unsafe{ self.mem_region.get(lamellar::current_pe*temp_buffer.len(),temp_buffer.clone())};
+    // ///         unsafe {
+    // ///             for elem in temp_buffer.iter(){
+    // ///                 while *elem == lamellar::current_pe{
+    // ///                     async_std::task::sleep(Duration::from_millis(100)).await;
+    // ///                 }
+    // ///                 let num_pes = lamellar::num_pes;
+    // ///                 assert_eq!(num_pes,*elem);
+    // ///             }
+    // ///         }
+    // ///     }
+    // /// }
+    // ///
+    // /// let world = LamellarWorldBuilder::new().build();
+    // /// let my_pe = world.my_pe();
+    // /// let num_pes = world.num_pes();
+    // ///
+    // /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(num_pes*10);
+    // /// unsafe{ for elem in mem_region.as_mut_slice().expect("PE just created the memregion"){*elem = num_pes};}
+    // ///
+    // /// let _ = world.exec_am_all(MemRegionAm{mem_region: mem_region.clone()}).block();
+    // ///```
+    pub unsafe fn get(&self, index: usize) -> RdmaGetHandle<T> {
+        RTMemoryRegionRDMA::<T>::get(self, self.pe, index)
+    }
+    pub unsafe fn get_buffer(&self, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
+        RTMemoryRegionRDMA::<T>::get_buffer(self, self.pe, index, len)
+    }
+    pub unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        RTMemoryRegionRDMA::<T>::get_into_buffer(self, self.pe, index, data)
+    }
+    pub unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        RTMemoryRegionRDMA::<T>::get_into_buffer_unmanaged(self, self.pe, index, data);
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -654,7 +593,7 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
     /// }
     ///```
     pub unsafe fn iter(&self) -> std::slice::Iter<'_, T> {
-        self.as_slice().unwrap().iter()
+        self.as_slice().iter()
     }
 
     #[doc(alias("One-sided", "onesided"))]
@@ -703,6 +642,126 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
         }
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let slice = unsafe{mem_region.as_slice().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_slice(&self) -> &[T] {
+        RegisteredMemoryRegion::as_slice(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a mutable slice of the local (to the calling PE) data of the memory region
+    ///
+    /// Returns a 0-length slice if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist other mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let slice =unsafe { mem_region.as_mut_slice().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_mut_slice(&self) -> &mut [T] {
+        RegisteredMemoryRegion::as_mut_slice(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let ptr = unsafe { mem_region.as_ptr().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_ptr(&self) -> MemResult<*const T> {
+        RegisteredMemoryRegion::as_ptr(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Return a mutable ptr to the local (to the calling PE) data of the memory region
+    ///
+    /// Returns an error if the PE does not contain any local data associated with this memory region
+    ///
+    /// # Safety
+    /// this call is always unsafe as there is no gaurantee that there do not exist mutable references elsewhere in the distributed system.
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    ///
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(1000).block();
+    /// let ptr = unsafe { mem_region.as_mut_ptr().expect("PE is part of the world team")};
+    ///```
+    pub unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
+        RegisteredMemoryRegion::as_mut_ptr(self)
+    }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Create a sub region of this RegisteredMemoryRegion using the provided range
+    ///
+    /// # One-sided Operation
+    /// the result is returned only on the calling PE
+    ///
+    /// # Panics
+    /// panics if the end range is larger than the length of the memory region
+    /// # Examples
+    ///```
+    /// use lamellar::memregion::prelude::*;
+    ///
+    /// let world = LamellarWorldBuilder::new().build();
+    /// let my_pe = world.my_pe();
+    /// let num_pes = world.num_pes();
+    ///
+    /// let mem_region: OneSidedMemoryRegion<usize> = world.alloc_one_sided_mem_region(100).block();
+    ///
+    /// let sub_region = mem_region.sub_region(30..70);
+    ///```
+    pub fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
+        SubRegion::sub_region(self, range)
+    }
+
     pub(crate) unsafe fn to_base<B: Dist>(self) -> OneSidedMemoryRegion<B> {
         let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
         let u8_size = self.sub_region_size * std::mem::size_of::<T>();
@@ -714,94 +773,80 @@ impl<T: Dist> OneSidedMemoryRegion<T> {
             phantom: PhantomData,
         }
     }
+
+    /// Return the length of the memory region
+    pub fn len(&self) -> usize {
+        self.sub_region_size
+    }
+
+    pub fn orig_pe(&self) -> usize {
+        self.pe
+    }
 }
 
-// This could be useful for if we want to transfer the actual data instead of the pointer
-// impl<T: Dist + serde::Serialize> OneSidedMemoryRegion<T> {
-//     pub(crate) fn serialize_local_data<S>(&self, s: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         unsafe { self.as_slice().unwrap().serialize(s) }
-//     }
-// }
-
-impl<T: Dist> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
+impl<T: Remote> RegisteredMemoryRegion<T> for OneSidedMemoryRegion<T> {
     fn len(&self) -> usize {
         self.sub_region_size
     }
-    fn addr(&self) -> MemResult<usize> {
+    fn addr(&self) -> MemResult<CommAllocAddr> {
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(addr) = self.mr.inner.mr.addr() {
-                Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
-            } else {
-                Err(MemNotLocalError {})
-            }
+            let addr = self.mr.inner.mr.addr()?;
+            Ok(addr + self.sub_region_offset * std::mem::size_of::<T>())
         } else {
-            Err(MemNotLocalError {})
+            Err(MemRegionError::MemNotLocalError)
         }
-    }
-    unsafe fn at(&self, index: usize) -> MemResult<&T> {
-        self.mr.inner.mr.casted_at::<T>(index)
     }
 
-    unsafe fn as_slice(&self) -> MemResult<&[T]> {
-        if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(slice) = self.mr.inner.mr.as_casted_slice::<T>() {
-                Ok(&slice[self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
-            } else {
-                Err(MemNotLocalError {})
-            }
-        } else {
-            Err(MemNotLocalError {})
-        }
+    unsafe fn as_slice(&self) -> &[T] {
+        self.as_mut_slice()
     }
-    unsafe fn as_mut_slice(&self) -> MemResult<&mut [T]> {
+    unsafe fn as_mut_slice(&self) -> &mut [T] {
         // println!("pe {:?} mr_pe {:?}",self.pe , self.mr.inner.my_id.1);
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(slice) = self.mr.inner.mr.as_casted_mut_slice::<T>() {
-                Ok(&mut slice
-                    [self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)])
+            let slice = self
+                .mr
+                .inner
+                .mr
+                .as_casted_mut_slice()
+                .expect("should be aligned");
+            if slice.len() == 0 {
+                slice
             } else {
-                Err(MemNotLocalError {})
+                if slice.len() >= self.sub_region_size + self.sub_region_offset {
+                    &mut slice
+                        [self.sub_region_offset..(self.sub_region_offset + self.sub_region_size)]
+                } else {
+                    &mut slice[self.sub_region_offset..]
+                }
             }
         } else {
-            Err(MemNotLocalError {})
+            &mut []
         }
     }
     unsafe fn as_ptr(&self) -> MemResult<*const T> {
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(addr) = self.addr() {
-                Ok(addr as *const T)
-            } else {
-                Err(MemNotLocalError {})
-            }
+            self.addr().map(|addr| addr.as_ptr())
         } else {
-            Err(MemNotLocalError {})
+            Err(MemRegionError::MemNotLocalError)
         }
     }
     unsafe fn as_mut_ptr(&self) -> MemResult<*mut T> {
         if self.pe == self.mr.inner.my_id.1 {
-            if let Ok(addr) = self.addr() {
-                Ok(addr as *mut T)
-            } else {
-                Err(MemNotLocalError {})
-            }
+            self.addr().map(|addr| addr.as_mut_ptr())
         } else {
-            Err(MemNotLocalError {})
+            Err(MemRegionError::MemNotLocalError)
         }
     }
 }
 
-impl<T: Dist> MemRegionId for OneSidedMemoryRegion<T> {
+impl<T: Remote> MemRegionId for OneSidedMemoryRegion<T> {
     fn id(&self) -> usize {
         self.mr.inner.mr.id()
     }
 }
 
-impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
-    type Region = OneSidedMemoryRegion<T>;
-    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self::Region {
+impl<T: Remote> SubRegion<T> for OneSidedMemoryRegion<T> {
+    fn sub_region<R: std::ops::RangeBounds<usize>>(&self, range: R) -> Self {
         let start = match range.start_bound() {
             //inclusive
             Bound::Included(idx) => *idx,
@@ -832,73 +877,107 @@ impl<T: Dist> SubRegion<T> for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> AsBase for OneSidedMemoryRegion<T> {
-    unsafe fn to_base<B: Dist>(self) -> LamellarMemoryRegion<B> {
-        let u8_offset = self.sub_region_offset * std::mem::size_of::<T>();
-        let u8_size = self.sub_region_size * std::mem::size_of::<T>();
-        OneSidedMemoryRegion {
-            mr: self.mr.clone(),
-            pe: self.pe,
-            sub_region_offset: u8_offset / std::mem::size_of::<B>(),
-            sub_region_size: u8_size / std::mem::size_of::<B>(),
-            phantom: PhantomData,
+impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
+    unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T> {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .as_base::<T>()
+                .put(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
         }
-        .into()
     }
-}
+    unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .as_base::<T>()
+                .put_unmanaged(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn put_buffer(
+        &self,
+        pe: usize,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T> {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .as_base::<T>()
+                .put_buffer(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn put_buffer_unmanaged(
+        &self,
+        pe: usize,
+        index: usize,
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) {
+        if self.pe == pe {
+            self.mr.inner.mr.as_base::<T>().put_buffer_unmanaged(
+                pe,
+                self.sub_region_offset + index,
+                data,
+            )
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn put_all(&self, index: usize, data: T) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put(self, self.pe, index, data)
+    }
 
-impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put<U: Into<LamellarMemoryRegion<T>>>(&self, pe: usize, index: usize, data: U) {
-        if self.pe == pe {
-            self.mr
-                .inner
-                .mr
-                .put(pe, self.sub_region_offset + index, data);
-        } else {
-            panic!(
-                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
-                pe, self.pe
-            );
-            // Err(MemNotLocalError {})
-        }
+    unsafe fn put_all_unmanaged(&self, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_unmanaged(self, self.pe, index, data)
     }
-    unsafe fn blocking_put<U: Into<LamellarMemoryRegion<T>>>(
+
+    unsafe fn put_all_buffer(
         &self,
-        pe: usize,
         index: usize,
-        data: U,
-    ) {
-        if self.pe == pe {
-            self.mr
-                .inner
-                .mr
-                .blocking_put(pe, self.sub_region_offset + index, data);
-        // self.mr.iput(pe, index, data);
-        } else {
-            panic!(
-                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
-                pe, self.pe
-            );
-            // Err(MemNotLocalError {})
-        }
+        data: impl Into<MemregionRdmaInputInner<T>>,
+    ) -> RdmaHandle<T> {
+        RTMemoryRegionRDMA::<T>::put_buffer(self, self.pe, index, data)
     }
-    unsafe fn put_all<U: Into<LamellarMemoryRegion<T>>>(&self, index: usize, data: U) {
-        self.mr
-            .inner
-            .mr
-            .put_all(self.sub_region_offset + index, data);
-    }
-    unsafe fn get_unchecked<U: Into<LamellarMemoryRegion<T>>>(
+    unsafe fn put_all_buffer_unmanaged(
         &self,
-        pe: usize,
         index: usize,
-        data: U,
+        data: impl Into<MemregionRdmaInputInner<T>>,
     ) {
+        RTMemoryRegionRDMA::<T>::put_buffer_unmanaged(self, self.pe, index, data)
+    }
+
+    unsafe fn get(&self, pe: usize, index: usize) -> RdmaGetHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .get_unchecked(pe, self.sub_region_offset + index, data);
+                .as_base::<T>()
+                .get(pe, self.sub_region_offset + index)
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -907,17 +986,54 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
             // Err(MemNotLocalError {})
         }
     }
-    unsafe fn blocking_get<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        pe: usize,
-        index: usize,
-        data: U,
-    ) {
+
+    unsafe fn get_buffer(&self, pe: usize, index: usize, len: usize) -> RdmaGetBufferHandle<T> {
         if self.pe == pe {
             self.mr
                 .inner
                 .mr
-                .blocking_get(pe, self.sub_region_offset + index, data);
+                .as_base::<T>()
+                .get_buffer(pe, self.sub_region_offset + index, len)
+        } else {
+            panic!(
+                "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        if self.pe == pe {
+            self.mr.inner.mr.as_base::<T>().get_into_buffer(
+                pe,
+                self.sub_region_offset + index,
+                data,
+            )
+        } else {
+            panic!(
+                "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+    unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        if self.pe == pe {
+            self.mr.inner.mr.as_base::<T>().get_into_buffer_unmanaged(
+                pe,
+                self.sub_region_offset + index,
+                data,
+            )
         } else {
             panic!(
                 "trying to get from PE {:?} which does not contain data (pe with data =  {:?})",
@@ -928,38 +1044,7 @@ impl<T: Dist> MemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
-    unsafe fn put_slice(&self, pe: usize, index: usize, data: &[T]) {
-        if self.pe == pe {
-            self.mr
-                .inner
-                .mr
-                .put_slice(pe, self.sub_region_offset + index, data)
-        } else {
-            panic!(
-                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
-                pe, self.pe
-            );
-            // Err(MemNotLocalError {})
-        }
-    }
-    unsafe fn blocking_get_slice(&self, pe: usize, index: usize, data: &mut [T]) {
-        if self.pe == pe {
-            self.mr
-                .inner
-                .mr
-                .blocking_get_slice(pe, self.sub_region_offset + index, data)
-        } else {
-            panic!(
-                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
-                pe, self.pe
-            );
-            // Err(MemNotLocalError {})
-        }
-    }
-}
-
-impl<T: Dist> std::fmt::Debug for OneSidedMemoryRegion<T> {
+impl<T: Remote> std::fmt::Debug for OneSidedMemoryRegion<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -969,12 +1054,12 @@ impl<T: Dist> std::fmt::Debug for OneSidedMemoryRegion<T> {
     }
 }
 
-impl<T: Dist> LamellarWrite for OneSidedMemoryRegion<T> {}
-impl<T: Dist> LamellarWrite for &OneSidedMemoryRegion<T> {}
-impl<T: Dist> LamellarRead for OneSidedMemoryRegion<T> {}
-impl<T: Dist> LamellarRead for &OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarWrite for OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarWrite for &OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarRead for OneSidedMemoryRegion<T> {}
+impl<T: Remote> LamellarRead for &OneSidedMemoryRegion<T> {}
 
-impl<T: Dist> From<&OneSidedMemoryRegion<T>> for LamellarMemoryRegion<T> {
+impl<T: Remote> From<&OneSidedMemoryRegion<T>> for LamellarMemoryRegion<T> {
     fn from(smr: &OneSidedMemoryRegion<T>) -> Self {
         LamellarMemoryRegion::Local(smr.clone())
     }
@@ -1051,7 +1136,3 @@ impl<T: Dist> TeamTryFrom<OneSidedMemoryRegion<T>> for LamellarArrayRdmaOutput<T
         Ok(LamellarArrayRdmaOutput::LocalMemRegion(smr))
     }
 }
-
-// pub(crate) struct OneSidedMemoryRegionIter<'a,T: Dist>{
-//     inner:
-// }

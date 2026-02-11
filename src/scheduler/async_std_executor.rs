@@ -34,6 +34,16 @@ impl LamellarExecutor for AsyncStdRt {
         task::spawn(async move { task.await });
         // });
     }
+
+    fn submit_task_thread<F>(&self, task: F, _: usize)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send,
+    {
+        // trace_span!("submit_task").in_scope(|| {
+        task::spawn(async move { task.await });
+        // });
+    }
     fn submit_io_task<F>(&self, task: F)
     where
         F: Future + Send + 'static,

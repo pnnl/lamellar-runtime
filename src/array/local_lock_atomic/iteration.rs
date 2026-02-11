@@ -1,17 +1,37 @@
+use std::{marker::PhantomData, sync::Arc};
+
 use parking_lot::Mutex;
 
-use crate::array::iterator::distributed_iterator::*;
-use crate::array::iterator::local_iterator::*;
-use crate::array::iterator::one_sided_iterator::OneSidedIter;
-use crate::array::iterator::{private::*, LamellarArrayIterators, LamellarArrayMutIterators};
-use crate::array::local_lock_atomic::*;
-use crate::array::private::LamellarArrayPrivate;
-use crate::array::r#unsafe::private::UnsafeArrayInner;
-use crate::array::*;
-use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
-use crate::memregion::Dist;
+use crate::{
+    array::{
+        iterator::{
+            distributed_iterator::DistIteratorLauncher,
+            local_iterator::LocalIteratorLauncher,
+            one_sided_iterator::OneSidedIter,
+            private::{InnerIter, Sealed},
+            IterLockFuture,
+        },
+        private::LamellarArrayPrivate,
+        r#unsafe::private::UnsafeArrayInner,
+        InnerArray,
+    },
+    darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard},
+    Dist, DistributedIterator, IndexedDistributedIterator, IndexedLocalIterator, LamellarArray,
+    LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator, LocalLockArray,
+};
 
-use self::iterator::IterLockFuture;
+// use crate::array::iterator::distributed_iterator::*;
+// use crate::array::iterator::local_iterator::*;
+// use crate::array::iterator::one_sided_iterator::OneSidedIter;
+// use crate::array::iterator::{private::*, LamellarArrayIterators, LamellarArrayMutIterators};
+// use crate::array::local_lock_atomic::*;
+// use crate::array::private::LamellarArrayPrivate;
+// use crate::array::r#unsafe::private::UnsafeArrayInner;
+// use crate::array::*;
+// use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
+// use crate::memregion::Dist;
+
+// use self::iterator::IterLockFuture;
 
 impl<T> InnerArray for LocalLockArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
@@ -230,19 +250,12 @@ pub struct LocalLockDistIterMut<'a, T: Dist> {
 
 impl<'a, T: Dist> InnerIter for LocalLockDistIterMut<'a, T> {
     fn lock_if_needed(&self, _s: Sealed) -> Option<IterLockFuture> {
-        // println!(
-        //     " LocalLockDistIterMut lock_if_needed: {:?}",
-        //     std::thread::current().id()
-        // );
         if self.lock.lock().is_none() {
-            // println!("LocalLockDistIterMut need to get write handle");
             let lock_handle = self.data.lock.write();
             let lock = self.lock.clone();
 
             Some(Box::pin(async move {
-                // println!("LocalLockDistIterMut trying to get write handle");
                 *lock.lock() = Some(lock_handle.await);
-                // println!("LocalLockDistIterMut got the write lock");
             }))
         } else {
             None
@@ -427,7 +440,7 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
     // type Array = LocalLockArray<T>;
     type DistIter = LocalLockDistIter<'static, T>;
     type LocalIter = LocalLockLocalIter<'static, T>;
-    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    type OnesidedIter = OneSidedIter<T, Self>;
 
     fn dist_iter(&self) -> Self::DistIter {
         LocalLockDistIter {
@@ -450,15 +463,11 @@ impl<T: Dist> LamellarArrayIterators<T> for LocalLockArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone(), self.array.team_rt(), 1)
+        OneSidedIter::new(self, 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(
-            self.clone(),
-            self.array.team_rt(),
-            std::cmp::min(buf_size, self.len()),
-        )
+        OneSidedIter::new(self, std::cmp::min(buf_size, self.len()))
     }
 }
 

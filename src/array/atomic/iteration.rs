@@ -7,7 +7,6 @@ use crate::array::iterator::{
     private::{InnerIter, Sealed},
     LamellarArrayIterators, LamellarArrayMutIterators,
 };
-use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
@@ -19,6 +18,7 @@ impl<T: Dist> InnerArray for AtomicArray<T> {
         match &self {
             AtomicArray::NativeAtomicArray(a) => a.as_inner(),
             AtomicArray::GenericAtomicArray(a) => a.as_inner(),
+            AtomicArray::NetworkAtomicArray(a) => a.as_inner(),
         }
     }
 }
@@ -199,7 +199,7 @@ impl<T: Dist> LamellarArrayIterators<T> for AtomicArray<T> {
     // type Array = AtomicArray<T>;
     type DistIter = AtomicDistIter<T>;
     type LocalIter = AtomicLocalIter<T>;
-    type OnesidedIter = OneSidedIter<'static, T, Self>;
+    type OnesidedIter = OneSidedIter<T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
         AtomicDistIter::new(self.clone(), 0, 0)
     }
@@ -209,15 +209,11 @@ impl<T: Dist> LamellarArrayIterators<T> for AtomicArray<T> {
     }
 
     fn onesided_iter(&self) -> Self::OnesidedIter {
-        OneSidedIter::new(self.clone(), self.team_rt(), 1)
+        OneSidedIter::new(self, 1)
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(
-            self.clone(),
-            self.team_rt(),
-            std::cmp::min(buf_size, self.len()),
-        )
+        OneSidedIter::new(self, std::cmp::min(buf_size, self.len()))
     }
 }
 

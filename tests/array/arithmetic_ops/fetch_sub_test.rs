@@ -137,7 +137,7 @@ macro_rules! fetch_sub_test {
         array.barrier();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array, val, zero, success);
             if !success {
                 eprintln!("{:?} {:?} {:?}", i, val, max_val);
@@ -167,7 +167,7 @@ macro_rules! fetch_sub_test {
         let sum = unsafe {
             onesided_iter!($array, array)
                 .into_iter()
-                .fold(0, |acc, x| acc + *x as usize)
+                .fold(0, |acc, x| acc + x as usize)
         };
         let calced_sum = tot_updates as usize * (array.len() - 1);
         check_val!($array, sum, calced_sum, success);
@@ -204,7 +204,7 @@ macro_rules! fetch_sub_test {
         sub_array.barrier();
         #[allow(unused_unsafe)]
         for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
-            let val = *elem;
+            let val = elem;
             check_val!($array, val, zero, success);
             if !success {
                 eprintln!("{:?} {:?} {:?}", i, val, max_val);
@@ -232,7 +232,7 @@ macro_rules! fetch_sub_test {
         let sum = unsafe {
             onesided_iter!($array, sub_array)
                 .into_iter()
-                .fold(0, |acc, x| acc + *x as usize)
+                .fold(0, |acc, x| acc + x as usize)
         };
         let calced_sum = tot_updates as usize * (sub_array.len() - 1);
         check_val!($array, sum, calced_sum, success);
@@ -271,7 +271,7 @@ macro_rules! fetch_sub_test {
             sub_array.barrier();
             #[allow(unused_unsafe)]
             for (i, elem) in unsafe { onesided_iter!($array, sub_array).into_iter().enumerate() } {
-                let val = *elem;
+                let val = elem;
                 check_val!($array, val, zero, success);
                 if !success {
                     eprintln!("{:?} {:?} {:?}", i, val, max_val);
@@ -299,7 +299,7 @@ macro_rules! fetch_sub_test {
             let sum = unsafe {
                 onesided_iter!($array, sub_array)
                     .into_iter()
-                    .fold(0, |acc, x| acc + *x as usize)
+                    .fold(0, |acc, x| acc + x as usize)
             };
             let calced_sum = tot_updates as usize * (sub_array.len() - 1);
             check_val!($array, sum, calced_sum, success);

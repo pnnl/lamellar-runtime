@@ -70,7 +70,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = array.load(53);
     /// let val = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
@@ -82,6 +82,10 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    fn blocking_load(&self, index: usize) -> T {
+        self.load(index).block()
     }
 
     /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
@@ -112,7 +116,7 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let vals = req.block();
     /// assert_eq!(vals.len(),indices.len());
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     fn batch_load<'a>(&self, index: impl OpInput<'a, usize>) -> ArrayFetchBatchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array().initiate_batch_fetch_op_2(
@@ -191,7 +195,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let req = unsafe{ array.load(53)};
     /// let val = req.block();
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
                                                         // let array = self.inner_array();
@@ -233,7 +237,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
     /// let vals = req.block();
     /// assert_eq!(vals.len(),indices.len());
     ///```
-    //#[tracing::instrument(skip_all)]
+    #[tracing::instrument(skip_all, level = "debug")]
     unsafe fn batch_load<'a>(&self, index: impl OpInput<'a, usize>) -> ArrayFetchBatchOpHandle<T> {
         let dummy_val = self.inner_array().dummy_val(); //we dont actually do anything with this except satisfy apis;
         self.inner_array().initiate_batch_fetch_op_2(
@@ -242,5 +246,60 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             ArrayOpCmd::Load,
             self.as_lamellar_byte_array(),
         )
+    }
+}
+
+#[doc(hidden)]
+pub trait LocalReadOnlyOps<T: ElementOps> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T>;
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for LamellarMutLocalData<'_, T> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        match self {
+            LamellarMutLocalData::Slice(data) => data.local_load(idx_vals),
+            LamellarMutLocalData::LocalLock(data) => {
+                let slice: &[T] = &*data;
+                slice.local_load(idx_vals)
+            }
+            LamellarMutLocalData::GlobalLock(data) => {
+                let slice: &[T] = &*data;
+                slice.local_load(idx_vals)
+            }
+            LamellarMutLocalData::NativeAtomic(data) => data.local_load(idx_vals),
+            LamellarMutLocalData::GenericAtomic(data) => data.local_load(idx_vals),
+            LamellarMutLocalData::NetworkAtomic(data) => data.local_load(idx_vals),
+        }
+    }
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for LamellarLocalData<'_, T> {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        match self {
+            LamellarLocalData::Slice(data) => data.local_load(idx_vals),
+            LamellarLocalData::LocalLock(data) => {
+                let slice: &[T] = &*data;
+                slice.local_load(idx_vals)
+            }
+            LamellarLocalData::GlobalLock(data) => {
+                let slice: &[T] = &*data;
+                slice.local_load(idx_vals)
+            }
+            LamellarLocalData::NativeAtomic(data) => data.local_load(idx_vals),
+            LamellarLocalData::GenericAtomic(data) => data.local_load(idx_vals),
+            LamellarLocalData::NetworkAtomic(data) => data.local_load(idx_vals),
+        }
+    }
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for &mut [T] {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        idx_vals.map(|(i, _)| self[i]).collect()
+    }
+}
+
+impl<T: ElementOps> LocalReadOnlyOps<T> for &[T] {
+    fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
+        idx_vals.map(|(i, _)| self[i]).collect()
     }
 }

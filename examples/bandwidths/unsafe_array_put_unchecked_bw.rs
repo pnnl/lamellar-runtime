@@ -16,7 +16,7 @@ fn main() {
         UnsafeArray::new(&world, ARRAY_LEN * num_pes, Distribution::Block).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
-        for i in data.as_mut_slice().unwrap() {
+        for i in data.as_mut_slice() {
             *i = my_pe as u8;
         }
         for i in array.local_as_mut_slice() {
@@ -52,21 +52,25 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(..num_bytes as usize);
-                unsafe { array.put_unchecked(ARRAY_LEN * (num_pes - 1) + j, &sub_reg) };
+                unsafe {
+                    let _ = array
+                        .put_buffer_unmanaged(ARRAY_LEN * (num_pes - 1) + j, &sub_reg);
+                };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed());
         }
-        if my_pe == num_pes - 1 {
-            let array_slice = unsafe { array.local_as_slice() };
-            for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
-                    std::thread::yield_now()
-                }
-            }
-        }
+        // if my_pe == num_pes - 1 {
+        //     let array_slice = unsafe { array.local_as_slice() };
+        //     for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+        //         while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
+        //             std::thread::yield_now()
+        //         }
+        //     }
+        // }
+        array.wait_all();
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();

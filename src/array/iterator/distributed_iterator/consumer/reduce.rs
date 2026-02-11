@@ -11,7 +11,7 @@ use crate::lamellar_task_group::TaskGroupLocalAmHandle;
 use crate::lamellar_team::LamellarTeamRT;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::Dist;
+use crate::{Darc, Dist};
 
 use futures_util::{ready, Future, StreamExt};
 use pin_project::{pin_project, pinned_drop};
@@ -68,7 +68,7 @@ where
     }
     fn create_handle(
         self,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         reqs: VecDeque<TaskGroupLocalAmHandle<Self::AmOutput>>,
     ) -> Self::Handle {
         InnerDistIterReduceHandle {
@@ -88,7 +88,7 @@ where
 pub(crate) struct InnerDistIterReduceHandle<T, F> {
     pub(crate) reqs: VecDeque<TaskGroupLocalAmHandle<Option<T>>>,
     pub(crate) op: F,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     state: InnerState<T>,
     spawned: bool,
 }
@@ -105,7 +105,7 @@ where
 {
     async fn async_reduce_remote_vals(
         local_val: T,
-        team: Pin<Arc<LamellarTeamRT>>,
+        team: Darc<LamellarTeamRT>,
         op: F,
     ) -> Option<T> {
         let local_vals = UnsafeArray::<T>::async_new(
@@ -125,7 +125,7 @@ where
 
         Some(
             stream
-                .fold(*first, |a, &b| {
+                .fold(first, |a, b| {
                     let val = op(a, b);
                     async move { val }
                 })

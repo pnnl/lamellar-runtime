@@ -25,6 +25,7 @@ fn impl_am_group_remote_lamellar_active_message_trait(
     quote! {
         impl #impl_generics #lamellar::active_messaging::LamellarActiveMessage for #am_group_am_name #ty_generics #where_clause {
             fn exec(self: std::sync::Arc<Self>,__lamellar_current_pe: usize,__lamellar_num_pes: usize, __local: bool, __lamellar_world: std::sync::Arc<#lamellar::LamellarTeam>, __lamellar_team: std::sync::Arc<#lamellar::LamellarTeam>) -> std::pin::Pin<Box<dyn std::future::Future<Output=#lamellar::active_messaging::LamellarReturn> + Send >>{
+                let __lamellar_thread_id = #lamellar::LAMELLAR_THREAD_ID.with(|id| *id);
                 Box::pin( async move {
                     #ret_contatiner
                     for i in 0..self.len(){
@@ -365,16 +366,21 @@ fn impl_am_group_user(
                 }
             }
 
+            // #[#lamellar::instrument(skip_all, level = "debug")]
             pub async fn exec(mut self) -> #typed_am_group_result_return_type{
 
+                // #lamellar::trace!("typed_am_group exec");
                 // let timer = std::time::Instant::now();
 
                 for pe in 0..(self.team.num_pes()+1){
                     self.send_pe_buffer(pe);
                 }
 
-                // println!("{} pending reqs", self.pending_reqs.len());
-                let results = #lamellar::futures_util::future::join_all(self.pending_reqs.drain(..).map(|req| async { req.into_result().await })).await;
+                // #lamellar::trace!("{} pending reqs", self.pending_reqs.len());
+                let results = #lamellar::futures_util::future::join_all(self.pending_reqs.drain(..).map(|req| async { let req = req.into_result().await;
+                    // #lamellar::trace!("got result");
+                    req
+                })).await;
                 let num_pes = self.team.num_pes();
                 #typed_am_group_result_type
             }
@@ -517,7 +523,7 @@ pub(crate) fn generate_am_group(
     let user_expanded = quote_spanned! {expanded.span()=>
         const _: () = {
             extern crate lamellar as __lamellar;
-            // use __lamellar::tracing::*;
+            // use __lamellar::Instrument;
             #expanded
         };
     };
@@ -559,8 +565,8 @@ fn create_am_group_remote(
     let mut am_group_ser = fields.ser_as_vecs();
     am_group_ser.extend(static_fields.ser());
 
-    let mut am_group_des = fields.des_as_vecs();
-    am_group_des.extend(static_fields.des());
+    // let mut am_group_des = fields.des_as_vecs();
+    // am_group_des.extend(static_fields.des());
 
     let (the_struct, the_traits) = create_am_struct(
         generics,
@@ -571,7 +577,7 @@ fn create_am_group_remote(
         &am_group_name,
         &am_group_fields,
         &am_group_ser,
-        &am_group_des,
+        // &am_group_des,
         lamellar,
         local,
     );

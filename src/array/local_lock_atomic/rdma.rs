@@ -1,158 +1,645 @@
-use std::collections::VecDeque;
+use futures_util::future::join_all;
+use parking_lot::Mutex;
 
 use crate::array::local_lock_atomic::*;
+use crate::array::rdma::private::{LamellarRdmaGet, LamellarRdmaPut, Sealed};
+
 use crate::array::private::{ArrayExecAm, LamellarArrayPrivate};
-use crate::array::LamellarWrite;
+
 use crate::array::*;
-use crate::memregion::{AsBase, Dist, RTMemoryRegionRDMA, RegisteredMemoryRegion};
+use crate::lamellae::CommSlice;
+use crate::memregion::{
+    AsLamellarBuffer, Dist, LamellarBuffer, MemregionRdmaInput, MemregionRdmaInputInner,
+    RTMemoryRegionRDMA, RemoteMemoryRegion,
+};
 
-impl<T: Dist> LamellarArrayInternalGet<T> for LocalLockArray<T> {
-    // fn iget<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(&self, index: usize, buf: U) {
-    //     self.iget(index, buf)
-    // }
-    unsafe fn internal_get<U: Into<LamellarMemoryRegion<T>>>(
+impl<T: Dist> LocalLockArray<T> {
+    pub fn put(&self, index: usize, data: T) -> ArrayRdmaPutHandle<T> {
+        unsafe { <Self as LamellarRdmaPut<T>>::put(self, index, data, Sealed) }
+    }
+    pub fn put_unmanaged(&self, index: usize, data: T) {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_unmanaged(self, index, data, Sealed) }
+    }
+
+    pub fn put_buffer<U: Into<MemregionRdmaInput<T>>>(
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
-        let req = self.exec_am_local(InitGetAm {
+    ) -> ArrayRdmaPutHandle<T> {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_buffer(self, index, buf.into(), Sealed) }
+    }
+
+    pub fn put_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(&self, index: usize, buf: U) {
+        unsafe {
+            <Self as LamellarRdmaPut<T>>::put_buffer_unmanaged(self, index, buf.into(), Sealed)
+        }
+    }
+    pub fn put_pe(&self, pe: usize, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_pe(self, pe, offset, data, Sealed) }
+    }
+    pub fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T) {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_pe_unmanaged(self, pe, offset, data, Sealed) }
+    }
+    pub fn put_pe_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+    ) -> ArrayRdmaPutHandle<T> {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_pe_buffer(self, pe, offset, buf.into(), Sealed) }
+    }
+    pub fn put_pe_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+    ) {
+        unsafe {
+            <Self as LamellarRdmaPut<T>>::put_pe_buffer_unmanaged(
+                self,
+                pe,
+                offset,
+                buf.into(),
+                Sealed,
+            )
+        }
+    }
+    pub fn put_all(&self, offset: usize, data: T) -> ArrayRdmaPutHandle<T> {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_all(self, offset, data, Sealed) }
+    }
+    pub fn put_all_unmanaged(&self, offset: usize, data: T) {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_all_unmanaged(self, offset, data, Sealed) }
+    }
+    pub fn put_all_buffer<U: Into<MemregionRdmaInput<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+    ) -> ArrayRdmaPutHandle<T> {
+        unsafe { <Self as LamellarRdmaPut<T>>::put_all_buffer(self, offset, buf.into(), Sealed) }
+    }
+    pub fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInput<T>>>(&self, offset: usize, buf: U) {
+        unsafe {
+            <Self as LamellarRdmaPut<T>>::put_all_buffer_unmanaged(self, offset, buf.into(), Sealed)
+        }
+    }
+
+    pub fn get(&self, index: usize) -> ArrayRdmaGetHandle<T> {
+        unsafe { <Self as LamellarRdmaGet<T>>::get(self, index, Sealed) }
+    }
+    pub fn get_buffer(&self, index: usize, num_elems: usize) -> ArrayRdmaGetBufferHandle<T> {
+        unsafe { <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed) }
+    }
+    pub fn get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
+        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed) }
+    }
+    pub fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged(self, index, data, Sealed)
+        }
+    }
+
+    pub fn get_pe(&self, pe: usize, offset: usize) -> ArrayRdmaGetHandle<T> {
+        unsafe { <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed) }
+    }
+    pub fn get_buffer_pe(
+        &self,
+        pe: usize,
+        offset: usize,
+        num_elems: usize,
+    ) -> ArrayRdmaGetBufferHandle<T> {
+        unsafe { <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed) }
+    }
+    pub fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+    ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
+        unsafe { <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed) }
+    }
+    pub fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+    ) {
+        unsafe {
+            <Self as LamellarRdmaGet<T>>::get_into_buffer_unmanaged_pe(
+                self, pe, offset, data, Sealed,
+            )
+        }
+    }
+}
+impl<T: Dist> LamellarRdmaPut<T> for LocalLockArray<T> {
+    unsafe fn put(&self, index: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
+        let am = self.store(index, data);
+        ArrayRdmaPutHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaPutState::StoreOp(am),
+            spawned: false,
+        }
+    }
+    unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
+        let _ = self.store(index, data).spawn();
+    }
+    unsafe fn put_buffer<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        index: usize,
+        buf: U,
+        _: Sealed,
+    ) -> ArrayRdmaPutHandle<T> {
+        let req = self.exec_am_local(InitPutBufferAm {
             array: self.clone(),
             index: index,
             buf: buf.into(),
         });
-        ArrayRdmaHandle {
+        ArrayRdmaPutHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: VecDeque::from([req.into()]),
+            state: ArrayRdmaPutState::LocalAmPut(req),
             spawned: false,
         }
     }
-    unsafe fn internal_at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
-        let buf: OneSidedMemoryRegion<T> = self.array.team_rt().alloc_one_sided_mem_region(1);
-        let req = self.exec_am_local(InitGetAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.clone().into(),
-        });
-        ArrayRdmaAtHandle {
-            array: self.as_lamellar_byte_array(),
-            req: Some(req),
-            buf: buf,
-            spawned: false,
-        }
-    }
-}
-
-impl<T: Dist> LamellarArrayGet<T> for LocalLockArray<T> {
-    unsafe fn get<U: TeamTryInto<LamellarArrayRdmaOutput<T>> + LamellarWrite>(
+    unsafe fn put_buffer_unmanaged<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
         index: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
-        match buf.team_try_into(&self.array.team()) {
-            Ok(buf) => self.internal_get(index, buf),
-            Err(_) => ArrayRdmaHandle {
-                array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
-                spawned: false,
+        _: Sealed,
+    ) {
+        let _ = self
+            .exec_am_local(InitPutBufferAm {
+                array: self.clone(),
+                index: index,
+                buf: buf.into(),
+            })
+            .spawn();
+    }
+    unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
+        let req = self.exec_am_pe_tg(
+            pe,
+            LocalLockRemotePePutAm {
+                array: self.clone().into(), //inner of the indices we need to place data into
+                byte_start_index: offset * std::mem::size_of::<T>(),
+                data: unsafe {
+                    std::slice::from_raw_parts(
+                        &data as *const T as *const u8,
+                        std::mem::size_of::<T>(),
+                    )
+                    .to_vec()
+                },
             },
-        }
-    }
-    fn at(&self, index: usize) -> ArrayRdmaAtHandle<T> {
-        unsafe { self.internal_at(index) }
-    }
-}
-
-impl<T: Dist> LamellarArrayInternalPut<T> for LocalLockArray<T> {
-    unsafe fn internal_put<U: Into<LamellarMemoryRegion<T>>>(
-        &self,
-        index: usize,
-        buf: U,
-    ) -> ArrayRdmaHandle {
-        let req = self.exec_am_local(InitPutAm {
-            array: self.clone(),
-            index: index,
-            buf: buf.into(),
-        });
-        ArrayRdmaHandle {
+        );
+        ArrayRdmaPutHandle {
             array: self.as_lamellar_byte_array(),
-            reqs: VecDeque::from([req.into()]),
+            state: ArrayRdmaPutState::RemoteAmPut(req),
             spawned: false,
         }
     }
-}
-
-impl<T: Dist> LamellarArrayPut<T> for LocalLockArray<T> {
-    unsafe fn put<U: TeamTryInto<LamellarArrayRdmaInput<T>> + LamellarRead>(
+    unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
+        let _ = self
+            .exec_am_pe_tg(
+                pe,
+                LocalLockRemotePePutAm {
+                    array: self.clone().into(), //inner of the indices we need to place data into
+                    byte_start_index: offset * std::mem::size_of::<T>(),
+                    data: unsafe {
+                        std::slice::from_raw_parts(
+                            &data as *const T as *const u8,
+                            std::mem::size_of::<T>(),
+                        )
+                        .to_vec()
+                    },
+                },
+            )
+            .spawn();
+    }
+    unsafe fn put_pe_buffer<U: Into<MemregionRdmaInputInner<T>>>(
         &self,
-        index: usize,
+        pe: usize,
+        offset: usize,
         buf: U,
-    ) -> ArrayRdmaHandle {
-        match buf.team_try_into(&self.array.team()) {
-            Ok(buf) => self.internal_put(index, buf),
-            Err(_) => ArrayRdmaHandle {
-                array: self.as_lamellar_byte_array(),
-                reqs: VecDeque::new(),
-                spawned: false,
+        _: Sealed,
+    ) -> ArrayRdmaPutHandle<T> {
+        let req = self.exec_am_pe_tg(
+            pe,
+            LocalLockRemotePePutAm {
+                array: self.clone().into(), //inner of the indices we need to place data into
+                byte_start_index: offset * std::mem::size_of::<T>(),
+                data: buf.into().to_bytes(),
             },
+        );
+        ArrayRdmaPutHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaPutState::RemoteAmPut(req),
+            spawned: false,
         }
+    }
+    unsafe fn put_pe_buffer_unmanaged<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        buf: U,
+        _: Sealed,
+    ) {
+        let _ = self.exec_am_pe_tg(
+            pe,
+            LocalLockRemotePePutAm {
+                array: self.clone().into(), //inner of the indices we need to place data into
+                byte_start_index: offset * std::mem::size_of::<T>(),
+                data: buf.into().to_bytes(),
+            },
+        );
+    }
+    unsafe fn put_all(&self, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
+        let req = self.exec_am_all_tg(LocalLockRemotePePutAm {
+            array: self.clone().into(), //inner of the indices we need to place data into
+            byte_start_index: offset * std::mem::size_of::<T>(),
+            data: unsafe {
+                std::slice::from_raw_parts(&data as *const T as *const u8, std::mem::size_of::<T>())
+                    .to_vec()
+            },
+        });
+        ArrayRdmaPutHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaPutState::RemoteAmPutAll(req),
+            spawned: false,
+        }
+    }
+    unsafe fn put_all_unmanaged(&self, offset: usize, data: T, _: Sealed) {
+        let _ = self.exec_am_all_tg(LocalLockRemotePePutAm {
+            array: self.clone().into(), //inner of the indices we need to place data into
+            byte_start_index: offset * std::mem::size_of::<T>(),
+            data: unsafe {
+                std::slice::from_raw_parts(&data as *const T as *const u8, std::mem::size_of::<T>())
+                    .to_vec()
+            },
+        });
+    }
+    unsafe fn put_all_buffer<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+        _: Sealed,
+    ) -> ArrayRdmaPutHandle<T> {
+        let req = self.exec_am_all_tg(LocalLockRemotePePutAm {
+            array: self.clone().into(), //inner of the indices we need to place data into
+            byte_start_index: offset * std::mem::size_of::<T>(),
+            data: buf.into().to_bytes(),
+        });
+        ArrayRdmaPutHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaPutState::RemoteAmPutAll(req),
+            spawned: false,
+        }
+    }
+    unsafe fn put_all_buffer_unmanaged<U: Into<MemregionRdmaInputInner<T>>>(
+        &self,
+        offset: usize,
+        buf: U,
+        _: Sealed,
+    ) {
+        let _ = self.exec_am_all_tg(LocalLockRemotePePutAm {
+            array: self.clone().into(), //inner of the indices we need to place data into
+            byte_start_index: offset * std::mem::size_of::<T>(),
+            data: buf.into().to_bytes(),
+        });
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Debug)]
-struct InitGetAm<T: Dist> {
-    array: LocalLockArray<T>, //inner of the indices we need to place data into
-    index: usize,             //relative to inner
-    buf: LamellarMemoryRegion<T>,
+impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
+    unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
+        if let Some((pe, _offset)) = self.pe_and_offset_for_global_index(index) {
+            let sub_array = self.sub_array(index..index + 1);
+
+            let req = self.exec_am_pe_tg(
+                pe,
+                LocalLockGetPeAm {
+                    array: sub_array.into(),
+                },
+            );
+            ArrayRdmaGetHandle {
+                array: self.as_lamellar_byte_array(),
+                state: ArrayRdmaGetState::RemoteAmGet(req),
+                spawned: false,
+            }
+        } else {
+            panic!("index out of bounds in LamellarArray get");
+        }
+    }
+    unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
+        <Self as LamellarRdmaGet<T>>::get(self, index, Sealed).block()
+    }
+    unsafe fn get_buffer(
+        &self,
+        index: usize,
+        num_elems: usize,
+        _: Sealed,
+    ) -> ArrayRdmaGetBufferHandle<T> {
+        let req = self.exec_am_local(LocalLockInitGetBufferAm {
+            array: self.sub_array(index..index + num_elems).clone().into(),
+            // index: index,
+            // len: num_elems,
+        });
+        ArrayRdmaGetBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaGetBufferState::LocalAmGet(req),
+            spawned: false,
+        }
+    }
+
+    unsafe fn blocking_get_buffer(&self, index: usize, num_elems: usize, _: Sealed) -> Vec<T> {
+        <Self as LamellarRdmaGet<T>>::get_buffer(self, index, num_elems, Sealed).block()
+    }
+    unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
+        let req = self.exec_am_local(LocalLockInitGetIntoBufferAm {
+            array: self.sub_array(index..index + data.len()).clone().into(),
+            // index: index,
+            buf: Mutex::new(data),
+        });
+        ArrayRdmaGetIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaGetIntoBufferState::LocalAmGet(req),
+            spawned: false,
+        }
+    }
+
+    unsafe fn blocking_get_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).block()
+    }
+    unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
+        &self,
+        index: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer(self, index, data, Sealed).spawn();
+    }
+
+    unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
+        let req = self.exec_am_pe_tg(
+            pe,
+            LocalLockGetPeAm {
+                array: self.sub_array(offset..offset + 1).into(), //inner of the indices we need to place data into
+                                                                  // local_index: offset,
+            },
+        );
+        ArrayRdmaGetHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaGetState::RemoteAmGet(req),
+            spawned: false,
+        }
+    }
+    unsafe fn blocking_get_pe(&self, pe: usize, offset: usize, _: Sealed) -> T {
+        <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed).block()
+    }
+
+    unsafe fn get_buffer_pe(
+        &self,
+        pe: usize,
+        offset: usize,
+        num_elems: usize,
+        _: Sealed,
+    ) -> ArrayRdmaGetBufferHandle<T> {
+        let buf = self.array.team_rt().alloc_one_sided_mem_region(num_elems);
+        let req = self.exec_am_pe_tg(
+            pe,
+            LocalLockRemoteGetBufferPeAm {
+                array: self.sub_array(offset..offset + num_elems).into(),
+                offset,
+                num_elems,
+                buf: unsafe { buf.clone().to_base::<u8>() },
+            },
+        );
+        ArrayRdmaGetBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaGetBufferState::RemoteAmGet(req, buf),
+            spawned: false,
+        }
+    }
+    unsafe fn blocking_get_buffer_pe(
+        &self,
+        pe: usize,
+        offset: usize,
+        num_elems: usize,
+        _: Sealed,
+    ) -> Vec<T> {
+        <Self as LamellarRdmaGet<T>>::get_buffer_pe(self, pe, offset, num_elems, Sealed).block()
+    }
+
+    unsafe fn get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) -> ArrayRdmaGetIntoBufferHandle<T, B> {
+        let req = self.exec_am_pe_tg(
+            pe,
+            LocalLockRemoteGetIntoBufferPeAm {
+                array: self.sub_array(offset..offset + data.len()).into(),
+                offset,
+                num_elems: data.len(),
+            },
+        );
+        ArrayRdmaGetIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayRdmaGetIntoBufferState::RemoteAmGet(data, req),
+            spawned: false,
+        }
+    }
+    unsafe fn blocking_get_into_buffer_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed).block()
+    }
+    unsafe fn get_into_buffer_unmanaged_pe<B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        data: LamellarBuffer<T, B>,
+        _: Sealed,
+    ) {
+        let _ = <Self as LamellarRdmaGet<T>>::get_into_buffer_pe(self, pe, offset, data, Sealed)
+            .spawn();
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct LocalLockGetPeAm {
+    array: LocalLockByteArray, //sub array specific to the elements we need to get
+                               // local_index: usize,        //local index
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for LocalLockGetPeAm<T> {
+    async fn exec(self) -> Vec<u8> {
+        let _lock = self.array.lock.read().await;
+
+        self.array.array.local_data().to_vec()
+    }
+}
+#[lamellar_impl::AmLocalDataRT]
+pub(crate) struct LocalLockInitGetBufferAm<T: Dist> {
+    array: LocalLockArray<T>, //sub array specific to the elements we need to get
+                              // index: usize,             //relative to inner
+                              // len: usize,
 }
 
 #[lamellar_impl::rt_am_local]
-impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
-    async fn exec(self) {
-        // let buf = self.buf.into();
-        // let u8_index = self.index * std::mem::size_of::<T>();
-        // let u8_len = self.buf.len() * std::mem::size_of::<T>();
-        // println!("in InitGetAm {:?} {:?}",u8_index,u8_index + u8_len);
+impl<T: Dist + 'static> LamellarAm for LocalLockInitGetBufferAm<T> {
+    async fn exec(self) -> Vec<T> {
         let mut reqs = vec![];
+        let mut cur_index = 0;
+        let buf = lamellar::team.alloc_one_sided_mem_region::<T>(self.array.len());
+        let mut bufs = vec![];
         for pe in self
             .array
             .array
-            .pes_for_range(self.index, self.buf.len())
+            .pes_for_range(0, self.array.len())
             .into_iter()
         {
-            // println!("pe {:?}",pe);
-            let remote_am = LocalLockRemoteGetAm {
+            let len = self.array.array.inner.num_elems_pe(pe);
+            let temp_buf = buf.sub_region(cur_index..cur_index + len);
+
+            let remote_am = LocalLockRemoteGetBufferAm {
                 array: self.array.clone().into(),
-                start_index: self.index,
-                len: self.buf.len(),
+                // start_index: self.index,
+                // len: self.len,
+                buf: unsafe { temp_buf.clone().to_base::<u8>() },
+            };
+            bufs.push(temp_buf.clone());
+            reqs.push(self.array.spawn_am_pe_tg(pe, remote_am));
+            cur_index += len;
+        }
+        let num_pes = reqs.len();
+        join_all(reqs).await;
+        match self.array.array.inner.distribution {
+            Distribution::Block => unsafe { buf.as_slice().to_vec() },
+            Distribution::Cyclic => {
+                let mut data = vec![T::default(); self.array.len()];
+                for (k, buf) in bufs.iter().enumerate() {
+                    let buf_slice = unsafe { buf.as_slice() };
+                    for (i, val) in buf_slice.iter().enumerate() {
+                        data[i * num_pes + k] = *val;
+                    }
+                }
+                data
+            }
+        }
+    }
+}
+#[lamellar_impl::AmDataRT(Debug)]
+struct LocalLockRemoteGetBufferAm {
+    array: LocalLockByteArray, //sub array specific to the elements we need to get
+    // start_index: usize,
+    // len: usize,
+    buf: OneSidedMemoryRegion<u8>,
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for LocalLockRemoteGetBufferAm {
+    //we cant directly do a put from the array in to the data buf
+    //because we need to guarantee the put operation is atomic (maybe iput would work?)
+    async fn exec(self) {
+        // println!("in LocalLock remotegetam {:?} {:?}",self.start_index,self.len);
+        let _lock = self.array.lock.read().await;
+        unsafe {
+            // let data = match self
+            //     .array
+            //     .array
+            //     .local_elements_for_range(self.start_index, self.len)
+            // {
+            //     Some((elems, _indices)) => {
+            //         elems.to_vec() //copy the data
+            //     } //locks dropped
+            //     None => vec![],
+            // };
+            let data = self.array.array.local_data();
+
+            let data_comm_slice = CommSlice::<u8>::from_raw_parts(data.as_ptr(), data.len());
+            RTMemoryRegionRDMA::put_buffer(&self.buf, self.buf.orig_pe(), 0, data_comm_slice).await;
+        }
+    }
+}
+
+#[lamellar_impl::AmLocalDataRT]
+struct LocalLockInitGetIntoBufferAm<T: Dist, B: AsLamellarBuffer<T>> {
+    array: LocalLockArray<T>, //sub array specific to the elements we need to get
+    // index: usize,             //relative to inner
+    buf: Mutex<LamellarBuffer<T, B>>,
+}
+
+#[lamellar_impl::rt_am_local]
+impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for LocalLockInitGetIntoBufferAm<T, B> {
+    async fn exec(self) {
+        let mut reqs = vec![];
+        let mut buf = self.buf.lock().split_off(0);
+        for pe in self.array.array.pes_for_range(0, buf.len()).into_iter() {
+            // println!("pe {:?}",pe);
+            let remote_am = LocalLockRemoteGetIntoBufferAm {
+                array: self.array.clone().into(),
+                // start_index: self.index,
+                // len: buf.len(),
             };
             reqs.push(self.array.spawn_am_pe_tg(pe, remote_am));
         }
+
         unsafe {
             match self.array.array.inner.distribution {
                 Distribution::Block => {
-                    let u8_buf = self.buf.clone().to_base::<u8>();
-                    let mut cur_index = 0;
+                    let cur_index = 0;
+
+                    let buf_slice = buf.as_mut_slice();
+                    let buf_u8_slice = std::slice::from_raw_parts_mut(
+                        buf_slice.as_mut_ptr() as *mut u8,
+                        buf_slice.len() * std::mem::size_of::<T>(),
+                    );
                     for req in reqs.drain(..) {
                         let data = req.await;
-                        // println!("data recv {:?}",data.len());
-                        u8_buf.put_slice(lamellar::current_pe, cur_index, &data);
-                        cur_index += data.len();
+                        buf_u8_slice[cur_index..(cur_index + data.len())].copy_from_slice(&data);
                     }
                 }
                 Distribution::Cyclic => {
-                    let buf_slice = self.buf.as_mut_slice().expect("array data should be on PE");
+                    let buf_slice = buf.as_mut_slice();
                     let num_pes = reqs.len();
                     for (start_index, req) in reqs.drain(..).enumerate() {
                         let data = req.await;
-                        let data_t_ptr = data.as_ptr() as *const T;
-                        let data_t_len = if data.len() % std::mem::size_of::<T>() == 0 {
-                            data.len() / std::mem::size_of::<T>()
+                        let data_aligned = data.as_ptr() as usize % std::mem::align_of::<T>() == 0;
+                        if data_aligned {
+                            let data_t_slice = std::slice::from_raw_parts(
+                                data.as_ptr() as *const T,
+                                data.len() / std::mem::size_of::<T>(),
+                            );
+                            for (i, val) in data_t_slice.iter().enumerate() {
+                                buf_slice[start_index + i * num_pes] = *val;
+                            }
                         } else {
-                            panic!("memory align error");
-                        };
-                        let data_t_slice = std::slice::from_raw_parts(data_t_ptr, data_t_len);
-                        for (i, val) in data_t_slice.iter().enumerate() {
-                            buf_slice[start_index + i * num_pes] = *val;
+                            let data_t_ptr = data.as_ptr() as *mut T;
+                            for i in 0..(data.len() / std::mem::size_of::<T>()) {
+                                buf_slice[start_index + i * num_pes] =
+                                    std::ptr::read_unaligned(data_t_ptr.offset(i as isize));
+                            }
                         }
                     }
                 }
@@ -162,47 +649,95 @@ impl<T: Dist + 'static> LamellarAm for InitGetAm<T> {
 }
 
 #[lamellar_impl::AmDataRT(Debug)]
-struct LocalLockRemoteGetAm {
-    array: LocalLockByteArray, //inner of the indices we need to place data into
-    start_index: usize,
-    len: usize,
+struct LocalLockRemoteGetIntoBufferAm {
+    array: LocalLockByteArray, //sub array specific to the elements we need to get
+                               // start_index: usize,
+                               // len: usize,
 }
 
 #[lamellar_impl::rt_am]
-impl LamellarAm for LocalLockRemoteGetAm {
+impl LamellarAm for LocalLockRemoteGetIntoBufferAm {
     //we cant directly do a put from the array in to the data buf
     //because we need to guarantee the put operation is atomic (maybe iput would work?)
     async fn exec(self) -> Vec<u8> {
-        // println!("in remotegetam {:?} {:?}",self.start_index,self.len);
+        // println!("in LocalLock remotegetam {:?} {:?}",self.start_index,self.len);
         let _lock = self.array.lock.read().await;
-        unsafe {
-            match self
-                .array
-                .array
-                .local_elements_for_range(self.start_index, self.len)
-            {
-                Some((elems, _)) => elems.to_vec(),
-                None => vec![],
-            }
-        }
+        // unsafe {
+        //     match self
+        //         .array
+        //         .array
+        //         .local_elements_for_range(self.start_index, self.len)
+        //     {
+        //         Some((elems, indices)) => {
+        //             elems.to_vec() //copy the data
+        //         } //locks dropped
+        //         None => vec![],
+        //     }
+        // }
+        self.array.array.local_data().to_vec()
     }
 }
 
-#[lamellar_impl::AmLocalDataRT(Debug)]
-struct InitPutAm<T: Dist> {
+#[lamellar_impl::AmDataRT(Debug)]
+struct LocalLockRemoteGetBufferPeAm {
+    array: LocalLockByteArray, //Not a sub array specific to the elements we need to get
+    offset: usize,
+    num_elems: usize,
+    buf: OneSidedMemoryRegion<u8>,
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for LocalLockRemoteGetBufferPeAm {
+    async fn exec(self) {
+        let _lock = self.array.lock.read().await;
+        let local_ptr = unsafe { self.array.array.ptr_for_local_index(self.offset) };
+        let data = unsafe {
+            std::slice::from_raw_parts(
+                local_ptr as *const u8,
+                self.num_elems * self.array.array.inner.elem_size,
+            )
+            // .to_vec()
+        };
+
+        unsafe {
+            let data_comm_slice = CommSlice::<u8>::from_raw_parts(data.as_ptr(), data.len());
+            RTMemoryRegionRDMA::put_buffer(&self.buf, self.buf.orig_pe(), 0, data_comm_slice).await;
+        };
+    }
+}
+#[lamellar_impl::AmDataRT(Debug)]
+struct LocalLockRemoteGetIntoBufferPeAm {
+    array: LocalLockByteArray, //Not a sub array specific to the elements we need to get
+    offset: usize,
+    num_elems: usize,
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for LocalLockRemoteGetIntoBufferPeAm {
+    async fn exec(self) -> Vec<u8> {
+        let _lock = self.array.lock.read().await;
+        let local_ptr = unsafe { self.array.array.ptr_for_local_index(self.offset) };
+        unsafe {
+            std::slice::from_raw_parts(
+                local_ptr as *const u8,
+                self.num_elems * self.array.array.inner.elem_size,
+            )
+            .to_vec()
+        }
+    }
+}
+#[lamellar_impl::AmLocalDataRT]
+struct InitPutBufferAm<T: Dist> {
     array: LocalLockArray<T>, //inner of the indices we need to place data into
     index: usize,             //relative to inner
-    buf: LamellarMemoryRegion<T>,
+    buf: MemregionRdmaInputInner<T>,
 }
 
 #[lamellar_impl::rt_am_local]
-impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
+impl<T: Dist + 'static> LamellarAm for InitPutBufferAm<T> {
     async fn exec(self) {
-        // let u8_index = self.index * std::mem::size_of::<T>();
-        // let u8_len = self.buf.len() * std::mem::size_of::<T>();
-
         unsafe {
-            let u8_buf = self.buf.clone().to_base::<u8>();
+            // let u8_buf = self.buf.clone().to_base::<u8>();
             let mut reqs = vec![];
             match self.array.array.inner.distribution {
                 Distribution::Block => {
@@ -218,25 +753,16 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                             self.index,
                             self.buf.len(),
                         ) {
-                            let u8_buf_len = len * std::mem::size_of::<T>();
-                            // println!(
-                            //     "pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",
-                            //     pe,
-                            //     self.index,
-                            //     len,
-                            //     self.buf.len(),
-                            //     &u8_buf.as_slice().unwrap()[cur_index..(cur_index + u8_buf_len)]
-                            // );
+                            // let u8_buf_len = len * std::mem::size_of::<T>();
+                            // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
                             let remote_am = LocalLockRemotePutAm {
                                 array: self.array.clone().into(), //inner of the indices we need to place data into
                                 start_index: self.index,
                                 len: self.buf.len(),
-                                data: u8_buf.as_slice().expect("array data should be on PE")
-                                    [cur_index..(cur_index + u8_buf_len)]
-                                    .to_vec(),
+                                data: self.buf.sub_region(cur_index..(cur_index + len)).to_bytes(),
                             };
                             reqs.push(self.array.spawn_am_pe_tg(pe, remote_am));
-                            cur_index += u8_buf_len;
+                            cur_index += len;
                         } else {
                             panic!("this should not be possible");
                         }
@@ -246,7 +772,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutAm<T> {
                     let num_pes = ArrayExecAm::team_rt(&self.array).num_pes();
                     let mut pe_u8_vecs: HashMap<usize, Vec<u8>> = HashMap::new();
                     let mut pe_t_slices: HashMap<usize, &mut [T]> = HashMap::new();
-                    let buf_slice = self.buf.as_slice().expect("array data should be on PE");
+                    let buf_slice = self.buf.as_slice();
                     for pe in self
                         .array
                         .array
@@ -312,10 +838,6 @@ struct LocalLockRemotePutAm {
 #[lamellar_impl::rt_am]
 impl LamellarAm for LocalLockRemotePutAm {
     async fn exec(self) {
-        // println!(
-        //     "in remote put {:?} {:?} {:?}",
-        //     self.start_index, self.len, self.data
-        // );
         let _lock = self.array.lock.write().await;
         // println!("got write lock");
         unsafe {
@@ -336,5 +858,23 @@ impl LamellarAm for LocalLockRemotePutAm {
             }
         }
         // println!("done remote put dropping write lock");
+    }
+}
+
+#[lamellar_impl::AmDataRT(Debug)]
+struct LocalLockRemotePePutAm {
+    array: LocalLockByteArray, //inner of the indices we need to place data into
+    byte_start_index: usize,
+    #[serde(with = "serde_bytes")]
+    data: Vec<u8>,
+}
+
+#[lamellar_impl::rt_am]
+impl LamellarAm for LocalLockRemotePePutAm {
+    async fn exec(self) {
+        let _lock = self.array.lock.write().await;
+        let u8_slice = &mut self.array.array.mut_local_data()
+            [self.byte_start_index..(self.byte_start_index + self.data.len())];
+        u8_slice.copy_from_slice(&self.data);
     }
 }

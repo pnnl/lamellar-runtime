@@ -1,7 +1,7 @@
 use crate::active_messaging::SyncSend;
 use crate::array::iterator::consumer::*;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
-// use crate::array::LamellarArray;
+// use crate::LamellarEnv;
 // use crate::memregion::Dist;
 
 use parking_lot::Mutex;
@@ -36,7 +36,7 @@ impl UnsafeArrayInner {
                 worker += 1;
             }
         }
-        cons.create_handle(self.data.team().clone(), reqs)
+        cons.create_handle(self.data.inner().darc_rt_team().clone(), reqs)
     }
 
     pub(crate) fn sched_dynamic<C, AmO, O, I>(&self, cons: C) -> C::Handle

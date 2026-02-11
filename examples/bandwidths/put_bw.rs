@@ -14,10 +14,10 @@ fn main() {
     let array = world.alloc_shared_mem_region::<u8>(ARRAY_LEN).block();
     let data = world.alloc_one_sided_mem_region::<u8>(ARRAY_LEN);
     unsafe {
-        for i in data.as_mut_slice().unwrap() {
+        for i in data.as_mut_slice() {
             *i = my_pe as u8;
         }
-        for i in array.as_mut_slice().unwrap() {
+        for i in array.as_mut_slice() {
             *i = 255 as u8;
         }
     }
@@ -49,7 +49,10 @@ fn main() {
         if my_pe == 0 {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
-                unsafe { array.put(num_pes - 1, j, data.sub_region(..num_bytes as usize)) };
+                unsafe {
+                    let _ = array
+                        .put_buffer_unmanaged(num_pes - 1, j, data.sub_region(..num_bytes as usize));
+                }
 
                 // println!("j: {:?}",j);
                 // unsafe { array.put_slice(num_pes - 1, j, &data[..num_bytes as usize]) };
@@ -58,16 +61,17 @@ fn main() {
                 cnt += 1;
             }
             println!("issue time: {:?}", timer.elapsed());
-            world.wait_all();
+            array.wait_all();
         }
-        if my_pe == num_pes - 1 {
-            let array_slice = unsafe { array.as_slice().unwrap() };
-            for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
-                while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
-                    std::thread::yield_now()
-                }
-            }
-        }
+        // if my_pe == num_pes - 1 {
+        //     let array_slice = unsafe { array.as_slice() };
+        //     // TODO: Not Needed
+        //     for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
+        //         while *(&array_slice[(j + num_bytes as usize) - 1]) != 0 as u8 {
+        //             std::thread::yield_now()
+        //         }
+        //     }
+        // }
         world.barrier();
         let cur_t = timer.elapsed().as_secs_f64();
         let cur: f64 = world.MB_sent();
@@ -90,7 +94,7 @@ fn main() {
         }
         bws.push((sum as f64 / 1048576.0) / cur_t);
         unsafe {
-            for i in array.as_mut_slice().unwrap() {
+            for i in array.as_mut_slice() {
                 *i = 255 as u8;
             }
         };

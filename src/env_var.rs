@@ -58,10 +58,19 @@ fn default_dissemination_factor() -> usize {
 }
 
 fn default_backend() -> String {
-    #[cfg(feature = "rofi")]
-    return "rofi".to_owned();
-    #[cfg(not(feature = "rofi"))]
-    return "local".to_owned();
+    if cfg!(feature = "enable-rofi-c") {
+        println!("rofi_c");
+        return "rofi_c".to_owned();
+    } else if cfg!(feature = "enable-rofi-rust") {
+        return "rofi_rust".to_owned();
+    } else if cfg!(feature = "enable-libfabric") {
+        return "libfabric".to_owned();
+    } else if cfg!(feature = "enable-libfabric-async") {
+        return "libfabric-async".to_owned();
+    } else {
+        println!("local");
+        return "local".to_owned();
+    }
 }
 
 fn default_executor() -> String {
@@ -161,7 +170,7 @@ where
 pub struct Config {
     /// A general timeout in seconds for various operations which may indicate a deadlock, default: 600.0 seconds
     #[serde(default = "default_deadlock_warning_timeout")]
-    pub deadlock_timeout: f64,
+    pub deadlock_warning_timeout: f64,
 
     /// The maximum number of sub messages that will be sent in a single AMGroup Active Message, default: 10000
     #[serde(default = "default_am_group_batch_size")]

@@ -1,0 +1,3 @@
+[submodule "lamellar-ucx-sys/ucx"]
+	path = lamellar-ucx-sys/ucx
+	url = https://github.com/openucx/ucx.git

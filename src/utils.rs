@@ -11,6 +11,26 @@ pub fn print_type_of<T>(_: &T) {
     println!("{}", any::type_name::<T>());
 }
 
+macro_rules! stats {
+    ($expr:expr) => {
+        if cfg!(feature = "enable-stats") {
+            $expr;
+        }
+    };
+}
+macro_rules! print_stats {
+    ($expr:expr) => {
+        if cfg!(feature = "enable-stats") {
+            format!("{:?}", $expr)
+        } else {
+            format!("")
+        }
+    };
+}
+
+pub(crate) use print_stats;
+pub(crate) use stats;
+
 // serialize the trait object F
 // #[flame]
 // #[cfg(feature = "nightly")]

@@ -15,6 +15,11 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+static LAMELLAR_THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    pub static LAMELLAR_THREAD_ID: usize = LAMELLAR_THREAD_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
+}
+
 pub(crate) mod work_stealing;
 use work_stealing::WorkStealing;
 
@@ -100,8 +105,8 @@ pub enum ExecutorType {
 /// LamellarTasks can be either awaited or blocked on.
 pub struct LamellarTask<T> {
     #[pin]
-    task: LamellarTaskInner<T>,
-    executor: Arc<Executor>,
+    pub(crate) task: LamellarTaskInner<T>,
+    pub(crate) executor: Arc<Executor>,
 }
 
 unsafe impl<T: Send> Send for LamellarTask<T> {}
@@ -124,6 +129,7 @@ impl<T> Future for LamellarTask<T> {
 
 #[derive(Debug)]
 pub(crate) enum LamellarTaskInner<T> {
+    // Finished(Option<T>),
     LamellarTask(Option<async_task::Task<T, usize>>),
     AsyncStdTask(async_std::task::JoinHandle<T>),
     #[cfg(feature = "tokio-executor")]
@@ -139,6 +145,7 @@ impl<T> Drop for LamellarTaskInner<T> {
 
         // std::mem::swap(&mut dropped, self);
         match self {
+            // LamellarTaskInner::Finished(_) => {}
             LamellarTaskInner::LamellarTask(task) => {
                 task.take().expect("task already taken").detach();
             }
@@ -154,6 +161,7 @@ impl<T> Future for LamellarTaskInner<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         unsafe {
             match self.get_unchecked_mut() {
+                // LamellarTaskInner::Finished(val) => Poll::Ready(val.take().unwrap()),
                 LamellarTaskInner::LamellarTask(task) => {
                     if let Some(task) = task {
                         Pin::new_unchecked(task).poll(cx)
@@ -180,6 +188,11 @@ pub(crate) trait LamellarExecutor {
         F::Output: Send;
 
     fn submit_task<F>(&self, future: F)
+    where
+        F: Future + Send + 'static,
+        F::Output: Send;
+
+    fn submit_task_thread<F>(&self, future: F, tid: usize)
     where
         F: Future + Send + 'static,
         F::Output: Send;
@@ -222,7 +235,7 @@ pub(crate) enum Executor {
 
 #[derive(Debug)]
 pub(crate) struct Scheduler {
-    executor: Arc<Executor>,
+    pub(crate) executor: Arc<Executor>,
     active_message_engine: RegisteredActiveMessages, //we can eventually abstract this around the ActiveMessageEngine trait but no need currently
     num_ams: Arc<AtomicUsize>,
     max_ams: Arc<AtomicUsize>,
@@ -253,10 +266,14 @@ impl Scheduler {
             panic,
         }
     }
+
+    pub(crate) fn increment_stall_mark(&self) -> usize {
+        self.am_stall_mark.fetch_add(1, Ordering::SeqCst)
+    }
     pub(crate) fn submit_am(&self, am: Am) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
         let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
@@ -296,11 +313,25 @@ impl Scheduler {
         self.executor.submit_task(am_future);
     }
 
+    pub(crate) fn submit_am_thread(&self, am: Am, tid: usize) {
+        let num_ams = self.num_ams.clone();
+        let max_ams = self.max_ams.clone();
+        let am_stall_mark = self.increment_stall_mark();
+        let ame = self.active_message_engine.clone();
+        num_ams.fetch_add(1, Ordering::Relaxed);
+        let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
+        let am_future = async move {
+            ame.process_msg(am, am_stall_mark, false).await;
+            num_ams.fetch_sub(1, Ordering::Relaxed);
+        };
+        self.executor.submit_task_thread(am_future, tid);
+    }
+
     #[allow(dead_code)]
     pub(crate) fn submit_am_immediate(&self, am: Am) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         num_ams.fetch_add(1, Ordering::Relaxed);
         let _am_id = max_ams.fetch_add(1, Ordering::Relaxed);
@@ -334,7 +365,7 @@ impl Scheduler {
     pub(crate) async fn exec_am(&self, am: Am) {
         let num_ams = self.num_ams.clone();
         let max_ams = self.max_ams.clone();
-        let am_stall_mark = self.am_stall_mark.fetch_add(1, Ordering::Relaxed);
+        let am_stall_mark = self.increment_stall_mark();
         let ame = self.active_message_engine.clone();
         // let am_future = async move {
         // let start_tid = thread::current().id();
@@ -589,7 +620,7 @@ impl Scheduler {
         //TODO maybe this should be > 2
         {
             //the Lamellae Comm Task, Lamellae Alloc Task, Lamellar Error Task
-            if timer.elapsed().as_secs_f64() > config().deadlock_timeout {
+            if timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
                 println!(
                     "shutdown timeout, tasks remaining: {:?} panic: {:?}",
                     self.num_tasks.load(Ordering::Relaxed),
@@ -621,51 +652,64 @@ impl Scheduler {
             .store(SchedulerStatus::Panic as u8, Ordering::SeqCst);
         self.executor.force_shutdown();
     }
+
+    pub(crate) fn max_threads(executor: &ExecutorType, num_workers: usize) -> usize {
+        match executor {
+            ExecutorType::LamellarWorkStealing | ExecutorType::LamellarWorkStealing2 | ExecutorType::LamellarWorkStealing3 => std::cmp::max(2, num_workers), // at least one worker + main thread, for more than one worker, the main thread is considered a worker.
+            ExecutorType::AsyncStd => num_workers +1, // the main thread + workers
+            #[cfg(feature = "tokio-executor")]
+            ExecutorType::Tokio => num_workers +1, //the main thread + workers
+        }
+    }
+    pub(crate) fn create_scheduler(
+        executor: ExecutorType,
+        num_pes: usize,
+        num_workers: usize,
+        panic: Arc<AtomicU8>,
+    ) -> Scheduler {
+        let am_stall_mark = Arc::new(AtomicUsize::new(0));
+        let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
+        let executor: Arc<Executor> = Arc::new(match executor {
+            ExecutorType::LamellarWorkStealing => {
+                WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
+            }
+            ExecutorType::LamellarWorkStealing2 => {
+                WorkStealing2::new(num_workers, status.clone(), panic.clone()).into()
+            }
+            ExecutorType::LamellarWorkStealing3 => {
+                WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
+            }
+            ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
+
+            #[cfg(feature = "tokio-executor")]
+            ExecutorType::Tokio => TokioRt::new(num_workers).into(),
+        });
+
+        let batcher = match config().batcher.as_str() {
+            "simple" => BatcherType::Simple(SimpleBatcher::new(
+                num_pes,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
+            "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
+                num_pes,
+                am_stall_mark.clone(),
+                executor.clone(),
+            )),
+            _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
+        };
+
+        Scheduler::new(
+            executor.clone(),
+            RegisteredActiveMessages::new(batcher, executor),
+            am_stall_mark,
+            status,
+            panic,
+        )
+    }
 }
 
-pub(crate) fn create_scheduler(
-    executor: ExecutorType,
-    num_pes: usize,
-    num_workers: usize,
-    panic: Arc<AtomicU8>,
-) -> Scheduler {
-    let am_stall_mark = Arc::new(AtomicUsize::new(0));
-    let status = Arc::new(AtomicU8::new(SchedulerStatus::Active as u8));
-    let executor: Arc<Executor> = Arc::new(match executor {
-        ExecutorType::LamellarWorkStealing => {
-            WorkStealing::new(num_workers, status.clone(), panic.clone()).into()
-        }
-        ExecutorType::LamellarWorkStealing2 => {
-            WorkStealing2::new(num_workers, status.clone(), panic.clone()).into()
-        }
-        ExecutorType::LamellarWorkStealing3 => {
-            WorkStealing3::new(num_workers, status.clone(), panic.clone()).into()
-        }
-        ExecutorType::AsyncStd => AsyncStdRt::new(num_workers).into(),
 
-        #[cfg(feature = "tokio-executor")]
-        ExecutorType::Tokio => TokioRt::new(num_workers).into(),
-    });
 
-    let batcher = match config().batcher.as_str() {
-        "simple" => BatcherType::Simple(SimpleBatcher::new(
-            num_pes,
-            am_stall_mark.clone(),
-            executor.clone(),
-        )),
-        "team_am" => BatcherType::TeamAm(TeamAmBatcher::new(
-            num_pes,
-            am_stall_mark.clone(),
-            executor.clone(),
-        )),
-        _ => panic!("[LAMELLAR ERROR] unexpected batcher type please set LAMELLAR_BATCHER to one of 'simple' or 'team_am'")
-    };
 
-    Scheduler::new(
-        executor.clone(),
-        RegisteredActiveMessages::new(batcher, executor),
-        am_stall_mark,
-        status,
-        panic,
-    )
-}
+

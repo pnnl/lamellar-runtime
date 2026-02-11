@@ -19,7 +19,7 @@ use super::global_rw_darc::{
     DistRwLock, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
 use super::local_rw_darc::LocalRwDarcWriteGuard;
-use super::DarcInner;
+use super::DarcCommPtr;
 
 #[pin_project(project = StateProj)]
 enum State<T> {
@@ -127,9 +127,9 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
 
         let guard = self
             .darc
-            .darc
-            .team()
             .clone()
+            .inner()
+            .rt_team()
             .block_on(async move { inner_darc.read_arc().await });
         LocalRwDarcReadGuard {
             _darc: self.darc.clone(),
@@ -159,7 +159,7 @@ impl<T: Sync + Send> LocalRwDarcReadHandle<T> {
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(mut self) -> LamellarTask<LocalRwDarcReadGuard<T>> {
         self.launched = true;
-        self.darc.darc.team().spawn(self)
+        self.darc.darc.inner().darc_rt_team().spawn(self)
     }
 }
 
@@ -284,9 +284,9 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
 
         let guard = self
             .darc
-            .darc
-            .team()
             .clone()
+            .inner()
+            .rt_team()
             .block_on(async move { inner_darc.write_arc().await });
         LocalRwDarcWriteGuard {
             _darc: self.darc.clone(),
@@ -315,7 +315,7 @@ impl<T: Sync + Send> LocalRwDarcWriteHandle<T> {
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(mut self) -> LamellarTask<LocalRwDarcWriteGuard<T>> {
         self.launched = true;
-        self.darc.darc.team().spawn(self)
+        self.darc.darc.inner().darc_rt_team().spawn(self)
     }
 }
 
@@ -443,7 +443,7 @@ impl<T: Sync + Send> GlobalRwDarcReadHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalRwDarcReadGuard<T>> {
-        self.darc.darc.team().spawn(self)
+        self.darc.darc.inner().darc_rt_team().spawn(self)
     }
 }
 
@@ -558,7 +558,7 @@ impl<T: Sync + Send> GlobalRwDarcWriteHandle<T> {
     ///```
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalRwDarcWriteGuard<T>> {
-        self.darc.darc.team().spawn(self)
+        self.darc.darc.inner().darc_rt_team().spawn(self)
     }
 }
 
@@ -653,7 +653,7 @@ impl<T: Sync + Send> GlobalRwDarcCollectiveWriteHandle<T> {
     /// *guard += my_pe;
     #[must_use = "this function returns a future [LamellarTask] used to poll for completion. Call '.await' on the returned future in an async context or '.block()' in a non async context.  Alternatively it may be acceptable to call '.block()' instead of 'spawn()' on this handle"]
     pub fn spawn(self) -> LamellarTask<GlobalRwDarcCollectiveWriteGuard<T>> {
-        self.darc.darc.team().spawn(self)
+        self.darc.darc.inner().darc_rt_team().spawn(self)
     }
 }
 
@@ -695,18 +695,18 @@ impl<T> From<GlobalRwDarc<T>> for OrigDarc<T> {
 }
 
 impl<T: 'static> OrigDarc<T> {
-    fn inc_local_cnt(&self) {
+    fn inc_local_cnt(&self) -> usize {
         match self {
             OrigDarc::Darc(darc) => darc.inc_local_cnt(1),
             OrigDarc::LocalRw(darc) => darc.darc.inc_local_cnt(1),
             OrigDarc::GlobalRw(darc) => darc.darc.inc_local_cnt(1),
         }
     }
-    fn inner<N>(&self) -> *mut DarcInner<N> {
+    fn inner<N>(&self) -> DarcCommPtr<N> {
         match self {
-            OrigDarc::Darc(darc) => darc.inner_mut() as *mut _ as *mut DarcInner<N>,
-            OrigDarc::LocalRw(darc) => darc.darc.inner_mut() as *mut _ as *mut DarcInner<N>,
-            OrigDarc::GlobalRw(darc) => darc.darc.inner_mut() as *mut _ as *mut DarcInner<N>,
+            OrigDarc::Darc(darc) => darc.inner.transmute(),
+            OrigDarc::LocalRw(darc) => darc.darc.inner.transmute(),
+            OrigDarc::GlobalRw(darc) => darc.darc.inner.transmute(),
         }
     }
     fn src_pe(&self) -> usize {
@@ -767,7 +767,7 @@ impl<T: 'static> OrigDarc<T> {
 /// ```
 pub struct IntoDarcHandle<T: 'static> {
     pub(crate) darc: OrigDarc<T>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ()> + Send>>,
@@ -827,11 +827,12 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
         self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
-        this.darc.inc_local_cnt();
+        let id = this.darc.inc_local_cnt();
         let item = unsafe { this.darc.get_item() };
         let darc: Darc<T> = Darc {
             inner: this.darc.inner(),
             src_pe: this.darc.src_pe(),
+            id,
         };
         darc.inner_mut().update_item(Box::into_raw(Box::new(item)));
         darc.inner_mut().drop = None;
@@ -868,7 +869,7 @@ impl<T: Sync + Send> Future for IntoDarcHandle<T> {
 /// ```
 pub struct IntoLocalRwDarcHandle<T: 'static> {
     pub(crate) darc: OrigDarc<T>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ()> + Send>>,
@@ -929,11 +930,12 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
         self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
-        this.darc.inc_local_cnt();
+        let id = this.darc.inc_local_cnt();
         let item = unsafe { this.darc.get_item() };
         let darc: Darc<Arc<RwLock<T>>> = Darc {
             inner: this.darc.inner(),
             src_pe: this.darc.src_pe(),
+            id,
         };
         darc.inner_mut()
             .update_item(Box::into_raw(Box::new(Arc::new(RwLock::new(item)))));
@@ -971,7 +973,7 @@ impl<T: Sync + Send> Future for IntoLocalRwDarcHandle<T> {
 /// ```
 pub struct IntoGlobalRwDarcHandle<T: 'static> {
     pub(crate) darc: OrigDarc<T>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) outstanding_future: Pin<Box<dyn Future<Output = ()> + Send>>,
@@ -1031,11 +1033,12 @@ impl<T: Sync + Send> Future for IntoGlobalRwDarcHandle<T> {
         self.launched = true;
         let mut this = self.project();
         ready!(this.outstanding_future.as_mut().poll(cx));
-        this.darc.inc_local_cnt();
+        let id = this.darc.inc_local_cnt();
         let item = unsafe { this.darc.get_item() };
         let darc: Darc<DistRwLock<T>> = Darc {
             inner: this.darc.inner(),
             src_pe: this.darc.src_pe(),
+            id,
         };
         darc.inner_mut()
             .update_item(Box::into_raw(Box::new(DistRwLock::new(
@@ -1066,7 +1069,7 @@ impl<T: Sync + Send> Future for IntoGlobalRwDarcHandle<T> {
 /// let five = Darc::new(&world,5).block().expect("PE in world team");
 /// ```
 pub struct DarcHandle<T: 'static> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future: Pin<Box<dyn Future<Output = Result<Darc<T>, IdError>> + Send>>,
@@ -1145,7 +1148,7 @@ impl<T: Sync + Send> Future for DarcHandle<T> {
 /// let five = LocalRwDarc::new(&world,5).block().expect("PE in world team");
 /// ```
 pub struct LocalRwDarcHandle<T: 'static> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future:
@@ -1225,7 +1228,7 @@ impl<T: Sync + Send> Future for LocalRwDarcHandle<T> {
 /// let five = GlobalRwDarc::new(&world,5).block().expect("PE in world team");
 /// ```
 pub struct GlobalRwDarcHandle<T: 'static> {
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
+    pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
     pub(crate) creation_future:

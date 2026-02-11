@@ -1,9 +1,22 @@
 use futures_util::stream::StreamExt;
 use lamellar::array::prelude::*;
 
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::{fmt, EnvFilter};
+
 const ARRAY_LEN: usize = 100;
 
 fn main() {
+    let subscriber = tracing_subscriber::registry()
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_thread_ids(true)
+                .with_file(true)
+                .with_line_number(true)
+                .with_level(true),
+        )
+        .init();
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
@@ -13,11 +26,12 @@ fn main() {
         AtomicArray::<usize>::new(world.team(), ARRAY_LEN, Distribution::Cyclic).block();
 
     //we are going to initialize the data on each PE by directly accessing its local data
-
+    block_array.print();
     block_array
         .mut_local_data()
         .iter()
         .for_each(|e| e.store(my_pe));
+    cyclic_array.print();
     cyclic_array
         .mut_local_data()
         .iter()
@@ -76,11 +90,11 @@ fn main() {
 
     if my_pe == 0 {
         for chunk in block_array.onesided_iter().chunks(10).skip(4).into_iter() {
-            println!("{:?}", unsafe { chunk.as_slice() });
+            println!("{:?}", chunk.as_slice());
         }
         println!("-----");
         for chunk in cyclic_array.onesided_iter().chunks(10).into_iter() {
-            println!("{:?}", unsafe { chunk.as_slice() });
+            println!("{:?}", chunk.as_slice());
         }
 
         println!("-----");
@@ -99,9 +113,7 @@ fn main() {
             .zip(block_array.onesided_iter().chunks(10))
             .into_iter()
         {
-            unsafe {
-                println!("{:?} {:?}", a.as_slice(), b.as_slice());
-            }
+            println!("{:?} {:?}", a.as_slice(), b.as_slice());
         }
     }
 
@@ -139,7 +151,7 @@ fn main() {
                 .onesided_iter()
                 .into_stream()
                 .take(4)
-                .map(|elem| *elem as f64)
+                .map(|elem| elem as f64)
                 .all(|elem| async move { elem < num_pes as f64 });
             assert_eq!(result.await, true);
         }

@@ -634,8 +634,10 @@
 //! Other than the addition of `#[AmData(static)]` the rest of the code as the previous example would be the same.
 
 use crate::barrier::BarrierHandle;
+use crate::darc::Darc;
+use crate::darc::DarcInner;
 use crate::darc::__NetworkDarc;
-use crate::lamellae::{Lamellae, LamellaeRDMA, SerializedData};
+use crate::lamellae::{comm::CommMem, Lamellae, SerializedData};
 use crate::lamellar_arch::IdError;
 use crate::lamellar_request::{InternalResult, LamellarRequestResult};
 use crate::lamellar_team::{LamellarTeam, LamellarTeamRT};
@@ -646,9 +648,9 @@ use async_trait::async_trait;
 use futures_util::Future;
 use parking_lot::Mutex;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tracing::trace;
 
 // //#[doc(hidden)]
 /// The prelude for the active messaging module
@@ -738,13 +740,13 @@ pub trait AmDist: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend
 
 impl<T: serde::ser::Serialize + serde::de::DeserializeOwned + SyncSend + 'static> AmDist for T {}
 
-#[derive(
-    serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
-)]
-pub(crate) enum ExecType {
-    Am(Cmd),
-    Runtime(Cmd),
-}
+// #[derive(
+//     serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord,
+// )]
+// pub(crate) enum ExecType {
+//     Am(Cmd),
+//     Runtime(Cmd),
+// }
 
 #[doc(hidden)]
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -756,12 +758,13 @@ pub enum RemotePtr {
 #[doc(hidden)]
 pub trait DarcSerde {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>);
-    fn des(&self, cur_pe: Result<usize, IdError>);
+    //TODO: we can probably remmove the des function as this occurs when the NetworkDarc is converted to the Darc now
+    // fn des(&self, cur_pe: Result<usize, IdError>);
 }
 
 impl<T> DarcSerde for &T {
     fn ser(&self, _num_pes: usize, _darcs: &mut Vec<RemotePtr>) {}
-    fn des(&self, _cur_pe: Result<usize, IdError>) {}
+    // fn des(&self, _cur_pe: Result<usize, IdError>) {}
 }
 
 #[doc(hidden)]
@@ -791,7 +794,7 @@ pub trait LamellarActiveMessage: DarcSerde {
         local: bool,
         world: Arc<LamellarTeam>,
         team: Arc<LamellarTeam>,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = LamellarReturn> + Send>>;
+    ) -> std::pin::Pin<Box<dyn Future<Output = LamellarReturn> + Send>>;
     fn get_id(&self) -> &'static str;
 }
 
@@ -850,9 +853,9 @@ pub(crate) struct ReqMetaData {
     pub(crate) dst: Option<usize>, // destination pe - team based pe id, none means all pes
     pub(crate) id: ReqId,          // id of the request
     pub(crate) lamellae: Arc<Lamellae>,
-    pub(crate) world: Pin<Arc<LamellarTeamRT>>,
-    pub(crate) team: Pin<Arc<LamellarTeamRT>>,
-    pub(crate) team_addr: usize,
+    pub(crate) world: Darc<LamellarTeamRT>,
+    pub(crate) team: Darc<LamellarTeamRT>,
+    // pub(crate) team_addr: usize,
 }
 
 pub(crate) enum Am {
@@ -877,6 +880,7 @@ impl std::fmt::Debug for Am {
     }
 }
 
+#[repr(u8)]
 #[derive(
     serde::Serialize,
     serde::Deserialize,
@@ -1363,18 +1367,32 @@ pub(crate) trait ActiveMessageEngine {
 
     async fn exec_msg(self, msg: Msg, ser_data: SerializedData, lamellae: Arc<Lamellae>);
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn get_team_and_world(
         &self,
         pe: usize,
         team_addr: usize,
         lamellae: &Arc<Lamellae>,
+        // team_rt: &Darc<LamellarTeamRT>,
     ) -> (Arc<LamellarTeam>, Arc<LamellarTeam>) {
-        let local_team_addr = lamellae.local_addr(pe, team_addr);
+        trace!(
+            "get_team_and_world: pe: {:?} team_addr: {:x} ",
+            pe,
+            team_addr
+        );
+        let local_team_addr = lamellae.comm().local_addr(pe, team_addr);
         let team_rt = unsafe {
-            let team_ptr = local_team_addr as *mut *const LamellarTeamRT;
+            let team_ptr = *local_team_addr.as_ptr::<*const DarcInner<LamellarTeamRT>>();
+            trace!(
+                "team_ptr from local_team_addr {:?} {:?} {:?}",
+                local_team_addr,
+                team_ptr,
+                local_team_addr.as_ref::<*const Darc<LamellarTeamRT>>()
+            );
             // println!("{:x} {:?} {:?} {:?}", team_hash,team_ptr, (team_hash as *mut (*const LamellarTeamRT)).as_ref(), (*(team_hash as *mut (*const LamellarTeamRT))).as_ref());
-            Arc::increment_strong_count(*team_ptr);
-            Pin::new_unchecked(Arc::from_raw(*team_ptr))
+            // Arc::increment_strong_count(team_ptr);
+            // Pin::new_unchecked(Arc::from_raw(team_ptr))
+            Darc::cloned_team_from_raw(team_ptr)
         };
         let world_rt = if let Some(world) = team_rt.world.clone() {
             world
@@ -1382,14 +1400,15 @@ pub(crate) trait ActiveMessageEngine {
             team_rt.clone()
         };
         let world = LamellarTeam::new(None, world_rt, true);
-        let team = LamellarTeam::new(Some(world.clone()), team_rt, true);
+        let team = LamellarTeam::new(Some(world.clone()), team_rt.clone(), true);
         (team, world)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn send_data_to_user_handle(&self, req_id: ReqId, pe: usize, data: InternalResult) {
-        // println!("returned req_id: {:?}", req_id);
+        trace!("returned req_id: {:?}", req_id);
         let req = unsafe { Arc::from_raw(req_id.id as *const LamellarRequestResult) };
-        // println!("strong count recv: {:?} ", Arc::strong_count(&req));
+        trace!("strong count recv: {:?} ", Arc::strong_count(&req));
         req.add_result(pe, req_id.sub_id, data);
     }
 }

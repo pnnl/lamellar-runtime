@@ -12,6 +12,7 @@ use std::{
 use futures_util::Future;
 use parking_lot::Mutex;
 use pin_project::{pin_project, pinned_drop};
+use tracing::{trace, warn};
 
 use crate::{
     lamellae::Des,
@@ -22,7 +23,7 @@ use crate::{
     Darc, LamellarArchRT,
 };
 
-use super::{AMCounters, Am, AmDist, DarcSerde, RemotePtr};
+use super::{AMCounters, Am, AmDist, RemotePtr};
 
 pub(crate) struct AmHandleInner {
     pub(crate) ready: AtomicBool,
@@ -49,13 +50,17 @@ impl LamellarRequestAddResult for AmHandleInner {
     fn user_held(&self) -> bool {
         self.user_handle.load(Ordering::SeqCst) > 0
     }
+
+    #[tracing::instrument(skip_all, level = "debug")]
     fn add_result(&self, _pe: usize, _sub_id: usize, data: InternalResult) {
         // for a single request this is only called one time by a single runtime thread so use of the cell is safe
         self.data.set(Some(data));
         self.ready.store(true, Ordering::SeqCst);
         if let Some(waker) = self.waker.lock().take() {
+            trace!("notifying waker");
             waker.wake();
         }
+        trace!("request complete");
     }
     fn update_counters(&self, _sub_id: usize) {
         self.team_counters.dec_outstanding(1);
@@ -104,7 +109,7 @@ impl<T: AmDist> AmHandle<T> {
                         match darc {
                             RemotePtr::NetworkDarc(darc) => {
                                 let temp: Darc<()> = darc.into();
-                                temp.des(Ok(0));
+                                // temp.des(Ok(0));
                                 temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
@@ -129,6 +134,7 @@ impl<T: AmDist> AmHandle<T> {
         }
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn launch_am_if_needed(&mut self) {
         if let Some((am, num_pes)) = self.am.take() {
             self.inner.team_counters.inc_outstanding(num_pes);
@@ -140,7 +146,7 @@ impl<T: AmDist> AmHandle<T> {
                 tg_counters.inc_launched(num_pes);
             }
             self.inner.scheduler.submit_am(am);
-            // println!("am spawned");
+            trace!("am spawned");
         }
     }
     /// This method will spawn the associated Active Message on the work queue,
@@ -173,17 +179,20 @@ impl<T: AmDist> LamellarRequest for AmHandle<T> {
         self.process_result(self.inner.data.replace(None).expect("result should exist"))
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
 
         if self.inner.ready.load(Ordering::SeqCst) {
+            trace!("request read");
             true
         } else {
+            trace!("request not ready");
             match &mut *cur_waker {
                 Some(cur_waker) => {
                     if !cur_waker.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", cur_waker);
+                        warn!("WARNING: overwriting waker {:?}", cur_waker);
                         cur_waker.wake_by_ref();
                     }
                     cur_waker.clone_from(waker);
@@ -224,6 +233,7 @@ pub struct LocalAmHandle<T> {
     pub(crate) inner: Arc<AmHandleInner>,
     pub(crate) am: Option<(Am, usize)>,
     pub(crate) _phantom: std::marker::PhantomData<T>,
+    pub(crate) thread: Option<usize>,
 }
 
 #[pinned_drop]
@@ -268,7 +278,11 @@ impl<T: 'static> LocalAmHandle<T> {
                 tg_counters.inc_outstanding(num_pes);
                 tg_counters.inc_launched(num_pes);
             }
-            self.inner.scheduler.submit_am(am);
+            if let Some(thread) = self.thread {
+                self.inner.scheduler.submit_am_thread(am, thread);
+            } else {
+                self.inner.scheduler.submit_am(am);
+            }
         }
     }
 }
@@ -316,6 +330,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
         self.process_result(data)
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
@@ -325,7 +340,7 @@ impl<T: 'static> LamellarRequest for LocalAmHandle<T> {
             match &mut *cur_waker {
                 Some(cur_waker) => {
                     if !cur_waker.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", cur_waker);
+                        warn!("WARNING: overwriting waker {:?}", cur_waker);
                         cur_waker.wake_by_ref();
                     }
                     cur_waker.clone_from(waker);
@@ -400,6 +415,7 @@ impl LamellarRequestAddResult for MultiAmHandleInner {
         let pe = self.arch.team_pe(pe).expect("pe does not exist on team");
         self.data.lock().insert(pe, data);
         self.cnt.fetch_sub(1, Ordering::SeqCst);
+
         if self.cnt.load(Ordering::SeqCst) == 0 {
             if let Some(waker) = self.waker.lock().take() {
                 waker.wake();
@@ -434,7 +450,7 @@ impl<T: AmDist> MultiAmHandle<T> {
                         match darc {
                             RemotePtr::NetworkDarc(darc) => {
                                 let temp: Darc<()> = darc.into();
-                                temp.des(Ok(0));
+                                // temp.des(Ok(0));
                                 temp.inc_local_cnt(1); //we drop temp decreasing local count, but need to account for the actual real darc (and we unfourtunately cannot enforce the T: DarcSerde bound, or at least I havent figured out how to yet)
                             }
                             RemotePtr::NetMemRegionHandle(mr) => {
@@ -508,6 +524,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
         res
     }
 
+    #[tracing::instrument(skip_all, level = "debug")]
     fn ready_or_set_waker(&mut self, waker: &Waker) -> bool {
         self.launch_am_if_needed();
         let mut cur_waker = self.inner.waker.lock();
@@ -517,7 +534,7 @@ impl<T: AmDist> LamellarRequest for MultiAmHandle<T> {
             match &mut *cur_waker {
                 Some(cur_waker) => {
                     if !cur_waker.will_wake(waker) {
-                        println!("WARNING: overwriting waker {:?}", cur_waker);
+                        warn!("WARNING: overwriting waker {:?}", cur_waker);
                         cur_waker.wake_by_ref();
                     }
                     cur_waker.clone_from(waker);
