@@ -6,7 +6,7 @@ use quote::{quote, quote_spanned};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
-pub(crate) fn create_reduction(
+fn create_reduction(
     typeident: syn::Ident,
     reduction: String,
     op: proc_macro2::TokenStream,

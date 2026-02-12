@@ -5,8 +5,6 @@ use quote::{quote, quote_spanned};
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
-use crate::array_reduce::create_reduction;
-
 fn type_to_string(ty: &syn::Type) -> String {
     match ty {
         syn::Type::Path(path) => path
@@ -2170,7 +2168,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
     // println!("__derive_arrayops called");
     let input = parse_macro_input!(input as syn::DeriveInput);
     let name = input.ident.clone();
-    
     let the_type: syn::Type = syn::parse_quote!(#name);
 
     let mut op_types = vec![OpType::ReadOnly, OpType::Access];
@@ -2182,8 +2179,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                                               // need to research if there is a way around this...
     };
 
-    let mut reduce_ops = vec![];
-    
     for attr in &input.attrs {
         if attr.path().is_ident("array_ops") {
             // println!("array_ops attr found");
@@ -2195,12 +2190,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                             impl __lamellar::ElementArithmeticOps for #the_type {}
                         }
                     );
-                    reduce_ops.push(("sum".to_string(), quote! {
-                        |acc, val|{ acc + val }
-                    }));
-                    reduce_ops.push(("prod".to_string(), quote! {
-                        |acc, val|{ acc + val }
-                    }));
                     Ok(())
                 }
                 else if temp.path.is_ident("CompExEps") {
@@ -2211,12 +2200,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
                             impl __lamellar::ElementComparePartialEqOps for #the_type {}
                         }
                     );
-                    reduce_ops.push(("min".to_string(), quote! {
-                        |acc, val|{ acc + val }
-                    }));
-                    reduce_ops.push(("max".to_string(), quote! {
-                        |acc, val|{ acc + val }
-                    }));
                     Ok(())
                 }
                 else if temp.path.is_ident("CompEx") {
@@ -2285,22 +2268,6 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
         }
     }
     let buf_ops = create_buffered_ops(the_type.clone(), op_types, false, false);
-   
-
-    let array_types = vec![
-        quote::format_ident!("LocalLockArray"),
-        quote::format_ident!("GlobalLockArray"),
-        quote::format_ident!("AtomicArray"),
-        quote::format_ident!("GenericAtomicArray"),
-        quote::format_ident!("UnsafeArray"),
-        quote::format_ident!("ReadOnlyArray"),
-    ];
-
-    let mut reductions = quote!{};
-
-    for (reduction,op) in reduce_ops.into_iter(){
-        reductions.extend(create_reduction(name.clone(), reduction, op, &array_types, false, false));
-    }
     // let opt_type = syn::parse_str(&format!("Option<{}>", the_type.to_token_stream())).unwrap(); //see note above why we cant do this
     // let opt_buf_opt = create_buffered_ops(opt_type, opt_op_types, false, false); //see note above why we cant do this
 

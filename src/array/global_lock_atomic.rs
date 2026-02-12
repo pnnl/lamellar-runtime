@@ -1,11 +1,10 @@
 //! This module provides the implementation of the `GlobalLockArray` type, which is a distributed array with a global read/write lock mechanism.
 
 pub(crate) mod handle;
-pub use handle::*;
-// use handle::{
-//     GlobalLockArrayHandle, GlobalLockCollectiveMutLocalDataHandle, GlobalLockLocalDataHandle,
-//     GlobalLockMutLocalDataHandle, GlobalLockReadHandle, GlobalLockWriteHandle,
-// };
+use handle::{
+    GlobalLockArrayHandle, GlobalLockCollectiveMutLocalDataHandle, GlobalLockLocalDataHandle,
+    GlobalLockMutLocalDataHandle, GlobalLockReadHandle, GlobalLockWriteHandle,
+};
 mod iteration;
 pub(crate) mod operations;
 mod rdma;

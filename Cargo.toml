@@ -1,7 +1,7 @@
 # cargo-features = ["codegen-backend"]
 [package]
 name = "lamellar"
-version = "0.7.1"
+version = "0.8.0"
 authors = [
     "Ryan D. Friese <ryan.friese@pnnl.gov>",
     "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>",
@@ -20,7 +20,7 @@ categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 
 [dependencies]
-lamellar-impl = { version = "0.7.1", path = "impl" }
+lamellar-impl = { version = "0.8.0", path = "impl" }
 # libfabric = { path = "../rofi-junction/libfabric", features = [
 #     # "use-async-std",
 #     "threading-thread-safe",

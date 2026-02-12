@@ -13,10 +13,9 @@ use crate::config;
 // use crate::LamellarTeamRT;
 
 pub(crate) mod handle;
-pub use handle::*;
-// {
-//     ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
-// };
+pub use handle::{
+    ArrayBatchOpHandle, ArrayFetchBatchOpHandle, ArrayOpHandle, ArrayResultBatchOpHandle,
+};
 pub(crate) mod access;
 pub use access::{AccessOps, LocalAccessOps, UnsafeAccessOps};
 pub(crate) mod arithmetic;

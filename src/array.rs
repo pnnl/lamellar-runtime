@@ -112,9 +112,9 @@ pub use lamellar_impl::ArrayOps;
 /// The prelude contains all the traits and macros that are required to use the array types
 pub mod prelude;
 
-
-pub mod r#unsafe;
-pub  use r#unsafe::{
+pub(crate) mod r#unsafe;
+pub use r#unsafe::{
+    local_chunks::{UnsafeLocalChunks, UnsafeLocalChunksMut},
     operations::{
         multi_val_multi_idx_ops, multi_val_multi_idx_ops_new, multi_val_single_idx_ops,
         multi_val_single_idx_ops_new, single_val_multi_idx_ops, single_val_multi_idx_ops_new,
@@ -122,22 +122,20 @@ pub  use r#unsafe::{
     },
     UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
 };
+pub(crate) mod read_only;
+pub use read_only::{ReadOnlyArray, ReadOnlyByteArray, ReadOnlyByteArrayWeak, ReadOnlyLocalChunks};
 
+pub(crate) mod atomic;
+pub use atomic::{AtomicArray, AtomicByteArray, AtomicByteArrayWeak, AtomicLocalData};
 
-pub mod read_only;
-pub  use read_only::{ReadOnlyArray, ReadOnlyByteArray};
-
-pub mod atomic;
-pub  use atomic::{AtomicArray, AtomicByteArray};
-
-pub mod generic_atomic;
-pub  use generic_atomic::{
-    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicByteArrayWeak,
+pub(crate) mod generic_atomic;
+pub use generic_atomic::{
+    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicByteArrayWeak, GenericAtomicLocalData,
 };
 
-pub mod native_atomic;
-pub  use native_atomic::{
-    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicByteArrayWeak,
+pub(crate) mod native_atomic;
+pub use native_atomic::{
+    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicByteArrayWeak, NativeAtomicLocalData,
 };
 
 pub(crate) mod network_atomic;
@@ -152,9 +150,10 @@ pub use local_lock_atomic::{
     LocalLockWriteGuard,
 };
 
-pub mod global_lock_atomic;
-pub  use global_lock_atomic::{
-    GlobalLockArray, GlobalLockByteArray
+pub(crate) mod global_lock_atomic;
+pub use global_lock_atomic::{
+    GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak, GlobalLockLocalData,
+    GlobalLockMutLocalData, GlobalLockReadGuard, GlobalLockWriteGuard,
 };
 
 pub mod iterator;
@@ -218,20 +217,7 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 // // //------------------------------------
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
-
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
-
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
-
-lamellar_impl::generate_ops_for_bool_rt!();
+pub(crate) mod type_impls;
 
 impl<T: Dist + ArrayOps> Dist for Option<T> {}
 impl<T: Dist + ArrayOps> ArrayOps for Option<T> {}

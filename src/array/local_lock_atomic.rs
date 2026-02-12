@@ -2,7 +2,7 @@
 
 mod iteration;
 pub(crate) mod local_chunks;
-pub use local_chunks::*;
+pub use local_chunks::{LocalLockLocalChunks, LocalLockLocalChunksMut};
 pub(crate) mod handle;
 use handle::{
     LocalLockArrayHandle, LocalLockLocalDataHandle, LocalLockMutLocalDataHandle,

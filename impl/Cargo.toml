@@ -1,15 +1,21 @@
-[package] 
+[package]
 name = "lamellar-impl"
-version = "0.7.1"
-authors = ["Ryan D. Friese <ryan.friese@pnnl.gov>",  "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>", "Joseph Cottam <joseph.cottam@pnnl.gov>","Greg Roek <gregory.roek@pnnl.gov>","Erdal Mutlu <erdal.mutlu@pnnl.gov>"]
+version = "0.8.0"
+authors = [
+    "Ryan D. Friese <ryan.friese@pnnl.gov>",
+    "Roberto Gioiosa <roberto.gioiosa@pnnl.gov>",
+    "Joseph Cottam <joseph.cottam@pnnl.gov>",
+    "Greg Roek <gregory.roek@pnnl.gov>",
+    "Erdal Mutlu <erdal.mutlu@pnnl.gov>",
+]
 edition = "2021"
 description = "Lamellar is an asynchronous tasking runtime for HPC systems developed in RUST."
 readme = "../README.md"
 repository = "https://github.com/pnnl/lamellar-runtime"
 homepage = "https://github.com/pnnl/lamellar-runtime"
 license-file = "../LICENSE"
-keywords = ["hpc","runtime","pgas","distributed","asynchronous"]
-categories = ["asynchronous","concurrency", "network-programming","science"]
+keywords = ["hpc", "runtime", "pgas", "distributed", "asynchronous"]
+categories = ["asynchronous", "concurrency", "network-programming", "science"]
 
 [lib]
 proc-macro = true
@@ -19,6 +25,11 @@ proc-macro2 = { version = "1.0.47", features = ["span-locations"] }
 proc-macro-error = "1.0.4"
 quote = "1.0.21"
 #regex = "1.6.0"
-syn = { version = "2.0.17", features = ["full","extra-traits","fold","visit-mut",] }
+syn = { version = "2.0.17", features = [
+    "full",
+    "extra-traits",
+    "fold",
+    "visit-mut",
+] }
 async-trait = "0.1.58"
 futures = "0.3.25"

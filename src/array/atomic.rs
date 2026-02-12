@@ -5,7 +5,7 @@ pub(crate) mod operations;
 pub(crate) mod rdma;
 
 pub(crate) mod handle;
-pub use handle::*;
+pub use handle::AtomicArrayHandle;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::array::generic_atomic::{GenericAtomicElement, LocalGenericAtomicElement};

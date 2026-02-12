@@ -1,7 +1,7 @@
 //! This module defines the `ReadOnlyArray` type, which provides a safe abstraction for a distributed array that only allows read access.
 
 pub(crate) mod handle;
-pub use handle::*;
+pub use handle::ReadOnlyArrayHandle;
 
 mod iteration;
 pub(crate) mod local_chunks;

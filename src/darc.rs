@@ -78,16 +78,15 @@ use crate::{
 /// prelude for the darc module
 pub mod prelude;
 
-pub mod local_rw_darc;
-// pub (crate) use local_rw_darc::LocalRwDarc;
+pub(crate) mod local_rw_darc;
+pub use local_rw_darc::LocalRwDarc;
 
-pub mod global_rw_darc;
-// pub (crate) use global_rw_darc::GlobalRwDarc;
+pub(crate) mod global_rw_darc;
+pub use global_rw_darc::GlobalRwDarc;
 
-// use self::handle::{DarcHandle, IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
+use self::handle::{DarcHandle, IntoGlobalRwDarcHandle, IntoLocalRwDarcHandle};
 
 pub(crate) mod handle;
-pub use handle::*;
 
 static DARC_ID: AtomicUsize = AtomicUsize::new(0);
 

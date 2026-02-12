@@ -1,14 +1,12 @@
 //! This module provides an unsafe abstraction of a distributed array in Lamellar.
 
 pub(crate) mod handle;
-pub use handle::*;
 mod iteration;
 pub(crate) mod local_chunks;
-pub use local_chunks::*;
 pub(crate) mod operations;
-pub use operations::*;
 mod rdma;
 
+pub use handle::UnsafeArrayHandle;
 
 use crate::active_messaging::ActiveMessaging;
 use crate::active_messaging::*;

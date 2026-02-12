@@ -1,7 +1,7 @@
 //! This module contains the implementation of the `NativeAtomicArray` type, which provides a distributed array of atomic types which are natively supported by the language and hardware
 
 mod handle;
-pub (crate) use handle::*;
+pub(crate) use handle::NativeAtomicArrayHandle;
 
 pub(crate) mod iteration;
 pub(crate) mod operations;
