@@ -1,3 +1,4 @@
+use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState};
 use crate::array::collective::gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState};
 use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::private::LamellarArrayPrivate;
@@ -649,6 +650,40 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn gather_all(&self) -> ArrayCollectiveAllGatherHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .gather_all();
+
+        ArrayCollectiveAllGatherHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveAllGatherState::CollectiveAllGather(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .gather_all_into_buffer(buffer);
+
+        ArrayCollectiveAllGatherIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBuffer(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
     pub unsafe fn gather_at_pe(&self, pe: usize) -> ArrayCollectiveGatherHandle<T> {
         let req = self
             .inner
@@ -683,34 +718,34 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn gather_all(&self) -> ArrayCollectiveAllGatherHandle<T> {
+    pub unsafe fn broadcast_all(&self) -> ArrayCollectiveAllBroadcastHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .gather_all();
+            .broadcast_all();
 
-        ArrayCollectiveAllGatherHandle {
+        ArrayCollectiveAllBroadcastHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayCollectiveAllGatherState::CollectiveAllGather(req),
+            state: ArrayCollectiveAllBroadcastState::CollectiveAllBroadcast(req),
             spawned: false,
         }
     }
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
+    pub unsafe fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllBroadcastIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .gather_all_into_buffer(buffer);
+            .broadcast_all_into_buffer(buffer);
 
-        ArrayCollectiveAllGatherIntoBufferHandle {
+        ArrayCollectiveAllBroadcastIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
-            state: ArrayCollectiveAllGatherIntoBufferState::CollectiveAllGatherIntoBuffer(req),
+            state: ArrayCollectiveAllBroadcastIntoBufferState::CollectiveAllBroadcastIntoBuffer(req),
             spawned: false,
         }
     }

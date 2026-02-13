@@ -1206,6 +1206,18 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .as_base::<T>()
             .gather_into_buffer(root_or_buffer)
     }
+    pub unsafe fn broadcast_all(&self) -> CollectiveAllBroadcastOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .broadcast_all()
+    }
+    pub unsafe fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .broadcast_all_into_buffer(buffer)
+    }
 
     /// Blocks until all outstanding RDMA operations issued by this PE on this memory region
     /// have completed.

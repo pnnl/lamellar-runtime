@@ -1,4 +1,4 @@
-use crate::{array::{collective::{gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::RootOrLamellarBuffer, AsLamellarBuffer, Dist, LamellarBuffer};
+use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::RootOrLamellarBuffer, AsLamellarBuffer, Dist, LamellarBuffer};
 
 
 impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
@@ -370,10 +370,6 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
         }
     }
 
-}
-
-
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
         unsafe {
             self
@@ -393,16 +389,33 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
                 .gather_at_pe(pe)
         }
     }
-}
 
-
-impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
     pub fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
                 .gather_at_pe_into_buffer(target)
+        }
+    }
+}
+
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+    pub fn broadcast_all(&self) -> ArrayCollectiveAllBroadcastHandle<T> {
+        unsafe {
+            self
+                .array
+                .array
+                .broadcast_all()
+        }
+    }
+
+    pub fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllBroadcastIntoBufferHandle<T, B> {
+        unsafe {
+            self
+                .array
+                .array
+                .broadcast_all_into_buffer(buffer)
         }
     }
 }
