@@ -11,7 +11,9 @@ use crate::lamellae::libfabric_lamellae::collective::{
     LibfabricCollectiveAllGatherFuture,
     LibfabricCollectiveAllGatherIntoBufferFuture,
     LibfabricCollectiveAllBroadcastFuture,
-    LibfabricCollectiveAllBroadcastIntoBufferFuture
+    LibfabricCollectiveAllBroadcastIntoBufferFuture,
+    LibfabricCollectiveBroadcastFuture,
+    LibfabricCollectiveBroadcastIntoBufferFuture
 };
 
 use crate::{
@@ -982,7 +984,163 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllBroadcastIntoBuf
     }
 }
 
+#[must_use = " CollectiveBroadcastOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project]
+pub struct CollectiveBroadcastOpHandle<T> {
+    #[pin]
+    pub(crate) future: CollectiveBroadcastOpFuture<T>,
+}
 
+#[pin_project(project = CollectiveBroadcastOpFutureProj)]
+pub(crate) enum CollectiveBroadcastOpFuture<T> {
+    #[cfg(feature = "enable-libfabric")]
+    Libfabric(#[pin] LibfabricCollectiveBroadcastFuture<T>),
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
+    // #[cfg(feature = "enable-libfabric-async")]
+    // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
+    // #[cfg(feature = "enable-ucx")]
+    // Ucx(#[pin] UcxAtomicFuture<T>),
+    // Shmem(#[pin] ShmemAtomicFuture<T>),
+    // Local(#[pin] LocalAtomicFuture<T>),
+}
+
+impl<T: Remote> CollectiveBroadcastOpHandle<T> {
+    /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
+    pub fn block(self) -> Option<Vec<T>> {
+        match self.future {
+            #[cfg(feature = "enable-libfabric")]
+            CollectiveBroadcastOpFuture::Libfabric(f) => f.block(),
+            // #[cfg(feature = "enable-libfabric")]
+            // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
+            // #[cfg(feature = "enable-libfabric-async")]
+            // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
+            // #[cfg(feature = "enable-ucx")]
+            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            // AtomicFetchOpFuture::Shmem(f) => f.block(),
+            // AtomicFetchOpFuture::Local(f) => f.block(),
+        }
+    }
+
+    /// This method will spawn the associated (raw) AtomicFetchOp Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<Option<Vec<T>>> {
+        match self.future {
+            #[cfg(feature = "enable-libfabric")]
+            CollectiveBroadcastOpFuture::Libfabric(f) => f.spawn(),
+            // #[cfg(feature = "enable-libfabric")]
+            // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
+            // #[cfg(feature = "enable-libfabric-async")]
+            // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
+            // #[cfg(feature = "enable-ucx")]
+            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
+            // AtomicFetchOpFuture::Local(f) => f.spawn(),
+        }
+    }
+}
+
+impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
+    type Output = Option<Vec<T>>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.future.project() {
+            #[cfg(feature = "enable-libfabric")]
+            CollectiveBroadcastOpFutureProj::Libfabric(f) => f.poll(cx),
+            // #[cfg(feature = "enable-libfabric")]
+            // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
+            // #[cfg(feature = "enable-libfabric-async")]
+            // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
+            // #[cfg(feature = "enable-ucx")]
+            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
+            // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+        }
+    }
+}
+
+#[must_use = " CollectiveBroadcastIntoBufferOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project]
+pub struct CollectiveBroadcastIntoBufferOpHandle<T: Remote, B: AsLamellarBuffer<T>> {
+    #[pin]
+    pub(crate) future: CollectiveBroadcastIntoBufferOpFuture<T, B>,
+}
+
+#[pin_project(project = CollectiveBroadcastIntoBufferOpFutureProj)]
+pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    #[cfg(feature = "enable-libfabric")]
+    Libfabric(#[pin] LibfabricCollectiveBroadcastIntoBufferFuture<T, B>),
+    // #[cfg(feature = "enable-libfabric")]
+    // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
+    // #[cfg(feature = "enable-libfabric-async")]
+    // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
+    // #[cfg(feature = "enable-ucx")]
+    // Ucx(#[pin] UcxAtomicFuture<T>),
+    // Shmem(#[pin] ShmemAtomicFuture<T>),
+    // Local(#[pin] LocalAtomicFuture<T>),
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T, B> {
+    /// This method will block the calling thread until the associated Array AtomicFetchOp Operation completes
+    pub fn block(self) {
+        match self.future {
+            #[cfg(feature = "enable-libfabric")]
+            CollectiveBroadcastIntoBufferOpFuture::Libfabric(f) => f.block(),
+            // #[cfg(feature = "enable-libfabric")]
+            // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
+            // #[cfg(feature = "enable-libfabric-async")]
+            // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
+            // #[cfg(feature = "enable-ucx")]
+            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            // AtomicFetchOpFuture::Shmem(f) => f.block(),
+            // AtomicFetchOpFuture::Local(f) => f.block(),
+        }
+    }
+
+    /// This method will spawn the associated (raw) AtomicFetchOp Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<()> {
+        match self.future {
+            #[cfg(feature = "enable-libfabric")]
+            CollectiveBroadcastIntoBufferOpFuture::Libfabric(f) => f.spawn(),
+            // #[cfg(feature = "enable-libfabric")]
+            // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
+            // #[cfg(feature = "enable-libfabric-async")]
+            // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
+            // #[cfg(feature = "enable-ucx")]
+            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
+            // AtomicFetchOpFuture::Local(f) => f.spawn(),
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBufferOpHandle<T, B> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.future.project() {
+            #[cfg(feature = "enable-libfabric")]
+            CollectiveBroadcastIntoBufferOpFutureProj::Libfabric(f) => f.poll(cx),
+            // #[cfg(feature = "enable-libfabric")]
+            // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
+            // #[cfg(feature = "enable-libfabric-async")]
+            // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
+            // #[cfg(feature = "enable-ucx")]
+            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
+            // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) enum ReduceOp {
@@ -1001,6 +1159,32 @@ pub(crate) enum RootOrBuffer<T> {
     Root(Vec<T>), 
     NotRoot(usize) 
 }
+
+
+pub(crate) enum RootSrcOrBuffer<T> {
+    Root(), 
+    NotRoot(Vec<T>, usize) 
+}
+
+pub(crate) enum RootSrcOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
+    Root(), 
+    NotRoot(LamellarBuffer<T, B>, usize) 
+}
+
+pub(crate) enum RootSrcOrSliceMut<'a, T> {
+    Root(), 
+    NotRoot(&'a mut [T], usize) 
+}
+
+impl<T>  RootSrcOrBuffer<T> {
+    pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootSrcOrSliceMut<'a, T> {
+        match self {
+            RootSrcOrBuffer::Root() => RootSrcOrSliceMut::Root(),
+            RootSrcOrBuffer::NotRoot(vec, pe) => RootSrcOrSliceMut::NotRoot(vec, *pe)
+        }
+    }
+}
+
 
 
 impl<T> RootOrBuffer<T> {
@@ -1026,6 +1210,16 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RootOrLamellarBuffer<T, B> {
         }
     }
 } 
+
+impl<T: Remote, B: AsLamellarBuffer<T>> RootSrcOrLamellarBuffer<T, B> {
+    pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootSrcOrSliceMut<'a, T> {
+        match self {
+            RootSrcOrLamellarBuffer::NotRoot(lamellar_buffer, pe) => RootSrcOrSliceMut::NotRoot(lamellar_buffer.as_mut_slice(), *pe),
+            RootSrcOrLamellarBuffer::Root() => RootSrcOrSliceMut::Root(),
+        }
+    }
+} 
+
 
 pub(crate) enum RootOrSliceMut<'a, T> {
     Root(&'a mut [T]), 
@@ -1137,4 +1331,19 @@ pub(crate) trait CommAllocCollectiveAllBroadcast {
         counters: Vec<Arc<AMCounters>>,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B>;
+}
+
+pub(crate) trait CommAllocCollectiveBroadcast {
+    fn broadcast<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        root_pe: usize,
+    ) -> CollectiveBroadcastOpHandle<T>;
+    fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        dst: RootSrcOrLamellarBuffer<T, B>,
+    ) -> CollectiveBroadcastIntoBufferOpHandle<T, B>;
 }
