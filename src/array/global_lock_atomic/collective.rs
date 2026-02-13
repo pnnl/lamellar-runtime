@@ -1,4 +1,4 @@
-use crate::{array::{collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::RootOrLamellarBuffer, AsLamellarBuffer, Dist, LamellarBuffer};
+use crate::{array::{collective::{gather_handle::{ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::RootOrLamellarBuffer, AsLamellarBuffer, Dist, LamellarBuffer};
 
 
 impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
@@ -356,6 +356,29 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
                 .array
                 .array
                 .bit_xor_at_pe_in_place(pe)
+        }
+    }
+}
+
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+    pub fn gather_at_pe(&self, pe: usize) -> ArrayCollectiveGatherHandle<T> {
+        unsafe {
+            self
+                .array
+                .array
+                .gather_at_pe(pe)
+        }
+    }
+}
+
+
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+    pub fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
+        unsafe {
+            self
+                .array
+                .array
+                .gather_at_pe_into_buffer(target)
         }
     }
 }

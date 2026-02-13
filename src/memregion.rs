@@ -13,7 +13,7 @@ use crate::{
     },
     darc::Darc,
     lamellae::{
-        collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CommAllocCollectiveAllReduce, CommAllocCollectiveReduce, ReduceOp, RootOrBuffer, RootOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
+        collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CommAllocCollectiveAllReduce, CommAllocCollectiveGather, CommAllocCollectiveReduce, ReduceOp, RootOrBuffer, RootOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -1403,6 +1403,43 @@ impl<T: Remote> MemoryRegion<T> {
                 self.counters.clone(), 
                 op, 
                 root_pe
+            )
+    }
+
+    pub(crate) fn gather(
+        &self,
+        root_pe: usize,
+    ) -> CollectiveGatherOpHandle<T> {
+        trace!(
+            "gather at root memregion {:?} root_pe: {:?}",
+            self.alloc,
+            root_pe
+        );
+
+        self.alloc
+            .inner_alloc
+            .gather(
+                &self.scheduler, 
+                self.counters.clone(), 
+                root_pe
+            )
+    }
+
+    pub(crate) fn gather_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        root_or_buffer: RootOrLamellarBuffer<T, B>,
+    ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
+        trace!(
+            "gather at root memregion {:?}", 
+            self.alloc
+        );
+
+        self.alloc
+            .inner_alloc
+            .gather_into_buffer(
+                &self.scheduler, 
+                self.counters.clone(), 
+                root_or_buffer
             )
     }
 

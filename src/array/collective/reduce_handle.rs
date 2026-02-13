@@ -6,7 +6,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::{lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle}, AsLamellarBuffer, Dist, LamellarTask};
+use crate::{lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle}, AsLamellarBuffer, Dist, LamellarTask};
 use crate::array::LamellarByteArray;
 use crate::lamellae::comm::collective::CollectiveAllReduceOpHandle;
 use crate::warnings::RuntimeWarning;
@@ -352,3 +352,4 @@ impl<T: Dist> Future for ArrayCollectiveReduceInPlaceHandle<T> {
         }
     }
 }
+
