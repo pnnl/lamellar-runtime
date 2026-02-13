@@ -2578,6 +2578,64 @@ impl LibfabricAlloc {
         self.reduce_inner(op, slice_or_pe, blocking)
     }
 
+    pub(crate) fn allgather_inner<T: 'static>(
+        &self,
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_allgather::<T, u8>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_allgather::<T, u16>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_allgather::<T, u32>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_allgather::<T, u64>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_allgather::<T, usize>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_allgather::<T, i8>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_allgather::<T, i16>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_allgather::<T, i32>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_allgather::<T, i64>(result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_allgather::<T, isize>(result, blocking)
+            } else {
+                panic!("Unsupported allgather operation type");
+            }
+        }
+    }
+
+    fn typed_allgather<T, OFI: AsFiType>(
+        &self,
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let res = unsafe {&mut *(result as *mut [T] as *mut [OFI])};
+        let cg = &self.ofi.comm_group;
+        let mc = self.mcast_group.as_ref().expect("No multicast group for allgather");
+        let src = unsafe {std::slice::from_raw_parts(self.start() as *const T, self.num_bytes()/std::mem::size_of::<T>())};
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let ctx = cg.post_collective(blocking, |ctx| {
+                cg.ep.allgather_with_context(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    CollectiveOptions::default(),
+                    ctx,
+                )
+            }
+        )?;
+
+        Ok(ctx)
+    }
+
     pub(crate) fn reduce_inner<T: 'static>(
         &self,
         op: &LamellarReduceOp,
