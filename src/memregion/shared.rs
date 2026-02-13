@@ -1182,6 +1182,18 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .as_base::<T>()
             .reduce_in_place(ReduceOp::BitAnd, root_pe)
     }
+    pub unsafe fn gather_all(&self) -> CollectiveAllGatherOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .gather_all()
+    }
+    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .gather_all_into_buffer(buffer)
+    }
     pub unsafe fn gather_at_pe(&self, root_pe: usize) -> CollectiveGatherOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
