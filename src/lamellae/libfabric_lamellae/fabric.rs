@@ -13,7 +13,7 @@ use libfabric::{
 
 use crate::{
     lamellae::{
-        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrBuffer, RootOrSliceMut}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp
+        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrBuffer, RootOrSliceMut, RootSrcOrSliceMut}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -2824,6 +2824,72 @@ impl LibfabricAlloc {
                 cg.ep.gather_with_context(
                     buf,
                     None,
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
+                    CollectiveOptions::default(),
+                    ctx,
+                )
+            }
+        )?;
+
+        Ok(ctx)
+    }
+
+    pub(crate) fn broadcast_inner<T: 'static>(
+        &self,
+        root_src: RootSrcOrSliceMut<T>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_broadcast::<T, u8>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_broadcast::<T, u16>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_broadcast::<T, u32>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_broadcast::<T, u64>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_broadcast::<T, usize>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_broadcast::<T, i8>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_broadcast::<T, i16>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_broadcast::<T, i32>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_broadcast::<T, i64>(root_src, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_broadcast::<T, isize>(root_src, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    fn typed_broadcast<T, OFI: AsFiType>(
+        &self,
+        slice_or_pe: RootSrcOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let cg = &self.ofi.comm_group;
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (result, root_pe) = match slice_or_pe {
+            RootSrcOrSliceMut::Root() => (None, self.ofi.my_pe) ,
+            RootSrcOrSliceMut::NotRoot(result, root_pe) => (Some(result), root_pe),
+        };
+        let res = match result {
+            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            None => {
+                let res_buf = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())}; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
+                unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+            }
+        };
+        let ctx = cg.post_collective(blocking, |ctx| {
+                cg.ep.broadcast_with_context(
                     res,
                     None,
                     mc,

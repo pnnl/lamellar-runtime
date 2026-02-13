@@ -1,4 +1,4 @@
-use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::RootOrLamellarBuffer, AsLamellarBuffer, Dist, LamellarBuffer};
+use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::{RootOrLamellarBuffer, RootSrcOrLamellarBuffer}, AsLamellarBuffer, Dist, LamellarBuffer};
 
 
 impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
@@ -416,6 +416,27 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
                 .array
                 .array
                 .broadcast_all_into_buffer(buffer)
+        }
+    }
+}
+
+
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+    pub fn broadcast_from_pe(&self, pe: usize) -> ArrayCollectiveBroadcastHandle<T> {
+        unsafe {
+            self
+                .array
+                .array
+                .broadcast_from_pe(pe)
+        }
+    }
+
+    pub fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootSrcOrLamellarBuffer<T, B>) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
+        unsafe {
+            self
+                .array
+                .array
+                .broadcast_from_pe_into_buffer(target)
         }
     }
 }

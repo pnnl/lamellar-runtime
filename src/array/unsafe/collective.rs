@@ -1,8 +1,8 @@
-use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState};
+use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState};
 use crate::array::collective::gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState};
 use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::private::LamellarArrayPrivate;
-use crate::lamellae::collective::{CollectiveAllReduceOpHandle, ReduceOp, RootOrLamellarBuffer};
+use crate::lamellae::collective::{CollectiveAllReduceOpHandle, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer};
 use crate::memregion::buffer;
 use crate::{AsLamellarBuffer, LamellarBuffer, UnsafeArray};
 use crate::Dist;
@@ -746,6 +746,40 @@ impl<T: Dist> UnsafeArray<T> {
         ArrayCollectiveAllBroadcastIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayCollectiveAllBroadcastIntoBufferState::CollectiveAllBroadcastIntoBuffer(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn broadcast_from_pe(&self, pe: usize) -> ArrayCollectiveBroadcastHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .broadcast(pe);
+
+        ArrayCollectiveBroadcastHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveBroadcastState::CollectiveBroadcast(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootSrcOrLamellarBuffer<T, B>) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .broadcast_into_buffer(dst);
+
+        ArrayCollectiveBroadcastIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBuffer(req),
             spawned: false,
         }
     }

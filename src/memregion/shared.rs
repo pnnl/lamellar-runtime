@@ -1,7 +1,7 @@
 use crate::active_messaging::RemotePtr;
 use crate::array::{LamellarRead, LamellarWrite, TeamTryFrom};
 use crate::darc::Darc;
-use crate::lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle};
+use crate::lamellae::collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle};
 use crate::lamellae::{AllocationType, LamellaeUtil, RdmaGetBufferHandle, RdmaGetIntoBufferHandle};
 use crate::{memregion::*, LamellarEnv, LamellarTeam};
 
@@ -690,6 +690,18 @@ impl<T: Remote> SharedMemoryRegion<T> {
         self.mr
             .as_base::<T>()
             .broadcast_all_into_buffer(buffer)
+    }
+    pub unsafe fn broadcast_from_pe(&self, root_pe: usize) -> CollectiveBroadcastOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .broadcast(root_pe)
+    }
+    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, root_or_buffer: RootSrcOrLamellarBuffer<T, B>) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .broadcast_into_buffer(root_or_buffer)
     }
     pub fn wait_all(&self) {
         self.mr.wait_all();

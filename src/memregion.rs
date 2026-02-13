@@ -13,7 +13,7 @@ use crate::{
     },
     darc::Darc,
     lamellae::{
-        collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveGather, CommAllocCollectiveReduce, ReduceOp, RootOrBuffer, RootOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
+        collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, ReduceOp, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -1476,6 +1476,38 @@ impl<T: Remote> MemoryRegion<T> {
                 &self.scheduler, 
                 self.counters.clone(), 
                 buffer
+            )
+    }
+
+    pub(crate) fn broadcast(&self, root_pe: usize) -> CollectiveBroadcastOpHandle<T> {
+        trace!(
+            "broadcast memregion {:?} root pe {}",
+            self.alloc,
+            root_pe
+        );
+        self.alloc
+            .inner_alloc
+            .broadcast(
+                &self.scheduler, 
+                self.counters.clone(),
+                root_pe
+            )
+    }
+
+    pub(crate) fn broadcast_into_buffer<B: AsLamellarBuffer<T>>(
+        &self, 
+        target: RootSrcOrLamellarBuffer<T, B>
+    ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
+        trace!(
+            "broadcast into buffer memregion {:?}",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .broadcast_into_buffer(
+                &self.scheduler, 
+                self.counters.clone(), 
+                target
             )
     }
 
