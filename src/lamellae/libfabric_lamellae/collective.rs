@@ -1,5 +1,5 @@
 use crate::{
-    active_messaging::AMCounters, lamellae::{collective::{CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle, CommAllocCollectiveAllReduce}, comm::collective::ReduceOp}, warnings::RuntimeWarning, AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote
+    active_messaging::AMCounters, lamellae::{collective::{CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle, CollectiveReduceInPlaceOpFuture, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle, CommAllocCollectiveAllReduce, CommAllocCollectiveReduce, RootOrBuffer, RootOrLamellarBuffer}, comm::collective::ReduceOp}, warnings::RuntimeWarning, AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote
 };
 
 use super::{
@@ -246,6 +246,242 @@ impl<T: Remote> Future for LibfabricCollectiveAllReduceInPlaceFuture<T> {
         Poll::Ready(())
     }
 }
+#[pin_project(PinnedDrop)]
+pub(crate) struct LibfabricCollectiveReduceFuture<T> {
+    pub(crate) alloc: LibfabricAlloc,
+    pub(super) op: ReduceOp,
+    pub(crate) target: RootOrBuffer<T>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) ctx: Option<CachedContext>,
+}
+
+
+
+impl<T: Remote> LibfabricCollectiveReduceFuture<T> {
+    fn exec_op(&mut self) {
+        
+        let ctx = LibfabricAlloc::reduce_inner(
+            &self.alloc,
+            &self.op,
+            self.target.as_mut_slice(),
+            false,
+        )
+        .unwrap();
+        self.ctx = Some(ctx);
+        // println!(
+        //     "collective reduce op: {:?} initiated",
+        //     self.op,
+        // );
+        self.spawned = true;
+    }
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
+        self.exec_op();
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        match &mut self.target {
+            RootOrBuffer::Root(res) => {
+                let mut res_vec = Vec::new();
+                std::mem::swap(&mut res_vec, res);
+                Some(res_vec)
+            },
+            RootOrBuffer::NotRoot(_) => None,
+        }
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+        self.exec_op();
+
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LibfabricCollectiveReduceFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a LibfabricCollectiveReduceFuture").print();
+        }
+    }
+}
+
+impl<T> From<LibfabricCollectiveReduceFuture<T>> for CollectiveReduceOpHandle<T> {
+    fn from(f: LibfabricCollectiveReduceFuture<T>) -> CollectiveReduceOpHandle<T> {
+        CollectiveReduceOpHandle {
+            future: CollectiveReduceOpFuture::Libfabric(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for LibfabricCollectiveReduceFuture<T> {
+    type Output = Option<Vec<T>>;
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        match &mut self.target {
+            RootOrBuffer::Root(res) => {
+                let mut res_vec = Vec::new();
+                std::mem::swap(&mut res_vec, res);
+                Poll::Ready(Some(res_vec))
+            },
+            RootOrBuffer::NotRoot(_) => Poll::Ready(None),
+        }
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct LibfabricCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: LibfabricAlloc,
+    pub(super) op: ReduceOp,
+    pub(crate) target: RootOrLamellarBuffer<T, B>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) ctx: Option<CachedContext>,
+}
+
+
+
+impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceIntoBufferFuture<T, B> {
+    fn exec_op(&mut self) {
+        
+        let ctx = LibfabricAlloc::reduce_inner(
+            &self.alloc,
+            &self.op,
+            self.target.as_mut_slice(),
+            false,
+        )
+        .unwrap();
+        self.ctx = Some(ctx);
+        // println!(
+        //     "collective reduce op: {:?} initiated",
+        //     self.op,
+        // );
+        self.spawned = true;
+    }
+    pub(crate) fn block(mut self)  {
+        self.exec_op();
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        self.exec_op();
+
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LibfabricCollectiveReduceIntoBufferFuture<T, B> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a LibfabricCollectiveReduceIntoBufferFuture").print();
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> From<LibfabricCollectiveReduceIntoBufferFuture<T, B>> for CollectiveReduceIntoBufferOpHandle<T, B> {
+    fn from(f: LibfabricCollectiveReduceIntoBufferFuture<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+        CollectiveReduceIntoBufferOpHandle {
+            future: CollectiveReduceIntoBufferOpFuture::Libfabric(f),
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveReduceIntoBufferFuture<T, B> {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        Poll::Ready(())
+    }
+}
+
+
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct LibfabricCollectiveReduceInPlaceFuture<T> {
+    pub(crate) alloc: LibfabricAlloc,
+    pub(super) op: ReduceOp,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) ctx: Option<CachedContext>,
+    root_pe: Option<usize>,
+    phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: Remote> LibfabricCollectiveReduceInPlaceFuture<T> {
+    fn exec_op(&mut self) {
+        println!(
+            "performing collective reduce op: {:?} in place ",
+            self.op,
+        );
+
+        let ctx = LibfabricAlloc::reduce_inplace_inner::<T>(
+            &self.alloc,
+            &self.op,
+            self.root_pe.clone(),
+            false,
+        )
+        .unwrap();
+        self.ctx = Some(ctx);
+        println!(
+            "collective reduce op: {:?} initiated",
+            self.op,
+        );
+        self.spawned = true;
+    }
+    pub(crate) fn block(mut self) {
+        self.exec_op();
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        self.exec_op();
+
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LibfabricCollectiveReduceInPlaceFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a LibfabricCollectiveReduceInPlaceFuture").print();
+        }
+    }
+}
+
+impl<T> From<LibfabricCollectiveReduceInPlaceFuture<T>> for CollectiveReduceInPlaceOpHandle<T> {
+    fn from(f: LibfabricCollectiveReduceInPlaceFuture<T>) -> CollectiveReduceInPlaceOpHandle<T> {
+        CollectiveReduceInPlaceOpHandle {
+            future: CollectiveReduceInPlaceOpFuture::Libfabric(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for LibfabricCollectiveReduceInPlaceFuture<T> {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        Poll::Ready(())
+    }
+}
+
 
 
 
@@ -299,6 +535,77 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
             scheduler: scheduler.clone(),
             counters,
             ctx: None,
+            phantom: std::marker::PhantomData,
+        }.into()
+    }
+}
+
+
+impl CommAllocCollectiveReduce for LibfabricAlloc {
+    fn reduce<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: ReduceOp,
+        root_pe: usize,
+    ) -> CollectiveReduceOpHandle<T> {
+        let target =
+            if root_pe != self.ofi.my_pe {
+                RootOrBuffer::NotRoot(root_pe)
+            }
+            else {
+                RootOrBuffer::Root(vec![T::default(); self.num_bytes()/std::mem::size_of::<T>()])
+            };
+        LibfabricCollectiveReduceFuture {
+            alloc: self.clone(),
+            op: op,
+            target,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            ctx: None,
+        }
+        .into()
+    }
+    fn reduce_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: ReduceOp,
+        root_or_buffer: RootOrLamellarBuffer<T, B>
+    ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+        
+        LibfabricCollectiveReduceIntoBufferFuture {
+            alloc: self.clone(),
+            op: op,
+            target: root_or_buffer,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            ctx: None,
+        }.into()
+    }
+    fn reduce_in_place<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: ReduceOp,
+        root_pe: usize,
+    ) -> CollectiveReduceInPlaceOpHandle<T> {
+        let root =  if root_pe != self.ofi.my_pe {
+            Some(root_pe)
+        }
+        else {
+            None
+        };
+        LibfabricCollectiveReduceInPlaceFuture {
+            alloc: self.clone(),
+            op: op,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            ctx: None,
+            root_pe: root,
             phantom: std::marker::PhantomData,
         }.into()
     }

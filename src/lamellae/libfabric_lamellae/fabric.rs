@@ -13,9 +13,7 @@ use libfabric::{
 
 use crate::{
     lamellae::{
-        comm::alloc::*,
-        comm::error::{AllocError, AllocResult, FabricError, FabricResult},
-        AllocationType, AtomicOp as LamellarAtomicOp, collective::ReduceOp as LamellarReduceOp,
+        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrBuffer, RootOrSliceMut}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -2495,7 +2493,7 @@ impl LibfabricAlloc {
 
     pub(crate) fn allreduce_inplace_inner<T: 'static>(        
         &self,
-        op: &LamellarReduceOp,
+        op: &AllReduceOp,
         blocking: bool,
     ) -> Result<CachedContext, libfabric::error::Error> {
         let dst = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())};
@@ -2504,7 +2502,7 @@ impl LibfabricAlloc {
 
     pub(crate) fn allreduce_inner<T: 'static>(
         &self,
-        op: &LamellarReduceOp,
+        op: &AllReduceOp,
         result: &mut [T],
         blocking: bool,
     ) -> Result<CachedContext, libfabric::error::Error> {
@@ -2537,7 +2535,7 @@ impl LibfabricAlloc {
 
     fn typed_allreduce<T, OFI: AsFiType>(
         &self,
-        op: &LamellarReduceOp,
+        op: &AllReduceOp,
         result: &mut [T],
         blocking: bool,
     ) -> Result<CachedContext, libfabric::error::Error> {
@@ -2553,6 +2551,96 @@ impl LibfabricAlloc {
                     res,
                     None,
                     mc,
+                    op.into(),
+                    CollectiveOptions::default(),
+                    ctx,
+                )
+            }
+        )?;
+
+        Ok(ctx)
+    }
+    pub(crate) fn reduce_inplace_inner<T: 'static>(        
+        &self,
+        op: &LamellarReduceOp,
+        root_pe: Option<usize>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let dst = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())};
+        let slice_or_pe = if let Some(root) = root_pe {
+            RootOrSliceMut::NotRoot(root)
+        }
+        else {
+            RootOrSliceMut::Root(dst)
+        };
+
+        
+        self.reduce_inner(op, slice_or_pe, blocking)
+    }
+
+    pub(crate) fn reduce_inner<T: 'static>(
+        &self,
+        op: &LamellarReduceOp,
+        slice_or_pe: RootOrSliceMut<T>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_reduce::<T, u8>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_reduce::<T, u16>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_reduce::<T, u32>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_reduce::<T, u64>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_reduce::<T, usize>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_reduce::<T, i8>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_reduce::<T, i16>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_reduce::<T, i32>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_reduce::<T, i64>(op, slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_reduce::<T, isize>(op, slice_or_pe, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    fn typed_reduce<T, OFI: AsFiType>(
+        &self,
+        op: &LamellarReduceOp,
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let cg = &self.ofi.comm_group;
+        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        let (result, root_pe) = match slice_or_pe {
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+        };
+        let src = unsafe {std::slice::from_raw_parts(self.start() as *const T, self.num_bytes()/std::mem::size_of::<T>())};
+        let res = match result {
+            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            None => {
+                let res_buf = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())}; // if result is None, we are doing an in-place reduce or we reduce on a non-root PE, so we can reuse the source buffer as the destination buffer since it is either the destination or will be ignored by non-root PEs
+                unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+            }
+        };
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let ctx = cg.post_collective(blocking, |ctx| {
+                cg.ep.reduce_with_context(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
                     op.into(),
                     CollectiveOptions::default(),
                     ctx,

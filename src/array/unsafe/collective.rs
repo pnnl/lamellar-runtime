@@ -1,6 +1,6 @@
-use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState};
+use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::private::LamellarArrayPrivate;
-use crate::lamellae::collective::{ReduceOp, CollectiveAllReduceOpHandle};
+use crate::lamellae::collective::{CollectiveAllReduceOpHandle, ReduceOp, RootOrLamellarBuffer};
 use crate::memregion::buffer;
 use crate::{AsLamellarBuffer, LamellarBuffer, UnsafeArray};
 use crate::Dist;
@@ -321,6 +321,327 @@ impl<T: Dist> UnsafeArray<T> {
         ArrayCollectiveAllReduceInPlaceHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayCollectiveAllReduceInPlaceState::CollectiveAllReduceInPlace(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn sum_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::Sum, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn max_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::Max, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn min_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::Min, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn prod_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::Prod, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_or_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::BitOr, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_and_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::BitAnd, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_xor_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce(ReduceOp::BitXor, pe);
+
+        ArrayCollectiveReduceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceState::CollectiveReduce(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::Sum, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::Max, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::Min, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::Prod, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::BitOr, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::BitAnd, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_into_buffer(ReduceOp::BitXor, dst);
+
+        ArrayCollectiveReduceIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::Sum, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn max_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::Max, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn min_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::Min, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn prod_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::Prod, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_or_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::BitOr, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_and_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::BitAnd, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+
+    pub unsafe fn bit_xor_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .reduce_in_place(ReduceOp::BitXor, pe);
+
+        ArrayCollectiveReduceInPlaceHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
             spawned: false,
         }
     }
