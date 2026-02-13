@@ -1,4 +1,4 @@
-use crate::{array::{collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState}, private::LamellarArrayPrivate}, lamellae::collective::ReduceOp, AsLamellarBuffer, AtomicArray, Dist, LamellarBuffer};
+use crate::{array::{collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState}, private::LamellarArrayPrivate}, lamellae::collective::{ReduceOp, RootOrBuffer, RootOrLamellarBuffer}, AsLamellarBuffer, AtomicArray, Dist, LamellarBuffer};
 
 impl<T: Dist> AtomicArray<T> {
     pub unsafe fn sum_all(&self) -> ArrayCollectiveAllReduceHandle<T> {
@@ -439,6 +439,454 @@ impl<T: Dist> AtomicArray<T> {
                 ArrayCollectiveAllReduceInPlaceHandle {
                     array: self.as_lamellar_byte_array(),
                     state: ArrayCollectiveAllReduceInPlaceState::CollectiveAllReduceInPlace(req),
+                    spawned: false,
+                }
+            }
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+         }
+    }
+}
+
+
+impl<T: Dist> AtomicArray<T> {
+    pub unsafe fn sum_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::Sum, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn max_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::Max, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn min_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::Min, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn prod_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::Prod, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_and_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::BitAnd, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_xor_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::BitXor, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_or_at_pe(&self, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce(ReduceOp::BitOr, pe);
+
+                ArrayCollectiveReduceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceState::CollectiveReduce(req),
+                    spawned: false,
+                }
+            }
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+         }
+    }
+}
+
+impl<T: Dist> AtomicArray<T> {
+    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::Sum, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::Max, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::Min, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::Prod, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::BitAnd, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::BitXor, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_into_buffer(ReduceOp::BitOr, target);
+
+                ArrayCollectiveReduceIntoBufferHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceIntoBufferState::CollectiveReduceIntoBuffer(req),
+                    spawned: false,
+                }
+            }
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+         }
+    }
+}
+
+impl<T: Dist> AtomicArray<T> {
+    pub unsafe fn sum_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::Sum, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn max_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::Max, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn min_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::Min, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn prod_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::Prod, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: array.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_and_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::BitAnd, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_xor_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::BitXor, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+                    spawned: false,
+                }
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn bit_or_at_pe_in_place(&self, pe: usize) -> ArrayCollectiveReduceInPlaceHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let req = array
+                    .array
+                    .inner
+                    .data
+                    .mem_region
+                    .as_base::<T>()
+                    .reduce_in_place(ReduceOp::BitOr, pe);
+
+                ArrayCollectiveReduceInPlaceHandle {
+                    array: self.as_lamellar_byte_array(),
+                    state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
                     spawned: false,
                 }
             }

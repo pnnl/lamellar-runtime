@@ -13,7 +13,7 @@ use crate::{
     },
     darc::Darc,
     lamellae::{
-        collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, ReduceOp, CollectiveAllReduceOpHandle, CommAllocCollectiveAllReduce}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
+        collective::{CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CommAllocCollectiveAllReduce, CommAllocCollectiveReduce, ReduceOp, RootOrBuffer, RootOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -1343,7 +1343,68 @@ impl<T: Remote> MemoryRegion<T> {
                 op,
             )
     }
-    
+
+    pub(crate) fn reduce(
+        &self,
+        op: ReduceOp,
+        root_pe: usize,
+    ) -> CollectiveReduceOpHandle<T> {
+        trace!(
+            "reduce at root memregion {:?} root_pe: {:?}",
+            self.alloc,
+            root_pe
+        );
+
+        self.alloc
+            .inner_alloc
+            .reduce(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op, 
+                root_pe
+            )
+    }
+
+    pub(crate) fn reduce_into_buffer<B: AsLamellarBuffer<T>>(
+        &self,
+        op: ReduceOp,
+        root_or_buffer: RootOrLamellarBuffer<T, B>,
+    ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+        trace!(
+            "reduce at root memregion {:?}", 
+            self.alloc
+        );
+
+        self.alloc
+            .inner_alloc
+            .reduce_into_buffer(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op, 
+                root_or_buffer
+            )
+    }
+
+    pub(crate) fn reduce_in_place(
+        &self,
+        op: ReduceOp,
+        root_pe: usize,
+    ) -> CollectiveReduceInPlaceOpHandle<T> {
+        trace!(
+            "reduce at root memregion {:?} root_pe: {:?}",
+            self.alloc,
+            root_pe
+        );
+
+        self.alloc
+            .inner_alloc
+            .reduce_in_place(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op, 
+                root_pe
+            )
+    }
 
     pub(crate) fn wait_all(&self) {
         self.rdma.comm().wait_all();
