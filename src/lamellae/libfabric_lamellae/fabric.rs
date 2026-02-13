@@ -8,7 +8,7 @@ use libfabric::{
         rma::{ReadEp, WriteEp},
     }, connless_ep::ConnectionlessEndpoint, cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq}, domain::{Domain, DomainBuilder}, enums::{
         AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp, EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ReduceOp, ResourceMgmt, TrafficClass, TransferOptions
-    }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
+    }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, error::Error, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
 };
 
 use crate::{
@@ -2619,7 +2619,7 @@ impl LibfabricAlloc {
         blocking: bool,
     ) -> Result<CachedContext, libfabric::error::Error> {
         let cg = &self.ofi.comm_group;
-        let mc = self.mcast_group.as_ref().expect("No multicast group for allreduce");
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
         let (result, root_pe) = match slice_or_pe {
             RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
             RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
@@ -2642,6 +2642,76 @@ impl LibfabricAlloc {
                     mc,
                     &cg.mapped_addresses[root_pe],
                     op.into(),
+                    CollectiveOptions::default(),
+                    ctx,
+                )
+            }
+        )?;
+
+        Ok(ctx)
+    }
+
+    pub(crate) fn gather_inner<T: 'static>(
+        &self,
+        slice_or_pe: RootOrSliceMut<T>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_gather::<T, u8>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_gather::<T, u16>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_gather::<T, u32>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_gather::<T, u64>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_gather::<T, usize>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_gather::<T, i8>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_gather::<T, i16>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_gather::<T, i32>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_gather::<T, i64>(slice_or_pe, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_gather::<T, isize>(slice_or_pe, blocking)
+            } else {
+                panic!("Unsupported allreduce operation type");
+            }
+        }
+    }
+
+    fn typed_gather<T, OFI: AsFiType>(
+        &self,
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<CachedContext, libfabric::error::Error> {
+        let cg = &self.ofi.comm_group;
+        let mc = self.mcast_group.as_ref().expect("No multicast group for collective reduce");
+        let (result, root_pe) = match slice_or_pe {
+            RootOrSliceMut::Root(result) => (Some(result), self.ofi.my_pe) ,
+            RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+        };
+        let src = unsafe {std::slice::from_raw_parts(self.start() as *const T, self.num_bytes()/std::mem::size_of::<T>())};
+        let res = match result {
+            Some(res) => unsafe {std::mem::transmute::<&mut [T], &mut [OFI]>(res)},
+            None => {
+                let res_buf = unsafe {std::slice::from_raw_parts_mut(self.start() as *mut T, self.num_bytes()/std::mem::size_of::<T>())}; // if result is None, we are a non-root PE, so we can reuse the source buffer as the destination buffer since it will be ignored.
+                unsafe { std::mem::transmute::<&mut [T], &mut [OFI]>(res_buf) }
+            }
+        };
+        let buf = unsafe { std::mem::transmute::<&[T], &[OFI]>(src) };
+        let ctx = cg.post_collective(blocking, |ctx| {
+                cg.ep.gather_with_context(
+                    buf,
+                    None,
+                    res,
+                    None,
+                    mc,
+                    &cg.mapped_addresses[root_pe],
                     CollectiveOptions::default(),
                     ctx,
                 )

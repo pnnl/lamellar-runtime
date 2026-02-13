@@ -1,5 +1,5 @@
 use crate::{
-    active_messaging::AMCounters, lamellae::{collective::{CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle, CollectiveReduceInPlaceOpFuture, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle, CommAllocCollectiveAllReduce, CommAllocCollectiveReduce, RootOrBuffer, RootOrLamellarBuffer}, comm::collective::ReduceOp}, warnings::RuntimeWarning, AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote
+    active_messaging::AMCounters, lamellae::{collective::{CollectiveAllReduceInPlaceOpFuture, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpFuture, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpFuture, CollectiveAllReduceOpHandle, CollectiveGatherIntoBufferOpFuture, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpFuture, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpFuture, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpFuture, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpFuture, CollectiveReduceOpHandle, CommAllocCollectiveAllReduce, CommAllocCollectiveGather, CommAllocCollectiveReduce, RootOrBuffer, RootOrLamellarBuffer}, comm::collective::ReduceOp}, warnings::RuntimeWarning, AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote
 };
 
 use super::{
@@ -246,6 +246,7 @@ impl<T: Remote> Future for LibfabricCollectiveAllReduceInPlaceFuture<T> {
         Poll::Ready(())
     }
 }
+
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveReduceFuture<T> {
     pub(crate) alloc: LibfabricAlloc,
@@ -404,8 +405,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveReduceInto
         Poll::Ready(())
     }
 }
-
-
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveReduceInPlaceFuture<T> {
@@ -607,6 +606,204 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
             ctx: None,
             root_pe: root,
             phantom: std::marker::PhantomData,
+        }.into()
+    }
+}
+
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct LibfabricCollectiveGatherFuture<T> {
+    pub(crate) alloc: LibfabricAlloc,
+    pub(crate) target: RootOrBuffer<T>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) ctx: Option<CachedContext>,
+}
+
+
+
+impl<T: Remote> LibfabricCollectiveGatherFuture<T> {
+    fn exec_op(&mut self) {
+        
+        let ctx = LibfabricAlloc::gather_inner(
+            &self.alloc,
+            self.target.as_mut_slice(),
+            false,
+        )
+        .unwrap();
+        self.ctx = Some(ctx);
+        // println!(
+        //     "collective reduce op: {:?} initiated",
+        //     self.op,
+        // );
+        self.spawned = true;
+    }
+    pub(crate) fn block(mut self) -> Option<Vec<T>> {
+        self.exec_op();
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        match &mut self.target {
+            RootOrBuffer::Root(res) => {
+                let mut res_vec = Vec::new();
+                std::mem::swap(&mut res_vec, res);
+                Some(res_vec)
+            },
+            RootOrBuffer::NotRoot(_) => None,
+        }
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Option<Vec<T>>> {
+        self.exec_op();
+
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LibfabricCollectiveGatherFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a LibfabricCollectiveGatherFuture").print();
+        }
+    }
+}
+
+impl<T> From<LibfabricCollectiveGatherFuture<T>> for CollectiveGatherOpHandle<T> {
+    fn from(f: LibfabricCollectiveGatherFuture<T>) -> CollectiveGatherOpHandle<T> {
+        CollectiveGatherOpHandle {
+            future: CollectiveGatherOpFuture::Libfabric(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for LibfabricCollectiveGatherFuture<T> {
+    type Output = Option<Vec<T>>;
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        match &mut self.target {
+            RootOrBuffer::Root(res) => {
+                let mut res_vec = Vec::new();
+                std::mem::swap(&mut res_vec, res);
+                Poll::Ready(Some(res_vec))
+            },
+            RootOrBuffer::NotRoot(_) => Poll::Ready(None),
+        }
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct LibfabricCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
+    pub(crate) alloc: LibfabricAlloc,
+    pub(crate) target: RootOrLamellarBuffer<T, B>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) ctx: Option<CachedContext>,
+}
+
+
+
+impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveGatherIntoBufferFuture<T, B> {
+    fn exec_op(&mut self) {
+        
+        let ctx = LibfabricAlloc::gather_inner(
+            &self.alloc,
+            self.target.as_mut_slice(),
+            false,
+        )
+        .unwrap();
+        self.ctx = Some(ctx);
+        // println!(
+        //     "collective reduce op: {:?} initiated",
+        //     self.op,
+        // );
+        self.spawned = true;
+    }
+    pub(crate) fn block(mut self)  {
+        self.exec_op();
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        self.exec_op();
+
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for LibfabricCollectiveGatherIntoBufferFuture<T, B> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a LibfabricCollectiveGatherIntoBufferFuture").print();
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> From<LibfabricCollectiveGatherIntoBufferFuture<T, B>> for CollectiveGatherIntoBufferOpHandle<T, B> {
+    fn from(f: LibfabricCollectiveGatherIntoBufferFuture<T, B>) -> CollectiveGatherIntoBufferOpHandle<T, B> {
+        CollectiveGatherIntoBufferOpHandle {
+            future: CollectiveGatherIntoBufferOpFuture::Libfabric(f),
+        }
+    }
+}
+
+impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveGatherIntoBufferFuture<T, B> {
+    type Output = ();
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.ofi.wait_for_completion(self.ctx.as_ref().unwrap()).unwrap();
+        Poll::Ready(())
+    }
+}
+
+impl CommAllocCollectiveGather for LibfabricAlloc {
+    fn gather<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        root_pe: usize,
+    ) -> CollectiveGatherOpHandle<T> {
+        let target =
+            if root_pe != self.ofi.my_pe {
+                RootOrBuffer::NotRoot(root_pe)
+            }
+            else {
+                RootOrBuffer::Root(vec![T::default(); self.num_bytes()/std::mem::size_of::<T>() * self.num_pes()])
+            };
+        LibfabricCollectiveGatherFuture {
+            alloc: self.clone(),
+            target,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            ctx: None,
+        }
+        .into()
+    }
+    fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        root_or_buffer: RootOrLamellarBuffer<T, B>
+    ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
+        
+        LibfabricCollectiveGatherIntoBufferFuture {
+            alloc: self.clone(),
+            target: root_or_buffer,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            ctx: None,
         }.into()
     }
 }

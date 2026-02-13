@@ -1,3 +1,4 @@
+use crate::array::collective::gather_handle::{ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState};
 use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::private::LamellarArrayPrivate;
 use crate::lamellae::collective::{CollectiveAllReduceOpHandle, ReduceOp, RootOrLamellarBuffer};
@@ -642,6 +643,40 @@ impl<T: Dist> UnsafeArray<T> {
         ArrayCollectiveReduceInPlaceHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayCollectiveReduceInPlaceState::CollectiveReduceInPlace(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn gather_at_pe(&self, pe: usize) -> ArrayCollectiveGatherHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .gather(pe);
+
+        ArrayCollectiveGatherHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveGatherState::CollectiveGather(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .gather_into_buffer(dst);
+
+        ArrayCollectiveGatherIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveGatherIntoBufferState::CollectiveGatherIntoBuffer(req),
             spawned: false,
         }
     }
