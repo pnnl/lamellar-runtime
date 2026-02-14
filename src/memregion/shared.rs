@@ -703,6 +703,18 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .as_base::<T>()
             .broadcast_into_buffer(root_or_buffer)
     }
+    pub unsafe fn scatter_from_pe(&self, root_pe: usize) -> CollectiveScatterOpHandle<T> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .scatter(root_pe)
+    }
+    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, buffer: LamellarBuffer<T, B>, root_pe: usize) -> CollectiveScatterIntoBufferOpHandle<T, B> {
+        // let slice = self.as_slice();
+        self.mr
+            .as_base::<T>()
+            .scatter_into_buffer(buffer, root_pe)
+    }
     pub fn wait_all(&self) {
         self.mr.wait_all();
     }

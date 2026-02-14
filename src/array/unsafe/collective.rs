@@ -1,4 +1,4 @@
-use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState};
+use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveBroadcastIntoBufferState, ArrayCollectiveBroadcastState, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle, ArrayCollectiveScatterIntoBufferState, ArrayCollectiveScatterState};
 use crate::array::collective::gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState};
 use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::private::LamellarArrayPrivate;
@@ -780,6 +780,40 @@ impl<T: Dist> UnsafeArray<T> {
         ArrayCollectiveBroadcastIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
             state: ArrayCollectiveBroadcastIntoBufferState::CollectiveBroadcastIntoBuffer(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn scatter_from_pe(&self, pe: usize) -> ArrayCollectiveScatterHandle<T> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .scatter(pe);
+
+        ArrayCollectiveScatterHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveScatterState::CollectiveScatter(req),
+            spawned: false,
+        }
+    }
+}
+
+impl<T: Dist> UnsafeArray<T> {
+    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>, root_pe: usize) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
+        let req = self
+            .inner
+            .data
+            .mem_region
+            .as_base::<T>()
+            .scatter_into_buffer(buffer, root_pe);
+
+        ArrayCollectiveScatterIntoBufferHandle {
+            array: self.as_lamellar_byte_array(),
+            state: ArrayCollectiveScatterIntoBufferState::CollectiveScatterIntoBuffer(req),
             spawned: false,
         }
     }

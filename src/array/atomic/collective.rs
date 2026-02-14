@@ -1,4 +1,4 @@
-use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState}}, private::LamellarArrayPrivate}, lamellae::collective::{ReduceOp, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}, AsLamellarBuffer, AtomicArray, Dist, LamellarBuffer};
+use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveAllBroadcastIntoBufferState, ArrayCollectiveAllBroadcastState, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState}}, private::LamellarArrayPrivate}, lamellae::collective::{ReduceOp, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}, AsLamellarBuffer, AtomicArray, Dist, LamellarBuffer};
 
 impl<T: Dist> AtomicArray<T> {
     pub unsafe fn sum_all(&self) -> ArrayCollectiveAllReduceHandle<T> {
@@ -936,6 +936,30 @@ impl<T: Dist> AtomicArray<T> {
                 array
                     .array
                     .broadcast_from_pe_into_buffer(target)
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+}
+
+impl<T: Dist> AtomicArray<T> {
+    pub unsafe fn scatter_from_pe(&self, pe: usize) -> ArrayCollectiveScatterHandle<T> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .array
+                    .scatter_from_pe(pe)
+            },
+            _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
+        }
+    }
+
+    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buf: LamellarBuffer<T, B>, root_pe: usize) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                array
+                    .array
+                    .scatter_from_pe_into_buffer(buf, root_pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }

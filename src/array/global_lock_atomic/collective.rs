@@ -1,4 +1,4 @@
-use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::{RootOrLamellarBuffer, RootSrcOrLamellarBuffer}, AsLamellarBuffer, Dist, LamellarBuffer};
+use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastHandle, ArrayCollectiveAllBroadcastIntoBufferHandle, ArrayCollectiveBroadcastHandle, ArrayCollectiveBroadcastIntoBufferHandle, ArrayCollectiveScatterHandle, ArrayCollectiveScatterIntoBufferHandle}, gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle}, reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceIntoBufferHandle}}, global_lock_atomic::GlobalLockCollectiveMutLocalData}, lamellae::collective::{RootOrLamellarBuffer, RootSrcOrLamellarBuffer}, AsLamellarBuffer, Dist, LamellarBuffer};
 
 
 impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
@@ -437,6 +437,26 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
                 .array
                 .array
                 .broadcast_from_pe_into_buffer(target)
+        }
+    }
+}
+
+impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
+    pub fn scatter_from_pe(&self, pe: usize) -> ArrayCollectiveScatterHandle<T> {
+        unsafe {
+            self
+                .array
+                .array
+                .scatter_from_pe(pe)
+        }
+    }
+
+    pub fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buf: LamellarBuffer<T, B>, root_pe: usize) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
+        unsafe {
+            self
+                .array
+                .array
+                .scatter_from_pe_into_buffer(buf, root_pe)
         }
     }
 }
