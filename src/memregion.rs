@@ -13,7 +13,7 @@ use crate::{
     },
     darc::Darc,
     lamellae::{
-        collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, ReduceOp, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
+        collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer, RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
     },
     lamellar_team::{LamellarTeam, LamellarTeamRT},
     scheduler::Scheduler,
@@ -1532,6 +1532,40 @@ impl<T: Remote> MemoryRegion<T> {
                 &self.scheduler, 
                 self.counters.clone(), 
                 target
+            )
+    }
+
+    pub(crate) fn scatter(&self, root_pe: usize) -> CollectiveScatterOpHandle<T> {
+        trace!(
+            "scatter memregion {:?} root pe {}",
+            self.alloc,
+            root_pe
+        );
+        self.alloc
+            .inner_alloc
+            .scatter(
+                &self.scheduler, 
+                self.counters.clone(),
+                root_pe
+            )
+    }
+
+    pub(crate) fn scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self, 
+        result: LamellarBuffer<T, B>,
+        root_pe: usize,
+    ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
+        trace!(
+            "scatter into buffer memregion {:?}",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .scatter_into_buffer(
+                &self.scheduler, 
+                self.counters.clone(), 
+                result,
+                root_pe
             )
     }
 
