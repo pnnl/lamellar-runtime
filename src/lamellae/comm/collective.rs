@@ -26,7 +26,7 @@ use futures_util::Future;
 use pin_project::pin_project;
 use std::{
     pin::Pin,
-    sync::{atomic::*, Arc},
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -1328,7 +1328,7 @@ pub(crate) enum RootSrcOrBuffer<T> {
     NotRoot(Vec<T>, usize) 
 }
 
-pub(crate) enum RootSrcOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
+pub enum RootSrcOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
     Root(), 
     NotRoot(LamellarBuffer<T, B>, usize) 
 }

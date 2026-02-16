@@ -3,7 +3,7 @@ use crate::{
 };
 
 use super::{
-    fabric::{LibfabricAlloc, OneSidedLibfabricAlloc, CachedContext},
+    fabric::{LibfabricAlloc, CachedContext},
     Scheduler,
 };
 
@@ -14,9 +14,6 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
-
-use tracing::trace;
-
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveAllReduceFuture<T> {
