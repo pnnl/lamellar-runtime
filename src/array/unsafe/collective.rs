@@ -2,8 +2,7 @@ use crate::array::collective::broadcast_handle::{ArrayCollectiveAllBroadcastHand
 use crate::array::collective::gather_handle::{ArrayCollectiveAllGatherHandle, ArrayCollectiveAllGatherIntoBufferHandle, ArrayCollectiveAllGatherIntoBufferState, ArrayCollectiveAllGatherState, ArrayCollectiveGatherHandle, ArrayCollectiveGatherIntoBufferHandle, ArrayCollectiveGatherIntoBufferState, ArrayCollectiveGatherState};
 use crate::array::collective::reduce_handle::{ArrayCollectiveAllReduceHandle, ArrayCollectiveAllReduceInPlaceHandle, ArrayCollectiveAllReduceInPlaceState, ArrayCollectiveAllReduceIntoBufferHandle, ArrayCollectiveAllReduceIntoBufferState, ArrayCollectiveAllReduceState, ArrayCollectiveReduceHandle, ArrayCollectiveReduceInPlaceHandle, ArrayCollectiveReduceInPlaceState, ArrayCollectiveReduceIntoBufferHandle, ArrayCollectiveReduceIntoBufferState, ArrayCollectiveReduceState};
 use crate::array::private::LamellarArrayPrivate;
-use crate::lamellae::collective::{CollectiveAllReduceOpHandle, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer};
-use crate::memregion::buffer;
+use crate::lamellae::collective::{ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer};
 use crate::{AsLamellarBuffer, LamellarBuffer, UnsafeArray};
 use crate::Dist;
 

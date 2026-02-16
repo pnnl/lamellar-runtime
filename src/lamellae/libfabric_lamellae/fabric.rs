@@ -8,12 +8,12 @@ use libfabric::{
         rma::{ReadEp, WriteEp},
     }, connless_ep::ConnectionlessEndpoint, cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq}, domain::{Domain, DomainBuilder}, enums::{
         AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp, EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ReduceOp, ResourceMgmt, TrafficClass, TransferOptions
-    }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, error::Error, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
+    }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
 };
 
 use crate::{
     lamellae::{
-        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrBuffer, RootOrSliceMut, RootSrcOrSliceMut}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp
+        collective::{AllReduceOp, ReduceOp as LamellarReduceOp, RootOrSliceMut, RootSrcOrSliceMut}, comm::{alloc::*, error::{AllocError, AllocResult, FabricError, FabricResult}}, AllocationType, AtomicOp as LamellarAtomicOp
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -2534,7 +2534,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_allreduce<T, OFI: AsFiType>(
+    unsafe fn typed_allreduce<T, OFI: AsFiType>(
         &self,
         op: &AllReduceOp,
         result: &mut [T],
@@ -2611,7 +2611,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_allgather<T, OFI: AsFiType>(
+    unsafe fn typed_allgather<T, OFI: AsFiType>(
         &self,
         result: &mut [T],
         blocking: bool,
@@ -2669,7 +2669,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_alltoall<T, OFI: AsFiType>(
+    unsafe fn typed_alltoall<T, OFI: AsFiType>(
         &self,
         result: &mut [T],
         blocking: bool,
@@ -2729,7 +2729,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_reduce<T, OFI: AsFiType>(
+    unsafe fn typed_reduce<T, OFI: AsFiType>(
         &self,
         op: &LamellarReduceOp,
         slice_or_pe: RootOrSliceMut<'_, T>,
@@ -2801,7 +2801,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_gather<T, OFI: AsFiType>(
+    unsafe fn typed_gather<T, OFI: AsFiType>(
         &self,
         slice_or_pe: RootOrSliceMut<'_, T>,
         blocking: bool,
@@ -2871,7 +2871,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_broadcast<T, OFI: AsFiType>(
+    unsafe fn typed_broadcast<T, OFI: AsFiType>(
         &self,
         slice_or_pe: RootSrcOrSliceMut<'_, T>,
         blocking: bool,
@@ -2938,7 +2938,7 @@ impl LibfabricAlloc {
         }
     }
 
-    fn typed_scatter<T, OFI: AsFiType>(
+    unsafe fn typed_scatter<T, OFI: AsFiType>(
         &self,
         res: &mut [T],
         root_pe: usize,

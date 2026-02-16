@@ -17,7 +17,6 @@ use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
 };
 use crate::darc::DarcMode;
-use crate::lamellae::collective::ReduceOp;
 use crate::lamellar_request::LamellarRequest;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
