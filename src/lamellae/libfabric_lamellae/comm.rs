@@ -96,7 +96,7 @@ impl CommProgress for LibfabricComm {
         if let Err(e) = self.ofi.thread_progress() {
             panic!("libfabric thread flush error: {}", e);
         }
-    } 
+    }
     fn wait_all(&self) {
         if let Err(e) = self.ofi.wait_all() {
             panic!("libfabric wait error: {}", e);
@@ -154,7 +154,7 @@ impl Drop for LibfabricComm {
         let _ = self.ofi.barrier();
         self.ofi.clear_barrier();
         let _ = self.ofi.clear_allocs();
-        
+
         trace!(
             "libfabric comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)

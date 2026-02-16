@@ -35,11 +35,15 @@ pub(crate) static HEAP_SIZE: AtomicUsize = AtomicUsize::new(4 * 1024 * 1024 * 10
 const RT_MEM: usize = 100 * 1024 * 1024;
 impl LibfabricMtComm {
     #[tracing::instrument(skip_all, level = "debug")]
-    pub(crate) fn new(provider: Option<&str>, domain: Option<&str>,num_threads: usize) -> LibfabricMtComm {
+    pub(crate) fn new(
+        provider: Option<&str>,
+        domain: Option<&str>,
+        num_threads: usize,
+    ) -> LibfabricMtComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
         }
-        let ofi = Ofi::new(provider, domain,num_threads).expect("error in ofi init");
+        let ofi = Ofi::new(provider, domain, num_threads).expect("error in ofi init");
         trace!("ofi initialized: {:?}", ofi);
 
         ofi.barrier().unwrap();
@@ -96,7 +100,7 @@ impl CommProgress for LibfabricMtComm {
         if let Err(e) = self.ofi.thread_progress() {
             panic!("LibfabricMt thread flush error: {}", e);
         }
-    } 
+    }
     fn wait_all(&self) {
         if let Err(e) = self.ofi.wait_all() {
             panic!("LibfabricMt wait error: {}", e);
@@ -154,7 +158,7 @@ impl Drop for LibfabricMtComm {
         let _ = self.ofi.barrier();
         self.ofi.clear_barrier();
         let _ = self.ofi.clear_allocs();
-        
+
         trace!(
             "LibfabricMt comm dropped ofi count: {:?}",
             Arc::strong_count(&self.ofi)

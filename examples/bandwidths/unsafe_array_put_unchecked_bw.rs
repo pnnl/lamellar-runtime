@@ -53,8 +53,7 @@ fn main() {
                 let sub_timer = Instant::now();
                 let sub_reg = data.sub_region(..num_bytes as usize);
                 unsafe {
-                    let _ = array
-                        .put_buffer_unmanaged(ARRAY_LEN * (num_pes - 1) + j, &sub_reg);
+                    let _ = array.put_buffer_unmanaged(ARRAY_LEN * (num_pes - 1) + j, &sub_reg);
                 };
                 sub_time += sub_timer.elapsed().as_secs_f64();
                 sum += num_bytes * 1 as u64;

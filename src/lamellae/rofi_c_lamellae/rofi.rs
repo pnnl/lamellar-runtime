@@ -1,6 +1,6 @@
 extern crate libc;
 
-use crate::lamellae::{AllocError,AllocResult,RdmaError,RdmaResult,AllocationType};
+use crate::lamellae::{AllocError, AllocResult, AllocationType, RdmaError, RdmaResult};
 
 use std::any::type_name;
 use std::ffi::CString;
@@ -61,7 +61,7 @@ pub(crate) fn rofi_c_alloc(size: usize, alloc: AllocationType) -> AllocResult<*m
         };
 
         if ret != 0 {
-           return Err(AllocError::FabricAllocationError(ret));
+            return Err(AllocError::FabricAllocationError(ret));
         }
     }
     //println!("[{:?}] ({:?}:{:?}) rofi_c_alloc addr: {:x} size {:?}",rofi_c_get_id(),file!(),line!(),base_ptr as usize, size);
@@ -93,16 +93,16 @@ pub(crate) fn rofi_c_local_addr(remote_pe: usize, remote_addr: usize) -> AllocRe
     if addr == 0 {
         error!("remote_pe: {remote_pe:?} {remote_addr:x}");
         Err(AllocError::LocalNotFound(remote_addr.into()))
-    }
-    else{
+    } else {
         Ok(addr)
     }
 }
 
-pub(crate) fn rofi_c_remote_addr(pe: usize, local_addr: usize) ->  AllocResult<usize>  {
+pub(crate) fn rofi_c_remote_addr(pe: usize, local_addr: usize) -> AllocResult<usize> {
     let addr = unsafe {
         // println!("{:x} {:?} {:?} {:?}",local_addr,(local_addr as *mut u8) as *mut std::ffi::c_void,pe,pe as u32);
-        rofisys::rofi_get_remote_addr((local_addr as *mut u8) as *mut std::ffi::c_void, pe as u32) as usize
+        rofisys::rofi_get_remote_addr((local_addr as *mut u8) as *mut std::ffi::c_void, pe as u32)
+            as usize
     };
     // println!("remote addr {:?} 0x{:x}", addr as *mut u8 ,addr as usize);
     if addr == 0 {
@@ -123,12 +123,12 @@ pub(crate) fn rofi_c_wait() -> i32 {
 }
 
 // data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe
-pub(crate) unsafe fn rofi_c_put<T>(src: &[T], dst: usize, pe: usize) ->  RdmaResult {
+pub(crate) unsafe fn rofi_c_put<T>(src: &[T], dst: usize, pe: usize) -> RdmaResult {
     let src_addr = src.as_ptr() as *mut std::ffi::c_void;
     let size = src.len() * std::mem::size_of::<T>();
 
-    let mut ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0); 
-                                                                                                 //FI_EAGAIN should this be handled here, at c-rofi_c layer, or application layer?
+    let mut ret = rofisys::rofi_put(dst as *mut std::ffi::c_void, src_addr, size, pe as u32, 0);
+    //FI_EAGAIN should this be handled here, at c-rofi_c layer, or application layer?
 
     while ret == -11 {
         std::thread::yield_now();
@@ -169,11 +169,11 @@ pub(crate) unsafe fn rofi_c_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rdma
     let src_addr = src as *mut std::ffi::c_void;
     let dst_addr = dst.as_ptr() as *mut std::ffi::c_void;
     let size = dst.len() * std::mem::size_of::<T>();
-    let mut ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0); 
+    let mut ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0);
     while ret == -11 {
         std::thread::yield_now();
-        ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0); 
-                                                                         //println!("[{:?}] ({:?}:{:?}) rofi_c_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_c_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
+        ret = rofisys::rofi_get(dst_addr, src_addr, size, pe as u32, 0);
+        //println!("[{:?}] ({:?}:{:?}) rofi_c_get src_addr {:?} dst_addr{:?} pe {:?} {:?}",rofi_c_get_id(),file!(),line!(),src_addr, dst_addr,pe, ret);
     }
     if ret == 0 {
         Ok(())
@@ -259,7 +259,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //             pe as u32,
 //             0,
 //         )
-//     }; 
+//     };
 //     while ret == -11 {
 //         std::thread::yield_now();
 //         ret = unsafe {
@@ -303,7 +303,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //             pe as u32,
 //             0,
 //         )
-//     }; 
+//     };
 //     while ret == -11 {
 //         std::thread::yield_now();
 //         ret = unsafe {
@@ -317,7 +317,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //                 pe as u32,
 //                 0,
 //             )
-//         }; 
+//         };
 //     }
 //     if ret == 0 {
 //         Ok(txid)
@@ -364,7 +364,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //                 pe as u32,
 //                 0,
 //             )
-//         }; 
+//         };
 //     }
 //     if ret == 0 {
 //         Ok(txid)
@@ -399,7 +399,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //             pe as u32,
 //             0,
 //         )
-//     }; 
+//     };
 //     while ret == -11 {
 //         std::thread::yield_now();
 //         ret = unsafe {
@@ -439,7 +439,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //             pe as u32,
 //             0,
 //         )
-//     }; 
+//     };
 //     while ret == -11 {
 //         std::thread::yield_now();
 //         ret = unsafe {
@@ -452,7 +452,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //                 pe as u32,
 //                 0,
 //             )
-//         }; 
+//         };
 //     }
 //     if ret == 0 {
 //         Ok(txid)
@@ -483,7 +483,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //             pe as u32,
 //             0,
 //         )
-//     }; 
+//     };
 //     while ret == -11 {
 //         std::thread::yield_now();
 //         ret = unsafe {
@@ -497,7 +497,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //                 pe as u32,
 //                 0,
 //             )
-//         }; 
+//         };
 //     }
 //     if ret == 0 {
 //         Ok(txid)
@@ -544,7 +544,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //                 pe as u32,
 //                 0,
 //             )
-//         }; 
+//         };
 //     }
 //     if ret == 0 {
 //         Ok(txid)
@@ -579,7 +579,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //             pe as u32,
 //             0,
 //         )
-//     }; 
+//     };
 //     while ret == -11 {
 //         std::thread::yield_now();
 //         ret = unsafe {
@@ -593,7 +593,7 @@ pub(crate) fn rofi_c_blocking_get<T>(src: usize, dst: &mut [T], pe: usize) -> Rd
 //                 pe as u32,
 //                 0,
 //             )
-//         }; 
+//         };
 //     }
 //     if ret == 0 {
 //         Ok(txid)

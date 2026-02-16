@@ -26,11 +26,12 @@ impl CommMem for UcxComm {
         alloc_type: AllocationType,
         align: usize,
     ) -> AllocResult<CommAlloc> {
+        trace!("alloc: size {} align {} type {:?}", size, align, alloc_type);
         let inner_alloc = self.ucx.alloc(size, align, alloc_type);
         // unsafe {
         //     inner_alloc.zeroize_bytes();
         // }
-        // println!("new fabric alloc: {:?}", inner_alloc);
+        trace!("new fabric alloc: {:?}", inner_alloc);
         let comm_alloc = CommAlloc {
             inner_alloc: CommAllocInner::UcxAlloc(inner_alloc),
             alloc_type: CommAllocType::Fabric,

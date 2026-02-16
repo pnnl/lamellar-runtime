@@ -12,9 +12,8 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::{
         comm::rdma::{
-            RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle,
-            RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaHandle, RdmaPutFuture,
-            Remote, CommAllocRdma,
+            CommAllocRdma, RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle,
+            RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaHandle, RdmaPutFuture, Remote,
         },
         CommAlloc, CommAllocAddr, CommAllocInner,
     },
@@ -23,7 +22,7 @@ use crate::{
     LamellarTask,
 };
 
-use super::{fabric::*, Scheduler,rofi::*};
+use super::{fabric::*, rofi::*, Scheduler};
 
 // Mirror libfabric_lamellae's structure: separate futures for put/get/get_buffer/get_into_buffer.
 
@@ -78,7 +77,12 @@ impl<T: Remote> RofiCPutFuture<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.spawn_task(async move { rofi_c_wait(); }, counters)
+        self.scheduler.spawn_task(
+            async move {
+                rofi_c_wait();
+            },
+            counters,
+        )
     }
 }
 
@@ -130,7 +134,10 @@ impl<T: Remote> RofiCGetFuture<T> {
     fn exec_at(&mut self) {
         trace!("rofi_c get at: {:?} {:?}", self.pe, self.offset);
         let src = (self.addr.0 + self.offset * std::mem::size_of::<T>()) as usize;
-        unsafe { rofi_c_get(src, std::slice::from_mut(&mut *self.result), self.pe).expect("rofi_c_get failed") };
+        unsafe {
+            rofi_c_get(src, std::slice::from_mut(&mut *self.result), self.pe)
+                .expect("rofi_c_get failed")
+        };
         self.spawned = true;
     }
 
@@ -148,7 +155,13 @@ impl<T: Remote> RofiCGetFuture<T> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         let result = *self.result; // move out of Box<T>
-        scheduler.spawn_task(async move { rofi_c_wait(); result }, counters)
+        scheduler.spawn_task(
+            async move {
+                rofi_c_wait();
+                result
+            },
+            counters,
+        )
     }
 }
 
@@ -163,7 +176,9 @@ impl<T: Remote> PinnedDrop for RofiCGetFuture<T> {
 
 impl<T: Remote> From<RofiCGetFuture<T>> for RdmaGetHandle<T> {
     fn from(f: RofiCGetFuture<T>) -> RdmaGetHandle<T> {
-        RdmaGetHandle { future: RdmaGetFuture::RofiC(f) }
+        RdmaGetHandle {
+            future: RdmaGetFuture::RofiC(f),
+        }
     }
 }
 
@@ -210,7 +225,13 @@ impl<T: Remote> RofiCGetBufferFuture<T> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         let result = std::mem::take(&mut self.result);
-        scheduler.spawn_task(async move { rofi_c_wait(); result }, counters)
+        scheduler.spawn_task(
+            async move {
+                rofi_c_wait();
+                result
+            },
+            counters,
+        )
     }
 }
 
@@ -225,7 +246,9 @@ impl<T: Remote> PinnedDrop for RofiCGetBufferFuture<T> {
 
 impl<T: Remote> From<RofiCGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
     fn from(f: RofiCGetBufferFuture<T>) -> RdmaGetBufferHandle<T> {
-        RdmaGetBufferHandle { future: RdmaGetBufferFuture::RofiC(f) }
+        RdmaGetBufferHandle {
+            future: RdmaGetBufferFuture::RofiC(f),
+        }
     }
 }
 
@@ -268,7 +291,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RofiCGetIntoBufferFuture<T, B> {
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         let scheduler = self.scheduler.clone();
-        scheduler.spawn_task(async move { rofi_c_wait(); }, counters)
+        scheduler.spawn_task(
+            async move {
+                rofi_c_wait();
+            },
+            counters,
+        )
     }
 }
 
@@ -281,9 +309,13 @@ impl<T: Remote, B: AsLamellarBuffer<T>> PinnedDrop for RofiCGetIntoBufferFuture<
     }
 }
 
-impl<T: Remote, B: AsLamellarBuffer<T>> From<RofiCGetIntoBufferFuture<T, B>> for RdmaGetIntoBufferHandle<T, B> {
+impl<T: Remote, B: AsLamellarBuffer<T>> From<RofiCGetIntoBufferFuture<T, B>>
+    for RdmaGetIntoBufferHandle<T, B>
+{
     fn from(f: RofiCGetIntoBufferFuture<T, B>) -> RdmaGetIntoBufferHandle<T, B> {
-        RdmaGetIntoBufferHandle { future: RdmaGetIntoBufferFuture::RofiC(f) }
+        RdmaGetIntoBufferHandle {
+            future: RdmaGetIntoBufferFuture::RofiC(f),
+        }
     }
 }
 
@@ -380,9 +412,14 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         // naive synchronous put to all pes
         for pe in 0..self.num_pes {
             if pe != self.my_pe {
-                unsafe { rofi_c_put(std::slice::from_ref(&src), self.start() as usize, pe).expect("rofi_c_put failed") }
+                unsafe {
+                    rofi_c_put(std::slice::from_ref(&src), self.start() as usize, pe)
+                        .expect("rofi_c_put failed")
+                }
             } else {
-                unsafe { std::ptr::copy_nonoverlapping(&src as *const T, self.start() as *mut T, 1) }
+                unsafe {
+                    std::ptr::copy_nonoverlapping(&src as *const T, self.start() as *mut T, 1)
+                }
             }
         }
         rofi_c_wait();
@@ -402,9 +439,14 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_all_unmanaged<T: Remote>(&self, src: T, _offset: usize) {
         for pe in 0..self.num_pes {
             if pe != self.my_pe {
-                unsafe { rofi_c_put(std::slice::from_ref(&src), self.start() as usize, pe).expect("rofi_c_put failed") }
+                unsafe {
+                    rofi_c_put(std::slice::from_ref(&src), self.start() as usize, pe)
+                        .expect("rofi_c_put failed")
+                }
             } else {
-                unsafe { std::ptr::copy_nonoverlapping(&src as *const T, self.start() as *mut T, 1) }
+                unsafe {
+                    std::ptr::copy_nonoverlapping(&src as *const T, self.start() as *mut T, 1)
+                }
             }
         }
         rofi_c_wait();
@@ -440,7 +482,11 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         .into()
     }
 
-    fn put_all_buffer_unmanaged<T: Remote>(&self, src: impl Into<MemregionRdmaInputInner<T>>, _offset: usize) {
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        _offset: usize,
+    ) {
         let src = src.into();
         for pe in 0..self.num_pes {
             let dst = self.start();
@@ -475,7 +521,14 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
         let mut val: T = T::default();
         let val_slice = std::slice::from_mut(&mut val);
-        unsafe { rofi_c_get((self.start() + offset * std::mem::size_of::<T>()) as usize, val_slice, pe).expect("rofi_c_get failed") };
+        unsafe {
+            rofi_c_get(
+                (self.start() + offset * std::mem::size_of::<T>()) as usize,
+                val_slice,
+                pe,
+            )
+            .expect("rofi_c_get failed")
+        };
         rofi_c_wait();
         val
     }
@@ -503,7 +556,14 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
 
     fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
         let mut dst = vec![T::default(); len];
-        unsafe { rofi_c_get((self.start() + offset * std::mem::size_of::<T>()) as usize, &mut dst, pe).expect("rofi_c_get failed") };
+        unsafe {
+            rofi_c_get(
+                (self.start() + offset * std::mem::size_of::<T>()) as usize,
+                &mut dst,
+                pe,
+            )
+            .expect("rofi_c_get failed")
+        };
         rofi_c_wait();
         dst
     }
@@ -534,8 +594,12 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            rofi_c_get((self.start() + offset * std::mem::size_of::<T>()) as usize, dst.as_mut_slice(), pe)
-                .expect("rofi_c_get failed");
+            rofi_c_get(
+                (self.start() + offset * std::mem::size_of::<T>()) as usize,
+                dst.as_mut_slice(),
+                pe,
+            )
+            .expect("rofi_c_get failed");
         }
         rofi_c_wait();
     }
@@ -547,8 +611,12 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         unsafe {
-            rofi_c_get((self.start() + offset * std::mem::size_of::<T>()) as usize, dst.as_mut_slice(), pe)
-                .expect("rofi_c_get failed");
+            rofi_c_get(
+                (self.start() + offset * std::mem::size_of::<T>()) as usize,
+                dst.as_mut_slice(),
+                pe,
+            )
+            .expect("rofi_c_get failed");
         }
     }
 }
@@ -577,42 +645,92 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::OneSidedRofiCAl
     ) -> RdmaHandle<T> {
         self.alloc.put_buffer(scheduler, counters, src, pe, offset)
     }
-    fn put_buffer_unmanaged<T: Remote>(&self, src: impl Into<MemregionRdmaInputInner<T>>, pe: usize, offset: usize) {
+    fn put_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        pe: usize,
+        offset: usize,
+    ) {
         self.alloc.put_buffer_unmanaged(src, pe, offset)
     }
-    fn put_all<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, src: T, offset: usize) -> RdmaHandle<T> {
+    fn put_all<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: T,
+        offset: usize,
+    ) -> RdmaHandle<T> {
         self.alloc.put_all(scheduler, counters, src, offset)
     }
     fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
         self.alloc.put_all_unmanaged(src, offset)
     }
-    fn put_all_buffer<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, src: impl Into<MemregionRdmaInputInner<T>>, offset: usize) -> RdmaHandle<T> {
+    fn put_all_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) -> RdmaHandle<T> {
         self.alloc.put_all_buffer(scheduler, counters, src, offset)
     }
-    fn put_all_buffer_unmanaged<T: Remote>(&self, src: impl Into<MemregionRdmaInputInner<T>>, offset: usize) {
+    fn put_all_buffer_unmanaged<T: Remote>(
+        &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        offset: usize,
+    ) {
         self.alloc.put_all_buffer_unmanaged(src, offset)
     }
-    fn get<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, offset: usize) -> RdmaGetHandle<T> {
+    fn get<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+    ) -> RdmaGetHandle<T> {
         self.alloc.get(scheduler, counters, pe, offset)
     }
     fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
         self.alloc.blocking_get(pe, offset)
     }
-    fn get_buffer<T: Remote>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, offset: usize, len: usize) -> RdmaGetBufferHandle<T> {
+    fn get_buffer<T: Remote>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        len: usize,
+    ) -> RdmaGetBufferHandle<T> {
         self.alloc.get_buffer(scheduler, counters, pe, offset, len)
     }
     fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
         self.alloc.blocking_get_buffer(pe, offset, len)
     }
-    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(&self, scheduler: &Arc<Scheduler>, counters: Vec<Arc<AMCounters>>, pe: usize, offset: usize, dst: LamellarBuffer<T, B>) -> RdmaGetIntoBufferHandle<T, B> {
-        self.alloc.get_into_buffer(scheduler, counters, pe, offset, dst)
+    fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) -> RdmaGetIntoBufferHandle<T, B> {
+        self.alloc
+            .get_into_buffer(scheduler, counters, pe, offset, dst)
     }
-    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(&self, pe: usize, offset: usize, dst: LamellarBuffer<T, B>) {
+    fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) {
         self.alloc.blocking_get_into_buffer(pe, offset, dst)
     }
-    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(&self, pe: usize, offset: usize, dst: LamellarBuffer<T, B>) {
+    fn get_into_buffer_unmanaged<T: Remote, B: AsLamellarBuffer<T>>(
+        &self,
+        pe: usize,
+        offset: usize,
+        dst: LamellarBuffer<T, B>,
+    ) {
         self.alloc.get_into_buffer_unmanaged(pe, offset, dst)
     }
 }
-
-

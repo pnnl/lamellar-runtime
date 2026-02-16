@@ -5,7 +5,7 @@ use super::{context::Context, error::Error};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use tracing::trace;
+use tracing::{debug,trace};
 
 #[derive(Debug)]
 pub(crate) struct Worker {
@@ -117,7 +117,7 @@ impl Worker {
 
 impl Drop for Worker {
     fn drop(&mut self) {
-        trace!("dropping worker");
+        debug!("dropping worker");
         unsafe { ucp_worker_destroy(self.handle) }
     }
 }

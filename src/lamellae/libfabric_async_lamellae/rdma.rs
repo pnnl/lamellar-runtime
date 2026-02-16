@@ -1,9 +1,25 @@
-use std::{future::Future, mem::MaybeUninit, pin::Pin, sync::Arc, task::{Context, Poll}};
+use std::{
+    future::Future,
+    mem::MaybeUninit,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 use tracing::trace;
 
 use pin_project::{pin_project, pinned_drop};
 
-use crate::{active_messaging::AMCounters, lamellae::{libfabric_async_lamellae::fabric::{LibfabricAsyncAlloc, OneSidedLibfabricAsyncAlloc}, CommAllocAddr, CommAllocRdma, RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture, RdmaGetHandle, RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaPutFuture}, memregion::MemregionRdmaInputInner, scheduler::Scheduler, AsLamellarBuffer, LamellarBuffer, LamellarTask, RdmaHandle, Remote};
+use crate::{
+    active_messaging::AMCounters,
+    lamellae::{
+        libfabric_async_lamellae::fabric::{LibfabricAsyncAlloc, OneSidedLibfabricAsyncAlloc},
+        CommAllocAddr, CommAllocRdma, RdmaGetBufferFuture, RdmaGetBufferHandle, RdmaGetFuture,
+        RdmaGetHandle, RdmaGetIntoBufferFuture, RdmaGetIntoBufferHandle, RdmaPutFuture,
+    },
+    memregion::MemregionRdmaInputInner,
+    scheduler::Scheduler,
+    AsLamellarBuffer, LamellarBuffer, LamellarTask, RdmaHandle, Remote,
+};
 
 pub(super) enum AllocOp<T: Remote> {
     Put(usize, T),
@@ -38,10 +54,13 @@ impl<T: Remote> LibfabricAsyncPutFuture<T> {
         let data = self.fut_data.take().unwrap();
         data.spawn()
     }
-
 }
 impl<T: Remote> PutFutureData<T> {
-    fn inner_put<'a, 'b>(&'a self, pe: usize, src: &'b T) -> impl Future<Output = Result<(), libfabric::error::Error> > + use<'a, 'b, T>{
+    fn inner_put<'a, 'b>(
+        &'a self,
+        pe: usize,
+        src: &'b T,
+    ) -> impl Future<Output = Result<(), libfabric::error::Error>> + use<'a, 'b, T> {
         trace!(
             "putting src: {:x} dst: {:x} len: {} num bytes {}",
             src as *const T as usize,
@@ -50,36 +69,36 @@ impl<T: Remote> PutFutureData<T> {
             std::mem::size_of::<T>()
         );
         unsafe {
-            LibfabricAsyncAlloc::inner_put(
-                &self.alloc,
-                pe,
-                self.offset,
-                std::slice::from_ref(src),
-            )
+            LibfabricAsyncAlloc::inner_put(&self.alloc, pe, self.offset, std::slice::from_ref(src))
         }
     }
-    fn inner_put_buf<'a, 'b>(&'a self, pe: usize, src: &'b MemregionRdmaInputInner<T>) -> impl Future<Output = Result<(), libfabric::error::Error>>  + use<'a, 'b, T>{
-        unsafe {
-            LibfabricAsyncAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice())
-        }
+    fn inner_put_buf<'a, 'b>(
+        &'a self,
+        pe: usize,
+        src: &'b MemregionRdmaInputInner<T>,
+    ) -> impl Future<Output = Result<(), libfabric::error::Error>> + use<'a, 'b, T> {
+        unsafe { LibfabricAsyncAlloc::inner_put(&self.alloc, pe, self.offset, src.as_slice()) }
     }
     async fn exec_op(self) {
-        
         match &self.op {
             AllocOp::Put(pe, src) => {
                 self.inner_put(*pe, src).await.expect("error in put");
             }
             AllocOp::PutBuf(pe, src) => {
-                self.inner_put_buf(*pe, src).await.expect("error in put_buf");
+                self.inner_put_buf(*pe, src)
+                    .await
+                    .expect("error in put_buf");
             }
             AllocOp::PutAll(pes, src) => {
                 for pe in pes {
-                     self.inner_put(*pe, src).await.expect("error in put");
+                    self.inner_put(*pe, src).await.expect("error in put");
                 }
             }
             AllocOp::PutAllBuf(pes, src) => {
                 for pe in pes {
-                    self.inner_put_buf(*pe, src).await.expect("error in put_buf");
+                    self.inner_put_buf(*pe, src)
+                        .await
+                        .expect("error in put_buf");
                 }
             }
         }
@@ -87,24 +106,22 @@ impl<T: Remote> PutFutureData<T> {
 
     pub(crate) fn block(mut self) {
         self.spawned = true;
-        self.scheduler
-            .clone()
-            .block_on(async move {
-                self.exec_op().await;
-            });
+        self.scheduler.clone().block_on(async move {
+            self.exec_op().await;
+        });
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler
-            .clone()
-            .spawn_task(async move {
+        self.scheduler.clone().spawn_task(
+            async move {
                 self.exec_op().await;
-            }, counters)
+            },
+            counters,
+        )
     }
 }
-
 
 struct GetFutureData<T> {
     alloc: LibfabricAsyncAlloc,
@@ -129,9 +146,7 @@ pub(crate) struct LibfabricAsyncGetFuture<T> {
     fut_data: Option<GetFutureData<T>>,
 }
 
-
 impl<T: Remote> LibfabricAsyncGetFuture<T> {
-
     pub(crate) fn block(mut self) -> T {
         let data = self.fut_data.take().unwrap();
         data.block()
@@ -144,7 +159,7 @@ impl<T: Remote> LibfabricAsyncGetFuture<T> {
 
 impl<T: Remote> GetFutureData<T> {
     #[tracing::instrument(skip_all, level = "debug")]
-    async fn exec_at(mut self) -> T{
+    async fn exec_at(mut self) -> T {
         trace!("getting at: {:?} {:?} ", self.pe, self.offset);
         unsafe {
             self.alloc
@@ -163,38 +178,32 @@ impl<T: Remote> GetFutureData<T> {
 
     pub(crate) fn block(mut self) -> T {
         self.spawned = true;
-        self.scheduler.clone().block_on(async {
-            self.exec_at().await
-        })
+        self.scheduler
+            .clone()
+            .block_on(async { self.exec_at().await })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(
-            async move {
-                self.exec_at().await
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { self.exec_at().await }, counters)
     }
 }
-
 
 impl<T: Remote> Future for LibfabricAsyncGetFuture<T> {
     type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut_self = self.get_mut();
         match mut_self.fut {
-            Some(ref mut fut) => {
-                fut.as_mut().poll(cx)
-            }
+            Some(ref mut fut) => fut.as_mut().poll(cx),
             None => {
                 let fut_data = mut_self.fut_data.take().unwrap();
                 mut_self.fut = Some(Box::pin(fut_data.exec_at()));
                 cx.waker().wake_by_ref();
                 Poll::Pending
-            },
+            }
         }
     }
 }
@@ -215,7 +224,6 @@ pub(crate) struct LibfabricAsyncGetBufferFuture<T> {
     fut_data: Option<GetBufferFutureData<T>>,
     fut: Option<Pin<Box<dyn Future<Output = Vec<T>> + Send>>>,
 }
-
 
 impl<T: Remote> LibfabricAsyncGetBufferFuture<T> {
     pub(crate) fn block(mut self) -> Vec<T> {
@@ -238,7 +246,8 @@ impl<T: Remote> GetBufferFutureData<T> {
 
             // dst.set_len(self.len);
             self.alloc
-                .inner_get(self.pe, self.offset, &mut dst).await
+                .inner_get(self.pe, self.offset, &mut dst)
+                .await
                 .expect("error in get_buffer");
             // let dst = std::mem::transmute::<Vec<MaybeUninit<T>>, Vec<T>>(dst);
             self.result.write(dst);
@@ -252,37 +261,30 @@ impl<T: Remote> GetBufferFutureData<T> {
         self.spawned = true;
         self.scheduler
             .clone()
-            .block_on(async {
-                self.exec_at().await
-            })
+            .block_on(async { self.exec_at().await })
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(
-            async move {
-                self.exec_at().await
-            },
-            counters,
-        )
+        self.scheduler
+            .clone()
+            .spawn_task(async move { self.exec_at().await }, counters)
     }
 }
 
-impl <T: Remote> Future for LibfabricAsyncGetBufferFuture<T> {
+impl<T: Remote> Future for LibfabricAsyncGetBufferFuture<T> {
     type Output = Vec<T>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut_self = self.get_mut();
         match mut_self.fut {
-            Some(ref mut fut) => {
-                fut.as_mut().poll(cx)
-            }
+            Some(ref mut fut) => fut.as_mut().poll(cx),
             None => {
                 let fut_data = mut_self.fut_data.take().unwrap();
                 mut_self.fut = Some(Box::pin(fut_data.exec_at()));
                 cx.waker().wake_by_ref();
                 Poll::Pending
-            },
+            }
         }
     }
 }
@@ -315,7 +317,6 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricAsyncGetIntoBufferFuture<T, B> 
     }
 }
 
-
 impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
     async fn exec_op(mut self) {
         // if self.pe != self.my_pe {
@@ -333,21 +334,20 @@ impl<T: Remote, B: AsLamellarBuffer<T>> GetIntoBufferFutureData<T, B> {
 
     pub(crate) fn block(mut self) {
         self.spawned = true;
-        self.scheduler
-            .clone()
-            .block_on(async move {
-                self.exec_op().await;
-            });
+        self.scheduler.clone().block_on(async move {
+            self.exec_op().await;
+        });
     }
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.spawned = true;
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler
-            .clone()
-            .spawn_task(async move {
+        self.scheduler.clone().spawn_task(
+            async move {
                 self.exec_op().await;
-            }, counters)
+            },
+            counters,
+        )
     }
 }
 
@@ -356,19 +356,16 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricAsyncGetIntoBufferFu
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut_self = self.get_mut();
         match mut_self.fut {
-            Some(ref mut fut) => {
-                fut.as_mut().poll(cx)
-            }
+            Some(ref mut fut) => fut.as_mut().poll(cx),
             None => {
                 let fut_data = mut_self.fut_data.take().unwrap();
                 mut_self.fut = Some(Box::pin(fut_data.exec_op()));
                 cx.waker().wake_by_ref();
                 Poll::Pending
-            },
+            }
         }
     }
 }
-
 
 #[pinned_drop]
 impl<T: Remote> PinnedDrop for LibfabricAsyncPutFuture<T> {
@@ -387,21 +384,18 @@ impl<T: Remote> From<LibfabricAsyncPutFuture<T>> for RdmaHandle<T> {
     }
 }
 
-
 impl<T: Remote> Future for LibfabricAsyncPutFuture<T> {
     type Output = ();
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut_self = self.get_mut();
         match mut_self.fut {
-            Some(ref mut fut) => {
-                fut.as_mut().poll(cx)
-            }
+            Some(ref mut fut) => fut.as_mut().poll(cx),
             None => {
                 let fut_data = mut_self.fut_data.take().unwrap();
                 mut_self.fut = Some(Box::pin(fut_data.exec_op()));
                 cx.waker().wake_by_ref();
                 Poll::Pending
-            },
+            }
         }
     }
 }
@@ -422,8 +416,6 @@ impl<T: Remote> From<LibfabricAsyncGetFuture<T>> for RdmaGetHandle<T> {
         }
     }
 }
-
-
 
 #[pinned_drop]
 impl<T> PinnedDrop for LibfabricAsyncGetBufferFuture<T> {
@@ -470,7 +462,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
-        
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
                 my_pe: self.ofi.my_pe,
@@ -492,8 +483,14 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         );
         if pe != self.ofi.my_pe {
             unsafe {
-                LibfabricAsyncAlloc::inner_put_unmanaged(&self, pe, offset, std::slice::from_ref(&src), false)
-                    .expect("error in put_unmanaged")
+                LibfabricAsyncAlloc::inner_put_unmanaged(
+                    &self,
+                    pe,
+                    offset,
+                    std::slice::from_ref(&src),
+                    false,
+                )
+                .expect("error in put_unmanaged")
             };
         } else {
             unsafe {
@@ -514,8 +511,8 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T> {
-            LibfabricAsyncPutFuture {
-                fut_data: Some(PutFutureData {
+        LibfabricAsyncPutFuture {
+            fut_data: Some(PutFutureData {
                 my_pe: self.ofi.my_pe,
                 alloc: self.clone(),
                 offset,
@@ -551,13 +548,13 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         let pes = (0..self.num_pes()).collect();
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-            my_pe: self.ofi.my_pe,
-            alloc: self.clone(),
-            offset,
-            op: AllocOp::PutAll(pes, src.into()),
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
+                my_pe: self.ofi.my_pe,
+                alloc: self.clone(),
+                offset,
+                op: AllocOp::PutAll(pes, src.into()),
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
             }),
             fut: None,
         }
@@ -567,8 +564,14 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         for pe in 0..self.num_pes() {
             if pe != self.ofi.my_pe {
                 unsafe {
-                    LibfabricAsyncAlloc::inner_put_unmanaged(&self, pe, offset, std::slice::from_ref(&src), false)
-                        .expect("error in put_all_unmanaged")
+                    LibfabricAsyncAlloc::inner_put_unmanaged(
+                        &self,
+                        pe,
+                        offset,
+                        std::slice::from_ref(&src),
+                        false,
+                    )
+                    .expect("error in put_all_unmanaged")
                 };
             } else {
                 let dst = CommAllocAddr(self.start() + offset);
@@ -586,13 +589,13 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         let pes = (0..self.num_pes()).collect();
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-            my_pe: self.ofi.my_pe,
-            alloc: self.clone(),
-            offset,
-            op: AllocOp::PutAllBuf(pes, src.into()),
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
+                my_pe: self.ofi.my_pe,
+                alloc: self.clone(),
+                offset,
+                op: AllocOp::PutAllBuf(pes, src.into()),
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
             }),
             fut: None,
         }
@@ -607,8 +610,14 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
         for pe in 0..self.num_pes() {
             if pe != self.ofi.my_pe {
                 unsafe {
-                    LibfabricAsyncAlloc::inner_put_unmanaged(&self, pe, offset, src.as_slice(), false)
-                        .expect("error in put_all_buffer_unmanaged")
+                    LibfabricAsyncAlloc::inner_put_unmanaged(
+                        &self,
+                        pe,
+                        offset,
+                        src.as_slice(),
+                        false,
+                    )
+                    .expect("error in put_all_buffer_unmanaged")
                 };
             } else {
                 let dst = self.start() + offset;
@@ -635,14 +644,14 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     ) -> RdmaGetHandle<T> {
         LibfabricAsyncGetFuture {
             fut_data: Some(GetFutureData {
-            alloc: self.clone(),
-            pe,
-            offset,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-            result: MaybeUninit::uninit(),
-        }),
+                alloc: self.clone(),
+                pe,
+                offset,
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
+                result: MaybeUninit::uninit(),
+            }),
             fut: None,
         }
         .into()
@@ -660,14 +669,14 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     ) -> RdmaGetBufferHandle<T> {
         LibfabricAsyncGetBufferFuture {
             fut_data: Some(GetBufferFutureData {
-            alloc: self.clone(),
-            pe,
-            offset,
-            len,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-            result: MaybeUninit::uninit(),
+                alloc: self.clone(),
+                pe,
+                offset,
+                len,
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
+                result: MaybeUninit::uninit(),
             }),
             fut: None,
         }
@@ -686,15 +695,15 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     ) -> RdmaGetIntoBufferHandle<T, B> {
         LibfabricAsyncGetIntoBufferFuture {
             fut_data: Some(GetIntoBufferFutureData {
-            my_pe: self.ofi.my_pe,
-            alloc: self.clone(),
-            pe,
-            offset,
-            dst,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-        }),
+                my_pe: self.ofi.my_pe,
+                alloc: self.clone(),
+                pe,
+                offset,
+                dst,
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
+            }),
             fut: None,
         }
         .into()
@@ -720,8 +729,6 @@ impl CommAllocRdma for LibfabricAsyncAlloc {
     }
 }
 
-
-
 impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     fn put<T: Remote>(
         &self,
@@ -739,13 +746,13 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
 
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-            my_pe: self.alloc.ofi.my_pe,
-            alloc: self.alloc.clone(),
-            offset: offset,
-            op: AllocOp::Put(pe, src),
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
+                my_pe: self.alloc.ofi.my_pe,
+                alloc: self.alloc.clone(),
+                offset: offset,
+                op: AllocOp::Put(pe, src),
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
             }),
             fut: None,
         }
@@ -788,13 +795,13 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
 
         LibfabricAsyncPutFuture {
             fut_data: Some(PutFutureData {
-            my_pe: self.alloc.ofi.my_pe,
-            alloc: self.alloc.clone(),
-            offset,
-            op: AllocOp::PutBuf(pe, src.into()),
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
+                my_pe: self.alloc.ofi.my_pe,
+                alloc: self.alloc.clone(),
+                offset,
+                op: AllocOp::PutBuf(pe, src.into()),
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
             }),
             fut: None,
         }
@@ -860,14 +867,14 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         );
         LibfabricAsyncGetFuture {
             fut_data: Some(GetFutureData {
-            alloc: self.alloc.clone(),
-            pe,
-            offset,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-            result: MaybeUninit::uninit(),
-        }),
+                alloc: self.alloc.clone(),
+                pe,
+                offset,
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
+                result: MaybeUninit::uninit(),
+            }),
             fut: None,
         }
         .into()
@@ -890,14 +897,14 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         );
         LibfabricAsyncGetBufferFuture {
             fut_data: Some(GetBufferFutureData {
-            alloc: self.alloc.clone(),
-            pe,
-            offset,
-            len,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
-            result: MaybeUninit::uninit(),
+                alloc: self.alloc.clone(),
+                pe,
+                offset,
+                len,
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
+                result: MaybeUninit::uninit(),
             }),
             fut: None,
         }
@@ -921,14 +928,14 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
         );
         LibfabricAsyncGetIntoBufferFuture {
             fut_data: Some(GetIntoBufferFutureData {
-            my_pe: self.alloc.ofi.my_pe,
-            alloc: self.alloc.clone(),
-            pe,
-            offset,
-            dst,
-            spawned: false,
-            scheduler: scheduler.clone(),
-            counters,
+                my_pe: self.alloc.ofi.my_pe,
+                alloc: self.alloc.clone(),
+                pe,
+                offset,
+                dst,
+                spawned: false,
+                scheduler: scheduler.clone(),
+                counters,
             }),
             fut: None,
         }
@@ -950,8 +957,14 @@ impl CommAllocRdma for OneSidedLibfabricAsyncAlloc {
     ) {
         assert_eq!(pe, self.remote_pe, "get_into_buffer_unmanaged called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
         unsafe {
-            LibfabricAsyncAlloc::inner_get_unmanaged(&self.alloc, pe, offset, dst.as_mut_slice(), false)
-                .expect("error in get_into_buffer_unmanaged")
+            LibfabricAsyncAlloc::inner_get_unmanaged(
+                &self.alloc,
+                pe,
+                offset,
+                dst.as_mut_slice(),
+                false,
+            )
+            .expect("error in get_into_buffer_unmanaged")
         };
     }
 }

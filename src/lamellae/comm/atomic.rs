@@ -1,3 +1,7 @@
+#[cfg(feature = "enable-libfabric-async")]
+use crate::lamellae::libfabric_async_lamellae::atomic::{
+    LibfabricAsyncAtomicFetchFuture, LibfabricAsyncAtomicFuture,
+};
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::atomic::{
     LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
@@ -5,10 +9,6 @@ use crate::lamellae::libfabric_lamellae::atomic::{
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae_mt::atomic::{
     LibfabricMtAtomicFetchFuture, LibfabricMtAtomicFuture,
-};
-#[cfg(feature = "enable-libfabric-async")]
-use crate::lamellae::libfabric_async_lamellae::atomic::{
-    LibfabricAsyncAtomicFetchFuture, LibfabricAsyncAtomicFuture,
 };
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};

@@ -1,6 +1,5 @@
 //! This module defines the `GlobalRwDarc` type, which provides a distributed read-write lock mechanism across multiple processing elements (PEs).
 
-
 use core::marker::PhantomData;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -299,7 +298,6 @@ impl LamellarAM for UnlockAm {
     }
 }
 
-
 /// A global read-write `Darc` read handle.
 /// Any number of read guards can be held at the same time across the distributed environment.
 /// The read lock will be held until all read guards are dropped across the distributed environment.
@@ -416,7 +414,7 @@ impl<T: fmt::Debug> fmt::Debug for GlobalRwDarcWriteGuard<T> {
     }
 }
 /// A global read-write `Darc` collective write guard, each PE will hold a guard while the collective write lock is held
-/// The lock is not released until all PEs have released their individual guards 
+/// The lock is not released until all PEs have released their individual guards
 pub struct GlobalRwDarcCollectiveWriteGuard<T: 'static> {
     pub(crate) darc: GlobalRwDarc<T>,
     pub(crate) collective_cnt: usize,

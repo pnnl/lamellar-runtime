@@ -1,11 +1,16 @@
 use std::sync::Arc;
 
 use crate::active_messaging::AMCounters;
-use crate::lamellae::comm::atomic::{AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, CommAllocAtomic};
+use crate::lamellae::comm::atomic::{
+    AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, CommAllocAtomic,
+};
 use crate::LamellarTask;
 use crate::Remote;
 
-use super::{fabric::{RofiCAlloc, OneSidedRofiCAlloc}, Scheduler};
+use super::{
+    fabric::{OneSidedRofiCAlloc, RofiCAlloc},
+    Scheduler,
+};
 
 impl CommAllocAtomic for RofiCAlloc {
     fn atomic_op<T: Remote>(
@@ -48,7 +53,12 @@ impl CommAllocAtomic for RofiCAlloc {
         unimplemented!("atomic fetch operations not implemented for rofi-c backend")
     }
 
-    fn blocking_atomic_fetch_op<T: Remote>(&self, _op: AtomicOp<T>, _pe: usize, _offset: usize) -> T {
+    fn blocking_atomic_fetch_op<T: Remote>(
+        &self,
+        _op: AtomicOp<T>,
+        _pe: usize,
+        _offset: usize,
+    ) -> T {
         unimplemented!("atomic fetch operations not implemented for rofi-c backend")
     }
 }
@@ -63,12 +73,18 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
         offset: usize,
     ) -> AtomicOpHandle<T> {
         // One-sided alloc should target its remote_pe; validate or forward
-        assert_eq!(pe, self.alloc.my_pe, "atomic op called on OneSidedRofiCAlloc with incorrect pe");
+        assert_eq!(
+            pe, self.alloc.my_pe,
+            "atomic op called on OneSidedRofiCAlloc with incorrect pe"
+        );
         self.alloc.atomic_op(scheduler, counters, op, pe, offset)
     }
 
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        assert_eq!(pe, self.alloc.my_pe, "atomic op called on OneSidedRofiCAlloc with incorrect pe");
+        assert_eq!(
+            pe, self.alloc.my_pe,
+            "atomic op called on OneSidedRofiCAlloc with incorrect pe"
+        );
         self.alloc.atomic_op_unmanaged(op, pe, offset)
     }
 
@@ -94,12 +110,19 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        assert_eq!(pe, self.alloc.my_pe, "atomic fetch op called on OneSidedRofiCAlloc with incorrect pe");
-        self.alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+        assert_eq!(
+            pe, self.alloc.my_pe,
+            "atomic fetch op called on OneSidedRofiCAlloc with incorrect pe"
+        );
+        self.alloc
+            .atomic_fetch_op(scheduler, counters, op, pe, offset)
     }
 
     fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
-        assert_eq!(pe, self.alloc.my_pe, "blocking atomic fetch op called on OneSidedRofiCAlloc with incorrect pe");
+        assert_eq!(
+            pe, self.alloc.my_pe,
+            "blocking atomic fetch op called on OneSidedRofiCAlloc with incorrect pe"
+        );
         self.alloc.blocking_atomic_fetch_op(op, pe, offset)
     }
 }

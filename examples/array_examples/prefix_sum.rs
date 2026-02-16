@@ -3,7 +3,6 @@
 // use rand::seq::SliceRandom;
 // use rand::thread_rng;
 
-
 // #[AmData]
 // struct ApplyPePrefix{
 //     array: LocalLockArray<usize>,
@@ -12,9 +11,9 @@
 
 // #[am]
 // impl LamellarAM for ApplyPePrefix {
-//     async fn exec(&self) { 
+//     async fn exec(&self) {
 //         self.array.write_local_chunks(1).await.for_each(move|mut chunk| {
-            
+
 //             for i in chunk.iter_mut() {
 //                 *i += self.sum;
 //             }
@@ -38,7 +37,7 @@
 //     //initialize array
 //     array.local_iter_mut().for_each(|i| *i = 1).block();
 //     array.print();
-   
+
 //     let chunk_size = array.num_elems_local() / world.num_threads_per_pe();
 //     let local_chunk_sums = array.write_local_chunks(chunk_size).block().map(|mut chunk| {
 //         let mut sum = 0;
@@ -47,7 +46,7 @@
 //             *i = sum;
 //         }
 //         sum
-    
+
 //     }).collect::<Vec<_>>(Distribution::Block).block();
 
 //     //calculate the local sum for each pe, and store it into local element of pe_sums
@@ -85,12 +84,11 @@
 
 //     array.print();
 
-
 //     let permuted_array =AtomicArray::<usize>::new(world.team(), array_len, Distribution::Block).block();
 //     let mut  pe_indices = (array.first_global_index_for_pe(my_pe).unwrap()..=array.last_global_index_for_pe(my_pe).unwrap()).collect::<Vec<_>>();
 //     let mut local_perm_indices = (0..array.num_elems_local()).collect::<Vec<_>>();
 //     let mut rng = thread_rng();
-    
+
 //     // Shuffle the vector
 //     pe_indices.shuffle(&mut rng);
 //     local_perm_indices.shuffle(&mut rng);
@@ -99,12 +97,12 @@
 //     // array.write_local_chunks(chunk_size).block().enumerate().for_each(move |(i,chunk)| {
 //     //     // if we know the permutation is local
 //     //     // let permuted_local = permuted_array_clone.local_data();
-//     //     // for (p_i, elem) in local_perm_indices[i*chunk_size..std::cmp::min((i+1)*chunk_size,local_perm_indices.len())].iter().zip(chunk.iter()){ 
+//     //     // for (p_i, elem) in local_perm_indices[i*chunk_size..std::cmp::min((i+1)*chunk_size,local_perm_indices.len())].iter().zip(chunk.iter()){
 //     //     //     permuted_local.at(*p_i).store(*elem);
 //     //     // }
 
-//     //     // if the permute may contain remote ops -- apply permute to each element individually 
-//     //     // for (p_i,elem) in pe_indices[i*chunk_size..std::cmp::min((i+1)*chunk_size,pe_indices.len())].iter().zip(chunk.iter()){ 
+//     //     // if the permute may contain remote ops -- apply permute to each element individually
+//     //     // for (p_i,elem) in pe_indices[i*chunk_size..std::cmp::min((i+1)*chunk_size,pe_indices.len())].iter().zip(chunk.iter()){
 //     //     //    let _ = permuted_array_clone.store(*p_i, *elem).spawn();
 //     //     // }
 
@@ -112,7 +110,7 @@
 //     //     // instead we can use the batch store operation
 //     //     let  permuted_indices = pe_indices[i*chunk_size..std::cmp::min((i+1)*chunk_size,pe_indices.len())].iter().map(|e| *e).collect::<Vec<_>>();
 //     //     let _ = permuted_array_clone.batch_store(permuted_indices, chunk.as_ref()).spawn();
-        
+
 //     // }).block();
 //     // world.wait_all();
 //     // world.barrier();
@@ -122,15 +120,12 @@
 //     let local_data = array.read_local_data().block();
 //     let _ = permuted_array.batch_store(pe_indices, &local_data).spawn();
 //     permuted_array.print();
-// }   
-
-
+// }
 
 use std::time::Instant;
 
 use lamellar::array::prelude::*;
 //use lamellar::array::Distribution;
-
 
 #[lamellar::AmData(
     Default,
@@ -228,7 +223,7 @@ fn global_shuffle(A: &UnsafeArray::<SortElement>,
         let _ =
           A.local_chunks(n_per_task)
              .enumerate().for_each(|(_tid,task_slice)| {
-                 // 
+                 //
                  for elt in task_slice.iter() {
                      B.store(elt.key as usize, *elt);
                  }
@@ -242,9 +237,10 @@ fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let num_pes = world.num_pes();
-    let mut n: usize = args.get(1)
-                           .and_then(|s| s.parse::<usize>().ok())
-                           .unwrap_or_else(|| 64);
+    let mut n: usize = args
+        .get(1)
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| 64);
     let n_tasks_per_pe: usize = world.num_threads_per_pe();
     let n_per_task: usize = usize::div_ceil(n, num_pes * n_tasks_per_pe);
     let n_per_pe: usize = n_tasks_per_pe * n_per_task;
@@ -253,14 +249,14 @@ fn main() {
     if my_pe == 0 {
         println!("hello from pe {} of {}", my_pe, num_pes);
         println!("there are {} tasks per pe", n_tasks_per_pe);
-        println!("n is {} n_per_pe is {} n_per_task is {}",
-                 n, n_per_pe, n_per_task);
+        println!(
+            "n is {} n_per_pe is {} n_per_task is {}",
+            n, n_per_pe, n_per_task
+        );
     }
 
-    let A_f = UnsafeArray::<SortElement>::new(world.team(), n,
-                                            Distribution::Block);
-    let B_f = UnsafeArray::<SortElement>::new(world.team(), n,
-                                            Distribution::Block);
+    let A_f = UnsafeArray::<SortElement>::new(world.team(), n, Distribution::Block);
+    let B_f = UnsafeArray::<SortElement>::new(world.team(), n, Distribution::Block);
     let A = A_f.block();
     let B = B_f.block();
 
@@ -270,18 +266,20 @@ fn main() {
     unsafe {
         let glob_start = n_per_pe * my_pe;
 
-        let _ =
-          A.local_chunks_mut(n_per_task)
-             .enumerate().for_each(move|(tid,task_slice)| {
-                        //  println!("tid {:?} got chunk {:?}", tid, task_slice);
-                         for (i, elt) in task_slice.iter_mut().enumerate() {
-                             let idx = (glob_start + tid*n_per_task + i) as u64;
-                             // keys will store the index to store into
-                             let k = (idx + 1000) % (n as u64);
-                             *elt = SortElement {key:k, val: idx};
-                         }
-                        //  println!("tid {:?} ->  chunk {:?}", tid, task_slice);
-                       }).spawn();
+        let _ = A
+            .local_chunks_mut(n_per_task)
+            .enumerate()
+            .for_each(move |(tid, task_slice)| {
+                //  println!("tid {:?} got chunk {:?}", tid, task_slice);
+                for (i, elt) in task_slice.iter_mut().enumerate() {
+                    let idx = (glob_start + tid * n_per_task + i) as u64;
+                    // keys will store the index to store into
+                    let k = (idx + 1000) % (n as u64);
+                    *elt = SortElement { key: k, val: idx };
+                }
+                //  println!("tid {:?} ->  chunk {:?}", tid, task_slice);
+            })
+            .spawn();
         A.wait_all();
     }
 
@@ -297,11 +295,11 @@ fn main() {
     //global_shuffle(&mut A, &mut B, &world, n_per_task);
     let time = Instant::now();
     let B_clone = B.clone();
-     unsafe {
+    unsafe {
         // let _ =
         //   A.local_chunks(n_per_task)
         //      .enumerate().for_each(move|(_tid,task_slice)| {
-        //          // 
+        //          //
         //         //  for elt in task_slice.iter() {
         //         //     let _ = B_clone.store(elt.key as usize, *elt).spawn();
         //         //  }
@@ -311,12 +309,15 @@ fn main() {
         //      }).block();
         let mut indices = A.local_data().iter().map(|e| e.key as usize);
         let mut vals = A.local_data().iter().map(|e| *e);
-        B.batch_store(&mut indices as &mut dyn Iterator<Item=usize>, &mut vals as &mut dyn Iterator<Item = SortElement>).block();
+        B.batch_store(
+            &mut indices as &mut dyn Iterator<Item = usize>,
+            &mut vals as &mut dyn Iterator<Item = SortElement>,
+        )
+        .block();
     }
-    
-   
+
     world.wait_all();
     world.barrier();
-    println!("Result of permute: {:?}",time.elapsed().as_secs_f32());
+    println!("Result of permute: {:?}", time.elapsed().as_secs_f32());
     // B.print();
 }

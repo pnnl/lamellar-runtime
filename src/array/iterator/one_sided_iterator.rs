@@ -453,8 +453,13 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 // if self.buf_0.try_reset() != true {
                 //     panic!("Cannot reset buffer as it is shared");
                 // }
-                let data_usize_slice  = unsafe{ std::slice::from_raw_parts(data.as_ptr() as *const usize, data.len())};
-                trace!("one sided iter buffered pending got data {:?}",data_usize_slice);
+                let data_usize_slice = unsafe {
+                    std::slice::from_raw_parts(data.as_ptr() as *const usize, data.len())
+                };
+                trace!(
+                    "one sided iter buffered pending got data {:?}",
+                    data_usize_slice
+                );
                 let val = data[0];
                 self.state = State::Buffered(data);
 
@@ -463,7 +468,9 @@ impl<T: Dist + 'static + Clone + Send, A: LamellarArray<T> + Send> private::OneS
                 Some(val)
             }
             State::Buffered(data) => {
-                let data_usize_slice  = unsafe{ std::slice::from_raw_parts(data.as_ptr() as *const usize, data.len())};
+                let data_usize_slice = unsafe {
+                    std::slice::from_raw_parts(data.as_ptr() as *const usize, data.len())
+                };
                 trace!(
                     "one sided iter buffered next: index: {} buf_index: {} data: {:?}",
                     self.index,

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, sync::atomic::Ordering};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, sync::atomic::Ordering};
 
 use tracing::{debug, trace};
 
@@ -9,9 +9,9 @@ use crate::{
     env_var::HeapMode,
     lamellae::{
         comm::{
+            alloc::calc_alloc_padding_size_align,
             error::{AllocError, AllocResult},
             CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommMem,
-            alloc::calc_alloc_padding_size_align,
         },
         AllocationType,
     },
@@ -21,7 +21,7 @@ use crate::{
 use super::{
     comm::{RofiCComm, HEAP_SIZE},
     fabric::*,
-    rofi::*
+    rofi::*,
 };
 
 impl CommMem for RofiCComm {
@@ -74,7 +74,6 @@ impl CommMem for RofiCComm {
             }
         }
         Err(AllocError::OutOfMemoryError(size))
-       
     }
 
     #[tracing::instrument(skip(self), level = "debug")]
@@ -91,7 +90,6 @@ impl CommMem for RofiCComm {
         false
     }
 
-
     #[tracing::instrument(skip(self), level = "debug")]
     fn mem_occupied(&self) -> usize {
         let mut occupied = 0;
@@ -107,7 +105,10 @@ impl CommMem for RofiCComm {
         if config().heap_mode == HeapMode::Static {
             panic!("Error: alloc_pool should not be called in static heap mode, please set LAMELLAR_HEAP_MODE=dynamic or increase the heap size with LAMELLAR_HEAP_SIZE environment variable");
         }
-        let size = std::cmp::max(min_size * 2 * self.num_pes, HEAP_SIZE.load(Ordering::SeqCst));
+        let size = std::cmp::max(
+            min_size * 2 * self.num_pes,
+            HEAP_SIZE.load(Ordering::SeqCst),
+        );
         if let Ok(alloc) = self.alloc(size, AllocationType::Global, 0) {
             // println!("addr: {:x} - {:x}",addr, addr+size);
 
@@ -153,7 +154,7 @@ impl CommMem for RofiCComm {
         _remote_addr: usize,
         _num_bytes: usize,
     ) -> CommAlloc {
-        self. rofi_c
+        self.rofi_c
             .one_sided_alloc_from_remote_pe_and_addr(_remote_pe, _remote_addr, _num_bytes)
     }
     fn local_alloc_and_offset_from_remote_pe_and_addr(
@@ -171,7 +172,8 @@ impl CommMem for RofiCComm {
             if let Some(size) = alloc.find(addr) {
                 let comm_alloc = CommAlloc {
                     inner_alloc: CommAllocInner::RofiCAlloc(
-                                inner_alloc.sub_alloc(addr - inner_alloc.start(), size)?
+                        inner_alloc
+                            .sub_alloc(addr - inner_alloc.start(), size)?
                             .as_rt_alloc(alloc.clone())?,
                     ),
                     alloc_type: CommAllocType::RtHeap,
@@ -189,8 +191,6 @@ impl CommMem for RofiCComm {
             .expect("remote_addr failed")
             .into()
     }
-
-    
 
     #[tracing::instrument(skip(self), level = "debug")]
     fn get_alloc_cloned(&self, addr: CommAllocAddr) -> AllocResult<CommAlloc> {

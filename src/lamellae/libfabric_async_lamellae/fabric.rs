@@ -1,97 +1,97 @@
+use crate::lamellae::calc_alloc_padding_size_align;
+use crate::lamellae::decode_padding;
+use crate::lamellae::decode_ref_count;
+use crate::lamellae::decode_ref_count_and_padding;
+use crate::lamellae::decrement_ref_count;
+use crate::lamellae::encode_ref_count_and_padding;
+use crate::lamellae::get_ref_count;
+use crate::lamellae::increment_ref_count;
+use crate::lamellae::AllocError;
+use crate::lamellae::AllocResult;
+use crate::lamellae::AllocationType;
+use crate::lamellae::AtomicOp as LamellarAtomicOp;
+use crate::lamellae::CommAlloc;
+use crate::lamellae::CommAllocAddr;
+use crate::lamellae::CommAllocInner;
+use crate::lamellae::CommAllocType;
+use crate::lamellae::FabricError;
+use crate::lamellae::FabricResult;
+use crate::lamellar_alloc::BTreeAlloc;
+use crate::lamellar_alloc::LamellarAlloc;
+use libfabric::async_::comm::atomic::AsyncAtomicFetchEp;
 use libfabric::async_::comm::atomic::AsyncAtomicWriteEp;
 use libfabric::async_::comm::collective::AsyncCollectiveEp;
 use libfabric::async_::comm::rma::AsyncReadEp;
 use libfabric::async_::comm::rma::AsyncWriteEp;
-use libfabric::MappedAddress;
-use parking_lot::RwLock;
-use pmi::pmi::PmiBuilder;
-use pmi::{pmi::Pmi};
 use libfabric::async_::connless_ep::ConnectionlessEndpoint;
+use libfabric::async_::cq::AsyncWaitCq;
 use libfabric::async_::cq::CompletionQueue;
-use libfabric::av::AddressVector;
-use libfabric::async_::eq::EventQueue;
-use libfabric::domain::Domain;
-use libfabric::info::InfoEntry;
-use std::sync::Arc;
-use std::sync::atomic::AtomicU64;
-use libfabric::FabInfoCaps;
-use libfabric::fabric::Fabric;
-use std::sync::atomic::AtomicUsize;
-use libfabric::mcast::MultiCastGroup;
-use tracing::{debug, trace};
-use crate::lamellae::CommAlloc;
-use std::sync::atomic::Ordering;
-use crate::lamellae::AllocResult;
-use crate::lamellae::AllocError;
-use crate::lamellae::CommAllocAddr;
-use libfabric::mr::MaybeDisabledMemoryRegion;
-use libfabric::mr::DisabledMemoryRegion;
-use libfabric::enums::HmemIface;
-use crate::lamellae::calc_alloc_padding_size_align;
-use crate::lamellae::FabricError;
-use libfabric::enums::CollectiveOp;
-use libfabric::comm::collective::CollectiveAttr;
-use libfabric::MemAddressInfo;
-use std::collections::HashMap;
-use libfabric::enums::CollectiveOptions;
-use libfabric::RemoteMemAddressInfo;
-use libfabric::mr::MemoryRegion;
-use libfabric::cntr::Counter;
-use libfabric::enums::JoinOptions;
-use libfabric::mcast::MulticastGroupBuilder;
-use libfabric::av_set::AddressVectorSetBuilder;
-use libfabric::enums::CompareAtomicOp;
-use libfabric::enums::FetchAtomicOp;
-use libfabric::AsFiType;
-use libfabric::comm::rma::WriteEp;
-use libfabric::comm::atomic::AtomicValidEp;
-use libfabric::mr::MemoryRegionBuilder;
-use libfabric::async_::ep::EndpointBuilder;
-use libfabric::cntr::CounterBuilder;
 use libfabric::async_::cq::CompletionQueueBuilder;
-use libfabric::async_::eq::EventQueueBuilder;
-use libfabric::enums::AddressFormat;
-use libfabric::enums::TransferOptions;
-use libfabric::enums::TrafficClass;
-use libfabric::enums::Progress;
-use libfabric::enums::ResourceMgmt;
-use libfabric::enums::MrMode;
-use libfabric::enums::EndpointType;
-use libfabric::enums::Mode;
-use libfabric::infocapsoptions::InfoCaps;
-use libfabric::info::libfabric_version;
-use libfabric::info::Info;
-use crate::lamellae::FabricResult;
-use libfabric::CntrCaps;
-use libfabric::ep::Address;
-use libfabric::fabric::FabricBuilder;
-use libfabric::domain::DomainBuilder;
-use libfabric::av::AddressVectorBuilder;
 use libfabric::async_::ep::Endpoint;
+use libfabric::async_::ep::EndpointBuilder;
+use libfabric::async_::eq::EventQueue;
+use libfabric::async_::eq::EventQueueBuilder;
+use libfabric::av::AddressVector;
+use libfabric::av::AddressVectorBuilder;
 use libfabric::av::AvInAddress;
-use libfabric::enums::AVOptions;
-use libfabric::enums::AtomicOp;
-use crate::lamellae::AllocationType;
+use libfabric::av_set::AddressVectorSetBuilder;
+use libfabric::cntr::Counter;
+use libfabric::cntr::CounterBuilder;
 use libfabric::cntr::ReadCntr;
 use libfabric::cntr::WaitCntr;
-use libfabric::ep::BaseEndpoint;
-use libfabric::async_::cq::AsyncWaitCq;
-use crate::lamellae::decode_padding;
-use crate::lamellae::decode_ref_count;
-use crate::lamellae::get_ref_count;
-use crate::lamellae::CommAllocInner;
-use crate::lamellae::CommAllocType;
-use crate::lamellae::encode_ref_count_and_padding;
-use crate::lamellae::decode_ref_count_and_padding;
-use crate::lamellae::decrement_ref_count;
-use crate::lamellae::increment_ref_count;
-use crate::lamellar_alloc::BTreeAlloc;
-use crate::lamellae::AtomicOp as LamellarAtomicOp;
-use libfabric::comm::rma::ReadEp;
-use libfabric::comm::atomic::AtomicWriteEp;
 use libfabric::comm::atomic::AtomicFetchEp;
-use crate::lamellar_alloc::LamellarAlloc;
-use libfabric::async_::comm::atomic::AsyncAtomicFetchEp;
+use libfabric::comm::atomic::AtomicValidEp;
+use libfabric::comm::atomic::AtomicWriteEp;
+use libfabric::comm::collective::CollectiveAttr;
+use libfabric::comm::rma::ReadEp;
+use libfabric::comm::rma::WriteEp;
+use libfabric::domain::Domain;
+use libfabric::domain::DomainBuilder;
+use libfabric::enums::AVOptions;
+use libfabric::enums::AddressFormat;
+use libfabric::enums::AtomicOp;
+use libfabric::enums::CollectiveOp;
+use libfabric::enums::CollectiveOptions;
+use libfabric::enums::CompareAtomicOp;
+use libfabric::enums::EndpointType;
+use libfabric::enums::FetchAtomicOp;
+use libfabric::enums::HmemIface;
+use libfabric::enums::JoinOptions;
+use libfabric::enums::Mode;
+use libfabric::enums::MrMode;
+use libfabric::enums::Progress;
+use libfabric::enums::ResourceMgmt;
+use libfabric::enums::TrafficClass;
+use libfabric::enums::TransferOptions;
+use libfabric::ep::Address;
+use libfabric::ep::BaseEndpoint;
+use libfabric::fabric::Fabric;
+use libfabric::fabric::FabricBuilder;
+use libfabric::info::libfabric_version;
+use libfabric::info::Info;
+use libfabric::info::InfoEntry;
+use libfabric::infocapsoptions::InfoCaps;
+use libfabric::mcast::MultiCastGroup;
+use libfabric::mcast::MulticastGroupBuilder;
+use libfabric::mr::DisabledMemoryRegion;
+use libfabric::mr::MaybeDisabledMemoryRegion;
+use libfabric::mr::MemoryRegion;
+use libfabric::mr::MemoryRegionBuilder;
+use libfabric::AsFiType;
+use libfabric::CntrCaps;
+use libfabric::FabInfoCaps;
+use libfabric::MappedAddress;
+use libfabric::MemAddressInfo;
+use libfabric::RemoteMemAddressInfo;
+use parking_lot::RwLock;
+use pmi::pmi::Pmi;
+use pmi::pmi::PmiBuilder;
+use std::collections::HashMap;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tracing::{debug, trace};
 
 enum BarrierImpl {
     Uninit,
@@ -99,7 +99,8 @@ enum BarrierImpl {
     Manual(usize, AtomicUsize),
 }
 
-type RmaAtomicCollEp =libfabric::info_caps_type!(FabInfoCaps::ATOMIC, FabInfoCaps::RMA, FabInfoCaps::COLL);
+type RmaAtomicCollEp =
+    libfabric::info_caps_type!(FabInfoCaps::ATOMIC, FabInfoCaps::RMA, FabInfoCaps::COLL);
 type SpinCq = libfabric::async_cq_caps_type!();
 type SpinEq = libfabric::async_eq_caps_type!();
 type WaitableCntr = libfabric::cntr_caps_type!(CntrCaps::WAIT);
@@ -133,7 +134,6 @@ impl std::fmt::Debug for OfiAsync {
             .finish()
     }
 }
-
 
 impl OfiAsync {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
@@ -349,10 +349,7 @@ impl OfiAsync {
         }
     }
 
-    fn create_mc_group(
-        &self,
-        pes: &[usize],
-    ) -> Result<MultiCastGroup, libfabric::error::Error> {
+    fn create_mc_group(&self, pes: &[usize]) -> Result<MultiCastGroup, libfabric::error::Error> {
         // trace!("Creating MC group of len: {}", pes.len());
         let mut av_set = AddressVectorSetBuilder::new_from_range(
             &self.av,
@@ -369,9 +366,11 @@ impl OfiAsync {
         }
 
         let mut ctx = self.info_entry.allocate_context();
-        let mc = MulticastGroupBuilder::from_av_set(&av_set)
-            .build();
-        let mc = async_std::task::block_on(async {mc.join_collective_async(&self.ep, JoinOptions::new(), &mut ctx).await})?;
+        let mc = MulticastGroupBuilder::from_av_set(&av_set).build();
+        let mc = async_std::task::block_on(async {
+            mc.join_collective_async(&self.ep, JoinOptions::new(), &mut ctx)
+                .await
+        })?;
         // trace!("Done Creating MC group");
 
         Ok(mc.1)
@@ -506,15 +505,19 @@ impl OfiAsync {
         let mut all_mem_info_bytes = vec![0u8; mem_info_bytes.len() * pes.len()];
         let mut ctx = self.info_entry.allocate_context();
 
-        async_std::task::block_on(async {self.ep.allgather_async(
-            &mut mem_info_bytes,
-            None,
-            &mut all_mem_info_bytes,
-            None,
-            &mc,
-            CollectiveOptions::new(),
-            &mut ctx,
-        ).await})?;
+        async_std::task::block_on(async {
+            self.ep
+                .allgather_async(
+                    &mut mem_info_bytes,
+                    None,
+                    &mut all_mem_info_bytes,
+                    None,
+                    &mc,
+                    CollectiveOptions::new(),
+                    &mut ctx,
+                )
+                .await
+        })?;
 
         // self.wait_for_completion(&ctx)?;
 
@@ -631,7 +634,11 @@ impl OfiAsync {
         }
     }
 
-    fn full_alloc(self: &Arc<OfiAsync>, data_size: usize, align: usize) -> AllocResult<LibfabricAsyncAlloc> {
+    fn full_alloc(
+        self: &Arc<OfiAsync>,
+        data_size: usize,
+        align: usize,
+    ) -> AllocResult<LibfabricAsyncAlloc> {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
 
@@ -796,7 +803,7 @@ impl OfiAsync {
             BarrierImpl::Collective(mc) => {
                 let mut ctx = self.info_entry.allocate_context();
                 let _guard = self.completion_lock.write();
-                async_std::task::block_on(async {self.ep.barrier_async(mc, &mut ctx).await})?;
+                async_std::task::block_on(async { self.ep.barrier_async(mc, &mut ctx).await })?;
                 // loop {
                 //     let ret = self.ep.barrier_with_context(mc, &mut ctx);
                 //     match &ret {
@@ -981,8 +988,6 @@ impl Drop for OfiAsync {
         trace!("wait_all done");
     }
 }
-
-
 
 pub(crate) struct AllocInfoManager {
     pub(crate) mr_info_table: Arc<RwLock<Vec<LibfabricAsyncAlloc>>>,
@@ -1588,12 +1593,15 @@ impl LibfabricAsyncAlloc {
             //     remote_dst_addr.as_ptr()
             // );
             // self.ofi.post_put(|| unsafe {
-                self.ofi.ep.inject_write_to_async(
+            self.ofi
+                .ep
+                .inject_write_to_async(
                     src_addr,
                     &self.ofi.mapped_addresses[pe],
                     remote_dst_addr,
                     &remote_key,
-                ).await?;
+                )
+                .await?;
             // })?;
         } else {
             let mut curr_idx = 0;
@@ -1602,18 +1610,21 @@ impl LibfabricAsyncAlloc {
                     src_addr.len() - curr_idx,
                     self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
                 );
-                let mut ctx  = self.ofi.info_entry.allocate_context();
+                let mut ctx = self.ofi.info_entry.allocate_context();
 
                 // self.ofi
                 //     .post_put(|| unsafe {
-                        self.ofi.ep.write_to_async(
-                            &src_addr[curr_idx..curr_idx + msg_len],
-                            Some(self.mr.descriptor()),
-                            &self.ofi.mapped_addresses[pe],
-                            remote_dst_addr,
-                            &remote_key,
-                            &mut ctx,
-                        ).await
+                self.ofi
+                    .ep
+                    .write_to_async(
+                        &src_addr[curr_idx..curr_idx + msg_len],
+                        Some(self.mr.descriptor()),
+                        &self.ofi.mapped_addresses[pe],
+                        remote_dst_addr,
+                        &remote_key,
+                        &mut ctx,
+                    )
+                    .await
                     // })
                     .expect("Error posting put");
 
@@ -1720,28 +1731,31 @@ impl LibfabricAsyncAlloc {
         let mut curr_idx = 0;
 
         while curr_idx < dst_addr.len() {
-            let mut ctx  = self.ofi.info_entry.allocate_context();
+            let mut ctx = self.ofi.info_entry.allocate_context();
             let msg_len = std::cmp::min(
                 dst_addr.len() - curr_idx,
                 self.ofi.info_entry.ep_attr().max_msg_size() / std::mem::size_of::<T>(),
             );
             // self.ofi
             //     .post_get(|| unsafe {
-                    trace!(
-                        "GET: from PE {} at addr {:?} to local addr {:?} len {}",
-                        pe,
-                        remote_src_addr,
-                        &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
-                        msg_len * std::mem::size_of::<T>()
-                    );
-                    self.ofi.ep.read_from_async(
-                        &mut dst_addr[curr_idx..curr_idx + msg_len],
-                        Some(self.mr.descriptor()),
-                        &self.ofi.mapped_addresses[pe],
-                        remote_src_addr,
-                        &remote_key,
-                        &mut ctx,
-                    ).await
+            trace!(
+                "GET: from PE {} at addr {:?} to local addr {:?} len {}",
+                pe,
+                remote_src_addr,
+                &mut dst_addr[curr_idx..curr_idx + msg_len] as *mut [T],
+                msg_len * std::mem::size_of::<T>()
+            );
+            self.ofi
+                .ep
+                .read_from_async(
+                    &mut dst_addr[curr_idx..curr_idx + msg_len],
+                    Some(self.mr.descriptor()),
+                    &self.ofi.mapped_addresses[pe],
+                    remote_src_addr,
+                    &remote_key,
+                    &mut ctx,
+                )
+                .await
                 // })
                 .expect("Error posting get");
             remote_src_addr = remote_src_addr.add(msg_len * std::mem::size_of::<T>());
@@ -1847,7 +1861,7 @@ impl LibfabricAsyncAlloc {
         Ok(())
     }
 
-    async unsafe  fn typed_atomic_op<T, OFI: AsFiType>(
+    async unsafe fn typed_atomic_op<T, OFI: AsFiType>(
         &self,
         pe: usize,
         offset: usize,
@@ -1866,13 +1880,16 @@ impl LibfabricAsyncAlloc {
         let src = op.src().expect("Atomic operation has no source");
         let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
         // self.ofi.post_put(|| {
-            self.ofi.ep.atomic_inject_to_async(
+        self.ofi
+            .ep
+            .atomic_inject_to_async(
                 buf,
                 &self.ofi.mapped_addresses[pe],
                 remote_dst_addr,
                 &remote_key,
                 op.into(),
-            ).await?;
+            )
+            .await?;
         // })?;
         Ok(())
     }
@@ -1886,25 +1903,35 @@ impl LibfabricAsyncAlloc {
     ) -> Result<(), libfabric::error::Error> {
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-                self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, u8>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-                self.typed_atomic_fetch_op::<T, u16>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, u16>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-                self.typed_atomic_fetch_op::<T, u32>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, u32>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_fetch_op::<T, u64>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, u64>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                self.typed_atomic_fetch_op::<T, usize>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, usize>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-                self.typed_atomic_fetch_op::<T, i8>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, i8>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-                self.typed_atomic_fetch_op::<T, i16>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, i16>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-                self.typed_atomic_fetch_op::<T, i32>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, i32>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-                self.typed_atomic_fetch_op::<T, i64>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, i64>(pe, offset, op, result)
+                    .await
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-                self.typed_atomic_fetch_op::<T, isize>(pe, offset, op, result).await
+                self.typed_atomic_fetch_op::<T, isize>(pe, offset, op, result)
+                    .await
             } else {
                 panic!("Unsupported atomic operation type");
             }
@@ -2020,7 +2047,9 @@ impl LibfabricAsyncAlloc {
             Some(src) => {
                 let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
                 // self.ofi.post_get(|| {
-                    self.ofi.ep.fetch_atomic_from_async(
+                self.ofi
+                    .ep
+                    .fetch_atomic_from_async(
                         buf,
                         None,
                         res,
@@ -2030,13 +2059,16 @@ impl LibfabricAsyncAlloc {
                         &remote_key,
                         &mut ctx,
                         op.into(),
-                    ).await?;
+                    )
+                    .await?;
                 // })?;
             }
             None => {
                 let buf_val = res[0];
                 // self.ofi.post_get(|| {
-                    self.ofi.ep.fetch_atomic_from_async(
+                self.ofi
+                    .ep
+                    .fetch_atomic_from_async(
                         std::slice::from_ref(&buf_val),
                         None,
                         res,
@@ -2046,7 +2078,8 @@ impl LibfabricAsyncAlloc {
                         &remote_key,
                         &mut ctx,
                         op.into(),
-                    ).await?;
+                    )
+                    .await?;
                 // })?;
             }
         };
@@ -2091,7 +2124,6 @@ impl Drop for LibfabricAsyncAlloc {
         }
     }
 }
-
 
 #[derive(Clone, Debug)]
 pub(crate) struct OneSidedLibfabricAsyncAlloc {

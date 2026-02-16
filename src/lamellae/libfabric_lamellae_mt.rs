@@ -38,7 +38,8 @@ impl LibfabricMtBuilder {
         } else {
             None
         };
-        let libfabric_comm: Arc<Comm> = Arc::new(LibfabricMtComm::new(provider, domain,num_threads).into());
+        let libfabric_comm: Arc<Comm> =
+            Arc::new(LibfabricMtComm::new(provider, domain, num_threads).into());
         LibfabricMtBuilder {
             my_pe: libfabric_comm.my_pe(),
             num_pes: libfabric_comm.num_pes(),

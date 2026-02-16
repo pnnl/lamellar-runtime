@@ -50,8 +50,11 @@ fn main() {
             for j in (0..2_u64.pow(exp) as usize).step_by(num_bytes as usize) {
                 let sub_timer = Instant::now();
                 unsafe {
-                    let _ = array
-                        .put_buffer_unmanaged(num_pes - 1, j, data.sub_region(..num_bytes as usize));
+                    let _ = array.put_buffer_unmanaged(
+                        num_pes - 1,
+                        j,
+                        data.sub_region(..num_bytes as usize),
+                    );
                 }
 
                 // println!("j: {:?}",j);

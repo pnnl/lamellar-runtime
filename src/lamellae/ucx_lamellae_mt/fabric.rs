@@ -69,7 +69,7 @@ impl UcxWorld {
         // let mut comm_groups = Vec::with_capacity(1);
         for tid in 0..num_threads {
             let worker = context.create_worker().unwrap();
-            let addresses = worker.exchange_address(&my_pmi,tid).unwrap();
+            let addresses = worker.exchange_address(&my_pmi, tid).unwrap();
             let endpoints = addresses
                 .iter()
                 .map(|a| Endpoint::new(worker.clone(), a).unwrap())
@@ -77,8 +77,6 @@ impl UcxWorld {
             comm_groups.push(CommGroup { worker, endpoints });
         }
         let utility_comm_group = comm_groups.last().unwrap().clone();
-
-       
 
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
@@ -736,14 +734,12 @@ impl UcxMtAlloc {
             remote_addr + offset,
             comm_group_id
         );
-        self.comm_groups[comm_group_id]
-            .endpoints[pe]
-            .put(
-                src_addr.as_ptr() as _,
-                src_addr.len() * std::mem::size_of::<T>(),
-                remote_addr + offset,
-                &rkey,
-                managed,
+        self.comm_groups[comm_group_id].endpoints[pe].put(
+            src_addr.as_ptr() as _,
+            src_addr.len() * std::mem::size_of::<T>(),
+            remote_addr + offset,
+            &rkey,
+            managed,
         )
     }
 
@@ -765,8 +761,7 @@ impl UcxMtAlloc {
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
-            .endpoints[pe]
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
             .get(
                 dst_addr.as_mut_ptr() as _,
                 dst_addr.len() * std::mem::size_of::<T>(),
@@ -794,8 +789,7 @@ impl UcxMtAlloc {
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
-            .endpoints[pe]
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
             .blocking_get(
                 dst_addr.as_mut_ptr() as _,
                 dst_addr.len() * std::mem::size_of::<T>(),
@@ -845,12 +839,7 @@ impl UcxMtAlloc {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_swap(
-                        *val,
-                        result.as_mut_ptr(),
-                        remote_addr + offset,
-                        &rkey,
-                    )
+                    .atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey)
             }
             _ => panic!("Unsupported atomic operation"),
         }
@@ -898,7 +887,7 @@ impl UcxMtAlloc {
     }
 
     pub(crate) fn thread_wait(&self) {
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)% self.comm_groups.len()]
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
             .worker
             .wait_all()
             .expect("UcxMtAlloc::thread_wait failed waiting on UCX requests");

@@ -117,6 +117,7 @@ impl Drop for UcxComm {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
         // println!("dropping ucx comm");
+        debug!("Dropping UcxComm");
         if self.mem_occupied() > 0 {
             println!("dropping ucx -- memory in use {:?}", self.mem_occupied());
         }
@@ -133,7 +134,8 @@ impl Drop for UcxComm {
 
         // let _ = self.ucx.clear_allocs();
         let world_ref_count = Arc::strong_count(&self.ucx);
-        debug!("Dropping UcxComm: ucx world ref count: {}", world_ref_count);
+        
         let _ = self.ucx.barrier();
+        debug!("Dropping UcxComm: ucx world ref count: {}", world_ref_count);
     }
 }

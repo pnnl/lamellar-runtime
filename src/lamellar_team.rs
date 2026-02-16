@@ -44,7 +44,7 @@ use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
-use tracing::trace;
+use tracing::{trace,debug};
 
 use std::cell::Cell;
 use std::marker::PhantomData;
@@ -456,9 +456,7 @@ impl LamellarTeam {
         self.team.exec_am_local_tg(am, None, Some(thread))
     }
 
-    
-    
-    pub fn spawn_am_all<F>(&self, am: F) ->MultiAmHandle<F::Output>
+    pub fn spawn_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
     {
@@ -544,7 +542,7 @@ impl ActiveMessaging for Arc<LamellarTeam> {
         // trace!("[{:?}] team exec am all request", self.team.world_pe);
         self.team.exec_am_all_tg(am, None)
     }
-    
+
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
@@ -1528,7 +1526,7 @@ impl LamellarTeamRT {
         // println!("wait_all called on pe: {}", self.world_pe);
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
 
-        self.lamellae.comm().wait_all();// want to wait on operations from all threads
+        self.lamellae.comm().wait_all(); // want to wait on operations from all threads
 
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.team_counters.send_req_cnt.load(Ordering::SeqCst);
@@ -1898,7 +1896,8 @@ impl Darc<LamellarTeamRT> {
         };
         // event!(Level::TRACE, "submitting request to scheduler");
         // println!("[{:?}] team exec all", std::thread::current().id());
-        self.scheduler.submit_am(Am::All(req_data.clone(), func.clone()));
+        self.scheduler
+            .submit_am(Am::All(req_data.clone(), func.clone()));
         MultiAmHandle {
             inner: req,
             am: None,
@@ -2531,7 +2530,8 @@ impl Darc<LamellarTeamRT> {
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
         // println!("[{:?}] team exec am local", std::thread::current().id());
-        self.scheduler.submit_am(Am::Local(req_data.clone(), func.clone()));
+        self.scheduler
+            .submit_am(Am::Local(req_data.clone(), func.clone()));
 
         // Box::new(LamellarLocalRequestHandle {
         //     inner: req,
@@ -2626,7 +2626,7 @@ impl Drop for LamellarTeamRT {
         //         println!("Deserialize: {:?}", duration.load(Ordering::SeqCst));
         //     }
         // }
-        trace!("LamellarTeamRT dropped");
+        debug!("LamellarTeamRT dropped");
     }
 }
 

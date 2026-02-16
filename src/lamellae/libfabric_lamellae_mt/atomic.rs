@@ -318,8 +318,15 @@ impl CommAllocAtomic for OneSidedLibfabricMtAlloc {
         );
         let mut result = T::default();
         let mut_result_slice = std::slice::from_mut(&mut result);
-        LibfabricMtAlloc::atomic_fetch_op_inner(&self.alloc, pe, offset, &op, mut_result_slice, true)
-            .unwrap();
+        LibfabricMtAlloc::atomic_fetch_op_inner(
+            &self.alloc,
+            pe,
+            offset,
+            &op,
+            mut_result_slice,
+            true,
+        )
+        .unwrap();
         result
     }
 }

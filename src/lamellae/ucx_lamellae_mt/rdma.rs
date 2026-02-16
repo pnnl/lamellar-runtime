@@ -73,8 +73,9 @@ impl<T: Remote> UcxMtPutFuture<T> {
             src.len() * std::mem::size_of::<T>()
         );
         if pe != self.my_pe {
-            self.request =
-                unsafe { UcxMtAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), true) };
+            self.request = unsafe {
+                UcxMtAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), true)
+            };
         } else {
             self.alloc.as_mut_slice()[self.offset..self.offset + src.len()]
                 .copy_from_slice(src.as_slice());
@@ -149,7 +150,9 @@ impl<T: Remote> PinnedDrop for UcxMtPutFuture<T> {
 
 impl<T: Remote> From<UcxMtPutFuture<T>> for RdmaHandle<T> {
     fn from(f: UcxMtPutFuture<T>) -> RdmaHandle<T> {
-        RdmaHandle { future: RdmaPutFuture::UcxMt(f) }
+        RdmaHandle {
+            future: RdmaPutFuture::UcxMt(f),
+        }
     }
 }
 
@@ -234,7 +237,9 @@ impl<T> PinnedDrop for UcxMtGetFuture<T> {
 
 impl<T: Remote> From<UcxMtGetFuture<T>> for RdmaGetHandle<T> {
     fn from(f: UcxMtGetFuture<T>) -> RdmaGetHandle<T> {
-        RdmaGetHandle { future: RdmaGetFuture::UcxMt(f) }
+        RdmaGetHandle {
+            future: RdmaGetFuture::UcxMt(f),
+        }
     }
 }
 
@@ -316,7 +321,9 @@ impl<T> PinnedDrop for UcxMtGetBufferFuture<T> {
 
 impl<T: Remote> From<UcxMtGetBufferFuture<T>> for RdmaGetBufferHandle<T> {
     fn from(f: UcxMtGetBufferFuture<T>) -> RdmaGetBufferHandle<T> {
-        RdmaGetBufferHandle { future: RdmaGetBufferFuture::UcxMt(f) }
+        RdmaGetBufferHandle {
+            future: RdmaGetBufferFuture::UcxMt(f),
+        }
     }
 }
 
@@ -405,7 +412,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> From<UcxMtGetIntoBufferFuture<T, B>>
     for RdmaGetIntoBufferHandle<T, B>
 {
     fn from(f: UcxMtGetIntoBufferFuture<T, B>) -> RdmaGetIntoBufferHandle<T, B> {
-        RdmaGetIntoBufferHandle { future: RdmaGetIntoBufferFuture::UcxMt(f) }
+        RdmaGetIntoBufferHandle {
+            future: RdmaGetIntoBufferFuture::UcxMt(f),
+        }
     }
 }
 

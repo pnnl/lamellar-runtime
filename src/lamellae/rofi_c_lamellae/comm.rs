@@ -11,7 +11,7 @@ use crate::{
     Backend,
 };
 
-use super::{fabric::*, CommandQueue,rofi::*};
+use super::{fabric::*, rofi::*, CommandQueue};
 
 use parking_lot::RwLock;
 use tracing::trace;
@@ -22,8 +22,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug)]
-pub(crate) struct RofiCComm { 
-    pub(crate) rofi_c: Arc<RofiC>,    
+pub(crate) struct RofiCComm {
+    pub(crate) rofi_c: Arc<RofiC>,
     pub(crate) runtime_allocs: RwLock<Vec<(RofiCAlloc, BTreeAlloc)>>, //runtime allocations
     _init: AtomicBool,
     pub(crate) num_pes: usize,
@@ -42,7 +42,8 @@ impl RofiCComm {
         if let Some(size) = config().heap_size {
             HEAP_SIZE.store(size, Ordering::SeqCst);
         }
-        let rofi_c = RofiC::new(Some(provider), Some(domain)).expect("Rofi-C initialization failed");
+        let rofi_c =
+            RofiC::new(Some(provider), Some(domain)).expect("Rofi-C initialization failed");
         trace!("rofi-c initialized: {:?}", rofi_c);
 
         rofi_c.barrier();
@@ -51,9 +52,13 @@ impl RofiCComm {
         let total_mem = cmd_q_mem + RT_MEM + HEAP_SIZE.load(Ordering::SeqCst);
 
         let alloc_info = rofi_c
-            .alloc(total_mem, AllocationType::Global, std::mem::align_of::<u8>())
+            .alloc(
+                total_mem,
+                AllocationType::Global,
+                std::mem::align_of::<u8>(),
+            )
             .expect("rofi rt alloc failed");
-        let mut first_alloc =  BTreeAlloc::new("rofi_c_rt_mem".to_string());
+        let mut first_alloc = BTreeAlloc::new("rofi_c_rt_mem".to_string());
         first_alloc.init(alloc_info.start(), total_mem);
 
         let rofi_c_comm = RofiCComm {
@@ -76,8 +81,7 @@ impl RofiCComm {
 }
 
 impl CommShutdown for RofiCComm {
-    fn force_shutdown(&self) {
-    }
+    fn force_shutdown(&self) {}
 }
 
 impl CommProgress for RofiCComm {
@@ -126,7 +130,10 @@ impl Drop for RofiCComm {
         }
         self.runtime_allocs.write().clear();
         let world_ref_count = Arc::strong_count(&self.rofi_c);
-        trace!("dropping rofi_c comm, rofi_c world ref count {:?}", world_ref_count);
+        trace!(
+            "dropping rofi_c comm, rofi_c world ref count {:?}",
+            world_ref_count
+        );
         self.rofi_c.barrier();
     }
 }

@@ -2,6 +2,7 @@ pub(crate) mod comm;
 pub(crate) mod command_queues;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
+pub(crate) mod shmem_utils;
 
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
@@ -28,24 +29,16 @@ pub(crate) mod libfabric_async_lamellae;
 #[cfg(feature = "enable-ucx")]
 pub(crate) mod ucx_lamellae;
 
-#[cfg(feature = "enable-libfabric")]
-use {
-    libfabric_lamellae::{Libfabric, LibfabricBuilder},
-};
-#[cfg(feature = "enable-libfabric")]
-use {
-    libfabric_lamellae_mt::{LibfabricMt, LibfabricMtBuilder},
-};
-#[cfg(feature = "enable-ucx")]
-use {
-    ucx_lamellae_mt::{UcxMt, UcxMtBuilder},
-};
 #[cfg(feature = "enable-libfabric-async")]
-use {
-    libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder},
-};
+use libfabric_async_lamellae::{LibfabricAsync, LibfabricAsyncBuilder};
+#[cfg(feature = "enable-libfabric")]
+use libfabric_lamellae::{Libfabric, LibfabricBuilder};
+#[cfg(feature = "enable-libfabric")]
+use libfabric_lamellae_mt::{LibfabricMt, LibfabricMtBuilder};
 #[cfg(feature = "enable-ucx")]
 use ucx_lamellae::{Ucx, UcxBuilder};
+#[cfg(feature = "enable-ucx")]
+use ucx_lamellae_mt::{UcxMt, UcxMtBuilder};
 
 use async_trait::async_trait;
 use enum_dispatch::enum_dispatch;
@@ -121,7 +114,9 @@ impl Default for Backend {
                 #[cfg(feature = "enable-libfabric")]
                 return Backend::LibfabricMt;
                 #[cfg(not(feature = "enable-libfabric"))]
-                panic!("unable to set libfabric-mt backend, recompile with 'enable-libfabric' feature")
+                panic!(
+                    "unable to set libfabric-mt backend, recompile with 'enable-libfabric' feature"
+                )
             }
 
             "libfabric-async" => {
@@ -407,7 +402,7 @@ impl Lamellae {
             #[cfg(feature = "enable-rofi-c")]
             Lamellae::RofiC(rofi_c) => rofi_c.comm(),
             #[cfg(feature = "enable-libfabric")]
-            Lamellae::Libfabric(libfabric) => libfabric.comm(), 
+            Lamellae::Libfabric(libfabric) => libfabric.comm(),
             #[cfg(feature = "enable-libfabric")]
             Lamellae::LibfabricMt(libfabric_mt) => libfabric_mt.comm(),
             #[cfg(feature = "enable-libfabric-async")]
@@ -476,7 +471,11 @@ pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeB
         Backend::LibfabricMt => {
             let provider = config().rofi_provider.clone();
             let domain = config().rofi_domain.clone();
-            LamellaeBuilder::LibfabricMtBuilder(LibfabricMtBuilder::new(&provider, &domain, num_threads))
+            LamellaeBuilder::LibfabricMtBuilder(LibfabricMtBuilder::new(
+                &provider,
+                &domain,
+                num_threads,
+            ))
         }
         #[cfg(feature = "enable-libfabric-async")]
         Backend::LibfabricAsync => {

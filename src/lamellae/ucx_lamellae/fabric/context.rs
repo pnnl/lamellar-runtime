@@ -3,6 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 use lamellar_ucx_sys::*;
 
 use pmi::{pmi::Pmi, pmix::PmiX};
+use tracing::{debug};
 
 use super::{error::Error, worker::Worker};
 
@@ -42,6 +43,7 @@ impl Default for Config {
 
 impl Drop for Config {
     fn drop(&mut self) {
+        debug!("Dropping UCP Config");
         unsafe { ucp_config_release(self.handle) };
     }
 }
@@ -136,6 +138,7 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
+        debug!("Dropping UCP Context");
         unsafe { ucp_cleanup(self.handle) };
     }
 }

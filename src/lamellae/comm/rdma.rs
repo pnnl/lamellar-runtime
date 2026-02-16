@@ -1,3 +1,29 @@
+#[cfg(feature = "enable-libfabric-async")]
+use crate::lamellae::libfabric_async_lamellae::rdma::{
+    LibfabricAsyncGetBufferFuture, LibfabricAsyncGetFuture, LibfabricAsyncGetIntoBufferFuture,
+    LibfabricAsyncPutFuture,
+};
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric_lamellae::rdma::{
+    LibfabricGetBufferFuture, LibfabricGetFuture, LibfabricGetIntoBufferFuture, LibfabricPutFuture,
+};
+#[cfg(feature = "enable-libfabric")]
+use crate::lamellae::libfabric_lamellae_mt::rdma::{
+    LibfabricMtGetBufferFuture, LibfabricMtGetFuture, LibfabricMtGetIntoBufferFuture,
+    LibfabricMtPutFuture,
+};
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::rdma::{
+    RofiCGetBufferFuture, RofiCGetFuture, RofiCGetIntoBufferFuture, RofiCPutFuture,
+};
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::rdma::{
+    UcxGetBufferFuture, UcxGetFuture, UcxGetIntoBufferFuture, UcxPutFuture,
+};
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae_mt::rdma::{
+    UcxMtGetBufferFuture, UcxMtGetFuture, UcxMtGetIntoBufferFuture, UcxMtPutFuture,
+};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -11,30 +37,6 @@ use crate::{
     },
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     LamellarTask,
-};
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_lamellae::rdma::{
-    LibfabricGetBufferFuture, LibfabricGetFuture, LibfabricGetIntoBufferFuture, LibfabricPutFuture,
-};
-#[cfg(feature = "enable-libfabric")]
-use crate::lamellae::libfabric_lamellae_mt::rdma::{
-    LibfabricMtGetBufferFuture, LibfabricMtGetFuture, LibfabricMtGetIntoBufferFuture, LibfabricMtPutFuture,
-};
-#[cfg(feature = "enable-libfabric-async")]
-use crate::lamellae::libfabric_async_lamellae::rdma::{
-    LibfabricAsyncGetBufferFuture, LibfabricAsyncGetFuture, LibfabricAsyncGetIntoBufferFuture, LibfabricAsyncPutFuture,
-};
-#[cfg(feature = "enable-ucx")]
-use crate::lamellae::ucx_lamellae::rdma::{
-    UcxGetBufferFuture, UcxGetFuture, UcxGetIntoBufferFuture, UcxPutFuture,
-};
-#[cfg(feature = "enable-ucx")]
-use crate::lamellae::ucx_lamellae_mt::rdma::{
-    UcxMtGetBufferFuture, UcxMtGetFuture, UcxMtGetIntoBufferFuture, UcxMtPutFuture,
-};
-#[cfg(feature = "enable-rofi-c")]
-use crate::lamellae::rofi_c_lamellae::rdma::{
-    RofiCPutFuture, RofiCGetFuture, RofiCGetBufferFuture, RofiCGetIntoBufferFuture,
 };
 
 use enum_dispatch::enum_dispatch;

@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
-use tracing::{trace, trace_span, Instrument};
+use tracing::{trace, trace_span, Instrument, debug};
 //, Weak};
 use std::thread;
 
@@ -602,12 +602,12 @@ impl Drop for WorkStealing {
     //when is this called with respect to world?
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
-        trace!("dropping work stealing");
+        debug!("dropping work stealing");
         while let Some(thread) = self.threads.pop() {
             if thread.thread().id() != std::thread::current().id() {
                 let _res = thread.join();
             }
         }
-        trace!("WorkStealing Scheduler Dropped");
+        debug!("WorkStealing Scheduler Dropped");
     }
 }

@@ -128,8 +128,9 @@ impl<T: Remote + Send + 'static> UcxAtomicFetchFuture<T> {
     }
     pub(crate) fn block(mut self) -> T {
         self.exec_op();
-        let request = self.request.take().expect("ucx request doesnt exist");
-        request.wait().expect("Failed to wait for UcxRequest");
+        if let Some(request) = self.request.take() {
+            request.wait().expect("Failed to wait for UcxRequest");
+        }
         *self.result
     }
 
@@ -139,8 +140,9 @@ impl<T: Remote + Send + 'static> UcxAtomicFetchFuture<T> {
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.clone().spawn_task(
             async move {
-                let request = self.request.take().expect("ucx request doesnt exist");
-                request.wait().expect("Failed to wait for UcxRequest");
+                if let Some(request) = self.request.take() {
+                    request.wait().expect("Failed to wait for UcxRequest");
+                }
                 *self.result
             },
             counters,
@@ -171,8 +173,9 @@ impl<T: Remote + Send + 'static> Future for UcxAtomicFetchFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
-        let request = self.request.take().expect("ucx request doesnt exist");
-        request.wait().expect("Failed to wait for UcxRequest");
+        if let Some(request) = self.request.take() {
+            request.wait().expect("Failed to wait for UcxRequest");
+        }
         Poll::Ready(*self.result)
     }
 }

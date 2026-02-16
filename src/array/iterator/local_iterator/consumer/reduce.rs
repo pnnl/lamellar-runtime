@@ -127,7 +127,6 @@ where
     }
 }
 
-
 /// This handle allows you to wait for the completion of a local iterator reduce operation.
 #[pin_project(PinnedDrop)]
 pub struct LocalIterReduceHandle<T, F> {

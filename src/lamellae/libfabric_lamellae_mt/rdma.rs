@@ -467,8 +467,14 @@ impl CommAllocRdma for LibfabricMtAlloc {
         for pe in 0..self.num_pes() {
             if pe != self.ofi.my_pe {
                 unsafe {
-                    LibfabricMtAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), false)
-                        .expect("error in put_all_unmanaged")
+                    LibfabricMtAlloc::inner_put(
+                        &self,
+                        pe,
+                        offset,
+                        std::slice::from_ref(&src),
+                        false,
+                    )
+                    .expect("error in put_all_unmanaged")
                 };
             } else {
                 let dst = CommAllocAddr(self.start() + offset);
@@ -590,7 +596,6 @@ impl CommAllocRdma for LibfabricMtAlloc {
                 .expect("error in blocking_get_buffer")
         };
         dst
-        
     }
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,

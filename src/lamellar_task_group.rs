@@ -860,13 +860,13 @@ impl LamellarTaskGroup {
     fn wait_all(&self) {
         RuntimeWarning::BlockingCall("wait_all", "await_all().await").print();
         self.team.lamellae.comm().wait_all(); // we want to wait on operations from all threads
-        // println!(
-        //     "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
-        //     self.team.world_pe,
-        //     self.counters.send_req_cnt.load(Ordering::SeqCst),
-        //     self.counters.outstanding_reqs.load(Ordering::SeqCst),
-        //     self.counters.launched_req_cnt.load(Ordering::SeqCst)
-        // );
+                                              // println!(
+                                              //     "in task group wait_all mype: {:?} cnt: {:?} {:?} {:?}",
+                                              //     self.team.world_pe,
+                                              //     self.counters.send_req_cnt.load(Ordering::SeqCst),
+                                              //     self.counters.outstanding_reqs.load(Ordering::SeqCst),
+                                              //     self.counters.launched_req_cnt.load(Ordering::SeqCst)
+                                              // );
         let mut temp_now = Instant::now();
         let mut orig_reqs = self.counters.send_req_cnt.load(Ordering::SeqCst);
         let mut orig_launched = self.counters.launched_req_cnt.load(Ordering::SeqCst);

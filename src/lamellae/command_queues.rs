@@ -701,16 +701,15 @@ impl InnerCQ {
                                                                                     // recv_buffer.index_addr(0),send_buf, send_buf[0],send_buf[0].as_bytes()};
                     stats!(PE_SENDS[1][dst].fetch_add(1, Ordering::SeqCst));
                     debug!("sending cmd to dst({dst}) {:?}", send_buf[0]);
-                    let _ = recv_buffer
-                        .put_unmanaged::<CmdMsg>(
-                            // &self.scheduler,
-                            // vec![],
-                            send_buf[0], //send_buf.sub_slice(dst..=dst),
-                            dst,
-                            0,
-                        );
+                    let _ = recv_buffer.put_unmanaged::<CmdMsg>(
+                        // &self.scheduler,
+                        // vec![],
+                        send_buf[0], //send_buf.sub_slice(dst..=dst),
+                        dst,
+                        0,
+                    );
                     recv_buffer.wait();
-                        // .block();
+                    // .block();
                     // .spawn();
                     self.put_amt
                         .fetch_add(send_buf[0].as_bytes().len(), Ordering::Relaxed);
@@ -1020,7 +1019,7 @@ impl InnerCQ {
                 }
             }
             self.comm.thread_wait(); //only need to wait on puts issued by this thread
-            // join_all(txs).await;
+                                     // join_all(txs).await;
         }
     }
 
@@ -1252,6 +1251,7 @@ impl InnerCQ {
 impl Drop for InnerCQ {
     #[tracing::instrument(skip_all, level = "debug")]
     fn drop(&mut self) {
+        debug!("dropping InnerCQ");
         let old = std::mem::replace(
             Arc::get_mut(&mut self.release_cmd).unwrap(),
             Box::new(CmdMsg {
@@ -1286,6 +1286,7 @@ impl Drop for InnerCQ {
         );
         let _ = Box::into_raw(old);
         self.cmd_buffers.clear();
+        debug!("dropped InnerCQ");
     }
 }
 
@@ -1300,7 +1301,7 @@ pub(crate) struct CommandQueue {
     _free_cmd: CommAlloc,
     _cmd_buffers: Vec<Arc<Vec<CommAlloc>>>,
     _comm: Arc<Comm>,
-    scheduler: Arc<Scheduler>,
+    pub(crate) scheduler: Arc<Scheduler>,
     active: Arc<AtomicU8>,
 }
 

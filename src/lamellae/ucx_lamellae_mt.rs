@@ -89,12 +89,7 @@ impl std::fmt::Debug for UcxMt {
 }
 
 impl UcxMt {
-    fn new(
-        my_pe: usize,
-        num_pes: usize,
-        ucx_comm: Arc<Comm>,
-        scheduler: Arc<Scheduler>,
-    ) -> UcxMt {
+    fn new(my_pe: usize, num_pes: usize, ucx_comm: Arc<Comm>, scheduler: Arc<Scheduler>) -> UcxMt {
         let active = Arc::new(AtomicU8::new(CmdQStatus::Active as u8));
         UcxMt {
             my_pe: my_pe,
@@ -102,11 +97,7 @@ impl UcxMt {
             ucx_comm: ucx_comm.clone(),
             active: active.clone(),
             cq: Arc::new(CommandQueue::new(
-                ucx_comm,
-                scheduler,
-                my_pe,
-                num_pes,
-                active,
+                ucx_comm, scheduler, my_pe, num_pes, active,
             )),
         }
     }

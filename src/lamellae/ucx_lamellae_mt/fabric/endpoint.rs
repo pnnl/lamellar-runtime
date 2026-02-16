@@ -9,10 +9,10 @@ use tracing::trace;
 use lamellar_ucx_sys::{
     ucp_atomic_op_nbx, ucp_atomic_op_t, ucp_dt_make_contig, ucp_ep_close_nbx, ucp_ep_create,
     ucp_ep_flush_nbx, ucp_ep_h, ucp_ep_params, ucp_ep_params_field, ucp_err_handler,
-    ucp_err_handling_mode_t, ucp_get_nbx, ucp_op_attr_t, ucp_put_nbx,
-    ucp_request_check_status, ucp_request_free, ucp_request_param_t,
-    ucp_request_param_t__bindgen_ty_1, ucp_request_param_t__bindgen_ty_2, ucs_memory_type,
-    ucs_sock_addr, ucs_status_ptr_t, ucs_status_t, UCS_PTR_IS_PTR,
+    ucp_err_handling_mode_t, ucp_get_nbx, ucp_op_attr_t, ucp_put_nbx, ucp_request_check_status,
+    ucp_request_free, ucp_request_param_t, ucp_request_param_t__bindgen_ty_1,
+    ucp_request_param_t__bindgen_ty_2, ucs_memory_type, ucs_sock_addr, ucs_status_ptr_t,
+    ucs_status_t, UCS_PTR_IS_PTR,
 };
 
 use super::{error::Error, memory_region::RKey, worker::Worker};
@@ -154,7 +154,6 @@ impl Endpoint {
         rkey: &RKey,
         managed: bool,
     ) -> Option<UcxRequest> {
-
         trace!(target: "ucx", "endpoint put to remote addr {:x}, size {}", remote_addr, size);
         // unsafe extern "C" fn callback(request: *mut c_void, status: ucs_status_t) {
         //     let request = &mut *(request as *mut Request);

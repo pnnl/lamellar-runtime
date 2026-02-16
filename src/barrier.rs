@@ -1,6 +1,15 @@
 use crate::{
-    utils::{ print_stats},
-    active_messaging::batching::{simple_batcher::io_task_stats, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS}, env_var::config, lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae}, lamellar_arch::LamellarArchRT, lamellar_request::LamellarRequest, memregion::MemoryRegion, scheduler::Scheduler, warnings::RuntimeWarning
+    active_messaging::batching::{
+        simple_batcher::io_task_stats, BATCHER_AM_PE_RECV_CNTS, BATCHER_AM_PE_SEND_CNTS,
+    },
+    env_var::config,
+    lamellae::{AllocationType, CommAllocRdma, CommProgress, CommSlice, Lamellae},
+    lamellar_arch::LamellarArchRT,
+    lamellar_request::LamellarRequest,
+    memregion::MemoryRegion,
+    scheduler::Scheduler,
+    utils::print_stats,
+    warnings::RuntimeWarning,
 };
 
 use futures_util::Future;
@@ -61,9 +70,11 @@ impl Barrier {
 
                 let mem_region =
                     MemoryRegion::new(num_rounds * n, &scheduler, vec![], &lamellae, alloc.clone());
-                    let mem_region_comm_slice = unsafe { mem_region.as_comm_slice().expect(
-                    "MemoryRegion should be registered and able to be converted to CommSlice",
-                ) };
+                let mem_region_comm_slice = unsafe {
+                    mem_region.as_comm_slice().expect(
+                        "MemoryRegion should be registered and able to be converted to CommSlice",
+                    )
+                };
                 let mut buffs = vec![];
                 for r in 0..n {
                     trace!(
@@ -71,11 +82,9 @@ impl Barrier {
                         alloc
                     );
                     buffs.push(
-                        mem_region_comm_slice.sub_slice(r * num_rounds.. (r + 1) * num_rounds),
+                        mem_region_comm_slice.sub_slice(r * num_rounds..(r + 1) * num_rounds),
                     );
-
                 }
-                
 
                 // let send_buf = MemoryRegion::new(1, &scheduler, vec![], &lamellae, alloc);
 
@@ -93,7 +102,6 @@ impl Barrier {
         } else {
             (None, vec![])
         };
-
 
         let bar = Barrier {
             my_pe,
@@ -145,7 +153,7 @@ impl Barrier {
 
         if s.elapsed().as_secs_f64() > config().deadlock_warning_timeout {
             self.lamellae.wait_all_print();
-            
+
             println!(
                 "[{:?}][{:?}, {:?}] round: {:?} i: {:?} teamsend_pe: {:?} team_recv_pe: {:?} recv_pe: {:?} id: {:?} buf {:?} AM send/recv counts: {:?} {:?} {:?}",
                 std::thread::current().id(),
@@ -162,8 +170,7 @@ impl Barrier {
                         .as_slice(),
                     print_stats!(&*BATCHER_AM_PE_SEND_CNTS),
                     print_stats!(&*BATCHER_AM_PE_RECV_CNTS),
-                    io_task_stats(),
-                    
+                        io_task_stats(),
             );
             self.print_bar();
             *s = Instant::now();
@@ -211,7 +218,7 @@ impl Barrier {
                         for i in 1..=self.n {
                             let team_send_pe =
                                 (my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
-                                trace!(
+                            trace!(
                                     "[{:?}][ {:?} {:?}] round: {:?}  i: {:?} sending to [ ({:?}) ] id: {:?} buf {:?}",
                                     std::thread::current().id(),
                                     self.my_pe,
@@ -222,25 +229,22 @@ impl Barrier {
                                     barrier_id,
                                         self.barrier_buf[i - 1]
                                             .as_slice()
-                                    
-                                );
+                                    );
                             if team_send_pe != my_index {
                                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-                                
+
                                 // println!("barrier put_slice 1");
-                                    // reqs.push(
-                                    self.barrier_buf[i - 1]
-                                        .put_unmanaged(barrier_id, send_pe,round );
-                                    // );
-                                    // let _ = self.barrier_buf[i - 1]
-                                    //     .put_comm_slice(
-                                    //         send_pe,
-                                    //         round,
-                                    //         CommSlice::from_slice(barrier_slice),
-                                    //     )
-                                    //     .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
-                                    //safe as we are the only ones writing to our index
-                                
+                                // reqs.push(
+                                self.barrier_buf[i - 1].put_unmanaged(barrier_id, send_pe, round);
+                                // );
+                                // let _ = self.barrier_buf[i - 1]
+                                //     .put_comm_slice(
+                                //         send_pe,
+                                //         round,
+                                //         CommSlice::from_slice(barrier_slice),
+                                //     )
+                                //     .spawn(); //no need to pass in counters as we wont leave until the barrier is complete anyway
+                                //safe as we are the only ones writing to our index
                             }
                         }
                         // join_all(reqs).await;
@@ -264,25 +268,23 @@ impl Barrier {
                                     recv_pe,
                                     team_recv_pe,
                                     barrier_id,
-                                    self.barrier_buf[i - 1].as_slice() 
+                                    self.barrier_buf[i - 1].as_slice()
                                 );
-                                
-                                    //safe as  each pe is only capable of writing to its own index
-                                    while self.barrier_buf[i - 1].as_slice()[round] < barrier_id
-                                    {
-                                        self.barrier_timeout(
-                                            &mut s,
-                                            my_index,
-                                            round,
-                                            i,
-                                            team_recv_pe,
-                                            recv_pe,
-                                            barrier_id,
-                                        );
-                                        self.lamellae.comm().flush_all();
-                                        wait_func();
-                                    }
-                                
+
+                                //safe as  each pe is only capable of writing to its own index
+                                while self.barrier_buf[i - 1].as_slice()[round] < barrier_id {
+                                    self.barrier_timeout(
+                                        &mut s,
+                                        my_index,
+                                        round,
+                                        i,
+                                        team_recv_pe,
+                                        recv_pe,
+                                        barrier_id,
+                                    );
+                                    self.lamellae.comm().flush_all();
+                                    wait_func();
+                                }
                             }
                         }
                     }
@@ -383,7 +385,6 @@ impl Barrier {
 //     }
 // }
 
-
 /// A handle to a Lamellar barrier that can be used to wait on the barrier
 #[pin_project(PinnedDrop)]
 pub struct BarrierHandle {
@@ -425,9 +426,8 @@ impl BarrierHandle {
             let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-                
-                    self.barrier_buf[i - 1].put_unmanaged(self.barrier_id, send_pe, round);
-                
+
+                self.barrier_buf[i - 1].put_unmanaged(self.barrier_id, send_pe, round);
             }
         }
         // for req in reqs.into_iter() {
@@ -445,14 +445,12 @@ impl BarrierHandle {
                 .rem_euclid(self.num_pes as isize) as isize;
             // let recv_pe = self.arch.single_iter(team_recv_pe as usize).next().unwrap();
             if team_recv_pe as usize != self.my_index {
-                
-                    //safe as  each pe is only capable of writing to its own index
-                    if self.barrier_buf[i - 1].as_slice()[round] < self.barrier_id {
-                        self.lamellae.comm().thread_flush();
-                        // trace!("waiting for recv pe: {:?} round: {:?} i: {:?}",  team_recv_pe, round, i);
-                        return Some(i);
-                    }
-                
+                //safe as  each pe is only capable of writing to its own index
+                if self.barrier_buf[i - 1].as_slice()[round] < self.barrier_id {
+                    self.lamellae.comm().thread_flush();
+                    // trace!("waiting for recv pe: {:?} round: {:?} i: {:?}",  team_recv_pe, round, i);
+                    return Some(i);
+                }
             }
         }
         // trace!("dont need to wait for any recv pe");

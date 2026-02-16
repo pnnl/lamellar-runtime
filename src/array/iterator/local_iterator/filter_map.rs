@@ -1,6 +1,5 @@
 use crate::array::iterator::{local_iterator::*, IterLockFuture};
 
-
 /// `FilterMap` is an iterator that applies a function to each element of the input iterator,
 /// transforming it into a new type, while also filtering out elements that do not satisfy the function.
 #[derive(Clone, Debug)]

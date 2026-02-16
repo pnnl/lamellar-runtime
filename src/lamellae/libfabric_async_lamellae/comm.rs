@@ -109,7 +109,9 @@ impl CommProgress for LibfabricAsyncComm {
     }
     #[tracing::instrument(skip_all, level = "debug")]
     fn barrier(&self) {
-        self.ofi.barrier().expect("error in libfabric-async barrier");
+        self.ofi
+            .barrier()
+            .expect("error in libfabric-async barrier");
     }
 }
 

@@ -126,7 +126,7 @@ macro_rules! get_buffer_test{
             array.wait_all();
             array.barrier();
             // unsafe{println!("{:?}",shared_mem_region.as_slice());}
-            
+
             let mut i = 0;
             for req in reqs.drain(..){
                 let buf =req.block();
@@ -138,7 +138,7 @@ macro_rules! get_buffer_test{
                     i+=1;
                 }
             }
-            
+
             array.barrier();
             array.wait_all();
             array.barrier();
@@ -214,7 +214,7 @@ macro_rules! get_buffer_test{
                 }
                 sub_array.wait_all();
                 sub_array.barrier();
-                
+
                 let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.block();
@@ -226,7 +226,7 @@ macro_rules! get_buffer_test{
                         i+=1;
                     }
                 }
-                
+
 
                 sub_array.barrier();
                 sub_array.wait_all();

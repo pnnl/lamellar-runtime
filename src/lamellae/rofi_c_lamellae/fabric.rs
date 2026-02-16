@@ -1,30 +1,28 @@
 extern crate libc;
 
-use crate::lamellae::{
-    AllocError, AllocResult, RdmaError, RdmaResult, AllocationType, CommAlloc, CommAllocInner,
-    CommAllocType, calc_alloc_padding_size_align, decode_padding, decode_ref_count,
-    decrement_ref_count, encode_ref_count_and_padding, increment_ref_count,
-    FabricResult,
-};
-use crate::lamellae::FabricError;
 use crate::lamellae::comm::alloc::CommAllocAddr;
+use crate::lamellae::FabricError;
+use crate::lamellae::{
+    calc_alloc_padding_size_align, decode_padding, decode_ref_count, decrement_ref_count,
+    encode_ref_count_and_padding, increment_ref_count, AllocError, AllocResult, AllocationType,
+    CommAlloc, CommAllocInner, CommAllocType, FabricResult, RdmaError, RdmaResult,
+};
 use crate::lamellar_alloc::BTreeAlloc;
 
+use crate::lamellar_alloc::LamellarAlloc;
 use std::any::type_name;
+use std::collections::HashSet;
 use std::ffi::CString;
 use std::os::raw::c_ulong;
-use tracing::{error, debug, trace};
-use std::sync::{Arc, Mutex};
-use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use crate::lamellar_alloc::LamellarAlloc;
-
+use std::sync::{Arc, Mutex};
+use tracing::{debug, error, trace};
 
 #[derive(Debug)]
-pub(crate) struct RofiC{
+pub(crate) struct RofiC {
     pub(crate) num_pes: usize,
     pub(crate) my_pe: usize,
-    mem_regions:  Arc<Mutex<Vec<RofiCAlloc>>>,
+    mem_regions: Arc<Mutex<Vec<RofiCAlloc>>>,
 }
 
 impl RofiC {
@@ -73,10 +71,7 @@ impl RofiC {
         regions.push(alloc_info.clone());
         Ok(alloc_info)
     }
-    pub(crate) fn get_alloc_from_start_addr(
-        &self,
-        addr: CommAllocAddr,
-    ) -> AllocResult<RofiCAlloc> {
+    pub(crate) fn get_alloc_from_start_addr(&self, addr: CommAllocAddr) -> AllocResult<RofiCAlloc> {
         let regions = self.mem_regions.lock().unwrap();
         for a in regions.iter() {
             if a.start() == addr.0 {
@@ -105,7 +100,9 @@ impl RofiC {
         remote_addr: usize,
         num_bytes: usize,
     ) -> CommAlloc {
-        if let Ok(local_addr) = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr) {
+        if let Ok(local_addr) =
+            crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr)
+        {
             let regions = self.mem_regions.lock().unwrap();
             for a in regions.iter() {
                 let start = a.start();
@@ -117,7 +114,10 @@ impl RofiC {
                 }
             }
         }
-        panic!("unable to find allocation for remote pe: {} addr: {:x} num_bytes: {}", remote_pe, remote_addr, num_bytes);
+        panic!(
+            "unable to find allocation for remote pe: {} addr: {:x} num_bytes: {}",
+            remote_pe, remote_addr, num_bytes
+        );
     }
 
     pub(crate) fn local_alloc_and_offset_from_remote_pe_and_addr(
@@ -125,7 +125,9 @@ impl RofiC {
         remote_pe: usize,
         remote_addr: usize,
     ) -> Option<(CommAlloc, usize)> {
-        if let Ok(local_addr) = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr) {
+        if let Ok(local_addr) =
+            crate::lamellae::rofi_c_lamellae::rofi::rofi_c_local_addr(remote_pe, remote_addr)
+        {
             let regions = self.mem_regions.lock().unwrap();
             for a in regions.iter() {
                 let start = a.start();
@@ -138,16 +140,16 @@ impl RofiC {
         None
     }
 
-     pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> AllocResult<usize> {
-         crate::lamellae::rofi_c_lamellae::rofi::rofi_c_remote_addr(pe, local_addr)
-     }
+    pub(crate) fn remote_addr(&self, pe: usize, local_addr: usize) -> AllocResult<usize> {
+        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_remote_addr(pe, local_addr)
+    }
 
     pub(crate) fn wait_all(&self) -> Result<(), ()> {
         let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
         Ok(())
     }
 
-    pub(crate) fn thread_wait(&self)-> Result<(), ()> {
+    pub(crate) fn thread_wait(&self) -> Result<(), ()> {
         let _ = crate::lamellae::rofi_c_lamellae::rofi::rofi_c_wait();
         Ok(())
     }
@@ -168,7 +170,6 @@ enum AllocTable {
     Fabric(Arc<Mutex<Vec<RofiCAlloc>>>),
     Runtime(BTreeAlloc, usize, Arc<Mutex<Vec<RofiCAlloc>>>),
 }
-
 
 pub(crate) struct RofiCAlloc {
     pub(crate) base_data: *mut u8,
@@ -191,9 +192,22 @@ impl std::fmt::Debug for RofiCAlloc {
         let mut temp = f.debug_struct("RofiCAlloc");
         temp.field(
             "sub_data",
-            &format_args!("{:p}-{:p}, {}",self.sub_data, self.sub_data.wrapping_add(self.sub_data_num_bytes),self.sub_data_num_bytes),
+            &format_args!(
+                "{:p}-{:p}, {}",
+                self.sub_data,
+                self.sub_data.wrapping_add(self.sub_data_num_bytes),
+                self.sub_data_num_bytes
+            ),
         )
-        .field("base_data", &format_args!("{:p}-{:p}, {}", self.base_data, self.base_data.wrapping_add(self.base_data_num_bytes), self.base_data_num_bytes  ))
+        .field(
+            "base_data",
+            &format_args!(
+                "{:p}-{:p}, {}",
+                self.base_data,
+                self.base_data.wrapping_add(self.base_data_num_bytes),
+                self.base_data_num_bytes
+            ),
+        )
         .field("my_pe", &self.my_pe)
         .field("num_pes", &self.num_pes)
         .field(
@@ -229,7 +243,12 @@ impl std::fmt::Debug for RofiCAlloc {
 
 impl Clone for RofiCAlloc {
     fn clone(&self) -> Self {
-        trace!("RofiCAlloc::clone start base={:p} sub={:p} bytes={}", self.base_data, self.sub_data, self.sub_data_num_bytes);
+        trace!(
+            "RofiCAlloc::clone start base={:p} sub={:p} bytes={}",
+            self.base_data,
+            self.sub_data,
+            self.sub_data_num_bytes
+        );
         let fab = self.increment_fabric_ref_count();
         trace!("RofiCAlloc::clone incremented fabric_ref_count={}", fab);
         if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
@@ -253,12 +272,6 @@ impl Clone for RofiCAlloc {
 unsafe impl Sync for RofiCAlloc {}
 unsafe impl Send for RofiCAlloc {}
 
-
-
-
-
-
-
 impl RofiCAlloc {
     pub(crate) fn start(&self) -> usize {
         self.sub_data as usize
@@ -278,7 +291,7 @@ impl RofiCAlloc {
         let sub_data = base_data;
 
         // total bytes allocated at base_data = user data + padding -- padding includes the refcount size
-        let base_data_num_bytes = data_num_bytes + padding ;
+        let base_data_num_bytes = data_num_bytes + padding;
 
         let alloc = RofiCAlloc {
             base_data,
@@ -312,7 +325,13 @@ impl RofiCAlloc {
             return Err(AllocError::InvalidSubAlloc(offset, len));
         }
         let new_data = unsafe { self.sub_data.add(offset) };
-        trace!("RofiCAlloc::sub_alloc offset={} len={} base={:p} sub={:p}", offset, len, self.base_data, self.sub_data);
+        trace!(
+            "RofiCAlloc::sub_alloc offset={} len={} base={:p} sub={:p}",
+            offset,
+            len,
+            self.base_data,
+            self.sub_data
+        );
         let fab = self.increment_fabric_ref_count();
         trace!("RofiCAlloc::sub_alloc fabric_ref_count={}", fab);
         if let AllocTable::Runtime(_, _, _) = &self.alloc_table {
@@ -339,7 +358,7 @@ impl RofiCAlloc {
         alloc_table: BTreeAlloc,
         offset: usize,
         padding: usize,
-        len: usize
+        len: usize,
     ) -> AllocResult<RofiCAlloc> {
         if offset + len > self.sub_data_num_bytes {
             return Err(AllocError::InvalidSubAlloc(offset, len));
@@ -348,7 +367,13 @@ impl RofiCAlloc {
         let new_data_bytes = len - padding - std::mem::size_of::<AtomicUsize>();
         let new_data = unsafe { self.sub_data.add(offset) };
 
-        trace!("RofiCAlloc::rt_alloc offset={} len={} padding={} base={:p}", offset, len, padding, self.base_data);
+        trace!(
+            "RofiCAlloc::rt_alloc offset={} len={} padding={} base={:p}",
+            offset,
+            len,
+            padding,
+            self.base_data
+        );
         let fab = self.increment_fabric_ref_count();
         trace!("RofiCAlloc::rt_alloc incremented fabric_ref_count={}", fab);
         let ref_cnt_offset = offset + new_data_bytes + padding;
@@ -367,11 +392,12 @@ impl RofiCAlloc {
             my_pe: self.my_pe,
             num_pes: self.num_pes,
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
-            rt_ref_cnt_offset: ref_cnt_offset,  //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
+            rt_ref_cnt_offset: ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             alloc_table: AllocTable::Runtime(alloc_table, new_data as usize, allocs),
         };
         unsafe {
-            (&*(alloc.base_data.add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize)).store(encoded, Ordering::SeqCst);
+            (&*(alloc.base_data.add(alloc.rt_ref_cnt_offset) as *mut AtomicUsize))
+                .store(encoded, Ordering::SeqCst);
         }
         trace!(target: "rofi", "RofiCAlloc::rt_alloc created rt alloc base={:p} sub={:p} sub_bytes={} rt_ref_offset={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes, alloc.rt_ref_cnt_offset);
         Ok(alloc)
@@ -382,22 +408,27 @@ impl RofiCAlloc {
             AllocTable::Fabric(allocs) => allocs.clone(),
             AllocTable::Runtime(_, _, allocs) => allocs.clone(),
         };
-        let ref_cnt_offset = ((self.start() - self.base_data as usize) + self.num_bytes()) - std::mem::size_of::<AtomicUsize>();
-        let encoded_ref_count = unsafe { (&*(self.base_data.add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst) };
+        let ref_cnt_offset = ((self.start() - self.base_data as usize) + self.num_bytes())
+            - std::mem::size_of::<AtomicUsize>();
+        let encoded_ref_count = unsafe {
+            (&*(self.base_data.add(ref_cnt_offset) as *const AtomicUsize)).load(Ordering::SeqCst)
+        };
         let padding = decode_padding(encoded_ref_count);
 
         let alloc = RofiCAlloc {
             base_data: self.base_data,
             base_data_num_bytes: self.base_data_num_bytes,
             sub_data: self.sub_data,
-            sub_data_num_bytes: self.sub_data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
+            sub_data_num_bytes: self.sub_data_num_bytes
+                - padding
+                - std::mem::size_of::<AtomicUsize>(),
             my_pe: self.my_pe,
             num_pes: self.num_pes,
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             alloc_table: AllocTable::Runtime(alloc_table, self.sub_data as usize, allocs),
         };
-        
+
         trace!(target: "rofi", "RofiCAlloc::as_rt_alloc base={:p} sub={:p} new_sub_bytes={} rt_ref_offset={}", alloc.base_data, alloc.sub_data, alloc.sub_data_num_bytes, alloc.rt_ref_cnt_offset);
         Ok(alloc)
     }
@@ -415,22 +446,26 @@ impl RofiCAlloc {
     }
 
     pub(crate) fn increment_fabric_ref_count(&self) -> usize {
-        let ref_count = unsafe { &*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+        let ref_count =
+            unsafe { &*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
         increment_ref_count(ref_count)
     }
 
     pub(crate) fn decrement_fabric_ref_count(&self) -> usize {
-        let ref_count = unsafe { &*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
+        let ref_count =
+            unsafe { &*(self.base_data.add(self.fabric_ref_cnt_offset) as *const AtomicUsize) };
         decrement_ref_count(ref_count)
     }
 
     pub(crate) fn increment_rt_ref_count(&self) -> usize {
-        let ref_count = unsafe { &*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+        let ref_count =
+            unsafe { &*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
         increment_ref_count(ref_count)
     }
 
     pub(crate) fn decrement_rt_ref_count(&self) -> usize {
-        let ref_count = unsafe { &*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
+        let ref_count =
+            unsafe { &*(self.base_data.add(self.rt_ref_cnt_offset) as *const AtomicUsize) };
         decrement_ref_count(ref_count)
     }
 
@@ -451,26 +486,44 @@ impl RofiCAlloc {
 
 impl Drop for RofiCAlloc {
     fn drop(&mut self) {
-        trace!("RofiCAlloc::drop enter base={:p} sub={:p} bytes={}", self.base_data, self.sub_data, self.sub_data_num_bytes);
+        trace!(
+            "RofiCAlloc::drop enter base={:p} sub={:p} bytes={}",
+            self.base_data,
+            self.sub_data,
+            self.sub_data_num_bytes
+        );
         let fabric_ref_count = self.decrement_fabric_ref_count();
-        trace!("RofiCAlloc::drop after decrement fabric_ref_count={}", fabric_ref_count);
+        trace!(
+            "RofiCAlloc::drop after decrement fabric_ref_count={}",
+            fabric_ref_count
+        );
         match &self.alloc_table {
             AllocTable::Fabric(allocs) => {
                 if fabric_ref_count == 2 {
-                        trace!("RofiCAlloc::drop freeing fabric alloc base={:p}", self.base_data);
-                        let mut allocs = allocs.lock().unwrap();
-                        let len = allocs.len();
-                        allocs.retain(|a| a.base_data != self.base_data);
-                        if len == allocs.len() {
-                            error!("RofiCAlloc::drop failed to free alloc: {:?}", self);
-                            panic!("failed to free alloc: {:?}", self);
-                        }
-                        unsafe { crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(self.base_data as usize) };
+                    trace!(
+                        "RofiCAlloc::drop freeing fabric alloc base={:p}",
+                        self.base_data
+                    );
+                    let mut allocs = allocs.lock().unwrap();
+                    let len = allocs.len();
+                    allocs.retain(|a| a.base_data != self.base_data);
+                    if len == allocs.len() {
+                        error!("RofiCAlloc::drop failed to free alloc: {:?}", self);
+                        panic!("failed to free alloc: {:?}", self);
+                    }
+                    unsafe {
+                        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_release(
+                            self.base_data as usize,
+                        )
+                    };
                 }
             }
             AllocTable::Runtime(rt_alloc_table, addr, allocs) => {
                 let rt_ref_count = self.decrement_rt_ref_count();
-                trace!("RofiCAlloc::drop after decrement rt_ref_count={}", rt_ref_count);
+                trace!(
+                    "RofiCAlloc::drop after decrement rt_ref_count={}",
+                    rt_ref_count
+                );
                 if rt_ref_count == 1 {
                     trace!("RofiCAlloc::drop freeing runtime alloc addr={:x}", addr);
                     rt_alloc_table.free(*addr).expect(&format!(
@@ -480,7 +533,10 @@ impl Drop for RofiCAlloc {
                     ));
                 }
                 if fabric_ref_count == 2 {
-                    trace!("RofiCAlloc::drop freeing fabric alloc (runtime) base={:p}", self.base_data);
+                    trace!(
+                        "RofiCAlloc::drop freeing fabric alloc (runtime) base={:p}",
+                        self.base_data
+                    );
                     let mut allocs = allocs.lock().unwrap();
                     let len = allocs.len();
                     allocs.retain(|a| a.base_data != self.base_data);
@@ -503,15 +559,10 @@ impl From<RofiCAlloc> for CommAlloc {
     }
 }
 
-
-
-
-
 #[derive(Clone, Debug)]
 pub(crate) struct OneSidedRofiCAlloc {
     pub(crate) alloc: RofiCAlloc,
 }
-
 
 impl OneSidedRofiCAlloc {
     pub(crate) fn start(&self) -> usize {
@@ -521,10 +572,15 @@ impl OneSidedRofiCAlloc {
         self.alloc.num_bytes()
     }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> Option<OneSidedRofiCAlloc> {
-        self.alloc.sub_alloc(offset, size).ok().map(|a| OneSidedRofiCAlloc { alloc: a })
+        self.alloc
+            .sub_alloc(offset, size)
+            .ok()
+            .map(|a| OneSidedRofiCAlloc { alloc: a })
     }
     pub(crate) fn wait(&self) {
-        self.alloc.wait().expect("error waiting on onesided rofi-c alloc");
+        self.alloc
+            .wait()
+            .expect("error waiting on onesided rofi-c alloc");
     }
 }
 

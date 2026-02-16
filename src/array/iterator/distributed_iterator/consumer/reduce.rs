@@ -20,8 +20,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-
-
 #[derive(Clone, Debug)]
 pub(crate) struct Reduce<I, F> {
     pub(crate) iter: I,

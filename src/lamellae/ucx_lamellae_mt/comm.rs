@@ -139,7 +139,10 @@ impl Drop for UcxMtComm {
 
         // let _ = self.ucx.clear_allocs();
         let world_ref_count = Arc::strong_count(&self.ucx);
-        debug!("Dropping UcxMtComm: ucx world ref count: {}", world_ref_count);
+        debug!(
+            "Dropping UcxMtComm: ucx world ref count: {}",
+            world_ref_count
+        );
         let _ = self.ucx.barrier();
     }
 }
