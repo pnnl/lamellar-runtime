@@ -32,6 +32,9 @@ use work_stealing3::WorkStealing3;
 pub(crate) mod async_std_executor;
 use async_std_executor::AsyncStdRt;
 
+pub(crate) mod single_thread;
+use single_thread::SingleThread;
+
 #[cfg(feature = "tokio-executor")]
 pub(crate) mod tokio_executor;
 #[cfg(feature = "tokio-executor")]
@@ -96,6 +99,8 @@ pub enum ExecutorType {
     #[cfg(feature = "tokio-executor")]
     /// The tokio executor
     Tokio,
+    /// Run every submitted future inline on the calling thread (no worker threads).
+    SingleThread,
     // Dyn(impl LamellarExecutor),
 }
 
@@ -231,6 +236,7 @@ pub(crate) enum Executor {
     AsyncStd(AsyncStdRt),
     #[cfg(feature = "tokio-executor")]
     Tokio(TokioRt),
+    SingleThread(SingleThread),
 }
 
 #[derive(Debug)]
@@ -655,10 +661,13 @@ impl Scheduler {
 
     pub(crate) fn max_threads(executor: &ExecutorType, num_workers: usize) -> usize {
         match executor {
-            ExecutorType::LamellarWorkStealing | ExecutorType::LamellarWorkStealing2 | ExecutorType::LamellarWorkStealing3 => std::cmp::max(2, num_workers), // at least one worker + main thread, for more than one worker, the main thread is considered a worker.
-            ExecutorType::AsyncStd => num_workers +1, // the main thread + workers
+            ExecutorType::LamellarWorkStealing
+            | ExecutorType::LamellarWorkStealing2
+            | ExecutorType::LamellarWorkStealing3 => std::cmp::max(2, num_workers), // at least one worker + main thread, for more than one worker, the main thread is considered a worker.
+            ExecutorType::AsyncStd => num_workers + 1, // the main thread + workers
             #[cfg(feature = "tokio-executor")]
-            ExecutorType::Tokio => num_workers +1, //the main thread + workers
+            ExecutorType::Tokio => num_workers + 1, //the main thread + workers
+            ExecutorType::SingleThread => 1,
         }
     }
     pub(crate) fn create_scheduler(
@@ -683,6 +692,7 @@ impl Scheduler {
 
             #[cfg(feature = "tokio-executor")]
             ExecutorType::Tokio => TokioRt::new(num_workers).into(),
+            ExecutorType::SingleThread => SingleThread::new().into(),
         });
 
         let batcher = match config().batcher.as_str() {
@@ -708,8 +718,3 @@ impl Scheduler {
         )
     }
 }
-
-
-
-
-

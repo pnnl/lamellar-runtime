@@ -133,7 +133,7 @@ impl LamellaeShutdown for RofiC {
         while self.active.load(Ordering::SeqCst) != CmdQStatus::Finished as u8
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
-            std::thread::yield_now();
+            self.cq.scheduler.exec_task();
         }
         // println!("rofi_c Lamellae shut down");
     }
