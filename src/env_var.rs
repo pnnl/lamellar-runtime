@@ -41,6 +41,7 @@
 //! - `LAMELLAR_AM_SIZE_THRESHOLD` - the threshold for an activemessage (in bytes) on whether it will be sent directly or aggregated, default: 100000
 //! - `LAMELLAR_ROFI_PROVIDER` - the provider for the rofi backend (only used with the rofi backend), default: "verbs"
 //! - `LAMELLAR_ROFI_DOMAIN` - the domain for the rofi backend (only used with the rofi backend), default: ""
+//! - `LAMELLAR_DISABLE_ON_NODE_SHMEM` - set to true or 1 to disable same-node shared-memory fast path (UCX/libfabric), default: false
 
 use serde::Deserialize;
 use std::sync::OnceLock;
@@ -230,6 +231,10 @@ pub struct Config {
     pub rofi_provider: String,
     #[serde(default = "default_rofi_domain")]
     pub rofi_domain: String,
+
+    /// Disable same-node shared-memory fast path for UCX/libfabric backends, default: false
+    #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
+    pub disable_on_node_shmem: Option<bool>,
 }
 
 #[doc(hidden)]

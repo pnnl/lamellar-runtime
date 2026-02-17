@@ -22,12 +22,12 @@ use crate::lamellae::libfabric_lamellae_mt::comm::LibfabricMtComm;
 #[cfg(feature = "enable-libfabric-async")]
 use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae_mt::comm::UcxMtComm;
-#[cfg(feature = "enable-rofi-c")]
-use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 use crate::lamellae::{
     local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
     SerializedData,
@@ -130,11 +130,11 @@ pub(crate) trait CommMem {
 #[enum_dispatch]
 pub(crate) trait CommProgress {
     fn flush_all(&self);
-    fn thread_flush(&self){
+    fn thread_flush(&self) {
         self.flush_all();
     }
     fn wait_all(&self);
-    fn thread_wait(&self){
+    fn thread_wait(&self) {
         self.wait_all();
     }
     fn barrier(&self);

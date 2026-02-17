@@ -11,25 +11,38 @@ use memory_region::{MemoryHandle, MemoryHandleInner, RKey};
 use worker::Worker;
 
 use crate::{
+    config,
     lamellae::{
-        comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
+        comm::alloc::*,
+        AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc, CommAllocAddr,
+        CommAllocInner, CommAllocType, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
 
+#[cfg(feature = "enable-on-node-shmem")]
+use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
+
 use pmi::{pmi::Pmi, pmix::PmiX};
 
+use std::ffi::c_void;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
 };
 use tracing::{debug, trace};
 
+
 pub(crate) struct UcxWorld {
     pmi: Arc<PmiX>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
+    #[cfg(feature = "enable-on-node-shmem")]
+    same_node_pes: Vec<bool>,
+    #[cfg(feature = "enable-on-node-shmem")]
+    disable_on_node_shmem: bool,
+    #[cfg(feature = "enable-on-node-shmem")]
+    job_id: usize,
     context: Arc<Context>,
     worker: Arc<Worker>,
     endpoints: Vec<Arc<Endpoint>>,
@@ -37,6 +50,9 @@ pub(crate) struct UcxWorld {
     remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     exchange_buffer: Option<UcxAlloc>,
 }
+
+#[cfg(feature = "enable-on-node-shmem")]
+static UCX_SHMEM_ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 
 impl std::fmt::Debug for UcxWorld {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -69,6 +85,23 @@ impl UcxWorld {
 
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
+        #[cfg(feature = "enable-on-node-shmem")]
+        let disable_on_node_shmem = config().disable_on_node_shmem.unwrap_or(false);
+        #[cfg(feature = "enable-on-node-shmem")]
+        let mut same_node_pes = vec![false; num_pes];
+        #[cfg(feature = "enable-on-node-shmem")]
+        if !disable_on_node_shmem {
+            let pes_on_node = my_pmi.ranks_on_node();
+            if !pes_on_node.is_empty() {
+                for pe in pes_on_node {
+                    if pe < num_pes {
+                        same_node_pes[pe] = true;
+                    }
+                }
+            }
+        }
+        #[cfg(feature = "enable-on-node-shmem")]
+        let job_id = my_pmi.job_id();
         let mem_handles = Arc::new(Mutex::new(Vec::new()));
         let remote_keys = Arc::new(Mutex::new(Vec::new()));
         let exchange_buffer = Self::initial_alloc(
@@ -78,6 +111,12 @@ impl UcxWorld {
             &my_pmi,
             num_pes,
             my_pe,
+            #[cfg(feature = "enable-on-node-shmem")]
+            &same_node_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            disable_on_node_shmem,
+            #[cfg(feature = "enable-on-node-shmem")]
+            job_id,
             mem_handles.clone(),
             remote_keys.clone(),
         )
@@ -86,6 +125,12 @@ impl UcxWorld {
             pmi: my_pmi,
             my_pe,
             num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            disable_on_node_shmem,
+            #[cfg(feature = "enable-on-node-shmem")]
+            job_id,
             context,
             worker,
             endpoints,
@@ -130,6 +175,12 @@ impl UcxWorld {
         pmi: &Arc<PmiX>,
         num_pes: usize,
         my_pe: usize,
+        #[cfg(feature = "enable-on-node-shmem")]
+        same_node_pes: &Vec<bool>,
+        #[cfg(feature = "enable-on-node-shmem")]
+        disable_on_node_shmem: bool,
+        #[cfg(feature = "enable-on-node-shmem")]
+        job_id: usize,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
         remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ) -> AllocResult<UcxAlloc> {
@@ -140,7 +191,32 @@ impl UcxWorld {
         drop(mem_handle);
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, 8);
         // debug!("Initial alloc size: {}", size);
-        let mem_handle = MemoryHandleInner::alloc(context, size * num_pes);
+        #[cfg(not(feature = "enable-on-node-shmem"))]
+        let mem_handle = MemoryHandleInner::alloc(context, size);
+        #[cfg(feature = "enable-on-node-shmem")]
+        let (mem_handle, same_node_bases, same_node_segments) = if disable_on_node_shmem {
+            (
+                MemoryHandleInner::alloc(context, size * num_pes),
+                vec![None; num_pes],
+                vec![None; num_pes],
+            )
+        } else {
+            let alloc_id = UCX_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+            let shmem_id = format!("ucx_alloc_{}_pe_{}", alloc_id, my_pe);
+            let local_segment =
+                attach_shmem_segment(job_id, size * num_pes, 8, &shmem_id, alloc_id, true);
+            let mem_handle = MemoryHandleInner::map_existing(
+                context,
+                local_segment.base_ptr() as *mut c_void,
+                size * num_pes,
+            );
+            let (mut same_node_bases, same_node_segments) =
+                build_same_node_segments(same_node_pes, job_id, size * num_pes, 8, alloc_id, my_pe);
+            let mut same_node_segments = same_node_segments;
+            same_node_bases[my_pe] = Some(local_segment.base_ptr() as usize);
+            same_node_segments[my_pe] = Some(Arc::new(local_segment));
+            (mem_handle, same_node_bases, same_node_segments)
+        };
         let buffer_keys = mem_handle.exchange_key_pmi(endpoints, pmi).unwrap();
 
         let mem = MemoryHandle {
@@ -155,6 +231,12 @@ impl UcxWorld {
             padding,
             my_pe,
             num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_pes.clone()),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_bases),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_segments),
             context.clone(),
             worker.clone(),
             endpoints.clone(),
@@ -178,8 +260,39 @@ impl UcxWorld {
     ) -> UcxAlloc {
         //add space for ref count and padding to align it
         let (padding, size, _align) = calc_alloc_padding_size_align(data_size, align);
-
+        #[cfg(not(feature = "enable-on-node-shmem"))]
         let mem_handle = MemoryHandleInner::alloc(&self.context, size);
+
+        #[cfg(feature = "enable-on-node-shmem")]
+        let (mem_handle, same_node_bases, same_node_segments) = if self.disable_on_node_shmem {
+            (
+                MemoryHandleInner::alloc(&self.context, size),
+                vec![None; self.num_pes],
+                vec![None; self.num_pes],
+            )
+        } else {
+            let alloc_id = UCX_SHMEM_ALLOC_ID.fetch_add(1, Ordering::SeqCst);
+            let shmem_id = format!("ucx_alloc_{}_pe_{}", alloc_id, self.my_pe);
+            let local_segment =
+                attach_shmem_segment(self.job_id, size, align, &shmem_id, alloc_id, true);
+            let mem_handle = MemoryHandleInner::map_existing(
+                &self.context,
+                local_segment.base_ptr() as *mut c_void,
+                size,
+            );
+            let (mut same_node_bases, same_node_segments) = build_same_node_segments(
+                &self.same_node_pes,
+                self.job_id,
+                size,
+                align,
+                alloc_id,
+                self.my_pe,
+            );
+            let mut same_node_segments = same_node_segments;
+            same_node_bases[self.my_pe] = Some(local_segment.base_ptr() as usize);
+            same_node_segments[self.my_pe] = Some(Arc::new(local_segment));
+            (mem_handle, same_node_bases, same_node_segments)
+        };
         let buffer_keys = mem_handle
             .exchange_key_alloc(
                 &self.endpoints,
@@ -200,6 +313,12 @@ impl UcxWorld {
             padding,
             self.my_pe,
             self.num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(self.same_node_pes.clone()),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_bases),
+            #[cfg(feature = "enable-on-node-shmem")]
+            Arc::new(same_node_segments),
             self.context.clone(),
             self.worker.clone(),
             self.endpoints.clone(),
@@ -332,6 +451,37 @@ impl UcxWorld {
     }
 }
 
+#[cfg(feature = "enable-on-node-shmem")]
+fn build_same_node_segments(
+    same_node_pes: &Vec<bool>,
+    job_id: usize,
+    size: usize,
+    align: usize,
+    alloc_id: usize,
+    my_pe: usize,
+) -> (Vec<Option<usize>>, Vec<Option<Arc<ShmemSegment>>>) {
+    let mut bases = vec![None; same_node_pes.len()];
+    let mut segments = vec![None; same_node_pes.len()];
+    if same_node_pes.is_empty() {
+        return (bases, segments);
+    }
+
+    for (pe, is_same_node) in same_node_pes.iter().enumerate() {
+        if !*is_same_node {
+            continue;
+        }
+        if pe == my_pe {
+            continue;
+        }
+        let shmem_id = format!("ucx_alloc_{}_pe_{}", alloc_id, pe);
+        let segment = attach_shmem_segment(job_id, size, align, &shmem_id, alloc_id, false);
+        bases[pe] = Some(segment.base_ptr() as usize);
+        segments[pe] = Some(Arc::new(segment));
+    }
+
+    (bases, segments)
+}
+
 impl Drop for UcxWorld {
     fn drop(&mut self) {
         debug!("dropping ucx world");
@@ -347,6 +497,7 @@ impl Drop for UcxWorld {
         // self.remote_keys.lock().unwrap().clear();
         // self.mem_handles.lock().unwrap().clear();
         self.barrier();
+        debug!("dropped ucx world");
     }
 }
 
@@ -369,6 +520,12 @@ pub(crate) struct UcxAlloc {
     data_num_bytes: usize,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
+    #[cfg(feature = "enable-on-node-shmem")]
+    same_node_pes: Arc<Vec<bool>>,
+    #[cfg(feature = "enable-on-node-shmem")]
+    same_node_bases: Arc<Vec<Option<usize>>>,
+    #[cfg(feature = "enable-on-node-shmem")]
+    same_node_segments: Arc<Vec<Option<Arc<ShmemSegment>>>>,
     fabric_ref_cnt_offset: usize,
     rt_ref_cnt_offset: usize,
     context: Arc<Context>,
@@ -389,6 +546,12 @@ impl Clone for UcxAlloc {
             data_num_bytes: self.data_num_bytes,
             my_pe: self.my_pe,
             num_pes: self.num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_pes: self.same_node_pes.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_bases: self.same_node_bases.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_segments: self.same_node_segments.clone(),
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset,
             context: self.context.clone(),
@@ -471,6 +634,12 @@ impl UcxAlloc {
         padding: usize,
         my_pe: usize,
         num_pes: usize,
+        #[cfg(feature = "enable-on-node-shmem")]
+        same_node_pes: Arc<Vec<bool>>,
+        #[cfg(feature = "enable-on-node-shmem")]
+        same_node_bases: Arc<Vec<Option<usize>>>,
+        #[cfg(feature = "enable-on-node-shmem")]
+        same_node_segments: Arc<Vec<Option<Arc<ShmemSegment>>>>,
         context: Arc<Context>,
         worker: Arc<Worker>,
         endpoints: Vec<Arc<Endpoint>>,
@@ -486,6 +655,12 @@ impl UcxAlloc {
             data_num_bytes,
             my_pe,
             num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_bases,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_segments,
             fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context,
@@ -507,6 +682,21 @@ impl UcxAlloc {
     pub(crate) fn num_bytes(&self) -> usize {
         self.data_num_bytes
     }
+    #[cfg(feature = "enable-on-node-shmem")]
+    pub(crate) fn same_node_addr(&self, pe: usize, offset_bytes: usize) -> Option<CommAllocAddr> {
+        self.same_node_bases
+            .get(pe)
+            .and_then(|base| base.map(|addr| CommAllocAddr(addr + offset_bytes)))
+    }
+    #[cfg(feature = "enable-on-node-shmem")]
+    fn shifted_same_node_bases(&self, offset: usize) -> Arc<Vec<Option<usize>>> {
+        Arc::new(
+            self.same_node_bases
+                .iter()
+                .map(|base| base.map(|addr| addr + offset))
+                .collect(),
+        )
+    }
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> AllocResult<Self> {
         if offset + size > self.num_bytes() {
             return Err(AllocError::InvalidSubAlloc(offset, size));
@@ -525,6 +715,12 @@ impl UcxAlloc {
             data_num_bytes: size,
             my_pe: self.my_pe,
             num_pes: self.num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_pes: self.same_node_pes.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_bases: self.shifted_same_node_bases(offset),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_segments: self.same_node_segments.clone(),
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: self.rt_ref_cnt_offset, //keep the same ref count offset as the parent allocation if this is actually a rt alloc, it will be updated when converted to a rt_alloc
             context: self.context.clone(),
@@ -576,6 +772,12 @@ impl UcxAlloc {
             data_num_bytes: size,
             my_pe: self.my_pe,
             num_pes: self.num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_pes: self.same_node_pes.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_bases: self.shifted_same_node_bases(offset),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_segments: self.same_node_segments.clone(),
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context: self.context.clone(),
@@ -626,6 +828,12 @@ impl UcxAlloc {
             data_num_bytes: self.data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
             my_pe: self.my_pe,
             num_pes: self.num_pes,
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_pes: self.same_node_pes.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_bases: self.same_node_bases.clone(),
+            #[cfg(feature = "enable-on-node-shmem")]
+            same_node_segments: self.same_node_segments.clone(),
             fabric_ref_cnt_offset: self.fabric_ref_cnt_offset,
             rt_ref_cnt_offset: ref_cnt_offset,
             context: self.context.clone(),
@@ -701,6 +909,15 @@ impl UcxAlloc {
             self.num_bytes(),
         );
         assert!(offset + src_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        if let Some(addr) = self.same_node_addr(pe, offset) {
+            std::ptr::copy_nonoverlapping(
+                src_addr.as_ptr() as *const u8,
+                addr.as_ptr::<u8>() as *mut u8,
+                src_addr.len() * std::mem::size_of::<T>(),
+            );
+            return None;
+        }
         let (remote_addr, rkey) = &self.remote_keys[pe];
         trace!(target: "ucx",
             "put to pe {} at remote addr {:x} + offset {:?}, final addr: {:x}",
@@ -735,6 +952,15 @@ impl UcxAlloc {
             self.num_bytes(),
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        if let Some(addr) = self.same_node_addr(pe, offset) {
+            std::ptr::copy_nonoverlapping(
+                addr.as_ptr::<u8>(),
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return UcxRequest::new(std::ptr::null_mut(), self.worker.clone(), false);
+        }
         let (remote_addr, rkey) = &self.remote_keys[pe];
         self.endpoints[pe].get(
             dst_addr.as_mut_ptr() as _,
@@ -762,8 +988,18 @@ impl UcxAlloc {
             self.num_bytes(),
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        if let Some(addr) = self.same_node_addr(pe, offset) {
+            std::ptr::copy_nonoverlapping(
+                addr.as_ptr::<u8>(),
+                dst_addr.as_mut_ptr() as *mut u8,
+                dst_addr.len() * std::mem::size_of::<T>(),
+            );
+            return;
+        }
+
         let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.endpoints[pe]
+        self.endpoints[pe]
             .blocking_get(
                 dst_addr.as_mut_ptr() as _,
                 dst_addr.len() * std::mem::size_of::<T>(),
@@ -773,7 +1009,7 @@ impl UcxAlloc {
             .unwrap();
     }
 
-    pub(crate) fn inner_atomic_op<T: Copy>(
+    pub(crate) fn inner_atomic_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,
@@ -781,7 +1017,14 @@ impl UcxAlloc {
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
-        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        {
+            if let Some(addr) = self.same_node_addr(pe, offset) {
+                crate::lamellae::comm::atomic::net_atomic_op(op, &addr);
+                return None;
+            }
+        }
         match op {
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
@@ -791,7 +1034,7 @@ impl UcxAlloc {
         }
     }
 
-    pub(crate) fn inner_atomic_fetch_op<T: Copy>(
+    pub(crate) fn inner_atomic_fetch_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,
@@ -799,7 +1042,14 @@ impl UcxAlloc {
         result: &mut [T],
     ) -> UcxRequest {
         let offset = offset * std::mem::size_of::<T>();
-        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        {
+            if let Some(addr) = self.same_node_addr(pe, offset) {
+                crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
+                return UcxRequest::new(std::ptr::null_mut(), self.worker.clone(), false);
+            }
+        }
         match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
@@ -807,7 +1057,7 @@ impl UcxAlloc {
             }
             AtomicOp::Write(val) => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
-                    self.endpoints[pe].atomic_swap(
+                self.endpoints[pe].atomic_swap(
                     *val,
                     result.as_mut_ptr(),
                     remote_addr + offset,
@@ -818,7 +1068,7 @@ impl UcxAlloc {
         }
     }
 
-    pub(crate) fn blocking_inner_atomic_fetch_op<T: Copy>(
+    pub(crate) fn blocking_inner_atomic_fetch_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,
@@ -826,7 +1076,14 @@ impl UcxAlloc {
         result: &mut [T],
     ) {
         let offset = offset * std::mem::size_of::<T>();
-        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        {    
+            if let Some(addr) = self.same_node_addr(pe, offset) {
+                crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
+                return;
+            }
+        }
         match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];

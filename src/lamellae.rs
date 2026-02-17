@@ -2,6 +2,8 @@ pub(crate) mod comm;
 pub(crate) mod command_queues;
 pub(crate) mod local_lamellae;
 pub(crate) mod shmem_lamellae;
+
+#[cfg(feature = "enable-on-node-shmem")]
 pub(crate) mod shmem_utils;
 
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};

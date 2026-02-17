@@ -17,11 +17,11 @@ use crate::{
         one_sided::OneSidedMemoryRegion,
         RemoteMemoryRegion,
     },
-    scheduler::{Scheduler, ExecutorType, LamellarTask},
+    scheduler::{ExecutorType, LamellarTask, Scheduler},
 };
 // use log::trace;
 
-use tracing::trace;
+use tracing::{debug,trace};
 
 use futures_util::future::join_all;
 use futures_util::Future;
@@ -32,11 +32,19 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
+// use std::ops::{AddAssign};
+// use std::time::{Instant,Duration};
+
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
         RwLock::new(HashMap::new());
     pub(crate) static ref INIT: AtomicBool = AtomicBool::new(false);
     pub(crate) static ref MAIN_THREAD: std::thread::ThreadId = std::thread::current().id();
+    // pub(crate) static ref SETUP_INSTANT: std::sync::Mutex<std::time::Instant> = std::sync::Mutex::new(std::time::Instant::now());
+    // pub(crate) static ref SETUP_TIME: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
+    // pub(crate) static ref SETUP_TIME2: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
+    // pub(crate) static ref SETUP_TIME3: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
+    // pub(crate) static ref OP_TIME: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
 }
 
 /// An abstraction representing all the PE's (processing elements) within a given distributed execution.
@@ -67,7 +75,7 @@ impl ActiveMessaging for LamellarWorld {
     {
         self.team.exec_am_all(am)
     }
-    
+
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_pe<F>(&self, pe: usize, am: F) -> Self::SinglePeAmHandle<F::Output>
     where
@@ -76,7 +84,7 @@ impl ActiveMessaging for LamellarWorld {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.exec_am_pe(pe, am)
     }
-    
+
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_am_local<F>(&self, am: F) -> Self::LocalAmHandle<F::Output>
     where
@@ -84,7 +92,7 @@ impl ActiveMessaging for LamellarWorld {
     {
         self.team.exec_am_local(am)
     }
-    
+
     #[tracing::instrument(skip_all, level = "debug")]
     fn wait_all(&self) {
         self.team.wait_all();
@@ -317,6 +325,13 @@ impl LamellarWorld {
     {
         self.team.spawn_am_local(am)
     }
+
+    // pub fn print_setup_op_times(&self) {
+    //     println!("setup time: {:?}", *SETUP_TIME.lock().unwrap());
+    //     println!("setup time2: {:?}", *SETUP_TIME2.lock().unwrap());
+    //     println!("setup time3: {:?}", *SETUP_TIME3.lock().unwrap());
+    //     println!("op time: {:?}", *OP_TIME.lock().unwrap());
+    // }
 }
 
 impl LamellarEnv for LamellarWorld {
@@ -360,7 +375,7 @@ impl Drop for LamellarWorld {
     fn drop(&mut self) {
         let cnt = self.ref_cnt.fetch_sub(1, Ordering::SeqCst);
         if cnt == 1 {
-            trace!("Dropping LamellarWorld");
+            debug!("Dropping LamellarWorld");
             if self.team.panic.load(Ordering::SeqCst) < 2 {
                 self.team.barrier();
                 self.team.wait_all();
@@ -381,8 +396,12 @@ impl Drop for LamellarWorld {
                 lamellae.comm().barrier();
             }
 
+            // println!("setup time: {:?}", *SETUP_TIME.lock().unwrap());
+            // println!("setup time2: {:?}", *SETUP_TIME2.lock().unwrap());
+            // println!("setup time3: {:?}", *SETUP_TIME3.lock().unwrap());
+            // println!("op time: {:?}", *OP_TIME.lock().unwrap());
             // LAMELLAES.write().clear();
-            trace!("LamellarWorld dropped");
+            debug!("LamellarWorld dropped");
         } else {
             // SAFETY: This is safe because we are not the last reference to the world, so the team and team_rt
             // will not be dropped yet.
@@ -451,6 +470,11 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
+        // SETUP_TIME.lock().unwrap().add_assign(Duration::from_secs(0));
+        // SETUP_TIME2.lock().unwrap().add_assign(Duration::from_secs(0));
+        // SETUP_TIME3.lock().unwrap().add_assign(Duration::from_secs(0));
+        // OP_TIME.lock().unwrap().add_assign(Duration::from_secs(0));
+        // *SETUP_INSTANT.lock().unwrap() = Instant::now();
         let executor = match config().executor.as_str(){
             "tokio" => {
                 #[cfg(not(feature = "tokio-executor"))]
@@ -464,7 +488,8 @@ impl LamellarWorldBuilder {
             "lamellar" => ExecutorType::LamellarWorkStealing,
             "lamellar2" => ExecutorType::LamellarWorkStealing2,
             "lamellar3" => ExecutorType::LamellarWorkStealing3,
-            _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'async_std', or (if tokio-executor feature is enabled, 'tokio'.")
+            "single_thread" => ExecutorType::SingleThread,
+            _ => panic!("[LAMELLAR WARNING]: unexpected executor type, please set LAMELLAR_EXECUTOR to one of the following 'lamellar', 'single_thread', 'async_std', or (if tokio-executor feature is enabled) 'tokio'.")
         };
 
         let num_threads = config().threads;

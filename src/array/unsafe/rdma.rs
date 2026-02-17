@@ -671,11 +671,11 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     pub unsafe fn blocking_get(&self, index: usize) -> T {
-        *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
+        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let res = self.mem_region
                 .blocking_get(pe, offset);
-            SETUP_TIME2.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
+            // SETUP_TIME2.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
             res
         } else {
             panic!("index out of bounds in LamellarArray put");

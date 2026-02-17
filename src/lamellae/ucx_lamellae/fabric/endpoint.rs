@@ -3,6 +3,10 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 
+// use std::ops::AddAssign;
+// use std::time::{Instant,Duration};
+// use crate::{SETUP_TIME3, OP_TIME, SETUP_INSTANT};
+
 // use ucx1_sys::*;
 
 use lamellar_ucx_sys::{
@@ -15,6 +19,8 @@ use lamellar_ucx_sys::{
 };
 
 use super::{error::Error, memory_region::RKey, worker::Worker};
+
+use tracing::{debug};
 
 pub(crate) struct UcxRequest {
     pub(crate) request: ucs_status_ptr_t,
@@ -517,6 +523,7 @@ impl Endpoint {
 impl Drop for Endpoint {
     fn drop(&mut self) {
         // println!("dropping endpoint");
+        debug!("Dropping Endpoint");
         unsafe {
             let request = ucp_ep_close_nbx(
                 self.handle,
