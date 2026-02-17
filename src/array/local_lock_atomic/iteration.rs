@@ -18,6 +18,7 @@ use crate::{
     darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard},
     Dist, DistributedIterator, IndexedDistributedIterator, IndexedLocalIterator, LamellarArray,
     LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator, LocalLockArray,
+    Remote,
 };
 
 // use crate::array::iterator::distributed_iterator::*;
@@ -33,7 +34,7 @@ use crate::{
 
 // use self::iterator::IterLockFuture;
 
-impl<T> InnerArray for LocalLockArray<T> {
+impl<T: Remote> InnerArray for LocalLockArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.array.inner
     }

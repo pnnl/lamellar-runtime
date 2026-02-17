@@ -16,7 +16,7 @@ use crate::memregion::Dist;
 
 use self::iterator::IterLockFuture;
 
-impl<T> InnerArray for GlobalLockArray<T> {
+impl<T: Remote> InnerArray for GlobalLockArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.array.inner
     }

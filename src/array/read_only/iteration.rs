@@ -7,7 +7,7 @@ use crate::array::read_only::*;
 use crate::array::*;
 use crate::memregion::Dist;
 
-impl<T> InnerArray for ReadOnlyArray<T> {
+impl<T: Remote> InnerArray for ReadOnlyArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.array.inner
     }

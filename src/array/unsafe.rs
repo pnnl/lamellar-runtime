@@ -22,6 +22,7 @@ use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::LamellarTaskGroup;
+use crate::Remote;
 
 use core::marker::PhantomData;
 use futures_util::{future, StreamExt};
@@ -59,11 +60,70 @@ impl std::fmt::Debug for UnsafeArrayData {
 /// # Warning
 /// Unless you are very confident in low level distributed memory access it is highly recommended you utilize the
 /// the other LamellarArray types ([AtomicArray], [LocalLockArray], [GlobalLockArray], [ReadOnlyArray]) to construct and interact with distributed memory.
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct UnsafeArray<T> {
+// #[lamellar_impl::AmDataRT(Clone, Debug)]
+#[derive(Debug)]
+pub struct UnsafeArray<T: Remote> {
     pub(crate) inner: UnsafeArrayInner,
+    pub(crate) mem_region: MemoryRegion<T>,
     phantom: PhantomData<T>,
 }
+
+impl <T: Remote> Clone for UnsafeArray<T> {
+    fn clone(&self) -> Self {
+        UnsafeArray {
+            inner: self.inner.clone(),
+            mem_region: unsafe { self.mem_region.as_base::<T>() },
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[lamellar_impl::AmDataRT(Clone, Debug)]
+pub struct __UnsafeArraySerde<T> {
+    pub(crate) array: UnsafeArrayInner,
+    phantom: PhantomData<T>,
+}
+
+impl<T: Remote> From<UnsafeArray<T>> for __UnsafeArraySerde<T> {
+    fn from(array: UnsafeArray<T>) -> Self {
+        Self {
+            array: array.inner,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: Dist> serde::Serialize for UnsafeArray<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        __UnsafeArraySerde::from(self.clone()).serialize(serializer)
+    }
+}
+
+impl<'de, T: Dist> serde::Deserialize<'de> for UnsafeArray<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let array: __UnsafeArraySerde<T> = __UnsafeArraySerde::deserialize(deserializer)?;
+        let mem_region = unsafe { array.array.data.mem_region.as_base::<T>() };
+        Ok(UnsafeArray {
+            inner: array.array,
+            mem_region,
+            phantom: PhantomData,
+
+        })
+    }
+}
+
+impl<T: Remote> crate::active_messaging::DarcSerde for UnsafeArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.inner.ser(num_pes, darcs);
+    }
+}
+
 
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
@@ -249,6 +309,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
         )
         .await
         .expect("trying to create array on non team member");
+        let mem_region = unsafe { data.mem_region.as_base::<T>() };
         let array = UnsafeArray {
             inner: UnsafeArrayInner {
                 data: data,
@@ -260,6 +321,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 size: full_array_size, //relative to size of T
                 sub: false,
             },
+            mem_region,
             phantom: PhantomData,
         };
 
@@ -923,8 +985,10 @@ impl<T: Dist> AsyncFrom<NetworkAtomicArray<T>> for UnsafeArray<T> {
 
 impl<T: Dist> From<UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: UnsafeByteArray) -> Self {
+        let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
         UnsafeArray {
             inner: array.inner,
+            mem_region,
             phantom: PhantomData,
         }
     }
@@ -932,8 +996,10 @@ impl<T: Dist> From<UnsafeByteArray> for UnsafeArray<T> {
 
 impl<T: Dist> From<&UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: &UnsafeByteArray) -> Self {
+        let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
         UnsafeArray {
             inner: array.inner.clone(),
+            mem_region,
             phantom: PhantomData,
         }
     }
@@ -1220,8 +1286,10 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
         inner.offset += start;
         inner.size = end - start;
         inner.sub = true;
+        let mem_region = unsafe { inner.data.mem_region.as_base::<T>() };
         UnsafeArray {
             inner: inner,
+            mem_region,
             phantom: PhantomData,
         }
     }

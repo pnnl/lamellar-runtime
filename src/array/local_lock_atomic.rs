@@ -23,6 +23,7 @@ use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{array::*, Darc};
+use crate::Remote;
 
 // use parking_lot::{
 //     lock_api::{ArcRwLockReadGuard, ArcRwLockWriteGuard},
@@ -44,10 +45,18 @@ use std::task::{Context, Poll, Waker};
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message.
 /// Direct RDMA operations can occur if the appropriate lock is held.
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct LocalLockArray<T> {
+#[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
+#[serde(bound = "T: Dist")]
+pub struct LocalLockArray<T: Remote> {
     lock: LocalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
+}
+
+impl<T: Remote> crate::active_messaging::DarcSerde for LocalLockArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.lock.ser(num_pes, darcs);
+        self.array.ser(num_pes, darcs);
+    }
 }
 
 #[doc(hidden)]

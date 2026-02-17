@@ -131,7 +131,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
 impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
     unsafe fn put(&self, index: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+            let req = self.array.mem_region.atomic_op(
                 pe,
                 offset,
                 AtomicOp::Write(data),
@@ -147,7 +147,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
     }
     unsafe fn put_unmanaged(&self, index: usize, data: T, _: Sealed) {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op_unmanaged(
+            self.array.mem_region.atomic_op_unmanaged(
                 pe,
                 offset,
                 AtomicOp::Write(data),
@@ -189,7 +189,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
             .spawn();
     }
     unsafe fn put_pe(&self, pe: usize, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
-        let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op(
+        let req = self.array.mem_region.atomic_op(
             pe,
             offset,
             AtomicOp::Write(data),
@@ -201,7 +201,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_pe_unmanaged(&self, pe: usize, offset: usize, data: T, _: Sealed) {
-        let _ = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_op_unmanaged(
+        let _ = self.array.mem_region.atomic_op_unmanaged(
             pe,
             offset,
             AtomicOp::Write(data),
@@ -245,7 +245,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         );
     }
     unsafe fn put_all(&self, offset: usize, data: T, _: Sealed) -> ArrayRdmaPutHandle<T> {
-        let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }
+        let req = self.array.mem_region
             .atomic_op_all(offset, AtomicOp::Write(data));
         ArrayRdmaPutHandle {
             array: self.as_lamellar_byte_array(),
@@ -254,7 +254,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         }
     }
     unsafe fn put_all_unmanaged(&self, offset: usize, data: T, _: Sealed) {
-        unsafe { self.array.inner.data.mem_region.as_base::<T>() }
+        self.array.mem_region
             .atomic_op_all_unmanaged(offset, AtomicOp::Write(data));
     }
     unsafe fn put_all_buffer<U: Into<MemregionRdmaInputInner<T>>>(
@@ -293,7 +293,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
 impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     unsafe fn get(&self, index: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_fetch_op(
+            let req = self.array.mem_region.atomic_fetch_op(
                 pe,
                 offset,
                 AtomicOp::Read,
@@ -309,7 +309,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     }
     unsafe fn blocking_get(&self, index: usize, _: Sealed) -> T {
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_fetch_op_blocking(
+            self.array.mem_region.atomic_fetch_op_blocking(
                 pe,
                 offset,
                 AtomicOp::Read,
@@ -375,7 +375,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NetworkAtomicArray<T> {
     }
 
     unsafe fn get_pe(&self, pe: usize, offset: usize, _: Sealed) -> ArrayRdmaGetHandle<T> {
-        let req = unsafe { self.array.inner.data.mem_region.as_base::<T>() }.atomic_fetch_op(
+        let req = self.array.mem_region.atomic_fetch_op(
             pe,
             offset,
             AtomicOp::Read,

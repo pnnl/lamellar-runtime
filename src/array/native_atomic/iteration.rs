@@ -16,7 +16,7 @@ use self::iterator::IterLockFuture;
 //     RawRwLock,
 // };
 
-impl<T> InnerArray for NativeAtomicArray<T> {
+impl<T: Remote> InnerArray for NativeAtomicArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.array.inner
     }
@@ -176,7 +176,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
     // type Array = NativeAtomicArray<T>;
     type DistIter = NativeAtomicDistIter<T>;
     type LocalIter = NativeAtomicLocalIter<T>;
-    type OnesidedIter = OneSidedIter< T, Self>;
+    type OnesidedIter = OneSidedIter<T, Self>;
     fn dist_iter(&self) -> Self::DistIter {
         NativeAtomicDistIter {
             data: self.clone(),
@@ -198,9 +198,7 @@ impl<T: Dist> LamellarArrayIterators<T> for NativeAtomicArray<T> {
     }
 
     fn buffered_onesided_iter(&self, buf_size: usize) -> Self::OnesidedIter {
-        OneSidedIter::new(self,
-            std::cmp::min(buf_size, self.len()),
-        )
+        OneSidedIter::new(self, std::cmp::min(buf_size, self.len()))
     }
 }
 

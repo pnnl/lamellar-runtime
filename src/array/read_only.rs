@@ -15,13 +15,22 @@ use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::Remote;
 
 use std::sync::Arc;
 
 /// A safe abstraction of a distributed array, providing only read access.
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct ReadOnlyArray<T> {
+// #[lamellar_impl::AmDataRT(Clone, Debug)]
+#[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
+#[serde(bound = "T: Dist")]
+pub struct ReadOnlyArray<T: Remote> {
     pub(crate) array: UnsafeArray<T>,
+}
+
+impl<T: Remote> crate::active_messaging::DarcSerde for ReadOnlyArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.array.ser(num_pes, darcs);
+    }
 }
 
 #[doc(hidden)]

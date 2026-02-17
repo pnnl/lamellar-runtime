@@ -18,6 +18,7 @@ use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::Remote;
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
@@ -649,7 +650,7 @@ macro_rules! impl_compare_exchange_eps {
     };
 }
 /// `NativeAtomicElement` represents a native (like AtomicUsize, AtomicU8, etc.) atomic element in a `NativeAtomicArray`.
-pub struct NativeAtomicElement<T> {
+pub struct NativeAtomicElement<T: Remote> {
     array: NativeAtomicArray<T>,
     local_index: usize,
 }
@@ -815,11 +816,21 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NativeAtomicElement<T> {
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
 ///
 /// You should not be directly interacting with this type, rather you should be operating on an [AtomicArray].
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct NativeAtomicArray<T> {
+
+// #[lamellar_impl::AmDataRT(Clone, Debug)]
+#[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
+#[serde(bound = "T: Dist")]
+pub struct NativeAtomicArray<T: Remote> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NativeAtomicType,
 }
+
+impl<T: Remote> crate::active_messaging::DarcSerde for NativeAtomicArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.array.ser(num_pes, darcs);
+    }
+}
+
 
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
@@ -854,7 +865,7 @@ impl NativeAtomicByteArrayWeak {
 
 #[doc(hidden)]
 #[derive(Clone, Debug)]
-pub struct NativeAtomicLocalData<T> {
+pub struct NativeAtomicLocalData<T: Remote> {
     // + NativeAtomicOps> {
     pub(crate) array: NativeAtomicArray<T>,
     start_index: usize,

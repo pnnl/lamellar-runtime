@@ -7,7 +7,7 @@ use crate::darc::handle::{
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Darc, GlobalLockArray};
-use crate::{Dist, LamellarTeamRT};
+use crate::{Dist, LamellarTeamRT, Remote};
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
@@ -121,7 +121,7 @@ impl<T: Dist + ArrayOps + 'static> Future for GlobalLockArrayHandle<T> {
 /// array.read_lock().block();
 /// task.block();
 ///```
-pub struct GlobalLockReadHandle<T> {
+pub struct GlobalLockReadHandle<T: Remote> {
     pub(crate) array: GlobalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: GlobalRwDarcReadHandle<()>,
@@ -324,7 +324,7 @@ impl<T: Dist> Future for GlobalLockLocalDataHandle<T> {
 /// array.write_lock().block();
 /// task.block();
 ///```
-pub struct GlobalLockWriteHandle<T> {
+pub struct GlobalLockWriteHandle<T: Remote> {
     pub(crate) array: GlobalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: GlobalRwDarcWriteHandle<()>,

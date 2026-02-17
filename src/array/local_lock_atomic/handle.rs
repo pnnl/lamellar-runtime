@@ -6,7 +6,7 @@ use crate::darc::handle::{LocalRwDarcReadHandle, LocalRwDarcWriteHandle};
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{Darc, LocalLockArray};
-use crate::{Dist, LamellarTeamRT};
+use crate::{Dist, LamellarTeamRT, Remote};
 
 use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
@@ -120,14 +120,14 @@ impl<T: Dist + ArrayOps + 'static> Future for LocalLockArrayHandle<T> {
 /// array.read_lock().block();
 /// task.block();
 ///```
-pub struct LocalLockReadHandle<T> {
+pub struct LocalLockReadHandle<T: Remote> {
     pub(crate) array: LocalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: LocalRwDarcReadHandle<()>,
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalLockReadHandle<T> {
+impl<T: Remote> PinnedDrop for LocalLockReadHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.lock_handle.launched {
             RuntimeWarning::DroppedHandle("a LocalLockReadHandle").print();
@@ -341,14 +341,14 @@ impl<T: Dist> Future for LocalLockLocalDataHandle<T> {
 /// array.write_lock().block();
 /// task.block();
 ///```
-pub struct LocalLockWriteHandle<T> {
+pub struct LocalLockWriteHandle<T: Remote> {
     pub(crate) array: LocalLockArray<T>,
     #[pin]
     pub(crate) lock_handle: LocalRwDarcWriteHandle<()>,
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalLockWriteHandle<T> {
+impl<T: Remote> PinnedDrop for LocalLockWriteHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.lock_handle.launched {
             RuntimeWarning::DroppedHandle("a LocalRwDarcWriteHandle").print();
@@ -568,7 +568,7 @@ impl<T: Dist> Future for LocalLockMutLocalDataHandle<T> {
 /// });
 ///
 /// ```
-pub struct LocalLockLocalChunksHandle<T> {
+pub struct LocalLockLocalChunksHandle<T: Remote> {
     pub(crate) chunk_size: usize,
     pub(crate) index: usize,     //global index within the array local data
     pub(crate) end_index: usize, //global index within the array local data
@@ -578,7 +578,7 @@ pub struct LocalLockLocalChunksHandle<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalLockLocalChunksHandle<T> {
+impl<T: Remote> PinnedDrop for LocalLockLocalChunksHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.lock_handle.launched {
             RuntimeWarning::DroppedHandle("a LocalLockLocalChunksHandle").print();
@@ -687,7 +687,7 @@ impl<T: Dist> Future for LocalLockLocalChunksHandle<T> {
 ///     }).await;
 /// });
 /// ```
-pub struct LocalLockLocalChunksMutHandle<T> {
+pub struct LocalLockLocalChunksMutHandle<T: Remote> {
     pub(crate) chunk_size: usize,
     pub(crate) index: usize,     //global index within the array local data
     pub(crate) end_index: usize, //global index within the array local data
@@ -697,7 +697,7 @@ pub struct LocalLockLocalChunksMutHandle<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for LocalLockLocalChunksMutHandle<T> {
+impl<T: Remote> PinnedDrop for LocalLockLocalChunksMutHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.lock_handle.launched {
             RuntimeWarning::DroppedHandle("a LocalLockLocalChunksMutHandle").print();

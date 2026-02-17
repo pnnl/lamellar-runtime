@@ -896,12 +896,12 @@ impl<T: Remote> MemoryRegion<T> {
             "Error converting memregion to new base, does not align"
         );
         MemoryRegion {
-            alloc: self.alloc.clone(),
+            alloc: self.alloc,
             pe: self.pe,
-            scheduler: self.scheduler.clone(),
-            counters: self.counters.clone(),
+            scheduler: self.scheduler,
+            counters: self.counters,
             backend: self.backend,
-            rdma: self.rdma.clone(),
+            rdma: self.rdma,
             mode: self.mode,
             phantom: PhantomData,
         }
@@ -1229,6 +1229,8 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     pub(crate) fn atomic_fetch_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) -> T {
+        // SETUP_TIME3.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
+        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
         trace!(
             "atomic_fetch_op memregion {:?} index: {:?}",
             self.alloc,

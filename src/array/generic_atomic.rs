@@ -17,6 +17,7 @@ use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
+use crate::Remote;
 
 use parking_lot::{Mutex, MutexGuard};
 use serde::ser::SerializeSeq;
@@ -28,7 +29,7 @@ use std::ops::{
 };
 
 #[doc(hidden)]
-pub struct GenericAtomicElement<T> {
+pub struct GenericAtomicElement<T: Remote> {
     array: GenericAtomicArray<T>,
     local_index: usize,
 }
@@ -268,10 +269,21 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for GenericAtomicElement<T> {
 /// Atomicity is gauranteed by constructing a 1-Byte mutex for each element in the array.
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct GenericAtomicArray<T> {
+// #[lamellar_impl::AmDataRT(Clone, Debug)]
+#[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
+#[serde(bound = "T: Dist")]
+pub struct GenericAtomicArray<T: Remote> {
     locks: Darc<Vec<Mutex<()>>>,
     pub(crate) array: UnsafeArray<T>,
+}
+
+
+
+impl<T: Remote> crate::active_messaging::DarcSerde for GenericAtomicArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.locks.ser(num_pes, darcs);
+        self.array.ser(num_pes, darcs);
+    }
 }
 
 #[doc(hidden)]
@@ -283,7 +295,7 @@ pub struct GenericAtomicByteArray {
 
 impl GenericAtomicByteArray {
     //#[doc(hidden)]
-    pub fn lock_index(&self, index: usize) -> MutexGuard<'_,()> {
+    pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         let index = self
             .array
             .inner

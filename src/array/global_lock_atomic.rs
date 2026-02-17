@@ -21,6 +21,7 @@ use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
 use crate::{array::*, Darc};
+use crate::Remote;
 
 use pin_project::pin_project;
 
@@ -38,10 +39,39 @@ use std::task::{Context, Poll};
 ///
 /// Generally any operation on this array type will be performed via an internal runtime Active Message.
 /// Direct RDMA operations can occur if the appropriate lock is held.
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct GlobalLockArray<T> {
+// #[lamellar_impl::AmDataRT(Clone, Debug)]
+#[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
+#[serde(bound = "T: Dist")]
+pub struct GlobalLockArray<T: Remote> {
     pub(crate) lock: GlobalRwDarc<()>,
     pub(crate) array: UnsafeArray<T>,
+}
+// impl<T: Dist> serde::Serialize for GlobalLockArray<T> {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: serde::Serializer,
+//     {
+//         self.lock.serialize(serializer)?;
+//         self.array.serialize(serializer)
+//     }
+// }
+
+// impl<'de, T: Dist> serde::Deserialize<'de> for GlobalLockArray<T> {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where
+//         D: serde::Deserializer<'de>,
+//     {
+//         let lock = GlobalRwDarc::deserialize(deserializer)?;
+//         let array = UnsafeArray::deserialize(deserializer)?;
+//         Ok(GlobalLockArray { lock, array })
+//     }
+// }
+
+impl<T: Remote> crate::active_messaging::DarcSerde for GlobalLockArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.lock.ser(num_pes, darcs);
+        self.array.ser(num_pes, darcs);
+    }
 }
 
 #[doc(hidden)]
@@ -1062,7 +1092,6 @@ impl<T: Dist + std::fmt::Debug> ArrayPrint<T> for GlobalLockArray<T> {
         self.array.print()
     }
 }
-
 
 // Dropped Handle Warning triggered by AmHandle
 /// This handle is used to check for the completion of an active message operation that was initiated by a `GlobalLockArray` reduction operation.

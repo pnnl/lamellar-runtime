@@ -6,14 +6,14 @@ use crate::array::r#unsafe::{UnsafeArray, UnsafeArrayInner};
 use crate::array::{ArrayOps, AsyncTeamFrom, Distribution, InnerArray};
 use crate::lamellar_env::LamellarEnv;
 use crate::memregion::Dist;
-use crate::LamellarTeam;
+use crate::{LamellarTeam,Remote};
 
 use core::marker::PhantomData;
 use futures_util::Future;
 use paste::paste;
 use std::sync::Arc;
 
-impl<T> InnerArray for UnsafeArray<T> {
+impl<T: Remote> InnerArray for UnsafeArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.inner
     }

@@ -11,9 +11,10 @@ use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::Dist;
+use crate::memregion::{MemoryRegion,Dist};
 use crate::scheduler::LamellarTask;
-use crate::{array::*, Darc};
+use crate::{array::*, Darc,Remote};
+use crate::active_messaging::DarcSerde;
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
@@ -646,7 +647,7 @@ macro_rules! impl_compare_exchange_eps {
 }
 
 //#[doc(hidden)]
-pub struct NetworkAtomicElement<T> {
+pub struct NetworkAtomicElement<T: Remote> {
     array: NetworkAtomicArray<T>,
     local_index: usize,
 }
@@ -780,11 +781,21 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NetworkAtomicElement<T> {
 /// Generally any operation on this array type will be performed via an internal runtime Active Message, i.e. direct RDMA operations are not allowed
 ///
 /// You should not be directly interacting with this type, rather you should be operating on an [AtomicArray][crate::array::AtomicArray].
-#[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct NetworkAtomicArray<T> {
+// #[derive(Debug)]
+#[derive(crate::Deserialize, crate::Serialize, Clone, Debug)]
+#[serde(bound = "T: Dist")]
+pub struct NetworkAtomicArray<T: Remote> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NetworkAtomicType,
 }
+
+impl<T: Remote> crate::active_messaging::DarcSerde for NetworkAtomicArray<T> {
+    fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
+        self.array.ser(num_pes, darcs);
+    }
+}
+
+
 
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
@@ -819,7 +830,7 @@ impl NetworkAtomicByteArrayWeak {
 
 #[doc(hidden)]
 #[derive(Clone, Debug)]
-pub struct NetworkAtomicLocalData<T> {
+pub struct NetworkAtomicLocalData<T: Remote> {
     // + NetworkAtomicOps> {
     pub(crate) array: NetworkAtomicArray<T>,
     start_index: usize,
@@ -1109,7 +1120,6 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NetworkAtomicArray<T> {
         array
             .await_on_outstanding(DarcMode::NetworkAtomicArray)
             .await;
-
         NetworkAtomicArray {
             array: array,
             orig_t: NetworkAtomicType::of::<T>(),

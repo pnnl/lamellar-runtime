@@ -14,9 +14,10 @@ use crate::{
     memregion::Dist,
     DistributedIterator, GenericAtomicArray, IndexedDistributedIterator, LamellarArray,
     LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator,
+    Remote,
 };
 
-impl<T> InnerArray for GenericAtomicArray<T> {
+impl<T: Remote> InnerArray for GenericAtomicArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.array.inner
     }

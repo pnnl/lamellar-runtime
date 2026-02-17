@@ -9,6 +9,7 @@ use pin_project::{pin_project, pinned_drop};
 
 use crate::darc::Darc;
 use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, Dist, LamellarTeamRT};
+use crate::Remote;
 
 use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeArray};
 
@@ -570,7 +571,7 @@ use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeA
 /// })
 ///  */
 /// ```
-pub struct IntoUnsafeArrayHandle<T> {
+pub struct IntoUnsafeArrayHandle<T: Remote> {
     pub(crate) team: Darc<LamellarTeamRT>,
     pub(crate) launched: bool,
     #[pin]
@@ -578,7 +579,7 @@ pub struct IntoUnsafeArrayHandle<T> {
 }
 
 #[pinned_drop]
-impl<T> PinnedDrop for IntoUnsafeArrayHandle<T> {
+impl<T: Remote> PinnedDrop for IntoUnsafeArrayHandle<T> {
     fn drop(self: Pin<&mut Self>) {
         if !self.launched {
             RuntimeWarning::DroppedHandle("a IntoUnsafeArrayHandle").print();
@@ -626,7 +627,7 @@ impl<T: Dist + 'static> IntoUnsafeArrayHandle<T> {
     }
 }
 
-impl<T> Future for IntoUnsafeArrayHandle<T> {
+impl<T: Remote> Future for IntoUnsafeArrayHandle<T> {
     type Output = UnsafeArray<T>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.launched = true;

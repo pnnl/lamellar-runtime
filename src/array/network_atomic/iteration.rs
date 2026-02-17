@@ -9,6 +9,7 @@ use crate::array::network_atomic::*;
 use crate::array::r#unsafe::private::UnsafeArrayInner;
 use crate::array::*;
 use crate::memregion::Dist;
+use crate::Remote;
 
 use self::iterator::IterLockFuture;
 // use parking_lot::{
@@ -16,7 +17,7 @@ use self::iterator::IterLockFuture;
 //     RawRwLock,
 // };
 
-impl<T> InnerArray for NetworkAtomicArray<T> {
+impl<T: Remote> InnerArray for NetworkAtomicArray<T> {
     fn as_inner(&self) -> &UnsafeArrayInner {
         &self.array.inner
     }
