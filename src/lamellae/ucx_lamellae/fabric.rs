@@ -13,9 +13,8 @@ use worker::Worker;
 use crate::{
     config,
     lamellae::{
-        comm::alloc::*,
-        AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc, CommAllocAddr,
-        CommAllocInner, CommAllocType, FabricError,
+        comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
+        CommAllocAddr, CommAllocInner, CommAllocType, FabricError,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -31,7 +30,6 @@ use std::sync::{
     Arc, Mutex,
 };
 use tracing::{debug, trace};
-
 
 pub(crate) struct UcxWorld {
     pmi: Arc<PmiX>,
@@ -175,12 +173,9 @@ impl UcxWorld {
         pmi: &Arc<PmiX>,
         num_pes: usize,
         my_pe: usize,
-        #[cfg(feature = "enable-on-node-shmem")]
-        same_node_pes: &Vec<bool>,
-        #[cfg(feature = "enable-on-node-shmem")]
-        disable_on_node_shmem: bool,
-        #[cfg(feature = "enable-on-node-shmem")]
-        job_id: usize,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_pes: &Vec<bool>,
+        #[cfg(feature = "enable-on-node-shmem")] disable_on_node_shmem: bool,
+        #[cfg(feature = "enable-on-node-shmem")] job_id: usize,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
         remote_keys: Arc<Mutex<Vec<(UcxAlloc, Vec<(usize, Arc<RKey>)>)>>>,
     ) -> AllocResult<UcxAlloc> {
@@ -634,12 +629,11 @@ impl UcxAlloc {
         padding: usize,
         my_pe: usize,
         num_pes: usize,
-        #[cfg(feature = "enable-on-node-shmem")]
-        same_node_pes: Arc<Vec<bool>>,
-        #[cfg(feature = "enable-on-node-shmem")]
-        same_node_bases: Arc<Vec<Option<usize>>>,
-        #[cfg(feature = "enable-on-node-shmem")]
-        same_node_segments: Arc<Vec<Option<Arc<ShmemSegment>>>>,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_pes: Arc<Vec<bool>>,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_bases: Arc<Vec<Option<usize>>>,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_segments: Arc<
+            Vec<Option<Arc<ShmemSegment>>>,
+        >,
         context: Arc<Context>,
         worker: Arc<Worker>,
         endpoints: Vec<Arc<Endpoint>>,
@@ -1078,7 +1072,7 @@ impl UcxAlloc {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         #[cfg(feature = "enable-on-node-shmem")]
-        {    
+        {
             if let Some(addr) = self.same_node_addr(pe, offset) {
                 crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
                 return;

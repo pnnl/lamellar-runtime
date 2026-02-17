@@ -20,7 +20,7 @@ use lamellar_ucx_sys::{
 
 use super::{error::Error, memory_region::RKey, worker::Worker};
 
-use tracing::{debug};
+use tracing::debug;
 
 pub(crate) struct UcxRequest {
     pub(crate) request: ucs_status_ptr_t,

@@ -831,7 +831,6 @@ impl<T: Remote> crate::active_messaging::DarcSerde for NativeAtomicArray<T> {
     }
 }
 
-
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]
 pub struct NativeAtomicByteArray {

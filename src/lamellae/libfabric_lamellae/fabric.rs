@@ -50,7 +50,7 @@ use std::{
 use tracing::{debug, trace};
 
 use std::ops::{Add, AddAssign};
-use std::time::{Instant,Duration};
+use std::time::{Duration, Instant};
 // use crate::{SETUP_TIME,SETUP_TIME2,SETUP_TIME3, OP_TIME, SETUP_INSTANT};
 
 type WaitableEq = libfabric::eq_caps_type!(EqCaps::WAIT);
@@ -750,10 +750,7 @@ impl Ofi {
                 std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
             }
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
-            (
-                LibfabricMem::Mmap(Arc::new(mmap)),
-                mem_base_ptr,
-            )
+            (LibfabricMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
 
         #[cfg(feature = "enable-on-node-shmem")]
@@ -888,10 +885,7 @@ impl Ofi {
                 std::slice::from_raw_parts_mut(mmap.as_ptr() as *mut u8, aligned_size).fill(0);
             }
             let mem_base_ptr = mmap.as_ptr() as *mut u8;
-            (
-                LibfabricMem::Mmap(Arc::new(mmap)),
-                mem_base_ptr,
-            )
+            (LibfabricMem::Mmap(Arc::new(mmap)), mem_base_ptr)
         };
         #[cfg(feature = "enable-on-node-shmem")]
         let (mem, mem_base_ptr, same_node_bases, same_node_segments) = if self.disable_on_node_shmem
@@ -1501,10 +1495,10 @@ impl LibfabricAlloc {
     pub(crate) fn new(
         ofi: Arc<Ofi>,
         mem: LibfabricMem,
-        #[cfg(feature = "enable-on-node-shmem")]
-        same_node_bases: Arc<Vec<Option<usize>>>,
-        #[cfg(feature = "enable-on-node-shmem")]
-        same_node_segments: Arc<Vec<Option<Arc<ShmemSegment>>>>,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_bases: Arc<Vec<Option<usize>>>,
+        #[cfg(feature = "enable-on-node-shmem")] same_node_segments: Arc<
+            Vec<Option<Arc<ShmemSegment>>>,
+        >,
         mr: MemoryRegion,
         remote_allocs: HashMap<usize, RemoteMemAddressInfo>,
         num_bytes: usize,

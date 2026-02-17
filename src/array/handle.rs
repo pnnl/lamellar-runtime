@@ -8,8 +8,8 @@ use futures_util::Future;
 use pin_project::{pin_project, pinned_drop};
 
 use crate::darc::Darc;
-use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, Dist, LamellarTeamRT};
 use crate::Remote;
+use crate::{scheduler::LamellarTask, warnings::RuntimeWarning, Dist, LamellarTeamRT};
 
 use super::{AtomicArray, GlobalLockArray, LocalLockArray, ReadOnlyArray, UnsafeArray};
 

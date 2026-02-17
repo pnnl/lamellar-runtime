@@ -1800,7 +1800,6 @@ impl CommAllocAtomic for CommAllocInner {
         }
     }
     fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
-        
         match self {
             CommAllocInner::Raw(_addr, _size) => {
                 panic!("Raw allocation not supported")

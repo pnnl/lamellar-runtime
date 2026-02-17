@@ -3,7 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 use lamellar_ucx_sys::*;
 
 use pmi::{pmi::Pmi, pmix::PmiX};
-use tracing::{debug};
+use tracing::debug;
 
 use super::{error::Error, worker::Worker};
 

@@ -44,7 +44,7 @@ use std::marker::PhantomPinned;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc; //, Weak};
 use std::time::{Duration, Instant};
-use tracing::{trace,debug};
+use tracing::{debug, trace};
 
 use std::cell::Cell;
 use std::marker::PhantomData;

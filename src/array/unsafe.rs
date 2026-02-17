@@ -68,7 +68,7 @@ pub struct UnsafeArray<T: Remote> {
     phantom: PhantomData<T>,
 }
 
-impl <T: Remote> Clone for UnsafeArray<T> {
+impl<T: Remote> Clone for UnsafeArray<T> {
     fn clone(&self) -> Self {
         UnsafeArray {
             inner: self.inner.clone(),
@@ -113,7 +113,6 @@ impl<'de, T: Dist> serde::Deserialize<'de> for UnsafeArray<T> {
             inner: array.array,
             mem_region,
             phantom: PhantomData,
-
         })
     }
 }
@@ -123,7 +122,6 @@ impl<T: Remote> crate::active_messaging::DarcSerde for UnsafeArray<T> {
         self.inner.ser(num_pes, darcs);
     }
 }
-
 
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]

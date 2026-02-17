@@ -11,7 +11,9 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
     fn load<'a>(&self, index: usize) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self.array.mem_region
+            let handle = self
+                .array
+                .mem_region
                 .atomic_fetch_op(pe, offset, AtomicOp::Read);
             ArrayFetchOpHandle {
                 array: self.clone().into(),
@@ -41,11 +43,10 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn store<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self.array.mem_region.atomic_op(
-                pe,
-                offset,
-                AtomicOp::Write(val),
-            );
+            let handle = self
+                .array
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Write(val));
             ArrayOpHandle {
                 array: self.clone().into(),
                 state: OpState::Network(handle),
@@ -57,7 +58,9 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            let handle = self.array.mem_region
+            let handle = self
+                .array
+                .mem_region
                 .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
             ArrayFetchOpHandle {
                 array: self.clone().into(),
@@ -70,8 +73,9 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
     fn blocking_swap(&self, index: usize, val: T) -> T {
         // println!("in Network atomic blocking swap");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-                self.array.mem_region
-                    .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
+            self.array
+                .mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
         } else {
             panic!("invalid index");
         }

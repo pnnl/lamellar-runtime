@@ -4,6 +4,7 @@ pub(crate) use handle::NetworkAtomicArrayHandle;
 pub(crate) mod iteration;
 pub(crate) mod operations;
 mod rdma;
+use crate::active_messaging::DarcSerde;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
@@ -11,10 +12,9 @@ use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{MemoryRegion,Dist};
+use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
-use crate::{array::*, Darc,Remote};
-use crate::active_messaging::DarcSerde;
+use crate::{array::*, Darc, Remote};
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
@@ -794,8 +794,6 @@ impl<T: Remote> crate::active_messaging::DarcSerde for NetworkAtomicArray<T> {
         self.array.ser(num_pes, darcs);
     }
 }
-
-
 
 #[doc(hidden)]
 #[lamellar_impl::AmDataRT(Clone, Debug)]

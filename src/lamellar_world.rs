@@ -21,7 +21,7 @@ use crate::{
 };
 // use log::trace;
 
-use tracing::{debug,trace};
+use tracing::{debug, trace};
 
 use futures_util::future::join_all;
 use futures_util::Future;

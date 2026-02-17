@@ -134,7 +134,7 @@ impl Drop for UcxComm {
 
         // let _ = self.ucx.clear_allocs();
         let world_ref_count = Arc::strong_count(&self.ucx);
-        
+
         let _ = self.ucx.barrier();
         debug!("Dropping UcxComm: ucx world ref count: {}", world_ref_count);
     }

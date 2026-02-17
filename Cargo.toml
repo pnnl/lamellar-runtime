@@ -37,13 +37,14 @@ libfabric = { path = "../rofi-junction/libfabric", features = [
 # rofi-rust = { path = "../rofi-junction/rofi-rust", features = [
 #     "async-rofi",
 # ], optional = true }
-# pmi = { path = "../rofi-junction/pmi", default-features = false, features = ["vendored",
-#     "with-pmix",
-# ], optional = true }
-pmi = { git = "https://github.com/pnnl/rofi.git", branch = "libfabric-async", default-features = false, features = [
+pmi = { path = "../rofi-junction/pmi", default-features = false, features = [
     "vendored",
     "with-pmix",
 ], optional = true }
+# pmi = { git = "https://github.com/pnnl/rofi.git", branch = "libfabric-async", default-features = false, features = [
+#     "vendored",
+#     "with-pmix",
+# ], optional = true }
 # lamellar_main= {path = "../rofi-junction/lamellar_main", optional = true}
 # prrte-sys = { path = "../rofi-junction/prrte-sys", optional = true}
 lamellar_main = { git = "https://github.com/pnnl/rofi.git", branch = "libfabric-async", optional = true }
@@ -137,6 +138,7 @@ tokio-executor = ["tokio"]
 disable-runtime-warnings = []
 runtime-warnings-panic = []
 slurm-test = []
+enable-on-node-shmem = []
 
 
 [profile.release]
@@ -146,7 +148,7 @@ codegen-units = 1
 debug = true
 # panic = "abort"
 [profile.release.package."*"]
-debug = false
+debug = true
 
 
 [lib]

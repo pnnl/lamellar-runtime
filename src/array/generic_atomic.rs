@@ -277,8 +277,6 @@ pub struct GenericAtomicArray<T: Remote> {
     pub(crate) array: UnsafeArray<T>,
 }
 
-
-
 impl<T: Remote> crate::active_messaging::DarcSerde for GenericAtomicArray<T> {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         self.locks.ser(num_pes, darcs);

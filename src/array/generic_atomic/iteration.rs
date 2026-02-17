@@ -13,8 +13,7 @@ use crate::{
     },
     memregion::Dist,
     DistributedIterator, GenericAtomicArray, IndexedDistributedIterator, LamellarArray,
-    LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator,
-    Remote,
+    LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator, Remote,
 };
 
 impl<T: Remote> InnerArray for GenericAtomicArray<T> {

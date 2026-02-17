@@ -1161,7 +1161,7 @@ impl<T: ElementOps + 'static> UnsafeReadOnlyOps<T> for UnsafeArray<T> {
         // println!("in Network atomic store");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             unsafe {
-                let  handle = self.mem_region.get(pe, offset);
+                let handle = self.mem_region.get(pe, offset);
                 ArrayFetchOpHandle {
                     array: self.clone().into(),
                     state: FetchOpState::Rdma(handle),
@@ -1184,9 +1184,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
             //     self.array.team_rt().alloc_one_sided_mem_region(1);
             unsafe {
                 // buf.as_mut_slice()[0] = val;
-                let handle = self
-                    .mem_region
-                    .put(pe, offset, val);
+                let handle = self.mem_region.put(pe, offset, val);
                 ArrayOpHandle {
                     array: self.clone().into(),
                     state: OpState::Rdma(handle),
@@ -1204,11 +1202,9 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
         //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
-                let handle = self.mem_region.atomic_fetch_op(
-                    pe,
-                    offset,
-                    AtomicOp::Write(val),
-                );
+                let handle = self
+                    .mem_region
+                    .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
                 ArrayFetchOpHandle {
                     array: self.clone().into(),
                     state: FetchOpState::Network(handle),
@@ -1229,8 +1225,7 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
         //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
-                self
-                    .mem_region
+                self.mem_region
                     .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
             } else {
                 self.initiate_batch_fetch_op_2(val, index, ArrayOpCmd::Swap, self.clone().into())

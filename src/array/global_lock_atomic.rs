@@ -20,8 +20,8 @@ use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::warnings::RuntimeWarning;
-use crate::{array::*, Darc};
 use crate::Remote;
+use crate::{array::*, Darc};
 
 use pin_project::pin_project;
 

@@ -11,7 +11,7 @@ use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc};
 use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use tracing::{debug};
+use tracing::debug;
 
 #[derive(Debug, Clone)]
 pub(crate) struct MemoryHandle {

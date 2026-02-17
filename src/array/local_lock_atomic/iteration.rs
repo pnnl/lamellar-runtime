@@ -17,8 +17,7 @@ use crate::{
     },
     darc::local_rw_darc::{LocalRwDarcReadGuard, LocalRwDarcWriteGuard},
     Dist, DistributedIterator, IndexedDistributedIterator, IndexedLocalIterator, LamellarArray,
-    LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator, LocalLockArray,
-    Remote,
+    LamellarArrayIterators, LamellarArrayMutIterators, LocalIterator, LocalLockArray, Remote,
 };
 
 // use crate::array::iterator::distributed_iterator::*;

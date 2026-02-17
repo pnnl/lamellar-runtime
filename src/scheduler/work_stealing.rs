@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
-use tracing::{trace, trace_span, Instrument, debug};
+use tracing::{debug, trace, trace_span, Instrument};
 //, Weak};
 use std::thread;
 
