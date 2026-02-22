@@ -6,18 +6,12 @@
 //! # Warning
 //! This is a low-level module, unless you are very comfortable/confident in low level distributed memory (and even then) it is highly recommended you use the [LamellarArrays][crate::array] and [Active Messaging][crate::active_messaging] interfaces to perform distributed communications and computation.
 use crate::{
-    active_messaging::{AMCounters, AmDist, RemotePtr},
-    array::{
+    active_messaging::{AMCounters, AmDist, RemotePtr}, array::{
         LamellarArrayRdmaInput, LamellarArrayRdmaOutput, LamellarRead, LamellarWrite, TeamFrom,
         TeamTryFrom,
-    },
-    darc::Darc,
-    lamellae::{
-        collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
-    },
-    lamellar_team::{LamellarTeam, LamellarTeamRT},
-    scheduler::Scheduler,
-    LamellarEnv
+    }, darc::Darc, lamellae::{
+        collective::{BroadcastInput, CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput}, AllocationType, AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, Backend, CommAlloc, CommAllocAddr, CommAllocAtomic, CommAllocRdma, CommInfo, CommMem, CommProgress, CommSlice, Lamellae, RdmaGetBufferHandle, RdmaGetHandle, RdmaGetIntoBufferHandle, RdmaHandle, Remote
+    }, lamellar_team::{LamellarTeam, LamellarTeamRT}, memregion::one_sided::MemRegionHandleInner, scheduler::Scheduler, LamellarEnv
 };
 use core::marker::PhantomData;
 use std::hash::{Hash, Hasher};
@@ -1270,7 +1264,7 @@ impl<T: Remote> MemoryRegion<T> {
             .atomic_fetch_op_blocking(&self.scheduler, op, pe, index)
     }
 
-    pub(crate) fn reduce_all(&self, op: ReduceOp) -> CollectiveAllReduceOpHandle<T> {
+    pub(crate) fn reduce_all(&self, src: impl Into<MemregionRdmaInputInner<T>>, op: ReduceOp) -> CollectiveAllReduceOpHandle<T> {
         trace!(
             "reduce_all memregion {:?} ",
             self.alloc,
@@ -1280,6 +1274,7 @@ impl<T: Remote> MemoryRegion<T> {
             .reduce_all(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
                 op,
             )
     }
@@ -1287,6 +1282,7 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) fn reduce_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self, 
         op: ReduceOp, 
+        src: impl Into<MemregionRdmaInputInner<T>>,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         trace!(
@@ -1298,15 +1294,17 @@ impl<T: Remote> MemoryRegion<T> {
             .reduce_all_into_buffer(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
                 op,
                 buffer
             )
     }
 
-    pub(crate) fn reduce_all_in_place(
+    pub(crate) fn reduce_all_in_place<B: AsLamellarBuffer<T>>(
         &self, 
+        src_and_dst: LamellarBuffer<T, B>,
         op: ReduceOp,
-    ) -> CollectiveAllReduceInPlaceOpHandle<T> {
+    ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         trace!(
             "reduce_all in place memregion {:?} ",
             self.alloc,
@@ -1316,6 +1314,7 @@ impl<T: Remote> MemoryRegion<T> {
             .reduce_all_in_place(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src_and_dst,
                 op,
             )
     }
@@ -1323,6 +1322,7 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) fn reduce(
         &self,
         op: ReduceOp,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_pe: usize,
     ) -> CollectiveReduceOpHandle<T> {
         trace!(
@@ -1337,6 +1337,7 @@ impl<T: Remote> MemoryRegion<T> {
                 &self.scheduler, 
                 self.counters.clone(), 
                 op, 
+                src,
                 root_pe
             )
     }
@@ -1344,6 +1345,7 @@ impl<T: Remote> MemoryRegion<T> {
     pub(crate) fn reduce_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
         op: ReduceOp,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         trace!(
@@ -1357,32 +1359,33 @@ impl<T: Remote> MemoryRegion<T> {
                 &self.scheduler, 
                 self.counters.clone(), 
                 op, 
+                src,
                 root_or_buffer
             )
     }
 
-    pub(crate) fn reduce_in_place(
-        &self,
-        op: ReduceOp,
-        root_pe: usize,
-    ) -> CollectiveReduceInPlaceOpHandle<T> {
-        trace!(
-            "reduce at root memregion {:?} root_pe: {:?}",
-            self.alloc,
-            root_pe
-        );
+    // pub(crate) fn reduce_in_place(
+    //     &self,
+    //     op: ReduceOp,
+    //     root_pe: usize,
+    // ) -> CollectiveReduceInPlaceOpHandle<T> {
+    //     trace!(
+    //         "reduce at root memregion {:?} root_pe: {:?}",
+    //         self.alloc,
+    //         root_pe
+    //     );
 
-        self.alloc
-            .inner_alloc
-            .reduce_in_place(
-                &self.scheduler, 
-                self.counters.clone(), 
-                op, 
-                root_pe
-            )
-    }
+    //     self.alloc
+    //         .inner_alloc
+    //         .reduce_in_place(
+    //             &self.scheduler, 
+    //             self.counters.clone(), 
+    //             op, 
+    //             root_pe
+    //         )
+    // }
 
-    pub(crate) fn gather_all(&self) -> CollectiveAllGatherOpHandle<T> {
+    pub(crate) fn gather_all(&self, src: impl Into<MemregionRdmaInputInner<T>>) -> CollectiveAllGatherOpHandle<T> {
         trace!(
             "gather_all memregion {:?} ",
             self.alloc,
@@ -1392,11 +1395,13 @@ impl<T: Remote> MemoryRegion<T> {
             .gather_all(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
             )
     }
 
     pub(crate) fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self, 
+        src: impl Into<MemregionRdmaInputInner<T>>,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         trace!(
@@ -1408,12 +1413,14 @@ impl<T: Remote> MemoryRegion<T> {
             .gather_all_into_buffer(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
                 buffer
             )
     }
 
     pub(crate) fn gather(
         &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T> {
         trace!(
@@ -1427,12 +1434,14 @@ impl<T: Remote> MemoryRegion<T> {
             .gather(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
                 root_pe
             )
     }
 
     pub(crate) fn gather_into_buffer<B: AsLamellarBuffer<T>>(
         &self,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_or_buffer: RootOrLamellarBuffer<T, B>,
     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         trace!(
@@ -1445,11 +1454,15 @@ impl<T: Remote> MemoryRegion<T> {
             .gather_into_buffer(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
                 root_or_buffer
             )
     }
 
-    pub(crate) fn broadcast_all(&self) -> CollectiveAllBroadcastOpHandle<T> {
+    pub(crate) fn broadcast_all(
+        &self, 
+        src: impl Into<MemregionRdmaInputInner<T>>
+    ) -> CollectiveAllBroadcastOpHandle<T> {
         trace!(
             "broadcast_all memregion {:?} ",
             self.alloc,
@@ -1459,11 +1472,13 @@ impl<T: Remote> MemoryRegion<T> {
             .broadcast_all(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
             )
     }
 
     pub(crate) fn broadcast_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self, 
+        src: impl Into<MemregionRdmaInputInner<T>>,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B> {
         trace!(
@@ -1475,22 +1490,23 @@ impl<T: Remote> MemoryRegion<T> {
             .broadcast_all_into_buffer(
                 &self.scheduler, 
                 self.counters.clone(), 
+                src,
                 buffer
             )
     }
 
-    pub(crate) fn broadcast(&self, root_pe: usize) -> CollectiveBroadcastOpHandle<T> {
-        trace!(
-            "broadcast memregion {:?} root pe {}",
-            self.alloc,
-            root_pe
-        );
+    pub(crate) fn broadcast(&self, src_or_root_pe: BroadcastInput<T>) -> CollectiveBroadcastOpHandle<T> {
+        // trace!(
+        //     "broadcast memregion {:?} root pe {}",
+        //     self.alloc,
+        //     root_pe
+        // );
         self.alloc
             .inner_alloc
             .broadcast(
                 &self.scheduler, 
                 self.counters.clone(),
-                root_pe
+                src_or_root_pe
             )
     }
 
@@ -1511,25 +1527,25 @@ impl<T: Remote> MemoryRegion<T> {
             )
     }
 
-    pub(crate) fn scatter(&self, root_pe: usize) -> CollectiveScatterOpHandle<T> {
-        trace!(
-            "scatter memregion {:?} root pe {}",
-            self.alloc,
-            root_pe
-        );
+    pub(crate) fn scatter(&self, src_or_pe: ScatterInput<T>) -> CollectiveScatterOpHandle<T> {
+        // trace!(
+        //     "scatter memregion {:?} root pe {}",
+        //     self.alloc,
+        //     root_pe
+        // );
         self.alloc
             .inner_alloc
             .scatter(
                 &self.scheduler, 
                 self.counters.clone(),
-                root_pe
+                src_or_pe
             )
     }
 
     pub(crate) fn scatter_into_buffer<B: AsLamellarBuffer<T>>(
         &self, 
         result: LamellarBuffer<T, B>,
-        root_pe: usize,
+        src_or_pe: ScatterInput<T>,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         trace!(
             "scatter into buffer memregion {:?}",
@@ -1541,7 +1557,44 @@ impl<T: Remote> MemoryRegion<T> {
                 &self.scheduler, 
                 self.counters.clone(), 
                 result,
-                root_pe
+                src_or_pe
+            )
+    }
+
+    pub(crate) fn reduce_scatter(&self, op: ReduceOp, src: impl Into<MemregionRdmaInputInner<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+        trace!(
+            "reduce_scatter memregion {:?} ",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .reduce_scatter(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op,
+                src,
+                len,
+            )
+    }
+
+    pub(crate) fn reduce_scatter_into_buffer<B: AsLamellarBuffer<T>>(
+        &self, 
+        op: ReduceOp, 
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        buffer: LamellarBuffer<T, B>,
+    ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+        trace!(
+            "reduce_scatter into buffer memregion {:?} ",
+            self.alloc,
+        );
+        self.alloc
+            .inner_alloc
+            .reduce_scatter_into_buffer(
+                &self.scheduler, 
+                self.counters.clone(), 
+                op,
+                src,
+                buffer
             )
     }
 

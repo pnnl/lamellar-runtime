@@ -2,7 +2,7 @@
 use crate::lamellae::libfabric_async_lamellae::fabric::{
     LibfabricAsyncAlloc, OneSidedLibfabricAsyncAlloc,
 };
-use crate::lamellae::collective::{CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer};
+use crate::lamellae::collective::{BroadcastInput, CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpHandle, CollectiveAllGatherOpHandle, CollectiveAllReduceInPlaceOpHandle, CollectiveAllReduceIntoBufferOpHandle, CollectiveAllReduceOpHandle, CollectiveBroadcastIntoBufferOpHandle, CollectiveBroadcastOpHandle, CollectiveGatherIntoBufferOpHandle, CollectiveGatherOpHandle, CollectiveReduceInPlaceOpHandle, CollectiveReduceIntoBufferOpHandle, CollectiveReduceOpHandle, CollectiveReduceScatterIntoBufferOpHandle, CollectiveReduceScatterOpHandle, CollectiveScatterIntoBufferOpHandle, CollectiveScatterOpHandle, CommAllocCollectiveAllBroadcast, CommAllocCollectiveAllGather, CommAllocCollectiveAllReduce, CommAllocCollectiveBroadcast, CommAllocCollectiveGather, CommAllocCollectiveReduce, CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrLamellarBuffer, RootSrcOrLamellarBuffer, ScatterInput};
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::fabric::{LibfabricAlloc, OneSidedLibfabricAlloc};
 #[cfg(feature = "enable-libfabric-mt")]
@@ -2165,6 +2165,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         op: ReduceOp,
     ) -> CollectiveAllReduceOpHandle<T> {
         match self {
@@ -2182,7 +2183,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_all(scheduler, counters, op)
+                inner_alloc.reduce_all(scheduler, counters, src, op)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2221,6 +2222,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         op: ReduceOp,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
@@ -2239,7 +2241,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_all_into_buffer(scheduler, counters, op, buffer)
+                inner_alloc.reduce_all_into_buffer(scheduler, counters, src, op, buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2274,12 +2276,13 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
         }
     }
-    fn reduce_all_in_place<T: Remote> (
+    fn reduce_all_in_place<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src_and_dst: LamellarBuffer<T, B>,
         op: ReduceOp,
-    ) -> CollectiveAllReduceInPlaceOpHandle<T> {
+    ) -> CollectiveAllReduceInPlaceOpHandle<T, B> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
             //     panic!("Raw allocation not supported")
@@ -2295,7 +2298,7 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_all_in_place(scheduler, counters, op)
+                inner_alloc.reduce_all_in_place(scheduler, counters, src_and_dst, op)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2338,6 +2341,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_pe: usize,
     ) -> CollectiveReduceOpHandle<T> {
         match self {
@@ -2356,7 +2360,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
 
-                inner_alloc.reduce(scheduler, counters, op, root_pe)
+                inner_alloc.reduce(scheduler, counters, op, src, root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2396,6 +2400,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         match self {
@@ -2413,7 +2418,7 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_into_buffer(scheduler, counters, op, root_or_buffer)
+                inner_alloc.reduce_into_buffer(scheduler, counters, op, src, root_or_buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2448,63 +2453,63 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // }
         }
     }
-    fn reduce_in_place<T: Remote> (
-        &self,
-        scheduler: &Arc<Scheduler>,
-        counters: Vec<Arc<AMCounters>>,
-        op: ReduceOp,
-        root_pe: usize,
-    ) -> CollectiveReduceInPlaceOpHandle<T> {
-        match self {
-            // CommAllocInner::Raw(_addr, _size) => {
-            //     panic!("Raw allocation not supported")
-            // }
-            // CommAllocInner::LocalAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::ShmemAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            #[cfg(feature = "enable-libfabric")]
-            CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_in_place(scheduler, counters, op, root_pe)
-            }
-            _ => {
-                panic!("Collective reduce not supported for this CommAlloc type")
-            }
-            // #[cfg(feature = "enable-libfabric")]
-            // CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // #[cfg(feature = "enable-libfabric")]
-            // CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // #[cfg(feature = "enable-libfabric")]
-            // CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // #[cfg(feature = "enable-libfabric-async")]
-            // CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // #[cfg(feature = "enable-libfabric-async")]
-            // CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // #[cfg(feature = "enable-ucx")]
-            // CommAllocInner::UcxAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-            // #[cfg(feature = "enable-ucx")]
-            // CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
-            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
-            // }
-        }
-    }
+    // fn reduce_in_place<T: Remote> ( // TODO: FIX
+    //     &self,
+    //     scheduler: &Arc<Scheduler>,
+    //     counters: Vec<Arc<AMCounters>>,
+    //     op: ReduceOp,
+    //     root_pe: usize,
+    // ) -> CollectiveReduceInPlaceOpHandle<T> {
+    //     match self {
+    //         // CommAllocInner::Raw(_addr, _size) => {
+    //         //     panic!("Raw allocation not supported")
+    //         // }
+    //         // CommAllocInner::LocalAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // CommAllocInner::ShmemAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         #[cfg(feature = "enable-libfabric")]
+    //         CommAllocInner::LibfabricAlloc(inner_alloc) => {
+    //             inner_alloc.reduce_in_place(scheduler, counters, op, root_pe)
+    //         }
+    //         _ => {
+    //             panic!("Collective reduce not supported for this CommAlloc type")
+    //         }
+    //         // #[cfg(feature = "enable-libfabric")]
+    //         // CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // #[cfg(feature = "enable-libfabric")]
+    //         // CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // #[cfg(feature = "enable-libfabric")]
+    //         // CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // #[cfg(feature = "enable-libfabric-async")]
+    //         // CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // #[cfg(feature = "enable-libfabric-async")]
+    //         // CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // #[cfg(feature = "enable-ucx")]
+    //         // CommAllocInner::UcxAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //         // #[cfg(feature = "enable-ucx")]
+    //         // CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+    //         //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+    //         // }
+    //     }
+    // }
 }
 
 
@@ -2513,6 +2518,7 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
     ) -> CollectiveAllGatherOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -2529,7 +2535,7 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.gather_all(scheduler, counters)
+                inner_alloc.gather_all(scheduler, counters, src)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2568,6 +2574,7 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         match self {
@@ -2585,7 +2592,7 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.gather_all_into_buffer(scheduler, counters, buffer)
+                inner_alloc.gather_all_into_buffer(scheduler, counters, src, buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2627,6 +2634,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T> {
         match self {
@@ -2645,7 +2653,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
 
-                inner_alloc.gather(scheduler, counters, root_pe)
+                inner_alloc.gather(scheduler, counters, src, root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2684,6 +2692,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         match self {
@@ -2701,7 +2710,7 @@ impl CommAllocCollectiveGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.gather_into_buffer(scheduler, counters, root_or_buffer)
+                inner_alloc.gather_into_buffer(scheduler, counters, src, root_or_buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2744,6 +2753,7 @@ impl CommAllocCollectiveAllBroadcast for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
     ) -> CollectiveAllBroadcastOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -2760,7 +2770,7 @@ impl CommAllocCollectiveAllBroadcast for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.broadcast_all(scheduler, counters)
+                inner_alloc.broadcast_all(scheduler, counters, src)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2799,6 +2809,7 @@ impl CommAllocCollectiveAllBroadcast for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
+        src: impl Into<MemregionRdmaInputInner<T>>,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllBroadcastIntoBufferOpHandle<T, B> {
         match self {
@@ -2816,7 +2827,7 @@ impl CommAllocCollectiveAllBroadcast for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.broadcast_all_into_buffer(scheduler, counters, buffer)
+                inner_alloc.broadcast_all_into_buffer(scheduler, counters, src, buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2860,7 +2871,7 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        root_pe: usize,
+        src_or_root_pe: BroadcastInput<T>,
     ) -> CollectiveBroadcastOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -2878,7 +2889,7 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
 
-                inner_alloc.broadcast(scheduler, counters, root_pe)
+                inner_alloc.broadcast(scheduler, counters, src_or_root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2977,7 +2988,7 @@ impl CommAllocCollectiveScatter for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        root_pe: usize,
+        src_or_root_pe: ScatterInput<T>,
     ) -> CollectiveScatterOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -2995,7 +3006,7 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
 
-                inner_alloc.scatter(scheduler, counters, root_pe)
+                inner_alloc.scatter(scheduler, counters, src_or_root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -3035,7 +3046,7 @@ impl CommAllocCollectiveScatter for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         buf: LamellarBuffer<T, B>,
-        root_pe: usize,
+        src_or_root_pe: ScatterInput<T>,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -3052,7 +3063,7 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.scatter_into_buffer(scheduler, counters, buf, root_pe)
+                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -3089,6 +3100,125 @@ impl CommAllocCollectiveScatter for CommAllocInner {
     }
 }
 
+
+impl CommAllocCollectiveReduceScatter for CommAllocInner {
+    fn reduce_scatter<T: Remote> (
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: ReduceOp,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        len: usize,
+    ) -> CollectiveReduceScatterOpHandle<T> {
+        match self {
+            // CommAllocInner::Raw(_addr, _size) => {
+            //     panic!("Raw allocation not supported")
+            // }
+            // CommAllocInner::LocalAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // CommAllocInner::ShmemAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter(scheduler, counters, op, src, len)
+            }
+            _ => {
+                panic!("Collective reduce not supported for this CommAlloc type")
+            }
+            // #[cfg(feature = "enable-libfabric")]
+            // CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric")]
+            // CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric")]
+            // CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric-async")]
+            // CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric-async")]
+            // CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-ucx")]
+            // CommAllocInner::UcxAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-ucx")]
+            // CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+        }
+    }
+    fn reduce_scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: ReduceOp,
+        src: impl Into<MemregionRdmaInputInner<T>>,
+        buffer: LamellarBuffer<T, B>,
+    ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+        match self {
+            // CommAllocInner::Raw(_addr, _size) => {
+            //     panic!("Raw allocation not supported")
+            // }
+            // CommAllocInner::LocalAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // CommAllocInner::ShmemAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, src, buffer)
+            }
+            _ => {
+                panic!("Collective reduce not supported for this CommAlloc type")
+            }
+            // #[cfg(feature = "enable-libfabric")]
+            // CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric")]
+            // CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric")]
+            // CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric-async")]
+            // CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-libfabric-async")]
+            // CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-ucx")]
+            // CommAllocInner::UcxAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+            // #[cfg(feature = "enable-ucx")]
+            // CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+            //     inner_alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
+            // }
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub(crate) struct CommAlloc {
