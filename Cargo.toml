@@ -293,6 +293,62 @@ path = "tests/array/atomic_ops/swap_test.rs"
 name = "compare_exchange_test"
 path = "tests/array/atomic_ops/compare_exchange_test.rs"
 
+[[example]]
+name = "sum_all_test"
+path = "tests/array/collective/sum_all_test.rs"
+
+[[example]]
+name = "prod_all_test"
+path = "tests/array/collective/prod_all_test.rs"
+
+[[example]]
+name = "min_all_test"
+path = "tests/array/collective/min_all_test.rs"
+
+[[example]]
+name = "max_all_test"
+path = "tests/array/collective/max_all_test.rs"
+
+[[example]]
+name = "or_all_test"
+path = "tests/array/collective/or_all_test.rs"
+
+[[example]]
+name = "and_all_test"
+path = "tests/array/collective/and_all_test.rs"
+
+[[example]]
+name = "xor_all_test"
+path = "tests/array/collective/xor_all_test.rs"
+
+# [[example]]
+# name = "sum_at_pe_test"
+# path = "tests/array/collective/sum_at_pe_test.rs"
+
+# [[example]]
+# name = "prod_at_pe_test"
+# path = "tests/array/collective/prod_at_pe_test.rs"
+
+# [[example]]
+# name = "min_at_pe_test"
+# path = "tests/array/collective/min_at_pe_test.rs"
+
+# [[example]]
+# name = "max_at_pe_test"
+# path = "tests/array/collective/max_at_pe_test.rs"
+
+# [[example]]
+# name = "or_at_pe_test"
+# path = "tests/array/collective/or_at_pe_test.rs"
+
+# [[example]]
+# name = "and_at_pe_test"
+# path = "tests/array/collective/and_at_pe_test.rs"
+
+# [[example]]
+# name = "xor_at_pe_test"
+# path = "tests/array/collective/xor_at_pe_test.rs"
+
 ##------------ Bandwidth Examples -----------------##
 
 [[example]]
