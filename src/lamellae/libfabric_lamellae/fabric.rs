@@ -38,10 +38,12 @@ use crate::{
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
+use libc::{sysconf, _SC_PAGESIZE, _SC_PHYS_PAGES};
 use parking_lot::{Mutex, RwLock};
 use pmi::{pmi::Pmi, pmix::PmiX};
 use std::{
     collections::HashMap,
+    env,
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc,
@@ -49,15 +51,24 @@ use std::{
 };
 use tracing::{debug, trace};
 
-use std::ops::{Add, AddAssign};
-use std::time::{Duration, Instant};
-// use crate::{SETUP_TIME,SETUP_TIME2,SETUP_TIME3, OP_TIME, SETUP_INSTANT};
 
 type WaitableEq = libfabric::eq_caps_type!(EqCaps::WAIT);
 type WaitableCq = libfabric::cq_caps_type!(CqCaps::WAIT);
 type WaitableCntr = libfabric::cntr_caps_type!(CntrCaps::WAIT);
 type RmaAtomicCollEp =
     libfabric::info_caps_type!(FabInfoCaps::ATOMIC, FabInfoCaps::RMA, FabInfoCaps::COLL);
+
+fn node_total_memory_bytes() -> Option<u64> {
+    let pages = unsafe { sysconf(_SC_PHYS_PAGES) };
+    let page_size = unsafe { sysconf(_SC_PAGESIZE) };
+    if pages <= 0 || page_size <= 0 {
+        return None;
+    }
+
+    let pages = pages as u64;
+    let page_size = page_size as u64;
+    pages.checked_mul(page_size)
+}
 
 // #[derive(Debug)]
 enum BarrierImpl {
@@ -315,8 +326,6 @@ impl CommGroup {
             .get_cnt
             .fetch_max(self.get_cntr.read(), Ordering::SeqCst);
         // let old_cnt = self.get_cnt.load(Ordering::SeqCst);
-        // SETUP_TIME.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
         loop {
             match fun() {
                 Ok(_) => break,
@@ -332,14 +341,10 @@ impl CommGroup {
         }
         let new_cnt = self.get_cnt.fetch_add(1, Ordering::SeqCst) + 1;
         trace!(target: "libfabric", "done posting get {} {}", old_cnt, new_cnt);
-        // SETUP_TIME2.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
 
         if blocking {
             self.get_cntr.wait(new_cnt, -1)?;
         }
-        // OP_TIME.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
 
         Ok(new_cnt)
     }
@@ -356,15 +361,29 @@ impl std::fmt::Debug for Ofi {
 
 impl Ofi {
     pub(crate) fn new(provider: Option<&str>, domain: Option<&str>) -> FabricResult<Arc<Self>> {
+        
         let my_pmi = Arc::new(PmiX::new().map_err(|e| {
             eprintln!("Error initializing PMI: {:?}", e);
             FabricError::InitError(1)
         })?);
 
+        let num_pes = my_pmi.ranks().len();
+        if env::var_os("FI_UNIVERSE").is_none() {
+            env::set_var("FI_UNIVERSE", num_pes.to_string());
+        }
+
+        if env::var_os("FI_MR_CACHE_MAX_SIZE").is_none() {
+            if let Some(total_bytes) = node_total_memory_bytes() {
+                env::set_var("FI_MR_CACHE_MAX_SIZE", total_bytes.to_string());
+            } else {
+                eprintln!("Warning: unable to determine total system memory for FI_MR_CACHE_MAX_SIZE");
+            }
+        }
+
         #[cfg(feature = "enable-on-node-shmem")]
         let disable_on_node_shmem = config().disable_on_node_shmem.unwrap_or(false);
         #[cfg(feature = "enable-on-node-shmem")]
-        let mut same_node_pes = vec![false; my_pmi.ranks().len()];
+        let mut same_node_pes = vec![false; num_pes];
         #[cfg(feature = "enable-on-node-shmem")]
         if !disable_on_node_shmem {
             let ranks_on_node = my_pmi.ranks_on_node();
@@ -379,7 +398,7 @@ impl Ofi {
         #[cfg(feature = "enable-on-node-shmem")]
         let job_id = my_pmi.job_id();
 
-        // trace!("Using PMI my_pe {} num_pes {}",my_pmi.rank(),my_pmi.ranks().len());
+        // trace!("Using PMI my_pe {} num_pes {}",my_pmi.rank(), num_pes);
 
         let info = Info::new(&libfabric_version())
             .enter_hints()
@@ -533,7 +552,7 @@ impl Ofi {
 
         let alloc_manager = AllocInfoManager::new();
         let ofi = Arc::new(Self {
-            num_pes: my_pmi.ranks().len(),
+            num_pes,
             my_pe: my_pmi.rank(),
             #[cfg(feature = "enable-on-node-shmem")]
             same_node_pes,
@@ -1990,8 +2009,6 @@ impl LibfabricAlloc {
         let remote_src_addr = remote_alloc_info.mem_address().add(offset);
         let remote_key = remote_alloc_info.key();
         let cg = &self.ofi.comm_group;
-        // SETUP_TIME.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
         cg.post_get(blocking, || unsafe {
             cg.ep.read_from(
                 dst_addr,
@@ -2001,8 +2018,6 @@ impl LibfabricAlloc {
                 &remote_key,
             )
         })?;
-        // OP_TIME.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
 
         Ok(())
     }

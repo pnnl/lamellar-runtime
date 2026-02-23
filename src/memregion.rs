@@ -1229,8 +1229,6 @@ impl<T: Remote> MemoryRegion<T> {
     }
 
     pub(crate) fn atomic_fetch_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) -> T {
-        // SETUP_TIME3.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
         trace!(
             "atomic_fetch_op memregion {:?} index: {:?}",
             self.alloc,

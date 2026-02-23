@@ -32,19 +32,12 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-// use std::ops::{AddAssign};
-// use std::time::{Instant,Duration};
 
 lazy_static! {
     pub(crate) static ref LAMELLAES: RwLock<HashMap<Backend, Arc<Lamellae>>> =
         RwLock::new(HashMap::new());
     pub(crate) static ref INIT: AtomicBool = AtomicBool::new(false);
     pub(crate) static ref MAIN_THREAD: std::thread::ThreadId = std::thread::current().id();
-    // pub(crate) static ref SETUP_INSTANT: std::sync::Mutex<std::time::Instant> = std::sync::Mutex::new(std::time::Instant::now());
-    // pub(crate) static ref SETUP_TIME: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
-    // pub(crate) static ref SETUP_TIME2: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
-    // pub(crate) static ref SETUP_TIME3: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
-    // pub(crate) static ref OP_TIME: std::sync::Mutex<std::time::Duration> = std::sync::Mutex::new(std::time::Duration::from_secs(0));
 }
 
 /// An abstraction representing all the PE's (processing elements) within a given distributed execution.
@@ -326,12 +319,6 @@ impl LamellarWorld {
         self.team.spawn_am_local(am)
     }
 
-    // pub fn print_setup_op_times(&self) {
-    //     println!("setup time: {:?}", *SETUP_TIME.lock().unwrap());
-    //     println!("setup time2: {:?}", *SETUP_TIME2.lock().unwrap());
-    //     println!("setup time3: {:?}", *SETUP_TIME3.lock().unwrap());
-    //     println!("op time: {:?}", *OP_TIME.lock().unwrap());
-    // }
 }
 
 impl LamellarEnv for LamellarWorld {
@@ -396,10 +383,7 @@ impl Drop for LamellarWorld {
                 lamellae.comm().barrier();
             }
 
-            // println!("setup time: {:?}", *SETUP_TIME.lock().unwrap());
-            // println!("setup time2: {:?}", *SETUP_TIME2.lock().unwrap());
-            // println!("setup time3: {:?}", *SETUP_TIME3.lock().unwrap());
-            // println!("op time: {:?}", *OP_TIME.lock().unwrap());
+            
             // LAMELLAES.write().clear();
             debug!("LamellarWorld dropped");
         } else {
@@ -470,11 +454,6 @@ impl LamellarWorldBuilder {
     pub fn new() -> LamellarWorldBuilder {
         // simple_logger::init().unwrap();
         // trace!("New world builder");
-        // SETUP_TIME.lock().unwrap().add_assign(Duration::from_secs(0));
-        // SETUP_TIME2.lock().unwrap().add_assign(Duration::from_secs(0));
-        // SETUP_TIME3.lock().unwrap().add_assign(Duration::from_secs(0));
-        // OP_TIME.lock().unwrap().add_assign(Duration::from_secs(0));
-        // *SETUP_INSTANT.lock().unwrap() = Instant::now();
         let executor = match config().executor.as_str(){
             "tokio" => {
                 #[cfg(not(feature = "tokio-executor"))]

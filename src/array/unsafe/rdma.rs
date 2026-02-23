@@ -15,9 +15,7 @@ use crate::{
     RdmaHandle,
 };
 
-use crate::{OP_TIME, SETUP_INSTANT, SETUP_TIME, SETUP_TIME2, SETUP_TIME3};
-use std::ops::{Add, AddAssign};
-use std::time::{Duration, Instant};
+
 
 // //use tracing::*;
 
@@ -652,10 +650,8 @@ impl<T: Dist> UnsafeArray<T> {
     }
 
     pub unsafe fn blocking_get(&self, index: usize) -> T {
-        // *SETUP_INSTANT.lock().unwrap() = std::time::Instant::now();
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
             let res = self.mem_region.blocking_get(pe, offset);
-            // SETUP_TIME2.lock().unwrap().add_assign(SETUP_INSTANT.lock().unwrap().elapsed());
             res
         } else {
             panic!("index out of bounds in LamellarArray put");
