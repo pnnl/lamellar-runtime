@@ -237,6 +237,23 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LamellarBuffer<T, B> {
         }
     }
 
+    pub async fn async_unwrap(self) -> B {
+        while unsafe {
+            self.data
+                .as_ref()
+                .cnt
+                .load(std::sync::atomic::Ordering::SeqCst)
+        } != 1
+        {
+            // println!("Waiting to unwrap LamellarBuffer: {:?}", self);
+            trace!("Waiting to unwrap LamellarBuffer: {:?}", self);
+            async_std::task::yield_now().await;
+        }
+        let this = std::mem::ManuallyDrop::new(self);
+        let data = unsafe { Box::from_raw(this.data.as_ptr()) };
+        data.data
+    }
+
     pub fn try_reset(&mut self) -> bool {
         if unsafe {
             self.data
