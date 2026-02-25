@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::env;
-use std::fs::File;
+use std::ffi::OsString;
+use std::fs::{self, File};
 use std::io::Write;
-use std::path::PathBuf;
+use std::os::unix::fs::symlink;
+use std::path::{Path, PathBuf};
 
 fn main() {
     let mut lib_paths: Vec<String> = Vec::new();
@@ -58,10 +61,20 @@ fn main() {
     }
     // println!("cargo:warning={:?}", env::vars());
 
+    let out_dir = env::var("OUT_DIR").unwrap_or_else(|_| ".".to_string());
+    let out_path = PathBuf::from(&out_dir);
+    let profile_output_dir = determine_profile_output_dir(&out_path);
+    copy_dependency_libs(&lib_paths, &profile_output_dir);
+    
+    if let Ok(origin) = env::var("ORIGIN"){
+        println!("cargo:warning=rpath for sharedlibs: {}/shared_libs", origin);
+    }
+    println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/shared_libs");
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}/shared_libs",profile_output_dir.display());
+    
+
     // Generate bash script with library paths
     // Navigate from OUT_DIR to the workspace root (where cargo was invoked)
-    let out_dir = env::var("OUT_DIR").unwrap_or_else(|_| ".".to_string());
-    let out_path = PathBuf::from(out_dir);
 
     // OUT_DIR is typically target/debug/build/<crate>/out
     // Navigate up to find the project root (where target/ is)
@@ -108,4 +121,144 @@ fn main() {
     } else {
         panic!("Failed to create lamellar_env.sh");
     }
+}
+
+fn determine_profile_output_dir(out_dir: &Path) -> PathBuf {
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    if let Some(dir) = find_profile_dir(out_dir, &profile) {
+        return dir;
+    }
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string()));
+    let mut target_dir = env::var("CARGO_TARGET_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| manifest_dir.join("target"));
+    target_dir.push(profile);
+    target_dir
+}
+
+fn find_profile_dir(out_dir: &Path, profile: &str) -> Option<PathBuf> {
+    let mut cursor = out_dir;
+    while let Some(parent) = cursor.parent() {
+        if parent
+            .file_name()
+            .and_then(|name| name.to_str())
+            == Some(profile)
+        {
+            return Some(parent.to_path_buf());
+        }
+        cursor = parent;
+    }
+    None
+}
+
+fn copy_dependency_libs(lib_paths: &[String], output_dir: &Path) {
+    if lib_paths.is_empty() {
+        return;
+    }
+
+    let shared_libs_dir = output_dir.join("shared_libs");
+    if let Err(err) = fs::create_dir_all(&shared_libs_dir) {
+        println!(
+            "cargo:warning=Unable to create shared libs directory {}: {}",
+            shared_libs_dir.display(), err
+        );
+        return;
+    }
+
+    let mut candidates = HashMap::<String, Candidate>::new();
+    for lib_path in lib_paths {
+        let lib_dir = PathBuf::from(lib_path);
+        if !lib_dir.is_dir() {
+            continue;
+        }
+
+        let entries = match fs::read_dir(&lib_dir) {
+            Ok(entries) => entries,
+            Err(err) => {
+                println!(
+                    "cargo:warning=Unable to read library directory {}: {}",
+                    lib_dir.display(), err
+                );
+                continue;
+            }
+        };
+
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+
+            let file_name = entry.file_name();
+            let file_name_str = match file_name.to_str() {
+                Some(s) => s,
+                None => continue,
+            };
+            if !is_shared_object(file_name_str) {
+                continue;
+            }
+
+            let (base, is_exact) = match shared_object_base(file_name_str) {
+                Some(result) => result,
+                None => continue,
+            };
+
+            let candidate = Candidate {
+                path: path.clone(),
+                name: file_name.clone(),
+                is_exact,
+            };
+
+            match candidates.entry(base) {
+                std::collections::hash_map::Entry::Occupied(mut existing) => {
+                    if !existing.get().is_exact && candidate.is_exact {
+                        existing.insert(candidate);
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(candidate);
+                }
+            }
+        }
+    }
+
+    let mut linked = Vec::new();
+    for candidate in candidates.values() {
+        let dest = shared_libs_dir.join(&candidate.name);
+        if dest.exists() {
+            let _ = fs::remove_file(&dest);
+        }
+        if let Err(err) = symlink(&candidate.path, &dest) {
+            println!(
+                "cargo:warning=Failed to link {} into {}: {}",
+                candidate.path.display(), dest.display(), err
+            );
+            continue;
+        }
+        linked.push(candidate.name.clone());
+    }
+
+    if !linked.is_empty() {
+        println!(
+            "cargo:warning=Linked {} shared libs into {}",
+            linked.len(), shared_libs_dir.display()
+        );
+    }
+}
+
+fn is_shared_object(file_name: &str) -> bool {
+    file_name.contains(".so")
+}
+
+fn shared_object_base(file_name: &str) -> Option<(String, bool)> {
+    let pos = file_name.find(".so")?;
+    let is_exact = file_name[pos + 3..].is_empty();
+    Some((file_name[..pos].to_string(), is_exact))
+}
+
+#[derive(Clone)]
+struct Candidate {
+    path: PathBuf,
+    name: OsString,
+    is_exact: bool,
 }

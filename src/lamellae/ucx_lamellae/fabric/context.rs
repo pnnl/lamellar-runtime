@@ -70,21 +70,24 @@ impl Context {
             | ucp_feature::UCP_FEATURE_AMO64
             | ucp_feature::UCP_FEATURE_AMO32;
 
-        let params = ucp_params_t {
-            field_mask: (ucp_params_field::UCP_PARAM_FIELD_FEATURES
-                | ucp_params_field::UCP_PARAM_FIELD_ESTIMATED_NUM_EPS
-                | ucp_params_field::UCP_PARAM_FIELD_MT_WORKERS_SHARED)
-                .0 as u64,
-            features: features.0 as u64,
-            estimated_num_eps: pmi.ranks().len() as usize,
-            mt_workers_shared: 0,
-            estimated_num_ppn: 0,
-            request_size: 0,
-            request_init: None,
-            request_cleanup: None,
-            tag_sender_mask: 0,
-            name: std::ptr::null(),
-        };
+        let mut params: ucp_params_t = Default::default();
+        params.field_mask = (ucp_params_field::UCP_PARAM_FIELD_FEATURES
+            | ucp_params_field::UCP_PARAM_FIELD_ESTIMATED_NUM_EPS
+            | ucp_params_field::UCP_PARAM_FIELD_MT_WORKERS_SHARED
+            | ucp_params_field::UCP_PARAM_FIELD_ESTIMATED_NUM_PPN)
+            .0 as u64;
+        params.features = features.0 as u64;
+        params.estimated_num_eps = pmi.ranks().len() as usize;
+        // Allow multiple workers to be created and used from different threads.
+        // Setting this to 1 requests the UCP to support shared multi-threaded workers.
+        params.mt_workers_shared = 1;
+        params.estimated_num_ppn = pmi.ranks_on_node(pmi.rank()).len() as usize;
+        params.request_size = 0;
+        params.request_init = None;
+        params.request_cleanup = None;
+        params.tag_sender_mask = 0;
+        params.name = std::ptr::null();
+
         let mut handle = MaybeUninit::uninit();
         let status = unsafe {
             ucp_init_version(
