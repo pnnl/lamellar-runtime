@@ -8,13 +8,13 @@ macro_rules! create_test {
             #[test]
             #[serial]
             #[allow(non_snake_case)]
-            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ and_at_pe>](){
+            fn [<$array _ $dist _ $elem _ $num_pes _ $len _ scatter_from_pe>](){
                 let mut d = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
                 d.push("lamellar_run.sh");
                 let result = Command::new(d.into_os_string())
                     .arg(format!("-N={}",$num_pes))
                     .arg("-T=4")
-                    .arg("./target/release/examples/and_at_pe_test")
+                    .arg("./target/release/examples/scatter_from_pe_test")
                     .arg(stringify!($array))
                     .arg($dist)
                     .arg(stringify!($elem))
@@ -61,21 +61,21 @@ macro_rules! iter_dist_types {
     }
 }
 
-macro_rules! create_and_at_pe_tests {
+macro_rules! create_gather_all_tests {
     ( ($($array:ty),*), $dist:tt, $elem:tt, $num_pes:tt, $len:tt) =>{
         $(iter_dist_types!($array,$dist,$elem,$num_pes,$len);)*
     }
 }
 
-// create_and_at_pe_tests!(
-//     (UnsafeArray, AtomicArray),
-//     ("Block", "Cyclic"),
-//     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
-//     (2, 3, 4),
-//     (4, 19, 128)
-// );
+create_gather_all_tests!(
+    (UnsafeArray, AtomicArray),
+    ("Block", "Cyclic"),
+    (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
+    (2, 3, 4),
+    (12, 24, 120)
+);
 
-// create_and_at_pe_tests!(
+// create_gather_all_tests!(
 //     (GlobalLockArray),
 //     ("Block", "Cyclic"),
 //     (u8, f64),

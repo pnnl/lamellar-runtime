@@ -321,6 +321,24 @@ path = "tests/array/collective/and_all_test.rs"
 name = "xor_all_test"
 path = "tests/array/collective/xor_all_test.rs"
 
+[[example]]
+name = "gather_all_test"
+path = "tests/array/collective/gather_all_test.rs"
+
+
+
+
+[[example]]
+name = "scatter_from_pe_test"
+path = "tests/array/collective/scatter_from_pe_test.rs"
+
+[[example]]
+name = "broadcast_test"
+path = "tests/array/collective/broadcast_test.rs"
+
+# Not supported by verbs
+##==================================================##
+
 # [[example]]
 # name = "sum_at_pe_test"
 # path = "tests/array/collective/sum_at_pe_test.rs"
@@ -348,6 +366,12 @@ path = "tests/array/collective/xor_all_test.rs"
 # [[example]]
 # name = "xor_at_pe_test"
 # path = "tests/array/collective/xor_at_pe_test.rs"
+
+#[[example]]
+#name = "sum_scatter_test"
+#path = "tests/array/collective/sum_scatter_test.rs"
+
+
 
 ##------------ Bandwidth Examples -----------------##
 

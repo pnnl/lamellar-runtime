@@ -6,7 +6,7 @@ use libfabric::{
         atomic::{AtomicCASEp, AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
         collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
-    }, connless_ep::ConnectionlessEndpoint, cq::{Completion, CompletionQueue, CompletionQueueBuilder, ReadCq}, domain::{Domain, DomainBuilder}, enums::{
+    }, connless_ep::ConnectionlessEndpoint, cq::{CompletionQueue, CompletionQueueBuilder, ReadCq}, domain::{Domain, DomainBuilder}, enums::{
         AVOptions, AddressFormat, AtomicOp, CollectiveOp, CollectiveOptions, CompareAtomicOp, EndpointType, FetchAtomicOp, HmemIface, JoinOptions, Mode, MrMode, Progress, ReduceOp, ResourceMgmt, TrafficClass, TransferOptions
     }, ep::{Address, BaseEndpoint, Endpoint, EndpointBuilder}, eq::{Event, EventQueue, EventQueueBuilder, JoinCompleteEvent, ReadEq}, fabric::{Fabric, FabricBuilder}, info::{libfabric_version, Info, InfoEntry}, infocapsoptions::InfoCaps, mcast::{MultiCastGroup, MulticastGroupBuilder}, mr::{DisabledMemoryRegion, MaybeDisabledMemoryRegion, MemoryRegion, MemoryRegionBuilder}, *
 };
