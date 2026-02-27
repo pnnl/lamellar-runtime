@@ -53,7 +53,7 @@ macro_rules! onesided_iter {
     };
 }
 
-macro_rules! sum_scatter_test{
+macro_rules! max_scatter_test{
     ($array:ident, $t:ty, $len:expr, $dist:ident) =>{
        {
             let world = lamellar::LamellarWorldBuilder::new().build();
@@ -79,16 +79,15 @@ macro_rules! sum_scatter_test{
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.sum_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array.max_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.0.block();
-                    let chunk = req.1;
                     for elem in buf.as_slice().iter(){
-                        let g = ((i/chunk * num_pes + my_pe) * chunk + i % chunk);
+                        let g = ((i/ req.1 * num_pes + my_pe) * req.1 + i % req.1);
                         let expected: $t = (g as $t) * num_pes as $t;
-                        if ((expected - *elem) as f32).abs() > 0.0001 {
+                        if ((expected  - *elem) as f32).abs() > 0.0001 {
                             eprintln!("expected {:?} got {:?}", expected, elem);
                             success = false;
                         }
@@ -118,19 +117,17 @@ macro_rules! sum_scatter_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
-                    // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.sum_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array.max_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
                 }
 
                 let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.0.block();
-                    let chunk = req.1;
                     for elem in buf.as_slice().iter(){
-                        let g = ((i/chunk * num_pes + my_pe) * chunk + i % chunk);
+                        let g = ((i/ req.1 * num_pes + my_pe) * req.1 + i % req.1);
                         let expected: $t = (g as $t) * num_pes as $t;
-                        if ((expected - *elem) as f32).abs() > 0.0001 {
+                        if ((expected  - *elem) as f32).abs() > 0.0001 {
                             eprintln!("expected {:?} got {:?}", expected, elem);
                             success = false;
                         }
@@ -164,9 +161,8 @@ macro_rules! sum_scatter_test{
                     let mut reqs = vec![];
                     for tx in (0..num_txs){
                         let chunk_size = (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
-                        // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        reqs.push((unsafe { sub_array.sum_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
+                        reqs.push((unsafe { sub_array.max_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
                     }
                     // array.wait_all();
                     // sub_array.barrier();
@@ -174,10 +170,9 @@ macro_rules! sum_scatter_test{
                     for req in reqs.drain(..){
                         let buf =req.0.block();
                         for elem in buf.as_slice().iter(){
-                            let chunk = req.1;
-                            let g = ((i/chunk * num_pes + my_pe) * chunk + i % chunk);
+                            let g = ((i/ req.1 * num_pes + my_pe) * req.1 + i % req.1);
                             let expected: $t = (g as $t) * num_pes as $t;
-                            if ((expected - *elem) as f32).abs() > 0.0001 {
+                            if ((expected  - *elem) as f32).abs() > 0.0001 {
                                 eprintln!("expected {:?} got {:?}", expected, elem);
                                 success = false;
                             }
@@ -218,73 +213,39 @@ fn main() {
 
     match array.as_str() {
         "UnsafeArray" => match elem.as_str() {
-            "u8" => sum_scatter_test!(UnsafeArray, u8, len, dist_type),
-            "u16" => sum_scatter_test!(UnsafeArray, u16, len, dist_type),
-            "u32" => sum_scatter_test!(UnsafeArray, u32, len, dist_type),
-            "u64" => sum_scatter_test!(UnsafeArray, u64, len, dist_type),
-            "u128" => sum_scatter_test!(UnsafeArray, u128, len, dist_type),
-            "usize" => sum_scatter_test!(UnsafeArray, usize, len, dist_type),
-            "i8" => sum_scatter_test!(UnsafeArray, i8, len, dist_type),
-            "i16" => sum_scatter_test!(UnsafeArray, i16, len, dist_type),
-            "i32" => sum_scatter_test!(UnsafeArray, i32, len, dist_type),
-            "i64" => sum_scatter_test!(UnsafeArray, i64, len, dist_type),
-            "i128" => sum_scatter_test!(UnsafeArray, i128, len, dist_type),
-            "isize" => sum_scatter_test!(UnsafeArray, isize, len, dist_type),
-            "f32" => sum_scatter_test!(UnsafeArray, f32, len, dist_type),
-            "f64" => sum_scatter_test!(UnsafeArray, f64, len, dist_type),
+            "u8" => max_scatter_test!(UnsafeArray, u8, len, dist_type),
+            "u16" => max_scatter_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => max_scatter_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => max_scatter_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => max_scatter_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => max_scatter_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => max_scatter_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => max_scatter_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => max_scatter_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => max_scatter_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => max_scatter_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => max_scatter_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => max_scatter_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => max_scatter_test!(UnsafeArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
         "AtomicArray" => match elem.as_str() {
-            "u8" => sum_scatter_test!(AtomicArray, u8, len, dist_type),
-            "u16" => sum_scatter_test!(AtomicArray, u16, len, dist_type),
-            "u32" => sum_scatter_test!(AtomicArray, u32, len, dist_type),
-            "u64" => sum_scatter_test!(AtomicArray, u64, len, dist_type),
-            "u128" => sum_scatter_test!(AtomicArray, u128, len, dist_type),
-            "usize" => sum_scatter_test!(AtomicArray, usize, len, dist_type),
-            "i8" => sum_scatter_test!(AtomicArray, i8, len, dist_type),
-            "i16" => sum_scatter_test!(AtomicArray, i16, len, dist_type),
-            "i32" => sum_scatter_test!(AtomicArray, i32, len, dist_type),
-            "i64" => sum_scatter_test!(AtomicArray, i64, len, dist_type),
-            "i128" => sum_scatter_test!(AtomicArray, i128, len, dist_type),
-            "isize" => sum_scatter_test!(AtomicArray, isize, len, dist_type),
-            "f32" => sum_scatter_test!(AtomicArray, f32, len, dist_type),
-            "f64" => sum_scatter_test!(AtomicArray, f64, len, dist_type),
+            "u8" => max_scatter_test!(AtomicArray, u8, len, dist_type),
+            "u16" => max_scatter_test!(AtomicArray, u16, len, dist_type),
+            "u32" => max_scatter_test!(AtomicArray, u32, len, dist_type),
+            "u64" => max_scatter_test!(AtomicArray, u64, len, dist_type),
+            "u128" => max_scatter_test!(AtomicArray, u128, len, dist_type),
+            "usize" => max_scatter_test!(AtomicArray, usize, len, dist_type),
+            "i8" => max_scatter_test!(AtomicArray, i8, len, dist_type),
+            "i16" => max_scatter_test!(AtomicArray, i16, len, dist_type),
+            "i32" => max_scatter_test!(AtomicArray, i32, len, dist_type),
+            "i64" => max_scatter_test!(AtomicArray, i64, len, dist_type),
+            "i128" => max_scatter_test!(AtomicArray, i128, len, dist_type),
+            "isize" => max_scatter_test!(AtomicArray, isize, len, dist_type),
+            "f32" => max_scatter_test!(AtomicArray, f32, len, dist_type),
+            "f64" => max_scatter_test!(AtomicArray, f64, len, dist_type),
             _ => eprintln!("unsupported element type"),
         },
-        // "LocalLockArray" => match elem.as_str() {
-        //     "u8" => sum_scatter_test!(LocalLockArray, u8, len, dist_type),
-        //     "u16" => sum_scatter_test!(LocalLockArray, u16, len, dist_type),
-        //     "u32" => sum_scatter_test!(LocalLockArray, u32, len, dist_type),
-        //     "u64" => sum_scatter_test!(LocalLockArray, u64, len, dist_type),
-        //     "u128" => sum_scatter_test!(LocalLockArray, u128, len, dist_type),
-        //     "usize" => sum_scatter_test!(LocalLockArray, usize, len, dist_type),
-        //     "i8" => sum_scatter_test!(LocalLockArray, i8, len, dist_type),
-        //     "i16" => sum_scatter_test!(LocalLockArray, i16, len, dist_type),
-        //     "i32" => sum_scatter_test!(LocalLockArray, i32, len, dist_type),
-        //     "i64" => sum_scatter_test!(LocalLockArray, i64, len, dist_type),
-        //     "i128" => sum_scatter_test!(LocalLockArray, i128, len, dist_type),
-        //     "isize" => sum_scatter_test!(LocalLockArray, isize, len, dist_type),
-        //     "f32" => sum_scatter_test!(LocalLockArray, f32, len, dist_type),
-        //     "f64" => sum_scatter_test!(LocalLockArray, f64, len, dist_type),
-        //     _ => eprintln!("unsupported element type"),
-        // },
-        // "GlobalLockArray" => match elem.as_str() {
-        //     "u8" => sum_scatter_test!(GlobalLockArray, u8, len, dist_type),
-        //     "u16" => sum_scatter_test!(GlobalLockArray, u16, len, dist_type),
-        //     "u32" => sum_scatter_test!(GlobalLockArray, u32, len, dist_type),
-        //     "u64" => sum_scatter_test!(GlobalLockArray, u64, len, dist_type),
-        //     "u128" => sum_scatter_test!(GlobalLockArray, u128, len, dist_type),
-        //     "usize" => sum_scatter_test!(GlobalLockArray, usize, len, dist_type),
-        //     "i8" => sum_scatter_test!(GlobalLockArray, i8, len, dist_type),
-        //     "i16" => sum_scatter_test!(GlobalLockArray, i16, len, dist_type),
-        //     "i32" => sum_scatter_test!(GlobalLockArray, i32, len, dist_type),
-        //     "i64" => sum_scatter_test!(GlobalLockArray, i64, len, dist_type),
-        //     "i128" => sum_scatter_test!(GlobalLockArray, i128, len, dist_type),
-        //     "isize" => sum_scatter_test!(GlobalLockArray, isize, len, dist_type),
-        //     "f32" => sum_scatter_test!(GlobalLockArray, f32, len, dist_type),
-        //     "f64" => sum_scatter_test!(GlobalLockArray, f64, len, dist_type),
-        //     _ => {} //eprintln!("unsupported element type"),
-        // },
         _ => eprintln!("unsupported array type"),
     }
 }
