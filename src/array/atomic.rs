@@ -939,7 +939,6 @@ impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> AtomicArrayHandle<T> {
-        println!("new atomic array");
         let team: Darc<LamellarTeamRT> = team.into().team.clone();
         if team.lamellae.comm().atomic_avail::<T>() {
             NetworkAtomicArray::new_internal(team, array_size, distribution).into()

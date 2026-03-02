@@ -1013,7 +1013,7 @@ impl<T: Dist + ArrayOps + std::default::Default> NetworkAtomicArray<T> {
         array_size: usize,
         distribution: Distribution,
     ) -> NetworkAtomicArrayHandle<T> {
-        println!("new Network atomic array 1");
+        // println!("new Network atomic array 1");
         // let array = UnsafeArray::new(team.clone(), array_size, distribution);
         // array.block_on_outstanding(DarcMode::NetworkAtomicArray);
 

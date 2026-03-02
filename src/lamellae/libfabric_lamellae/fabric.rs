@@ -149,7 +149,7 @@ impl CommGroup {
         &self,
         ctx: &Context,
     ) -> Result<JoinCompleteEvent, libfabric::error::Error> {
-        // let _lock = self.lock.lock();
+        let _lock = self.lock.lock();
         loop {
             let eq_res = self.eq.read();
 
@@ -187,7 +187,7 @@ impl CommGroup {
     }
 
     fn wait_for_completion(&self, ctx: &Context) -> Result<(), libfabric::error::Error> {
-        // let _lock = self.lock.lock();
+        let _lock = self.lock.lock();
         loop {
             let cq_res = self.cq.read(1);
             match cq_res {
@@ -245,7 +245,7 @@ impl CommGroup {
         cntr: &Counter<WaitableCntr>,
         dir: &str,
     ) -> Result<(), libfabric::error::Error> {
-        // let _lock = self.lock.lock();
+        let _lock = self.lock.lock();
         let mut prev_expected_cnt = pending.load(Ordering::SeqCst);
         let mut old_cnt = cntr.read();
         let mut expected_cnt = pending.load(Ordering::SeqCst);
@@ -292,7 +292,7 @@ impl CommGroup {
         blocking: bool,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
-        // let _lock = self.lock.lock();
+        let _lock = self.lock.lock();
         self.put_cnt
             .fetch_max(self.put_cntr.read(), Ordering::SeqCst);
         loop {
@@ -321,7 +321,7 @@ impl CommGroup {
         blocking: bool,
         mut fun: impl FnMut() -> Result<(), libfabric::error::Error>,
     ) -> Result<u64, libfabric::error::Error> {
-        // let _lock = self.lock.lock();
+        let _lock = self.lock.lock();
         let old_cnt = self
             .get_cnt
             .fetch_max(self.get_cntr.read(), Ordering::SeqCst);
@@ -1065,7 +1065,7 @@ impl Ofi {
                         };
                     }
 
-                    // let _lock = self.comm_group.lock.lock();
+                    let _lock = self.comm_group.lock.lock();
                     for i in 1..=n {
                         let recv_pe = (self.my_pe as i64
                             - i as i64 * (n as i64 + 1).pow(round as u32))
@@ -1212,12 +1212,12 @@ impl Ofi {
     }
 
     pub(crate) fn progress_all(&self) -> Result<(), libfabric::error::Error> {
-        // let _lock = self.comm_group.lock.lock();
+        let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
     }
 
     pub(crate) fn thread_progress(&self) -> Result<(), libfabric::error::Error> {
-        // let _lock = self.comm_group.lock.lock();
+        let _lock = self.comm_group.lock.lock();
         self.comm_group.progress()
     }
 }
