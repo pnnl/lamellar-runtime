@@ -99,7 +99,7 @@ enum IndexSize {
 
 impl From<usize> for IndexSize {
     fn from(size: usize) -> Self {
-        match config().index_size {
+        match config().array_index_size {
             IndexType::Dynamic => {
                 if size <= u8::MAX as usize {
                     IndexSize::U8

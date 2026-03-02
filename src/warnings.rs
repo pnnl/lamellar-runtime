@@ -23,7 +23,7 @@ impl<'a> RuntimeWarning<'a> {
     fn print_warning(&self) -> bool {
         if ENABLED.load(Ordering::Relaxed) {
             match self {
-                RuntimeWarning::UnspawnedTask(_) => match config().unpspawned_task_warning {
+                RuntimeWarning::UnspawnedTask(_) => match config().unspawned_task_warning {
                     Some(true) => true,
                     Some(false) => false,
                     None => true,

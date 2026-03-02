@@ -191,7 +191,7 @@ pub struct Config {
 
     /// flag used to print warnings when users attempt to call wait_all while there are tasks that have not been spawned. Default: true
     #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
-    pub unpspawned_task_warning: Option<bool>,
+    pub unspawned_task_warning: Option<bool>,
 
     /// The lamellae backend to use
     /// rofi -- multi pe distributed execution, default if rofi feature is turned on
@@ -216,7 +216,7 @@ pub struct Config {
     #[serde(default = "default_alloc")]
     pub alloc: Alloc,
     #[serde(default = "default_array_dynamic_index")]
-    pub index_size: IndexType,
+    pub array_index_size: IndexType,
 
     //used internally by the command queues
     #[serde(default = "default_cmd_buf_len")]
