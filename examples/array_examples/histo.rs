@@ -1,7 +1,7 @@
 // use itertools::Itertools;
 use lamellar::active_messaging::prelude::*;
 use lamellar::array::prelude::*;
-use rand::{distributions::Distribution, rngs::StdRng, SeedableRng};
+use rand::{distr::Distribution, rngs::StdRng, SeedableRng};
 use std::time::Instant;
 
 const ARRAY_SIZE: usize = 1000000000;
@@ -13,7 +13,7 @@ fn main() {
         AtomicArray::<usize>::new(&world, ARRAY_SIZE, lamellar::Distribution::Block).block();
 
     let mut rng: StdRng = SeedableRng::seed_from_u64(world.my_pe() as u64);
-    let range = rand::distributions::Uniform::new(0, ARRAY_SIZE);
+    let range = rand::distr::Uniform::new(0, ARRAY_SIZE).unwrap();
 
     let start = Instant::now();
     let histo = array.batch_add(

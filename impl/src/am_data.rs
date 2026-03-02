@@ -9,7 +9,7 @@ use quote::{quote, ToTokens};
 use syn::parse_macro_input;
 use syn::punctuated::Punctuated;
 
-fn check_attrs(attrs: &Vec<syn::Attribute>) -> (bool, bool, Vec<syn::Attribute>) {
+fn check_attrs(attrs: &[syn::Attribute]) -> (bool, bool, Vec<syn::Attribute>) {
     let mut static_field = false;
     let attrs = attrs
         .iter()
@@ -167,7 +167,7 @@ fn process_fields(
             }
         } else if !t.contains("serde::Serialize")
             && !t.contains("serde::Deserialize")
-            && t.trim().len() > 0
+            && !t.trim().is_empty()
         {
             let temp = quote::format_ident!("{}", t.trim());
             trait_strs
@@ -262,7 +262,7 @@ pub(crate) fn derive_am_data(
             &traits,
             &attrs,
             &vis,
-            &name,
+            name,
             &full_fields,
             &full_ser,
             &full_des,
@@ -276,7 +276,7 @@ pub(crate) fn derive_am_data(
                 &group_traits,
                 &group_attrs,
                 &vis,
-                &name,
+                name,
                 &fields,
                 &static_fields,
                 &lamellar,

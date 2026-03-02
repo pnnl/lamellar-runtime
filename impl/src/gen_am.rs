@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use crate::replace::LamellarDSLReplace;
 use crate::{get_expr, get_impl_method, type_name, AmType};
 
@@ -252,7 +254,7 @@ fn gen_am_body(
     let mut stmts = exec_fn.stmts;
 
     let (ret_statement, bytes_buf) = if let Some(stmt) = stmts.pop() {
-        gen_return_stmt(am_type, &stmt, &ret_struct_name, &lamellar, local)
+        gen_return_stmt(am_type, &stmt, ret_struct_name, lamellar, local)
     } else {
         (
             quote! {#lamellar::active_messaging::LamellarReturn::Unit},
@@ -283,7 +285,7 @@ fn gen_return_stmt(
             #lamellar::active_messaging::LamellarReturn::Unit
         },
         AmType::ReturnData(ref ret) => {
-            let last_expr = get_expr(&last_stmt)
+            let last_expr = get_expr(last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
             let last_expr =
                 quote_spanned! {last_stmt.span()=> let __lamellar_last_expr: #ret = #last_expr; };
@@ -318,7 +320,7 @@ fn gen_return_stmt(
             }
         }
         AmType::ReturnAm(ret, _) => {
-            let last_expr = get_expr(&last_stmt)
+            let last_expr = get_expr(last_stmt)
                 .expect("failed to get exec return value (try removing the last \";\")");
             let last_expr =
                 quote_spanned! {last_stmt.span()=> let __lamellar_last_expr: #ret = #last_expr; };
@@ -406,7 +408,7 @@ pub(crate) fn generate_am(
 
     let generics = input.generics.clone();
 
-    let (am_body, bytes_buf) = gen_am_body(&input, &am_type, &return_struct_name, &lamellar, local);
+    let (am_body, bytes_buf) = gen_am_body(input, &am_type, &return_struct_name, lamellar, local);
 
     let (return_type, return_struct) = {
         match am_type {
@@ -415,10 +417,10 @@ pub(crate) fn generate_am(
                 let return_type = quote! {#output};
                 let return_struct = impl_return_struct(
                     &generics,
-                    &am_data_header,
+                    am_data_header,
                     &return_struct_name,
                     &return_type,
-                    &lamellar,
+                    lamellar,
                     bytes_buf,
                     local,
                 );
@@ -429,10 +431,10 @@ pub(crate) fn generate_am(
     };
 
     let lamellar_active_message =
-        impl_lamellar_active_message_trait(&generics, &orig_name, &am_body, &lamellar);
-    let local_am = impl_local_am_trait(&generics, &orig_name, &return_type, &lamellar);
+        impl_lamellar_active_message_trait(&generics, &orig_name, &am_body, lamellar);
+    let local_am = impl_local_am_trait(&generics, &orig_name, &return_type, lamellar);
     let remote_trait_impls =
-        impl_remote_traits(&generics, &orig_name, &return_type, &lamellar, local);
+        impl_remote_traits(&generics, &orig_name, &return_type, lamellar, local);
 
     let expanded = quote_spanned! {am_body.span()=>
         #lamellar_active_message

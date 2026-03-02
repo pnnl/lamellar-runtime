@@ -34,12 +34,13 @@ lazy_static! {
         crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
 }
 
-/// The list of available lamellae backends, used to specify how data is transfered between PEs
+/// The list of available lamellae backends, used to specify how data is transferred between PEs
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
     #[cfg(feature = "rofi")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rofi")))]
     /// The Rofi (Rust-OFI) backend -- intended for multi process and distributed environments
     Rofi,
     /// The Local backend -- intended for single process environments
@@ -221,7 +222,6 @@ pub(crate) trait LamellaeRDMA: Send + Sync {
 }
 
 #[allow(unused_variables)]
-
 pub(crate) fn create_lamellae(backend: Backend) -> LamellaeBuilder {
     match backend {
         #[cfg(feature = "rofi")]

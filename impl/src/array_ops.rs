@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use proc_macro::TokenStream;
 // use proc_macro_error::abort;
 use proc_macro2::Ident;
@@ -255,7 +257,7 @@ fn gen_array_names(
 ) -> (Ident, Ident, Ident, Ident, Ident, Ident, Ident, Ident) {
     let base = quote::format_ident!(
         "{array_type}_{}_{val_type}_val_{idx_type}_idx",
-        type_to_string(&typeident)
+        type_to_string(typeident)
     );
 
     let am_buf_name = quote::format_ident!("{base}_am_buf");
@@ -552,15 +554,10 @@ fn create_buf_ops(
             quote! {}, //no lock since its native atomic
             quote! { #slice },
         )
-    } else if array_type == "LocalLockArray" {
+    } else if array_type == "LocalLockArray" || array_type == "GlobalLockArray" {
         (
             quote! {}, //no explicit lock since the slice handle is a lock guard
             quote! {let mut slice = self.data.write_local_data().await; }, //this is the lock
-        )
-    } else if array_type == "GlobalLockArray" {
-        (
-            quote! {}, //no explicit lock since the slice handle is a lock guard
-            quote! {let mut slice = self.data.write_local_data().await;}, //this is the lock
         )
     } else if array_type == "ReadOnlyArray" {
         (
@@ -1523,7 +1520,7 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
     let native = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[1]) {
         val.value
     } else {
-        panic! ("second argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
+        panic!("second argument of generate_ops_for_type expects 'true' or 'false' specifying whether types are native atomics");
     };
 
     let impl_eq = if let Ok(val) = syn::parse_str::<syn::LitBool>(&items[2]) {
@@ -1533,10 +1530,10 @@ pub(crate) fn __generate_ops_for_type_rt(item: TokenStream) -> TokenStream {
         }
         val.value
     } else {
-        panic! ("third argument of generate_ops_for_type expects 'true' or 'false' specifying whether types implement eq");
+        panic!("third argument of generate_ops_for_type expects 'true' or 'false' specifying whether types implement eq");
     };
     for t in items[3..].iter() {
-        let the_type = syn::parse_str::<syn::Type>(&t).unwrap();
+        let the_type = syn::parse_str::<syn::Type>(t).unwrap();
         let typeident = quote::format_ident!("{:}", t.trim());
         output.extend(quote! {
             impl Dist for #typeident {}

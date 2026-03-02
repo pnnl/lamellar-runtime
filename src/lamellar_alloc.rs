@@ -98,30 +98,30 @@ impl LamellarAlloc for LinearAlloc {
             if prev_end + size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: prev_end,
-                    padding: padding,
-                    size: size,
+                    padding,
+                    size,
                 };
                 entries.insert(idx, n_vma);
                 self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
-                return Some(prev_end + padding);
+                Some(prev_end + padding)
             } else {
                 cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
-                return None;
+                None
             }
         } else {
             let padding = calc_padding(self.start_addr, align);
             if size + padding <= self.start_addr + self.max_size {
                 let n_vma = Vma {
                     addr: self.start_addr,
-                    padding: padding,
-                    size: size,
+                    padding,
+                    size,
                 };
                 entries.push(n_vma);
                 self.free_space.fetch_sub(size + padding, Ordering::SeqCst);
-                return Some(self.start_addr + padding);
+                Some(self.start_addr + padding)
             } else {
                 cvar.wait_for(&mut entries, std::time::Duration::from_millis(1));
-                return None;
+                None
             }
         }
     }
@@ -141,18 +141,10 @@ impl LamellarAlloc for LinearAlloc {
                 padding = calc_padding(prev_end, align);
             }
 
-            if prev_end + size + padding <= self.start_addr + self.max_size {
-                return true;
-            } else {
-                return false;
-            }
+            prev_end + size + padding <= self.start_addr + self.max_size
         } else {
             let padding = calc_padding(self.start_addr, align);
-            if size + padding <= self.start_addr + self.max_size {
-                return true;
-            } else {
-                return false;
-            }
+            size + padding <= self.start_addr + self.max_size
         }
     }
 
@@ -257,7 +249,7 @@ impl LamellarAlloc for BTreeAlloc {
             allocated_addrs: Arc::new((Mutex::new(BTreeMap::new()), Condvar::new())),
             start_addr: 0,
             max_size: 0,
-            id: id,
+            id,
             free_space: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -624,17 +616,17 @@ mod tests {
         for _i in 0..10 {
             let alloc_clone = alloc.clone();
             let t = std::thread::spawn(move || {
-                let mut rng = rand::thread_rng();
+                let mut rng = rand::rng();
                 let mut addrs: Vec<usize> = Vec::new();
                 let mut i = 0;
                 while i < 100000 {
-                    if rng.gen_range(0..2) == 0 || addrs.len() == 0 {
+                    if rng.random_range(0..2) == 0 || addrs.is_empty() {
                         if let Some(addr) = alloc_clone.try_malloc(1, 1) {
                             addrs.push(addr);
                             i += 1;
                         }
                     } else {
-                        let index = rng.gen_range(0..addrs.len());
+                        let index = rng.random_range(0..addrs.len());
                         let addr = addrs.remove(index);
                         alloc_clone
                             .free(addr)

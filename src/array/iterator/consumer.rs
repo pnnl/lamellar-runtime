@@ -8,7 +8,7 @@ use crate::lamellar_team::LamellarTeamRT;
 
 use parking_lot::Mutex;
 use rand::prelude::SliceRandom;
-use rand::thread_rng;
+use rand::rng;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -146,7 +146,7 @@ impl<I: IterConsumer> Iterator for IterScheduleIter<I> {
                 };
                 let mut next = inner_next(iter);
                 if next.is_none() {
-                    let mut rng = thread_rng();
+                    let mut rng = rng();
                     let mut workers = (0..siblings.len()).collect::<Vec<usize>>();
                     workers.shuffle(&mut rng);
                     if let Some(worker) = workers.pop() {

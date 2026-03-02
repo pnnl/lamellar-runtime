@@ -1,5 +1,5 @@
 // use rand::Rng;
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 use std::time::Instant;
 
 use lamellar::active_messaging::prelude::*;
@@ -120,10 +120,10 @@ fn main() {
     let num_pes = world.num_pes();
     // let _guard = setup_global_subscriber();
 
-    let mut rng = rand::thread_rng();
-    let pe_rng = Uniform::from(0..num_pes + 1);
-    let am_rng = Uniform::from(0..12);
-    let buf_rng = Uniform::from(10000..100000);
+    let mut rng = rand::rng();
+    let pe_rng = Uniform::try_from(0..num_pes + 1).unwrap();
+    let am_rng = Uniform::try_from(0..12).unwrap();
+    let buf_rng = Uniform::try_from(10000..100000).unwrap();
     world.barrier();
     println!("after first barrier");
     // if my_pe == 0 {
