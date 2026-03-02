@@ -645,6 +645,7 @@ use crate::memregion::one_sided::NetMemRegionHandle;
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, ReqId};
 
 use async_trait::async_trait;
+use futures_util::future::join_all;
 use futures_util::Future;
 use parking_lot::Mutex;
 use std::collections::HashMap;
@@ -1317,6 +1318,21 @@ pub trait ActiveMessaging {
     /// });
     ///```
     fn block_on<F: Future>(&self, f: F) -> F::Output;
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Asynchronously run a collection of futures to completion via the Lamellar threadpool.
+    ///
+    /// The returned future is lazy and does nothing unless awaited. Use this when you are already
+    /// inside an async context and want to await multiple Lamellar tasks without blocking the caller.
+    #[must_use = "this function is lazy and does nothing unless awaited."]
+    fn join_all<I>(&self, iter: I) -> impl Future<Output = Vec<<<I as IntoIterator>::Item as Future>::Output>> + Send
+    where
+        I: IntoIterator,
+        <I as IntoIterator>::Item: Future + Send,
+        <<I as IntoIterator>::Item as Future>::Output: Send,
+    {
+        join_all(iter.into_iter())
+    }
 
     #[doc(alias("One-sided", "onesided"))]
     /// Run a collection of futures to completion
