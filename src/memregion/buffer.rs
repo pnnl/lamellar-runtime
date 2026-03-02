@@ -104,7 +104,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> std::fmt::Debug for LamellarBuffer<T, B>
 }
 
 // impl<T: Remote> LamellarBuffer<T, LamellarMemoryRegion<T>> {
-//     pub(crate) unsafe fn from_lamellar_memory_region(mem_region: LamellarMemoryRegion<T>) -> Self {
+//     /// Unsafe because multiple handles to the same memory region can be created,
+//     /// thus the caller must ensure no other references mutate the region while
+//     /// the buffer exists.
+//     pub(crate) unsafe fn from_lamellar_memory_region(
+//         mem_region: LamellarMemoryRegion<T>,
+//     ) -> Self {
 //         let len = mem_region.len();
 //         LamellarBuffer {
 //             data: NonNull::new(Box::into_raw(Box::new(BufferInner::new(mem_region))).into())
@@ -112,6 +117,12 @@ impl<T: Remote, B: AsLamellarBuffer<T>> std::fmt::Debug for LamellarBuffer<T, B>
 //             range: 0..len,
 //             _phantom: PhantomData,
 //         }
+//     }
+// }
+
+// impl<T: Remote> From<LamellarMemoryRegion<T>> for LamellarBuffer<T, LamellarMemoryRegion<T>> {
+//     fn from(mem_region: LamellarMemoryRegion<T>) -> Self {
+//         unsafe { LamellarBuffer::from_lamellar_memory_region(mem_region) }
 //     }
 // }
 
@@ -131,6 +142,12 @@ impl<T: Remote> LamellarBuffer<T, SharedMemoryRegion<T>> {
     }
 }
 
+impl<T: Remote> From<SharedMemoryRegion<T>> for LamellarBuffer<T, SharedMemoryRegion<T>> {
+    fn from(mem_region: SharedMemoryRegion<T>) -> Self {
+        unsafe { LamellarBuffer::from_shared_memory_region(mem_region) }
+    }
+}
+
 impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
     /// unsafe because multiple handles to the same memory region can be created,
     /// thus user must ensure that nothing else is mutating the memory region
@@ -143,6 +160,12 @@ impl<T: Remote> LamellarBuffer<T, OneSidedMemoryRegion<T>> {
             range: 0..len,
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<T: Remote> From<OneSidedMemoryRegion<T>> for LamellarBuffer<T, OneSidedMemoryRegion<T>> {
+    fn from(mem_region: OneSidedMemoryRegion<T>) -> Self {
+        unsafe { LamellarBuffer::from_one_sided_memory_region(mem_region) }
     }
 }
 
@@ -161,6 +184,12 @@ impl<T: Remote> LamellarBuffer<T, CommSlice<T>> {
     }
 }
 
+impl<T: Remote> From<CommSlice<T>> for LamellarBuffer<T, CommSlice<T>> {
+    fn from(comm_slice: CommSlice<T>) -> Self {
+        unsafe { LamellarBuffer::from_comm_slice(comm_slice) }
+    }
+}
+
 impl<T: Remote> LamellarBuffer<T, Vec<T>> {
     /// safe because the buffer takes ownership of the vec
     pub fn from_vec(vec: Vec<T>) -> Self {
@@ -170,6 +199,12 @@ impl<T: Remote> LamellarBuffer<T, Vec<T>> {
             range: 0..len,
             _phantom: PhantomData,
         }
+    }
+}
+
+impl<T: Remote> From<Vec<T>> for LamellarBuffer<T, Vec<T>> {
+    fn from(vec: Vec<T>) -> Self {
+        LamellarBuffer::from_vec(vec)
     }
 }
 
