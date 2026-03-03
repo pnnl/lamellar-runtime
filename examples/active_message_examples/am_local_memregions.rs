@@ -6,7 +6,7 @@ use lamellar::memregion::prelude::*;
 use lamellar::{BlockedArch, StridedArch};
 use std::time::Instant;
 
-use rand::distributions::{Distribution, Uniform};
+use rand::distr::{Distribution, Uniform};
 
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -24,13 +24,9 @@ struct DataAM {
 #[lamellar::am]
 impl LamellarAM for DataAM {
     async fn exec() {
-        let mut rng = rand::thread_rng();
-        let num_pes = lamellar::team.num_pes();
-        let pes = Uniform::from(0..num_pes);
-        println!(
-            "depth {:?} {:?} num_pes: {:?}",
-            self.depth, self.path, num_pes
-        );
+        let mut rng = rand::rng();
+        let pes = Uniform::try_from(0..lamellar::team.num_pes()).expect("could not create uniform");
+        // println!("depth {:?} {:?}",self.depth, self.path);
         let mut path = self.path.clone();
         path.push(lamellar::current_pe);
         if self.depth > 0 {
@@ -70,8 +66,8 @@ fn main() {
     let num_pes = world.num_pes();
     let array = world.alloc_one_sided_mem_region::<u8>(10);
 
-    let mut rng = rand::thread_rng();
-    let pes = Uniform::from(0..num_pes);
+    let mut rng = rand::rng();
+    let pes = Uniform::try_from(0..num_pes).expect("could not create uniform");
     let _width = 10;
     let s = Instant::now();
     // for _i in 0..width {

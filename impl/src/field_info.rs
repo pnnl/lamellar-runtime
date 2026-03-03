@@ -24,7 +24,7 @@ impl FieldInfo {
                     ser.extend(self.ser_path(field, *darc_iter, false));
                 }
                 syn::Type::Tuple(ty) => {
-                    ser.extend(self.ser_tuple(field, &ty, false));
+                    ser.extend(self.ser_tuple(field, ty, false));
                 }
                 _ => {
                     abort!(
@@ -46,7 +46,7 @@ impl FieldInfo {
                     ser.extend(self.ser_path(field, *darc_iter, true));
                 }
                 syn::Type::Tuple(ty) => {
-                    ser.extend(self.ser_tuple(field, &ty, true));
+                    ser.extend(self.ser_tuple(field, ty, true));
                 }
                 _ => {
                     abort!(

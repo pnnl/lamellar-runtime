@@ -648,8 +648,8 @@ fn main() {
             UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
 
         unsafe {
-            for i in full_signal.as_mut_slice() {
-                *i = rng.gen_range(0.0..1.0);
+            for i in full_signal.as_mut_slice().unwrap() {
+                *i = rng.random_range(0.0..1.0);
             }
             let full_signal_clone = full_signal.clone();
             full_signal_array
@@ -959,7 +959,7 @@ fn main() {
         let mut full_signal = vec![0.0; array_len];
         let mut full_spectrum = vec![0.0; array_len];
         for i in full_signal.iter_mut() {
-            *i = rng.gen_range(0.0..1.0);
+            *i = rng.random_range(0.0..1.0);
         }
 
         let mut times = vec![vec![]; 2];

@@ -65,7 +65,7 @@ where
                 .iter
                 .iter_clone(Sealed)
                 .init(start_i, self.chunk_size, Sealed);
-            let chunk = Chunk { iter: iter };
+            let chunk = Chunk { iter };
             self.cur_i += 1;
             Some(chunk)
         } else {

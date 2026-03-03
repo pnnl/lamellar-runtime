@@ -392,7 +392,7 @@ impl<R: AmDist> ArrayFetchBatchOpHandle<R> {
             results.set_len(max_index);
         }
         Self {
-            array: array,
+            array,
             state: FetchBatchOpState::Reqs(reqs),
             results,
         }
@@ -594,7 +594,7 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
             results.set_len(max_index);
         }
         Self {
-            array: array,
+            array,
             state: BatchResultOpState::Reqs(reqs),
             results,
         }

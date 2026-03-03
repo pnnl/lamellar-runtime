@@ -795,8 +795,8 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
         // println!("lock creation {:?}", timer.elapsed());
 
         LocalLockArray {
-            lock: lock,
-            array: array,
+            lock,
+            array,
         }
     }
 }
@@ -916,7 +916,7 @@ impl<T: Dist> ActiveMessaging for LocalLockArray<T> {
     fn async_barrier(&self) -> BarrierHandle {
         self.array.async_barrier()
     }
-    fn spawn<F: Future>(&self, f: F) -> LamellarTask<F::Output>
+    fn spawn<F>(&self, f: F) -> LamellarTask<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send,

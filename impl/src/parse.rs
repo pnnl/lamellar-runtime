@@ -84,23 +84,24 @@ impl Parse for ReductionArgs {
             })
         }
         Ok(ReductionArgs {
-            name: name,
-            closure: closure,
-            tys: tys,
+            name,
+            closure,
+            tys,
         })
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub(crate) enum VecArgs {
-    List(Vec<syn::Expr>),
-    Size((syn::Expr, syn::Expr)),
+    List(Vec<Expr>),
+    Size((Expr, Expr)),
 }
 
 impl Parse for VecArgs {
     fn parse(input: ParseStream) -> Result<Self> {
-        let first: syn::Expr = if let Ok(first) = input.parse::<syn::Lit>() {
-            syn::Expr::Lit(syn::ExprLit {
+        let first: Expr = if let Ok(first) = input.parse::<syn::Lit>() {
+            Expr::Lit(syn::ExprLit {
                 attrs: vec![],
                 lit: first,
             })
@@ -112,7 +113,7 @@ impl Parse for VecArgs {
             while !input.is_empty() {
                 input.parse::<Token![,]>()?;
                 let elem = if let Ok(elem) = input.parse::<syn::Lit>() {
-                    syn::Expr::Lit(syn::ExprLit {
+                    Expr::Lit(syn::ExprLit {
                         attrs: vec![],
                         lit: elem,
                     })
@@ -125,7 +126,7 @@ impl Parse for VecArgs {
         } else if input.peek(Token![;]) {
             input.parse::<Token![;]>()?;
             let second = if let Ok(second) = input.parse::<syn::Lit>() {
-                syn::Expr::Lit(syn::ExprLit {
+                Expr::Lit(syn::ExprLit {
                     attrs: vec![],
                     lit: second,
                 })

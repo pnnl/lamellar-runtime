@@ -74,7 +74,7 @@ impl SimpleBatcherInner {
             batch: Arc::new(Mutex::new(Vec::new())),
             size: Arc::new(AtomicUsize::new(0)),
             batch_id: Arc::new(AtomicUsize::new(0)),
-            pe: pe,
+            pe,
         }
     }
 
@@ -638,8 +638,8 @@ impl SimpleBatcher {
         batched_ams.push(SimpleBatcherInner::new(None));
         SimpleBatcher {
             batched_ams: Arc::new(batched_ams),
-            stall_mark: stall_mark,
-            executor: executor,
+            stall_mark,
+            executor,
         }
     }
 
@@ -773,7 +773,7 @@ impl SimpleBatcher {
         //     req_data.team.ser(req_data.team.num_pes(), &mut vec![]); //ensure team is serialized for am header
         // }
         let am_header = AmHeader {
-            am_id: am_id,
+            am_id,
             req_id: req_data.id,
             // team_addr: req_data.team_addr.into(),
             team_addr: req_data.team.darc_addr(),
@@ -818,7 +818,7 @@ impl SimpleBatcher {
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
-            darc_list_size: darc_list_size,
+            darc_list_size,
         };
         crate::serialize_into(&mut data_buf[i..i + *DATA_HEADER_LEN], &data_header, false).unwrap();
         i += *DATA_HEADER_LEN;
@@ -851,7 +851,7 @@ impl SimpleBatcher {
             src: src as u16,
             cmd: Cmd::BatchedMsg,
         };
-        SerializeHeader { msg: msg }
+        SerializeHeader { msg }
     }
 
     #[tracing::instrument(skip_all, level = "debug")]

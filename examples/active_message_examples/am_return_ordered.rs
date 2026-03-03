@@ -42,7 +42,7 @@ fn main() {
         let mut ams = typed_am_group!(AmReturnUsize, &world);
         let mut check = vec![];
         for i in 0..num_ams {
-            let pe = rng.gen_range(0..(num_pes + 1));
+            let pe = rng.random_range(0..(num_pes + 1));
             if pe == num_pes {
                 ams.add_am_all(AmReturnUsize { val1: i });
             } else {

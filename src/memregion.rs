@@ -614,11 +614,11 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     /// After calling this function, a handle is returned that the user can use to retrieve the result.
     ///
     /// # Safety
-    /// This call is always unsafe as mutual exclusitivity is not enforced, i.e. many other reader/writers can exist simultaneously.
+    /// This call is always unsafe as mutual exclusivity is not enforced, i.e. many other reader/writers can exist simultaneously.
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Examples
     ///```
@@ -646,7 +646,7 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     /// Additionally, when this call returns the underlying fabric provider may or may not have already copied data into the data buffer.
     ///
     /// # One-sided Operation
-    /// the calling PE initaites the remote transfer
+    /// the calling PE initiates the remote transfer
     ///
     /// # Examples
     ///```

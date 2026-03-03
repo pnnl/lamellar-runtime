@@ -367,7 +367,7 @@ fn main() {
         indices
             .as_mut_slice()
             .iter_mut()
-            .for_each(|x| *x = rng.gen_range(0..global_size));
+            .for_each(|x| *x = rng.random_range(0..global_size));
     }
     world.barrier();
 

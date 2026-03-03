@@ -82,8 +82,8 @@ impl From<NetMemRegionHandle> for Arc<MemRegionHandleInner> {
                         ID_COUNTER.fetch_add(1, Ordering::Relaxed),
                         team.team_pe.expect("pe not part of team"),
                     ),
-                    parent_id: parent_id,
-                    grand_parent_id: grand_parent_id,
+                    parent_id,
+                    grand_parent_id,
                     local_dropped: AtomicBool::new(false),
                 });
                 mrh_map.insert(parent_id, mrh.clone());
@@ -225,7 +225,7 @@ impl Drop for MemRegionHandle {
                     let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                     if cnt > 0 {
                         let temp = MemRegionFinishedAm {
-                            cnt: cnt,
+                            cnt,
                             parent_id: self.inner.grand_parent_id,
                         };
                         trace!(
@@ -306,7 +306,7 @@ impl LamellarAM for MemRegionDropWaitAm {
                         let cnt = self.inner.remote_recv.swap(0, Ordering::SeqCst);
                         if cnt > 0 {
                             let temp = MemRegionFinishedAm {
-                                cnt: cnt,
+                                cnt,
                                 parent_id: self.inner.grand_parent_id,
                             };
                             let _ = self
@@ -395,7 +395,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         let id = ID_COUNTER.fetch_add(1, Ordering::Relaxed);
         let mrh = MemRegionHandle {
             inner: Arc::new(MemRegionHandleInner {
-                mr: mr,
+                mr,
                 team: team.clone(),
                 local_ref: AtomicUsize::new(1),
                 remote_sent: AtomicUsize::new(0),
@@ -413,7 +413,7 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
             .insert(mrh.inner.my_id, mrh.inner.clone());
         Ok(OneSidedMemoryRegion {
             mr: mrh,
-            pe: pe,
+            pe,
             sub_region_offset: 0,
             sub_region_size: size,
             phantom: PhantomData,

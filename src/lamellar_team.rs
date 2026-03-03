@@ -376,11 +376,11 @@ impl LamellarTeam {
     }
 
     #[doc(alias = "Collective")]
-    /// team wide synchronization method which blocks calling thread until all PEs in the team have entered
+    /// Team-wide synchronization method which blocks calling thread until all PEs in the team have entered
     /// Generally this is intended to be called from the main thread, if a barrier is needed within an active message or async context please see [async_barrier](Self::async_barrier)
     ///
     /// # Collective Operation
-    /// Requrires all PEs present within the team to enter the barrier otherwise deadlock will occur.
+    /// Requires all PEs present within the team to enter the barrier otherwise deadlock will occur.
     ///
     /// # Examples
     ///```
@@ -410,7 +410,7 @@ impl LamellarTeam {
     /// Care should be taken when using this function to avoid deadlocks,as it is easy to mismatch barrier calls accross threads and PEs.
     ///
     /// # Collective Operation
-    /// Requrires all PEs present within the team to enter the barrier otherwise deadlock will occur.
+    /// Requires all PEs present within the team to enter the barrier otherwise deadlock will occur.
     ///
     /// # Examples
     ///```
@@ -966,7 +966,7 @@ impl LamellarTeamRT {
         let arch = Arc::new(LamellarArchRT {
             parent: None,
             arch: LamellarArchEnum::GlobalArch(GlobalArch::new(num_pes)),
-            num_pes: num_pes,
+            num_pes,
         });
         lamellae.comm().barrier();
 
@@ -1011,7 +1011,7 @@ impl LamellarTeamRT {
             scheduler: scheduler.clone(),
             lamellae: lamellae.clone(),
             arch: arch.clone(),
-            world_pe: world_pe,
+            world_pe,
             team_pe: Ok(world_pe),
             num_world_pes: num_pes,
             num_pes: num_pes,
@@ -1277,7 +1277,7 @@ impl LamellarTeamRT {
                 num_pes: num_pes,
                 team_counters,
                 world_counters: parent.world_counters.clone(),
-                id: id,
+                id,
                 sub_team_id_cnt: AtomicUsize::new(0),
                 barrier: Barrier::new(
                     parent.world_pe,
@@ -1815,9 +1815,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: None,
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -1960,9 +1960,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: None,
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2037,9 +2037,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2105,9 +2105,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2177,9 +2177,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2248,9 +2248,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: None,
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2312,9 +2312,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2379,9 +2379,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: Some(self.arch.world_pe(pe).expect("pe not member of team")),
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2454,9 +2454,9 @@ impl Darc<LamellarTeamRT> {
         let req_data = ReqMetaData {
             src: self.world_pe,
             dst: Some(self.world_pe),
-            id: id,
+            id,
             lamellae: self.lamellae.clone(),
-            world: world,
+            world,
             team: self.clone(),
             // team_addr: Darc::into_raw_team(self.clone()).addr(),
         };
@@ -2544,13 +2544,13 @@ impl Darc<LamellarTeamRT> {
             thread: thread,
         }
     }
-    /// allocate a shared memory region from the asymmetric heap
-    ///
-    /// # Arguments
-    ///
-    /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
-    ///
-    // pub(crate) fn alloc_shared_mem_region<T: AmDist+ 'static>(self:   &Darc<LamellarTeamRT>, size: usize) -> SharedMemoryRegion<T> {
+    // /// allocate a shared memory region from the asymmetric heap
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `size` - number of elements of T to allocate a memory region for -- (not size in bytes)
+    // ///
+    // pub(crate) fn alloc_shared_mem_region<T: AmDist+ 'static>(self:   &Pin<Arc<LamellarTeamRT>>, size: usize) -> SharedMemoryRegion<T> {
     //     self.barrier.barrier();
     //     let mr: SharedMemoryRegion<T> = if self.num_world_pes == self.num_pes {
     //         SharedMemoryRegion::new(size, self.clone(), AllocationType::Global)

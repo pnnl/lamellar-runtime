@@ -161,7 +161,7 @@ impl<T: Dist> LamellarRdmaPut<T> for GlobalLockArray<T> {
     ) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_local(InitPutBufferAm {
             array: self.clone(),
-            index: index,
+            index,
             buf: buf.into(),
         });
         ArrayRdmaPutHandle {

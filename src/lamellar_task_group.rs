@@ -845,14 +845,14 @@ impl LamellarTaskGroup {
             multi_id: Arc::as_ptr(&rt_multi_req) as usize,
             local_id: Arc::as_ptr(&rt_local_req) as usize,
             sub_id_counter: AtomicUsize::new(0),
-            cnt: cnt,
-            counters: counters,
-            req: req,
-            multi_req: multi_req,
-            local_req: local_req,
-            rt_req: rt_req,
-            rt_multi_req: rt_multi_req,
-            rt_local_req: rt_local_req,
+            cnt,
+            counters,
+            req,
+            multi_req,
+            local_req,
+            rt_req,
+            rt_multi_req,
+            rt_local_req,
             // pending_reqs: pending_reqs,
         }
     }
@@ -1015,7 +1015,7 @@ impl LamellarTaskGroup {
             dst: None,
             id: req_id,
             lamellae: self.team.lamellae.clone(),
-            world: world,
+            world,
             team: self.team.clone(),
             // team_addr: Darc::into_raw_team(self.team.clone()).addr(),
         };
@@ -1057,7 +1057,7 @@ impl LamellarTaskGroup {
             dst: Some(self.team.arch.world_pe(pe).expect("pe not member of team")),
             id: req_id,
             lamellae: self.team.lamellae.clone(),
-            world: world,
+            world,
             team: self.team.clone(),
             // team_addr: Darc::into_raw_team(self.team.clone()).addr(),
         };
@@ -1105,7 +1105,7 @@ impl LamellarTaskGroup {
             dst: Some(self.team.world_pe),
             id: req_id,
             lamellae: self.team.lamellae.clone(),
-            world: world,
+            world,
             team: self.team.clone(),
             // team_addr: Darc::into_raw_team(self.team.clone()).addr(),
         };
@@ -1288,7 +1288,7 @@ fn am_group_am_unpack(
     let tg_am = AmGroupAm {
         ams: Arc::new(ams),
         si: 0,
-        ei: ei,
+        ei,
     };
     // <AmGroupAm as DarcSerde>::des(&tg_am, cur_pe);
     Arc::new(tg_am)
@@ -1321,8 +1321,8 @@ impl LamellarSerde for AmGroupAmReturn {
 impl LamellarResultDarcSerde for AmGroupAmReturn {}
 
 /// A group of active messages that can be executed in parallel
-/// the active messages do not need the be the same type, but they must all return the unit type i.e. `()`
-///Future implementations will relax this restriction, so that they only need to return the same type.
+/// the active messages do not need to be the same type, but they must all return the unit type i.e. `()`
+/// Future implementations will relax this restriction, so that they only need to return the same type.
 /// ```
 /// use lamellar::active_messaging::prelude::*;
 /// #[AmData(Debug,Clone)]

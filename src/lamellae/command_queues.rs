@@ -564,6 +564,7 @@ impl InnerCQ {
             alloc_buffer: Arc::new(alloc_buffers),
             panic_buffer: Arc::new(Mutex::new(panic_buffer)),
             cmd_buffers,
+            cmd_buffers,
             release_cmd: Arc::new(release_cmd),
             clear_cmd: Arc::new(clear_cmd),
             free_cmd: Arc::new(free_cmd),
@@ -580,7 +581,7 @@ impl InnerCQ {
             put_amt: Arc::new(AtomicUsize::new(0)),
             // get_amt: Arc::new(AtomicUsize::new(0)),
             alloc_id: Arc::new(AtomicUsize::new(0)),
-            active: active,
+            active,
         }
     }
 

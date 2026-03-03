@@ -75,7 +75,7 @@ impl TeamAmBatcherInner {
             batch: Arc::new(Mutex::new((HashMap::new(), HashMap::new(), Vec::new()))),
             size: Arc::new(AtomicUsize::new(0)),
             batch_id: Arc::new(AtomicUsize::new(0)),
-            pe: pe,
+            pe,
         }
     }
 
@@ -472,8 +472,8 @@ impl TeamAmBatcher {
         batched_ams.push(TeamAmBatcherInner::new(None));
         TeamAmBatcher {
             batched_ams: Arc::new(batched_ams),
-            stall_mark: stall_mark,
-            executor: executor,
+            stall_mark,
+            executor,
         }
     }
     #[tracing::instrument(skip_all, level = "debug")]
@@ -566,9 +566,9 @@ impl TeamAmBatcher {
 
                 for (am_id, ams) in am_map {
                     let batched_am_header = BatchedAmHeader {
-                        am_id: am_id,
+                        am_id,
                         am_cnt: ams.len(),
-                        cmd: cmd,
+                        cmd,
                     };
                     crate::serialize_into(
                         &mut data_slice[i..i + *BATCHED_AM_HEADER_LEN],
@@ -683,7 +683,7 @@ impl TeamAmBatcher {
         let data_header = DataHeader {
             size: data_size,
             req_id: req_data.id,
-            darc_list_size: darc_list_size,
+            darc_list_size,
         };
         crate::serialize_into(&mut data_buf[i..i + *DATA_HEADER_LEN], &data_header, false).unwrap();
         i += *DATA_HEADER_LEN;
@@ -723,7 +723,7 @@ impl TeamAmBatcher {
             src: src as u16,
             cmd: Cmd::BatchedMsg,
         };
-        SerializeHeader { msg: msg }
+        SerializeHeader { msg }
     }
 
     #[tracing::instrument(skip_all, level = "debug")]

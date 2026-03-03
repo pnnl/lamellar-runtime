@@ -10,7 +10,7 @@ use async_task::{Builder, Runnable};
 use core_affinity::CoreId;
 use crossbeam::deque::{Injector, Stealer, Worker};
 use futures_util::Future;
-use rand::distributions::Uniform;
+use rand::distr::Uniform;
 use rand::prelude::*;
 use std::collections::HashMap;
 use std::panic;
@@ -84,9 +84,9 @@ impl WorkStealingThread {
                 // );
                 core_affinity::set_for_current(id);
                 active_cnt.fetch_add(1, Ordering::SeqCst);
-                let mut rng = rand::thread_rng();
-                let global_inj_dist = Uniform::new(0, worker.global_injs.len());
-                let group_dist = Uniform::new(0, worker.group_queue.stealers.len());
+                let mut rng = rand::rng();
+                let global_inj_dist = Uniform::new(0, worker.global_injs.len()).expect("error getting uniform distribution");
+                let group_dist = Uniform::new(0, worker.group_queue.stealers.len()).expect("error getting uniform distribution");
                 let mut timer = std::time::Instant::now();
                 while worker.panic.load(Ordering::SeqCst) == 0
                     && (worker.status.load(Ordering::SeqCst) == SchedulerStatus::Active as u8
@@ -370,8 +370,8 @@ impl LamellarExecutor for WorkStealing2 {
 
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_task(&self) {
-        let mut rng = rand::thread_rng();
-        let t = rand::distributions::Uniform::new(0, self.work_stealers.len());
+        let mut rng = rand::rng();
+        let t = rand::distr::Uniform::new(0, self.work_stealers.len()).expect("error getting uniform distribution");
         let ret = if !self.imm_inj.is_empty() {
             self.imm_inj.steal().success()
         } else {
@@ -424,10 +424,10 @@ impl WorkStealing2 {
             work_injs: Vec::new(),
             work_stealers: Vec::new(),
             work_flag: Arc::new(AtomicU8::new(0)),
-            status: status,
+            status,
             active_cnt: Arc::new(AtomicUsize::new(0)),
-            panic: panic,
-            num_threads_per_group: num_threads_per_group,
+            panic,
+            num_threads_per_group,
             cur_inj: Arc::new(AtomicU8::new(0)),
             inj_map: HashMap::new(),
         };
@@ -497,7 +497,7 @@ impl WorkStealing2 {
 
                 let worker = WorkStealingThread {
                     imm_inj: self.imm_inj.clone(),
-                    group_queue: group_queue,
+                    group_queue,
                     global_injs: work_injs,
                     status: self.status.clone(),
                     panic: self.panic.clone(),

@@ -52,22 +52,28 @@ lazy_static! {
         crate::serialized_size::<Option<SerializeHeader>>(&Some(Default::default()), false);
 }
 
-/// The list of available lamellae backends, used to specify how data is transfered between PEs
+/// The list of available lamellae backends, used to specify how data is transferred between PEs
 #[derive(
     serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq, Ord, PartialOrd, Hash, Clone, Copy,
 )]
 pub enum Backend {
     #[cfg(feature = "enable-rofi-c")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-rofi-c")))]
     RofiC,
     #[cfg(feature = "enable-libfabric")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric")))]
     Libfabric,
     #[cfg(feature = "enable-libfabric")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric")))]
     LibfabricMt,
     #[cfg(feature = "enable-libfabric-async")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-libfabric-async")))]
     LibfabricAsync,
     #[cfg(feature = "enable-ucx")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx")))]
     Ucx,
     #[cfg(feature = "enable-ucx")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "enable-ucx")))]
     UcxMt,
     /// The Local backend -- intended for single process environments
     Local,
@@ -453,7 +459,6 @@ pub(crate) trait LamellaeUtil: Send {
     async fn request_new_alloc(&self, min_size: usize);
 }
 
-#[allow(unused_variables)]
 #[tracing::instrument(skip_all, level = "debug")]
 pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeBuilder {
     match backend {
