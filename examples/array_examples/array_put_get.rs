@@ -17,6 +17,7 @@ fn initialize_mem_region<M: Into<LamellarMemoryRegion<usize>> + Clone>(memregion
     }
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();

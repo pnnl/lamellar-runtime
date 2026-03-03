@@ -111,6 +111,7 @@ impl LamellarAM for ReturnVecAM {
 //     _guard
 // }
 
+#[lamellar::main]
 fn main() {
     // let _guard = setup_global_subscriber();
     let subscriber = tracing_subscriber::registry()

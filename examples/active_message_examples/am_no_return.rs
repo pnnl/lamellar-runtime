@@ -46,6 +46,7 @@ impl LamellarAM for AmNoReturn {
 //     _guard
 // }
 
+#[lamellar::main]
 fn main() {
     // let subscriber = tracing_subscriber::FmtSubscriber::builder()
     //     .with_max_level(Level::TRACE)

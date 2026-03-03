@@ -11,6 +11,7 @@ use lamellar::array::prelude::*;
 ///----------------------------------------------------------------------------------
 use matrixmultiply::sgemm;
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let elem_per_pe = args

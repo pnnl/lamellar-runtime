@@ -17,6 +17,7 @@ use rand::SeedableRng;
 //     _guard
 // }
 
+#[lamellar::main]
 fn main() {
     // let _guard = setup_global_subscriber();
     let world = lamellar::LamellarWorldBuilder::new().build();

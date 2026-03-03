@@ -69,6 +69,7 @@ impl LamellarAM for RdmaAM {
 //
 // SharedMemoryRegions are serializable and can be transfered
 // as part of a LamellarAM
+#[lamellar::main]
 fn main() {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())

@@ -11,6 +11,7 @@ const ARRAY_LEN: usize = 100;
 // upon which we will build safer PGAS abstractions
 // we provide APIs for these memory regions but they
 // are intended mostly for internal use in the runtime
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();

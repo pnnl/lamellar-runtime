@@ -22,6 +22,7 @@ lamellar::register_reduction!(
     u8
 );
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();

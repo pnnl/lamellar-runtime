@@ -12,6 +12,7 @@ fn print_env<T: LamellarEnv>(env: &T) {
     println!();
 }
 
+#[lamellar::main]
 fn main() {
     let world = LamellarWorldBuilder::new().build();
     let darc = Darc::new(&world, 0).block().unwrap();

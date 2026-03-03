@@ -456,6 +456,7 @@ fn test_shr<T: std::fmt::Debug + ElementShiftOps + 'static>(
     array.barrier();
 }
 
+#[lamellar::main]
 fn main() {
     // let args: Vec<String> = std::env::args().collect();
     let subscriber = fmt::init();

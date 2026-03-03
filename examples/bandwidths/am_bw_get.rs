@@ -35,6 +35,7 @@ impl LamellarAM for DataAM {
     }
 }
 
+#[lamellar::main]
 fn main() {
     let subscriber = tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::from_default_env())

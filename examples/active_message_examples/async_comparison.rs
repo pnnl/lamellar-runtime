@@ -65,6 +65,7 @@ impl LamellarAM for AsyncSleepAM {
 * LAMELLAR_THREADS=1 this forces on a single worker thread, meaning each tasks will be executed by that thread.
 * the async sleep will place the tasks back in the task pool while they are sleeping, the std sleep will block for the entire time
 */
+#[lamellar::main]
 fn main() {
     match std::env::var("LAMELLAR_THREADS") {
         Ok(num) => if num.parse::<usize>().expect(

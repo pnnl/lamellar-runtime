@@ -289,6 +289,7 @@ fn sum_with_schedule(
     });
 }
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     println!("world created");

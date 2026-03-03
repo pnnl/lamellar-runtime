@@ -5,7 +5,7 @@ use super::{context::Context, error::Error};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use tracing::{debug, trace};
+use tracing::debug;
 
 #[derive(Debug)]
 pub(crate) struct Worker {

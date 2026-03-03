@@ -6,6 +6,8 @@ use quote::quote;
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
 use quote::ToTokens;
 
+
+
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
 fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Option<impl ToTokens>) -> impl ToTokens {
 
@@ -37,7 +39,17 @@ fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Optio
             // Add the arguments targeting the application
             prterun_args.extend(args.into_iter());
 
+            let mut ld_library_path = std::env::var("LD_LIBRARY_PATH").unwrap_or_else(|_| String::new());
+            if let Ok(origin) = std::env::var("ORIGIN"){
+                if !ld_library_path.is_empty() {
+                    ld_library_path.push_str(":");
+                }
+                ld_library_path.push_str(&origin);
+            }
+            
+            println!("Launching with {:?}: {:?} {:?}", #env_var, #launcher_path, prterun_args.join(" "));
             std::process::Command::new(#launcher_path)
+                .env("LD_LIBRARY_PATH", ld_library_path)
                 .args(prterun_args)
                 .status()
                 .expect("failed to launch process");
@@ -47,7 +59,7 @@ fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Optio
 }
 
 #[proc_macro_attribute]
-pub fn lamellar_main(_args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(any(feature = "use-prterun", feature = "use-srun")))]
     compile_error!("Either feature \"use-prterun\" or \"use-srun\" must be enabled for lamellar_main proc macro.");
     #[cfg(all(feature = "use-prterun", feature = "use-srun"))]
@@ -169,7 +181,7 @@ fn create_launch_test_block(launcher_info: (impl ToTokens, impl ToTokens), test_
 }
 
 #[proc_macro_attribute]
-pub fn lamellar_test(_args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn test(_args: TokenStream, item: TokenStream) -> TokenStream {
     #[cfg(not(any(feature = "use-prterun", feature = "use-srun")))]
     compile_error!("Either feature \"use-prterun\" or \"use-srun\" must be enabled for lamellar_test proc macro.");
     #[cfg(all(feature = "use-prterun", feature = "use-srun"))]

@@ -56,6 +56,7 @@ impl LamellarAM for ReturnAM {
 }
 //-------------------------------------------------------------------//
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         // .with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local

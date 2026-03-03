@@ -301,10 +301,17 @@ pub use crate::lamellar_world::*;
 pub use crate::scheduler::ExecutorType;
 pub use crate::scheduler::LamellarTask;
 
-extern crate lamellar_impl;
+// extern crate lamellar_impl;
+// pub mod lamellar_impl;
 // //#[doc(hidden)]
 pub use lamellar_impl::Dist;
 // use lamellar_impl;
+
+
+#[cfg(feature="enable-lamellar-main")]
+pub use lamellar_main::main;
+
+
 
 //#[doc(hidden)]
 pub use inventory;

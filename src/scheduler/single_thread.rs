@@ -5,7 +5,6 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use std::thread;
 
 use crate::scheduler::{Executor, LamellarExecutor, LamellarTask, LamellarTaskInner};
 

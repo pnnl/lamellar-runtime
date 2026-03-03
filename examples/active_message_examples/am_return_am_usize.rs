@@ -59,6 +59,7 @@ impl LamellarAM for InitialAM {
 }
 //-------------------------------------------------------------------//
 
+#[lamellar::main]
 fn main() {
     //sleep for 10 seconds to allow time to attach a debugger
     // std::thread::sleep(std::time::Duration::from_secs(10));

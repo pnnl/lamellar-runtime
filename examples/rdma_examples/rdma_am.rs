@@ -89,6 +89,7 @@ impl LamellarAM for RdmaLocalMRAM {
 //
 // SharedMemoryRegions are serializable and can be transfered
 // as part of a LamellarAM
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();

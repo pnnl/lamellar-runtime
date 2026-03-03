@@ -16,6 +16,7 @@ impl LamellarAM for DataAM {
     async fn exec() {}
 }
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         // .with_scheduler(lamellar::SchedulerType::WorkStealing)

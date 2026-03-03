@@ -49,6 +49,7 @@ impl LamellarAM for DataAM {
     }
 }
 
+#[lamellar::main]
 fn main() {
     // std::thread::sleep(std::time::Duration::from_secs(60));
     let subscriber = tracing_subscriber::registry()

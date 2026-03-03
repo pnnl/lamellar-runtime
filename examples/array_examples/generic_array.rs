@@ -14,6 +14,7 @@ impl<T: Dist + ArrayOps + Default> ArrayWrapper<T> {
 
 // lamellar::generate_ops_for_type!(false, Option<u8>); //todo get this to work... which Im not sure is actually possible?
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let _my_pe = world.my_pe();

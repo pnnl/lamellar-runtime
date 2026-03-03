@@ -12,7 +12,7 @@ use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
-use crate::memregion::{Dist, MemoryRegion};
+use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::{array::*, Darc, Remote};
 

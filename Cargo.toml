@@ -58,7 +58,6 @@ async-trait = "0.1.58"
 async-std = "1.13.2"
 async-recursion = "1.0.0"
 async-lock = "3.4.1"
-async-lock = "3.4.1"
 enum_dispatch = "0.3.8"
 memoffset = "0.9.1"
 shared_memory = "0.12.4"
@@ -106,9 +105,9 @@ opt-level = 3
 #features are strictly additive.... can't have mutual exclusitivity
 [features]
 # default = ["pmi/with-pmix-vendored", "pmix-sys/vendored"]
-default = ["pmi/with-pmix-vendored"]
+default = ["pmi/with-pmix-vendored", "enable-lamellar-main"]
 
-enable-lamellar-main = ["lamellar_main", "prrte-sys"]
+enable-lamellar-main = ["lamellar_main/use-prterun", "prrte-sys/vendored"]
 enable-stats = []
 enable-rofi-c = ["rofi-c", "rofisys", "libc", "libfabric"]
 enable-rofi-c-shared = ["rofi-c", "rofisys/shared", "libc", "libfabric"]

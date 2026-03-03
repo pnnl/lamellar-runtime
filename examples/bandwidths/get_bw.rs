@@ -7,6 +7,7 @@ use std::time::Instant;
 
 const MEMREG_LEN: usize = 2 * 1024 * 1024 * 1024;
 
+#[lamellar::main]
 fn main() {
     let mut s = Instant::now();
     let world = lamellar::LamellarWorldBuilder::new().build();

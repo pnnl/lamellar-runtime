@@ -54,6 +54,7 @@ impl LamellarAM for FollowUpAM {
     }
 }
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let _my_pe = world.my_pe();

@@ -24,7 +24,6 @@ use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use std::ffi::c_void;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc, Mutex,

@@ -64,6 +64,7 @@ impl LamellarAM for FlopAM {
 //     }
 // }
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new()
         // .with_lamellae( Backend::Local )

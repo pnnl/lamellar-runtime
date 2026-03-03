@@ -232,6 +232,7 @@ fn global_shuffle(A: &UnsafeArray::<SortElement>,
     }
 }*/
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let world = lamellar::LamellarWorldBuilder::new().build();

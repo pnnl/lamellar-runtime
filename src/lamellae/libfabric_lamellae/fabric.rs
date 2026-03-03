@@ -26,7 +26,6 @@ use libfabric::{
 };
 
 use crate::{
-    config,
     lamellae::{
         comm::alloc::*,
         comm::error::{AllocError, AllocResult, FabricError, FabricResult},

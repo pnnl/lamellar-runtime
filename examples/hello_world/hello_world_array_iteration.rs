@@ -4,6 +4,7 @@
 /// --------------------------------------------------------------------
 use lamellar::array::prelude::*;
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let num_pes = world.num_pes();

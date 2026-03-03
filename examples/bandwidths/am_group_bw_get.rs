@@ -33,6 +33,7 @@ impl LamellarAM for DataAM {
     }
 }
 
+#[lamellar::main]
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();

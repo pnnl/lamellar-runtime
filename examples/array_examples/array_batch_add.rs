@@ -18,6 +18,7 @@ impl LamellarAM for AddAm {
     }
 }
 
+#[lamellar::main]
 fn main() {
     unsafe {
         let num_per_batch = match std::env::var("LAMELLAR_OP_BATCH") {

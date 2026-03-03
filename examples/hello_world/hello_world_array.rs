@@ -4,6 +4,7 @@
 /// --------------------------------------------------------------------
 use lamellar::array::prelude::*;
 
+#[lamellar::main]
 fn main() {
     let timer = std::time::Instant::now();
     let world = lamellar::LamellarWorldBuilder::new().build();

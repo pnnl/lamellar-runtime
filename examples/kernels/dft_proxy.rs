@@ -596,6 +596,7 @@ fn dft_lamellar_array_opt_3(
     timer.elapsed().as_secs_f64()
 }
 
+#[lamellar::main]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let array_len = args
