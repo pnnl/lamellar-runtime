@@ -678,7 +678,7 @@ impl CommAllocRdma for UcxMtAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Vec::new(),
+            result: vec![T::default(); len],
             request: None,
         }
         .into()
@@ -916,7 +916,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
-            result: Vec::new(),
+            result: vec![T::default(); len],
             request: None,
         }
         .into()
