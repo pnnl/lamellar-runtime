@@ -1039,10 +1039,11 @@ impl Darc<LamellarTeamRT> {
 
     pub(crate) fn into_raw_team(self) -> *const DarcInner<LamellarTeamRT> {
         trace!(
-            "[{}][{}] {:?} into_raw_team",
+            "[{}][{}] {:?} into_raw_team {:?}",
             self.inner().id,
             self.id,
-            self.inner()
+            self.inner(),
+            self.inner.as_ptr()
         );
         self.inc_local_cnt(1); // we need this to ensure DarcInner is not dropped
         self.inner.as_ptr()
@@ -1239,8 +1240,10 @@ impl<T: Send + Sync> Darc<T> {
         let num_pes = team_rt.num_pes;
 
         let alloc = if team_rt.num_pes == team_rt.num_world_pes {
+            trace!("using global alloc for darc");
             AllocationType::Global
         } else {
+            trace!("using sub team alloc for darc");
             AllocationType::Sub(team_rt.get_pes())
         };
 
