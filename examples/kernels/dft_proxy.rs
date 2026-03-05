@@ -649,7 +649,7 @@ fn main() {
             UnsafeArray::<f64>::new(world.team(), global_len, Distribution::Block).block();
 
         unsafe {
-            for i in full_signal.as_mut_slice().unwrap() {
+            for i in full_signal.as_mut_slice() {
                 *i = rng.random_range(0.0..1.0);
             }
             let full_signal_clone = full_signal.clone();

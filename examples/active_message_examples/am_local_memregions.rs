@@ -18,7 +18,7 @@ struct DataAM {
     array: OneSidedMemoryRegion<u8>,
     depth: usize,
     width: usize,
-    path: Vec<usize>,
+    path: Vec<(usize, Option<usize>)>,
 }
 
 #[lamellar::am]
@@ -28,11 +28,11 @@ impl LamellarAM for DataAM {
         let pes = Uniform::try_from(0..lamellar::team.num_pes()).expect("could not create uniform");
         // println!("depth {:?} {:?}",self.depth, self.path);
         let mut path = self.path.clone();
-        path.push(lamellar::current_pe);
+        path.push((lamellar::world.my_pe(), lamellar::team.team_pe_id().ok()));
         if self.depth > 0 {
             for _i in 0..self.width {
                 let pe = pes.sample(&mut rng);
-                println!("sending {:?} to {:?}", path, pe);
+                println!("sending {:?} to {:?} of {} ({})", path, pe, lamellar::team.num_pes(), lamellar::world.num_pes());
                 let _ = lamellar::team
                     .exec_am_pe(
                         pe,
@@ -105,6 +105,7 @@ fn main() {
     if my_pe == 0 {
         for _i in 0..width {
             let pe = pes.sample(&mut rng) / 2; //since both teams consist of half the number of pes as the world
+            println!("sending {:?} to {:?} of {} ({})", (my_pe, first_half_team.team_pe_id().ok()), pe, first_half_team.num_pes(), world.num_pes());
             let _ = first_half_team
                 .exec_am_pe(
                     pe,
@@ -112,10 +113,12 @@ fn main() {
                         array: array.clone(),
                         depth: 5,
                         width: width,
-                        path: vec![my_pe],
+                        path: vec![(my_pe, first_half_team.team_pe_id().ok())],
                     },
                 )
                 .spawn();
+            
+            println!("sending {:?} to {:?} of {} ({})", (my_pe, odd_team.team_pe_id().ok()), pe, odd_team.num_pes(), world.num_pes());
             let _ = odd_team
                 .exec_am_pe(
                     pe,
@@ -123,7 +126,7 @@ fn main() {
                         array: array.clone(),
                         depth: 5,
                         width: width,
-                        path: vec![my_pe],
+                        path: vec![(my_pe, odd_team.team_pe_id().ok())],
                     },
                 )
                 .spawn();
