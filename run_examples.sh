@@ -1,27 +1,18 @@
 #!/bin/bash
 
-
-# target_dir=/home/scratch/$USER
-# target_dir=$PWD/target/x86_64-unknown-linux-
 target_dir=$PWD/target/
 output_dir=/home/scratch/$USER
-
 root=$PWD
-# . $root/../junction-prep.rc
 
 local_results_dir=v0.8.0
-lamellae_dir=libfabric_lamellae
+lamellae_dir=libfabric_ucx_lamellae
 results_dir=${output_dir}/${lamellae_dir}/${local_results_dir}
+
 ### test using rofi verbs lamellae
 rm -r ${results_dir}
-
 rm -r ${lamellae_dir}
 mkdir -p ${results_dir}
 ln -s ${output_dir}/${lamellae_dir} ${lamellae_dir}
-
-
-# cargo build --release --features enable-rofi --features tokio-executor --features runtime-warnings-panic --examples -j 20
-
 
 cd ${lamellae_dir}/${local_results_dir}
 for toolchain in stable; do #nightly; do
@@ -41,8 +32,8 @@ for toolchain in stable; do #nightly; do
       cd $dir
         sbatch --exclude=j004,j005,j036 --cpus-per-task=64 -N 2 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 64 2 $target_dir
         if [ $dir != "bandwidths" ]; then
-          sbatch --exclude=j004,j005,j036 --cpus-per-task=64 -N 8 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 64 8 $target_dir
-          sbatch --exclude=j004,j005,j036 --cpus-per-task=32 -N 16 -n 32 --time 0:240:00 $root/batch_runner.sh $root $dir $mode 32 32 $target_dir
+          sbatch --exclude=j004,j005,j036 --cpus-per-task=32 -N 8 -n 16 --time 0:120:00 $root/batch_runner.sh $root $dir $mode 32 16 $target_dir
+          sbatch --exclude=j004,j005,j036 --cpus-per-task=4 -N 16 -n 256 --time 0:240:00 $root/batch_runner.sh $root $dir $mode 4 256 $target_dir
         fi
       cd ..
       sleep 2
