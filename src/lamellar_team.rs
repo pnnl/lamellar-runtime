@@ -1246,17 +1246,7 @@ impl LamellarTeamRT {
             parent.check_hash_vals(hash as usize, &dropped, timeout);
             trace!("subteam passed check hash vals");
 
-            // let remote_ptr_alloc = parent
-            //     .lamellae
-            //     .comm()
-            //     .alloc(
-            //         std::mem::size_of::<*const LamellarTeamRT>(),
-            //         parent_alloc,
-            //         std::mem::align_of::<*const LamellarTeamRT>(),
-            //     )
-            //     .expect("alloc failed creating LamellarTeam");
-            // ------------------------------------------------------------------------------------------------- //
-            trace!("subteam passed remote_ptr_alloc");
+          
             let num_pes = archrt.num_pes();
             parent.barrier();
             trace!("subteam passed barrier, creating RT team");

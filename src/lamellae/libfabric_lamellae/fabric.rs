@@ -757,7 +757,7 @@ impl Ofi {
         trace!(target: "libfabric", "Full Allocating aligned size: {} aligned", aligned_size);
         #[cfg(not(feature = "enable-on-node-shmem"))]
         let (mem, mem_base_ptr) = {
-            let mut mmap = memmap::MmapOptions::new()
+            let  mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect(&format!(
@@ -895,7 +895,7 @@ impl Ofi {
 
         #[cfg(not(feature = "enable-on-node-shmem"))]
         let (mem, mem_base_ptr) = {
-            let mut mmap = memmap::MmapOptions::new()
+            let  mmap = memmap::MmapOptions::new()
                 .len(aligned_size)
                 .map_anon()
                 .expect("Error in allocating aligned memory");

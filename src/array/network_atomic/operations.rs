@@ -27,11 +27,9 @@ impl<T: ElementOps + 'static> ReadOnlyOps<T> for NetworkAtomicArray<T> {
     fn blocking_load(&self, index: usize) -> T {
         // println!("in Network atomic blocking load");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            unsafe {
-                self.array
-                    .mem_region
-                    .atomic_fetch_op_blocking(pe, offset, AtomicOp::Read)
-            }
+            self.array
+                .mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Read)
         } else {
             panic!("invalid index");
         }
@@ -327,14 +325,15 @@ impl<T: Dist> NetworkAtomicLocalData<T> {
         idx_vals
             .map(|(i, val)| {
                 let mut res = val;
-                match unsafe {
+                let success = unsafe {
                     op(
                         &data[i],
                         &val as *const T,
                         &mut res as *mut T,
                         &current as *const T,
                     )
-                } {
+                };
+                match success {
                     true => Ok(res),
                     false => Err(res),
                 }
@@ -354,7 +353,7 @@ impl<T: Dist> NetworkAtomicLocalData<T> {
         idx_vals
             .map(|(i, val)| {
                 let mut res = val;
-                match unsafe {
+                let success = unsafe {
                     op(
                         &data[i],
                         &val as *const T,
@@ -362,7 +361,8 @@ impl<T: Dist> NetworkAtomicLocalData<T> {
                         &current as *const T,
                         &epsilon as *const T,
                     )
-                } {
+                };
+                match success {
                     true => Ok(res),
                     false => Err(res),
                 }
