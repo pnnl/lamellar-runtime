@@ -24,11 +24,18 @@ fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Optio
             // Prepare arguments for prterun
             let mut prterun_args = Vec::<String>::new();
 
+            let mut time=false;
+
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
             if let Some(pos) = pos {
                 args.split_off(pos).into_iter().skip(1).for_each(|x| {
-                    prterun_args.push(x.to_string());
+                    if x == "--time" {
+                        time = true;
+                    }
+                    else{
+                        prterun_args.push(x.to_string());
+                    }
                 });
             }
             let end = args.len();
@@ -46,9 +53,12 @@ fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Optio
                 }
                 ld_library_path.push_str(&origin);
             }
-            
+            let mut launcher_cmd = std::process::Command::new(#launcher_path);
+            if time {
+                launcher_cmd.env("LAMELLAR_MAIN_TIME", "1");
+            }
             println!("Launching with {:?}: {:?} {:?}", #env_var, #launcher_path, prterun_args.join(" "));
-            std::process::Command::new(#launcher_path)
+            launcher_cmd
                 .env("LD_LIBRARY_PATH", ld_library_path)
                 .args(prterun_args)
                 .status()
@@ -115,7 +125,13 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         fn main() #ret_type {
             #launch_block
             else {
-                #block
+                let mut __lamellar_main_timer = std::time::Instant::now();
+                let result = (|| #block)();
+                if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
+                    let __lamellar_main_duration = __lamellar_main_timer.elapsed();
+                    println!("[LAMELLAR_MAIN] execution time: {:?}", __lamellar_main_duration);
+                }
+                result
             }
         } 
     };
