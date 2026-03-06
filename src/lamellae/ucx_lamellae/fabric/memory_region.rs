@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::c_void,
     mem::MaybeUninit,
     sync::{
@@ -7,11 +8,17 @@ use std::{
     },
 };
 
-use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc};
+use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc,UcxBarrier};
 use lamellar_ucx_sys::*;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
-use tracing::debug;
+use tracing::{debug, trace};
+
+#[derive(Debug, Clone)]
+pub(crate) struct RemoteAddressInfo {
+    pub(crate) addr: usize,
+    pub(crate) rkey: Arc<RKey>,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct MemoryHandle {
@@ -175,7 +182,7 @@ impl MemoryHandleInner {
         &self,
         endpoints: &[Arc<Endpoint>],
         pmi: &Arc<PmiX>,
-    ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
+    ) -> Result<HashMap<usize,RemoteAddressInfo>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
         // println!("[exchange_key] address: {:x?}", address_and_key);
@@ -190,7 +197,7 @@ impl MemoryHandleInner {
         pmi.put(&id, &address_and_key).unwrap();
         pmi.exchange().unwrap();
 
-        let mut all_rkeys = Vec::new();
+        let mut all_rkeys = HashMap::new();
         for pe in 0..pmi.ranks().len() {
             let res = pmi.get(&id, &address_and_key.len(), &pe).unwrap();
             // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
@@ -198,17 +205,74 @@ impl MemoryHandleInner {
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
             let remote_rkey = RKey::unpack(&endpoints[pe], &res[8..]);
             // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
-            all_rkeys.push((remote_address, Arc::new(remote_rkey)));
+            all_rkeys.insert(pe, RemoteAddressInfo {
+                addr: remote_address,
+                rkey: Arc::new(remote_rkey),
+            });
         }
+        Ok(all_rkeys)
+    }
+
+    pub(crate) fn exchange_key_sub_alloc(&self, endpoints: &[Arc<Endpoint>],
+        pes: &[usize],
+        barrier: &UcxBarrier,
+        exchange_buffer: &UcxAlloc,) -> Result<HashMap<usize, RemoteAddressInfo>, Error> {
+        // println!("PE {}: Starting exchange_key_sub_alloc with pes: {:?}", exchange_buffer.my_pe, pes);
+        let rkey = self.pack();
+        let mut address_and_key = self.addr.to_ne_bytes().to_vec();
+        // println!("[exchange_key] address: {:x?}", address_and_key);
+        // println!("[exchange_key] key: {:x?}", rkey.as_ref());
+        address_and_key.extend_from_slice(rkey.as_ref());
+        trace!(target: "ucx", "[exchange_key] address_and_key: {:x?}", address_and_key);
+        
+        // println!("[exchange_key_alloc] ex_buff  {:?}", exchange_buffer.as_mut_slice::<u8>());
+
+        barrier.sub_barrier(pes);
+
+        for pe in pes{
+            // println!("PE {}: Putting to PE {} in exchange_key_sub_alloc", exchange_buffer.my_pe, pe);
+            unsafe {
+                exchange_buffer.put_inner(
+                    *pe,
+                    exchange_buffer.my_pe * address_and_key.len(),
+                    &address_and_key,
+                    false,
+                )
+            };
+        }
+
+        exchange_buffer.wait_all();
+        // println!("[exchange_key_alloc] ex_buff  {:?}", exchange_buffer.as_mut_slice::<u8>());
+
+        barrier.sub_barrier(pes);
+        let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
+        // println!("[exchange_key_alloc] ex_buff size: {} {:?}", ex_buff_slice.len(), ex_buff_slice);
+        let mut all_rkeys = HashMap::new();
+        for pe in pes {
+            let res = ex_buff_slice[pe * address_and_key.len()..(pe + 1) * address_and_key.len()]
+                .to_vec();
+            trace!(target: "ucx", "[exchange_sub_key] {pe}: remote address_and_key {:x?}", res);
+            let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
+            // println!("[exchange_sub_key] {pe}: remote_address: {:x}", remote_address);
+            let remote_rkey = RKey::unpack(&endpoints[*pe], &res[8..]);
+            // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
+            all_rkeys.insert(*pe, RemoteAddressInfo {
+                addr: remote_address,
+                rkey: Arc::new(remote_rkey),
+            });
+        }
+        ex_buff_slice.fill(0);
+        barrier.sub_barrier(pes);
         Ok(all_rkeys)
     }
 
     pub(crate) fn exchange_key_alloc(
         &self,
         endpoints: &[Arc<Endpoint>],
-        pmi: &Arc<PmiX>,
+        // pmi: &Arc<PmiX>,
+        barrier: &UcxBarrier,
         exchange_buffer: &UcxAlloc,
-    ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
+    ) -> Result<HashMap<usize,RemoteAddressInfo>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();
         address_and_key.extend_from_slice(rkey.as_ref());
@@ -216,9 +280,10 @@ impl MemoryHandleInner {
         //     "mem_region_address_{}",
         //     MEMREGION_CNT.fetch_add(1, Ordering::SeqCst)
         // );
-        // println!("[exchange_key_alloc] len: {}", address_and_key.len());
+        trace!(target: "ucx", "[exchange_key_alloc] len: {}", address_and_key.len());
 
-        pmi.barrier(false).expect("PMI Barrier failed");
+        // pmi.barrier(false).expect("PMI Barrier failed");
+        barrier.barrier();
         for pe in 0..exchange_buffer.num_pes {
             unsafe {
                 exchange_buffer.put_inner(
@@ -231,19 +296,25 @@ impl MemoryHandleInner {
         }
 
         exchange_buffer.wait_all();
-        pmi.barrier(false).expect("PMI Barrier failed");
+        barrier.barrier();
         let ex_buff_slice = exchange_buffer.as_mut_slice::<u8>();
-        // println!("[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
-        let mut all_rkeys = Vec::new();
+        // trace!(target: "ucx", "[exchange_key_alloc] ex_buff size: {}", ex_buff_slice.len());
+        let mut all_rkeys = HashMap::new();
         for pe in 0..exchange_buffer.num_pes {
             let res = ex_buff_slice[pe * address_and_key.len()..(pe + 1) * address_and_key.len()]
                 .to_vec();
-            // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
+            trace!(target: "ucx", "[exchange_key] {pe}: remote address_and_key {:x?}", res);
             let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
             let remote_rkey = RKey::unpack(&endpoints[pe], &res[8..]);
+            if remote_address == 0 || remote_rkey.handle.is_null() {
+                panic!("PE {}: Received remote address 0 or null rkey handle, indicating an error in key exchange", pe);
+            }
             // println!("[exchange_key] {pe}: remote_rkey: {:?}", remote_rkey);
-            all_rkeys.push((remote_address, Arc::new(remote_rkey)));
+            all_rkeys.insert(pe, RemoteAddressInfo {
+                addr: remote_address,
+                rkey: Arc::new(remote_rkey),
+            });
         }
         ex_buff_slice.fill(0);
         Ok(all_rkeys)
