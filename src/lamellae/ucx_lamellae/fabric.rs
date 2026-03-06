@@ -38,21 +38,19 @@ struct UcxBarrier {
     my_pe: usize,
     buffer: UcxAlloc,
     sub_buffer: UcxAlloc,
-    sub_buffer_last_seen: UcxAlloc,
+    sub_last_seen: Mutex<Vec<u32>>,
 }
 
 impl UcxBarrier {
     fn new(num_pes: usize, my_pe: usize, buffer: UcxAlloc,) -> Self {
 
         trace!(target: "ucx", "PE {} creating barrier with num_pes: {}", my_pe, num_pes);
-        let sub_buffer_size = std::mem::size_of::<u32>() * num_pes;
-        let sub_buffer_last_seen_size = std::mem::size_of::<u32>() * num_pes;
+        let sub_buffer_size = std::mem::size_of::<u32>() * num_pes * 2;
        
-        let full_buffer_size = buffer.data_num_bytes - (sub_buffer_size+sub_buffer_last_seen_size);
+        let full_buffer_size = buffer.data_num_bytes - sub_buffer_size;
         trace!(target: "ucx", "PE {} barrier buffer size: {} sub_buffer_size: {} full_buffer_size: {}", my_pe, buffer.data_num_bytes, sub_buffer_size, full_buffer_size);
         let full_buffer = buffer.sub_alloc(0, full_buffer_size).expect("Failed to create full buffer for barrier");
         let sub_buffer = buffer.sub_alloc(full_buffer_size, sub_buffer_size).expect("Failed to create sub buffer for barrier");
-        let sub_buffer_last_seen = buffer.sub_alloc(full_buffer_size + sub_buffer_size, sub_buffer_last_seen_size).expect("Failed to create sub buffer last seen for barrier");
         UcxBarrier {
             counter: AtomicUsize::new(1),
             sub_counter: AtomicU32::new(1),
@@ -60,47 +58,68 @@ impl UcxBarrier {
             my_pe,
             buffer: full_buffer,
             sub_buffer: sub_buffer,
-            sub_buffer_last_seen: sub_buffer_last_seen,
+            sub_last_seen: Mutex::new(vec![0u32; num_pes * 2]),
         }
     }
 
 
     fn sub_barrier(&self, pes: &[usize])  {
-        trace!(target: "ucx", "PE {} entering sub barrier with pes: {:?}", self.my_pe, pes);
         
-        let num_pes = pes.len();
-        let num_rounds =  (num_pes as f64).log2().ceil() as usize;
-        let mapped_pes = (0..num_pes).collect::<Vec<_>>();
-        let my_pe = pes.iter().position(|p| *p == self.my_pe).unwrap();
-        let mut my_barrier = self.sub_counter.fetch_add(1, Ordering::SeqCst);
+        
+        let group_size = pes.len();
+        let num_rounds =  (group_size as f64).log2().ceil() as usize;
+        let my_group_pe = pes.iter().position(|p| *p == self.my_pe).unwrap();
+        let my_barrier = self.sub_counter.fetch_add(1, Ordering::SeqCst);
+        let phase_offset = (my_barrier as usize & 1) * self.num_pes;
         let barrier_alloc = &self.sub_buffer;
         let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<u32>() };
-        let sub_barrier_last_seen_alloc = &self.sub_buffer_last_seen;
-        let last_seen_vec = unsafe { sub_barrier_last_seen_alloc.as_mut_slice::<u32>() };
+        let mut last_seen_guard = self.sub_last_seen.lock().unwrap();
+        let last_seen_vec = last_seen_guard.as_mut_slice();
+        trace!(target: "ucx", "PE {} entering sub barrier id: {my_barrier} with pes: {:?} ", self.my_pe, pes);
+
 
         //just do dissemination instead of 2-way dissemination, as its simpler to implement and sub_barrier is a place holder until we get UCC up and working
         for round in 0..num_rounds as usize {
-            let send_pe = pes[(my_pe + (1 << round)) % num_pes];
-            let recv_pe  = pes[(my_pe as i64 - (1 << round) as i64).rem_euclid(num_pes as i64) as usize];
+            let send_pe = pes[(my_group_pe + (1 << round)) % group_size];
+            let recv_pe  = pes[(my_group_pe as i64 - (1 << round) as i64).rem_euclid(group_size as i64) as usize];
             trace!(target: "ucx", "PE {} sending sub barrier to PE {} in round {} with barrier value {} {:?} {:?}", self.my_pe, send_pe, round, my_barrier, barrier_vec, last_seen_vec);
             unsafe {
                 barrier_alloc.put_inner(
                     send_pe,
-                    pes[my_pe],
+                    phase_offset + self.my_pe,
                     std::slice::from_ref(&my_barrier),
                     false,
                 );
             };
-            let mut cur_val = barrier_vec[recv_pe];
             trace!(target: "ucx", "PE {} waiting for sub barrier from PE {} in round {} with barrier value {} {:?} {:?}", self.my_pe, recv_pe, round, my_barrier, barrier_vec, last_seen_vec);
-            while last_seen_vec[recv_pe] >= cur_val {
+            let recv_idx_0 = recv_pe;
+            let recv_idx_1 = self.num_pes + recv_pe;
+            loop {
+                let cur_0 = unsafe {
+                    std::ptr::read_volatile(barrier_vec.as_ptr().add(recv_idx_0))
+                };
+                let cur_1 = unsafe {
+                    std::ptr::read_volatile(barrier_vec.as_ptr().add(recv_idx_1))
+                };
+
+                let ready_0 = cur_0 > last_seen_vec[recv_idx_0];
+                let ready_1 = cur_1 > last_seen_vec[recv_idx_1];
+
+                if ready_0 || ready_1 {
+                    if ready_1 && (!ready_0 || cur_1 >= cur_0) {
+                        last_seen_vec[recv_idx_1] = cur_1;
+                    } else {
+                        last_seen_vec[recv_idx_0] = cur_0;
+                    }
+                    break;
+                }
+
                 barrier_alloc.worker.progress();
                 std::thread::yield_now();
-                cur_val = barrier_vec[recv_pe];
             }
-            last_seen_vec[recv_pe] = cur_val;
         }
         barrier_alloc.wait_all();
+        trace!(target: "ucx", "PE {} exiting sub barrier id: {my_barrier}  with pes: {:?}", self.my_pe, pes);
     }
 
 
@@ -339,7 +358,7 @@ impl UcxWorld {
                 1
             };
             let full_barrier_size = std::mem::size_of::<usize>() * num_rounds * n ;
-            let sub_barrier_size = std::mem::size_of::<usize>()* num_pes; 
+            let sub_barrier_size = std::mem::size_of::<u32>() * num_pes * 2;
             trace!(target: "ucx", "PE {}: Calculated barrier buffer size: full_barrier_size: {} sub_barrier_size: {} num_rounds: {} n: {}", my_pe, full_barrier_size, sub_barrier_size, num_rounds, n);
             full_barrier_size + sub_barrier_size
         };
