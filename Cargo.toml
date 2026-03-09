@@ -47,8 +47,12 @@ tokio = { version = "1.47.1", features = ["full"] , optional = true}
 libc = { version = "0.2.175", optional = true }
 async-global-executor = "2.4.1"
 envy = "0.4.2"
+dashmap  = "6"
+thiserror = "2"
 
-
+[dependencies.cust]
+version  = "0.3"
+optional = true
 
 [dev-dependencies]
 trybuild = "1.0.71"
@@ -77,6 +81,8 @@ tokio-executor=["tokio"]
 slurm-test=[]
 disable-runtime-warnings=[]
 runtime-warnings-panic=[]
+cuda = ["dep:cust"]
+rust-cuda = ["cuda"]
 default=[]
 
 
@@ -481,3 +487,12 @@ path="examples/hello_world/hello_world_array.rs"
 [[example]]
 name="hello_world_array_iteration"
 path="examples/hello_world/hello_world_array_iteration.rs"
+
+##------------ GPU Examples -----------------##
+[[example]]
+name="gpu_histo"
+path="examples/gpu/gpu_histo.rs"
+
+[[example]]
+name="gpu_topsort"
+path="examples/gpu/gpu_topsort.rs"

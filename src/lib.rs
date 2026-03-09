@@ -282,6 +282,8 @@ pub(crate) mod warnings;
 pub mod env_var;
 pub use env_var::config;
 
+pub mod gpu;
+
 pub use crate::lamellae::Backend;
 pub use crate::lamellar_arch::{BlockedArch, IdError, LamellarArch, StridedArch};
 // //#[doc(hidden)]

@@ -1,0 +1,10 @@
+# Use clang as the Cargo linker instead of gcc.
+#
+# gcc invokes `collect2` as its linker driver, which searches for `ld` using
+# PATH.  Cargo's build-script environment has a restricted PATH, so collect2
+# fails to find `ld` when linking CUDA objects.  clang invokes `ld` directly,
+# bypassing collect2 and avoiding the issue.
+#
+# Required when building with --features cuda.
+[target.x86_64-unknown-linux-gnu]
+linker = "/usr/bin/clang"
