@@ -424,6 +424,10 @@ impl<T: Remote> OneSidedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::put(self, self.pe, index, data)
     }
 
+    pub unsafe fn put_blocking(&self, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_blocking(self, self.pe, index, data)
+    }
+
     pub unsafe fn put_unmanaged(&self, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_unmanaged(self, self.pe, index, data)
     }
@@ -885,6 +889,22 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for OneSidedMemoryRegion<T> {
                 .mr
                 .as_base::<T>()
                 .put(pe, self.sub_region_offset + index, data)
+        } else {
+            panic!(
+                "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",
+                pe, self.pe
+            );
+            // Err(MemNotLocalError {})
+        }
+    }
+
+    unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
+        if self.pe == pe {
+            self.mr
+                .inner
+                .mr
+                .as_base::<T>()
+                .put_blocking(pe, self.sub_region_offset + index, data)
         } else {
             panic!(
                 "trying to put to PE {:?} which does not contain data (pe with data =  {:?})",

@@ -158,6 +158,10 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
+    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) {
+        assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
+        net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
+    }
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         net_atomic_op(&op, &CommAllocAddr(self.start() + offset));

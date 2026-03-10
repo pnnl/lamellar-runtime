@@ -4,7 +4,7 @@ use crate::array::operations::*;
 use crate::array::r#unsafe::UnsafeArray;
 use crate::array::{AmDist, Dist, LamellarArray, LamellarByteArray, LamellarEnv};
 use crate::env_var::{config, IndexType};
-use crate::lamellae::{AtomicOp, CommInfo};
+use crate::lamellae::AtomicOp;
 use crate::AmHandle;
 use core::panic;
 use parking_lot::Mutex;
@@ -1197,11 +1197,25 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
             );
         }
     }
+
+    unsafe fn blocking_store(&self, index: usize, val: T) {
+        // println!("in Network atomic blocking store");
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                self.mem_region.put_blocking(pe, offset, val);
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
     unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
-        //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+            if self.atomic_support.swap {
                 let handle = self
                     .mem_region
                     .atomic_fetch_op(pe, offset, AtomicOp::Write(val));
@@ -1222,9 +1236,8 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
     }
     unsafe fn blocking_swap(&self, index: usize, val: T) -> T {
         // println!("in Network atomic blocking swap");
-        //add the check for atomic statement
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
-            if self.inner.data.team.lamellae.comm().atomic_avail::<T>() {
+            if self.atomic_support.swap {
                 self.mem_region
                     .atomic_fetch_op_blocking(pe, offset, AtomicOp::Write(val))
             } else {

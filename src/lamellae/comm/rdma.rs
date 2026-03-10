@@ -447,6 +447,7 @@ pub(crate) trait CommAllocRdma {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T>;
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize);
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize);
     fn put_buffer<T: Remote>(
         &self,

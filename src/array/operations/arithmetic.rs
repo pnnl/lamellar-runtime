@@ -127,6 +127,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
     }
 
+    fn blocking_add(&self, index: usize, val: T) {
+        self.add(index, val).block();
+    }
+
     /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -203,6 +207,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    fn blocking_fetch_add(&self, index: usize, val: T) -> T {
+        self.fetch_add(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_add][ArithmeticOps::fetch_add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -270,6 +278,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
+    }
+
+    fn blocking_sub(&self, index: usize, val: T) {
+        self.sub(index, val).block();
     }
 
     /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
@@ -348,6 +360,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    fn blocking_fetch_sub(&self, index: usize, val: T) -> T {
+        self.fetch_sub(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_sub][ArithmeticOps::fetch_sub] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -415,6 +431,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
+    }
+
+    fn blocking_mul(&self, index: usize, val: T) {
+        self.mul(index, val).block();
     }
 
     /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
@@ -493,6 +513,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    fn blocking_fetch_mul(&self, index: usize, val: T) -> T {
+        self.fetch_mul(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_mul][ArithmeticOps::fetch_mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -560,6 +584,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
+    }
+
+    fn blocking_div(&self, index: usize, val: T) {
+        self.div(index, val).block();
     }
 
     /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
@@ -638,6 +666,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    fn blocking_fetch_div(&self, index: usize, val: T) -> T {
+        self.fetch_div(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_div][ArithmeticOps::fetch_div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -705,6 +737,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
     fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
+    }
+
+    fn blocking_rem(&self, index: usize, val: T) {
+        self.rem(index, val).block();
     }
 
     /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,
@@ -781,6 +817,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    fn blocking_fetch_rem(&self, index: usize, val: T) -> T {
+        self.fetch_rem(index, val).block()
     }
 
     /// This call performs a batched vesion of the [fetch_rem][ArithmeticOps::fetch_rem] function,

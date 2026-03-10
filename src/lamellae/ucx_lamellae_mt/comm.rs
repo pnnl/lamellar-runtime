@@ -1,7 +1,7 @@
 use crate::{
     config,
     lamellae::{
-        comm::{CommInfo, CommMem, CommProgress, CommShutdown},
+        comm::{AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
         AllocationType,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
@@ -112,6 +112,12 @@ impl CommInfo for UcxMtComm {
     }
     fn atomic_avail<T: 'static>(&self) -> bool {
         self.ucx.atomic_avail::<T>()
+    }
+    fn atomic_op_avail<T: 'static>(&self, op: AtomicOp<T>) -> bool {
+        match op {
+            AtomicOp::Read | AtomicOp::Write(_) => self.ucx.atomic_avail::<T>(),
+            _ => false,
+        }
     }
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64

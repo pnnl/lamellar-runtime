@@ -100,6 +100,10 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    fn blocking_store(&self, index: usize, val: T) {
+        self.store(index, val).block();
+    }
+
     /// This call performs a batched vesion of the [store][AccessOps::store] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -306,6 +310,10 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
             .into()
+    }
+
+    unsafe fn blocking_store(&self, index: usize, val: T) {
+        self.store(index, val).block();
     }
 
     /// This call performs a batched vesion of the [store][AccessOps::store] function,

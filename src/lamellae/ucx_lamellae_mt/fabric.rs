@@ -7,6 +7,7 @@ mod worker;
 use context::Context;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
+use endpoint::ATOMIC_PUT_TMP;
 use memory_region::{MemoryHandle, MemoryHandleInner, RKey};
 use worker::Worker;
 
@@ -20,6 +21,7 @@ use crate::{
 };
 
 use pmi::{pmi::Pmi, pmix::PmiX};
+use lamellar_ucx_sys::ucp_atomic_op_t;
 
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -493,6 +495,54 @@ impl std::fmt::Debug for UcxMtAlloc {
 }
 
 impl UcxMtAlloc {
+    unsafe fn negate_atomic_value<T: Copy>(value: T) -> T {
+        let num_bytes = std::mem::size_of::<T>();
+        let mut bytes = vec![0u8; num_bytes];
+        std::ptr::copy_nonoverlapping(
+            (&value as *const T).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            num_bytes,
+        );
+        for byte in bytes.iter_mut() {
+            *byte = !*byte;
+        }
+
+        let mut carry: u16 = 1;
+        #[cfg(target_endian = "little")]
+        for byte in bytes.iter_mut() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+        #[cfg(target_endian = "big")]
+        for byte in bytes.iter_mut().rev() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+
+        let mut result = std::mem::MaybeUninit::<T>::uninit();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        result.assume_init()
+    }
+
+    fn ucx_atomic_update<T: Copy>(op: &AtomicOp<T>) -> (ucp_atomic_op_t, T) {
+        match op {
+            AtomicOp::Sum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, *val),
+            AtomicOp::Sub(val) => (
+                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
+                unsafe { Self::negate_atomic_value(*val) },
+            ),
+            _ => panic!("Unsupported atomic operation"),
+        }
+    }
+
     pub(crate) fn new(
         mem: MemoryHandle,
         data_num_bytes: usize,
@@ -711,6 +761,7 @@ impl UcxMtAlloc {
         pe: usize,
         offset: usize, //with respect to T
         src_addr: &[T],
+        blocking: bool,
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
@@ -734,21 +785,30 @@ impl UcxMtAlloc {
             remote_addr + offset,
             comm_group_id
         );
-        self.comm_groups[comm_group_id].endpoints[pe].put(
+        let req = self.comm_groups[comm_group_id].endpoints[pe].put(
             src_addr.as_ptr() as _,
             src_addr.len() * std::mem::size_of::<T>(),
             remote_addr + offset,
             &rkey,
             managed,
-        )
+        );
+        if blocking {
+            if let Some(req) = req {
+                req.wait().expect("blocking_put failed");
+            }
+            None
+        } else {
+            req
+        }
     }
 
     pub(crate) unsafe fn inner_get<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
+        blocking: bool,
         dst_addr: &mut [T],
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         trace!(target: "ucx",
             "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
@@ -761,61 +821,59 @@ impl UcxMtAlloc {
         );
         assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
         let (remote_addr, rkey) = &self.remote_keys[pe];
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
+        let req = self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
             .get(
                 dst_addr.as_mut_ptr() as _,
                 dst_addr.len() * std::mem::size_of::<T>(),
                 remote_addr + offset,
                 &rkey,
-            )
-    }
-
-    pub(crate) unsafe fn blocking_inner_get<T: Copy>(
-        &self,
-        pe: usize,
-        offset: usize,
-        dst_addr: &mut [T],
-    ) {
-        let offset = offset * std::mem::size_of::<T>();
-        trace!(
-            target: "ucx",
-            "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
-            pe,
-            offset,
-            dst_addr.len(),
-            std::mem::size_of::<T>(),
-            dst_addr.len() * std::mem::size_of::<T>(),
-            self.num_bytes(),
-        );
-        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
-        let (remote_addr, rkey) = &self.remote_keys[pe];
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()].endpoints[pe]
-            .blocking_get(
-                dst_addr.as_mut_ptr() as _,
-                dst_addr.len() * std::mem::size_of::<T>(),
-                remote_addr + offset,
-                &rkey,
-            )
-            .unwrap();
+            );
+        if blocking {
+            req.wait().expect("blocking_get failed");
+            None
+        } else {
+            Some(req)
+        }
     }
 
     pub(crate) fn inner_atomic_op<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
+        blocking: bool,
         op: &AtomicOp<T>,
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        match op {
+        let (remote_addr, rkey) = &self.remote_keys[pe];
+        let req = match op {
             AtomicOp::Write(val) => {
-                let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_put(*val, remote_addr + offset, &rkey, managed)
+                    .atomic_swap(
+                        *val,
+                        &ATOMIC_PUT_TMP as *const _ as *mut T,
+                        remote_addr + offset,
+                        &rkey,
+                        managed,
+                    )
+            }
+            AtomicOp::Sum(_) | AtomicOp::Sub(_) => {
+                let (ucx_op, val) = Self::ucx_atomic_update(op);
+                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
+                    .endpoints[pe]
+                    .atomic_op(ucx_op, val, remote_addr + offset, &rkey, managed)
             }
             _ => panic!("Unsupported atomic operation"),
+        };
+        if blocking {
+            if let Some(req) = req {
+                req.wait().expect("blocking_atomic_op failed");
+            }
+            None
+        } else {
+            req
         }
     }
 
@@ -823,53 +881,33 @@ impl UcxMtAlloc {
         &self,
         pe: usize,
         offset: usize,
+        blocking: bool,
         op: &AtomicOp<T>,
         result: &mut [T],
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        match op {
+        let req = match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
                     .atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
             }
-            AtomicOp::Write(val) => {
+            AtomicOp::Write(_) | AtomicOp::Sum(_) | AtomicOp::Sub(_) => {
+                let (ucx_op, val) = Self::ucx_atomic_update(op);
                 let (remote_addr, rkey) = &self.remote_keys[pe];
                 self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
                     .endpoints[pe]
-                    .atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey)
+                    .atomic_fetch_op(ucx_op, val, result.as_mut_ptr(), remote_addr + offset, &rkey)
             }
             _ => panic!("Unsupported atomic operation"),
-        }
-    }
-
-    pub(crate) fn blocking_inner_atomic_fetch_op<T: Copy>(
-        &self,
-        pe: usize,
-        offset: usize,
-        op: &AtomicOp<T>,
-        result: &mut [T],
-    ) {
-        let offset = offset * std::mem::size_of::<T>();
-        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        match op {
-            AtomicOp::Read => {
-                let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
-                    .endpoints[pe]
-                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, &rkey)
-                    .expect("blocking_atomic_get failed");
-            }
-            AtomicOp::Write(val) => {
-                let (remote_addr, rkey) = &self.remote_keys[pe];
-                self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.comm_groups.len()]
-                    .endpoints[pe]
-                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, &rkey)
-                    .expect("blocking_atomic_swap failed");
-            }
-            _ => panic!("Unsupported atomic operation"),
+        };
+        if blocking {
+            req.wait().expect("blocking_atomic_fetch_op failed");
+            None
+        } else {
+            Some(req)
         }
     }
 

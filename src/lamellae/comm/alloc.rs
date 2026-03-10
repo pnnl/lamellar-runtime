@@ -498,6 +498,70 @@ impl CommAllocRdma for CommAllocInner {
             }
         }
     }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::RofiCAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxMtAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
+                CommAllocRdma::put_blocking(inner_alloc, src, pe, offset)
+            }
+        }
+    }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         trace!("CommAllocInner::put_unmanaged called");
         match self {
@@ -1530,6 +1594,70 @@ impl CommAllocAtomic for CommAllocInner {
             }
         }
     }
+    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::RofiCAlloc(inner_alloc) => {
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => { 
+                inner_alloc.atomic_op_blocking(op, pe, offset)
+            }
+        }
+    }
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         match self {
             CommAllocInner::Raw(_addr, _size) => {
@@ -1951,6 +2079,9 @@ impl CommAllocRdma for CommAlloc {
         offset: usize,
     ) -> RdmaHandle<T> {
         self.inner_alloc.put(scheduler, counters, src, pe, offset)
+    }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        self.inner_alloc.put_blocking(src, pe, offset)
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         self.inner_alloc.put_unmanaged(src, pe, offset)

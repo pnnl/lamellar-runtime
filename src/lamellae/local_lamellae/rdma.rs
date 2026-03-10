@@ -307,6 +307,12 @@ impl CommAllocRdma for Arc<LocalAlloc> {
         }
         .into()
     }
+    fn put_blocking<T: Remote>(&self, src: T, _pe: usize, offset: usize) {
+        let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
+        unsafe {
+            dst.write(src);
+        }
+    }
     fn put_unmanaged<T: Remote>(&self, src: T, _pe: usize, offset: usize) {
         let dst = unsafe { self.as_mut_ptr::<T>().add(offset) };
         unsafe {

@@ -391,6 +391,12 @@ impl CommAllocRdma for LibfabricAlloc {
         }
         .into()
     }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        unsafe {
+            LibfabricAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), true)
+                .expect("error in put_blocking")
+        };
+    }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         trace!(
             "put unamanaged dst: {pe}  offset: {offset} size_of<T> {}",
@@ -631,6 +637,17 @@ impl CommAllocRdma for OneSidedLibfabricAlloc {
             counters,
         }
         .into()
+    }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_blocking called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        unsafe {
+            LibfabricAlloc::inner_put(&self.alloc, pe, offset, std::slice::from_ref(&src), true)
+                .expect("error in put_blocking")
+        };
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         assert_eq!(

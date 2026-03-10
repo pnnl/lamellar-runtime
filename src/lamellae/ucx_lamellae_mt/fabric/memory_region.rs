@@ -186,6 +186,7 @@ impl MemoryHandleInner {
                     exchange_buffer.my_pe * address_and_key.len(),
                     &address_and_key,
                     false,
+                    false,
                 )
             };
         }

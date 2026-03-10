@@ -537,7 +537,7 @@ impl<T: 'static> DarcInner<T> {
         let rdma = team.lamellae.comm();
         rdma.thread_flush();
         for pe in inner.mode_slice.iter() {
-            let timer = std::time::Instant::now();
+            let mut timer = std::time::Instant::now();
             while *pe != state {
                 if inner.local_cnt.load(Ordering::SeqCst) == 1 + extra_cnt {
                     join_all(inner.send_finished()).await;
@@ -559,6 +559,7 @@ impl<T: 'static> DarcInner<T> {
                         config().deadlock_warning_timeout,
                         std::backtrace::Backtrace::capture()
                     );
+                    timer = std::time::Instant::now();
                 }
                 if reset && timer.elapsed().as_secs_f64() > config().deadlock_warning_timeout / 2.0
                 {

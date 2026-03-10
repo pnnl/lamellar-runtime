@@ -272,10 +272,11 @@ pub(crate) enum AtomicOp<T> {
     Min(T),
     Max(T),
     Sum(T),
+    Sub(T), // backends only expose a sum/add op, we expose subtraction via negating the value and using sum/add
+    Prod(T),
     BitOr(T),
     BitXor(T),
     BitAnd(T),
-    BitNand(T),
     Read,
     Write(T),
     Cas(T, T),
@@ -287,10 +288,11 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
             AtomicOp::Min(_) => write!(f, "Min"),
             AtomicOp::Max(_) => write!(f, "Max"),
             AtomicOp::Sum(_) => write!(f, "Sum"),
+            AtomicOp::Sub(_) => write!(f, "Sub"),
+            AtomicOp::Prod(_) => write!(f, "Prod"),
             AtomicOp::BitOr(_) => write!(f, "BitOr"),
             AtomicOp::BitXor(_) => write!(f, "BitXor"),
             AtomicOp::BitAnd(_) => write!(f, "BitAnd"),
-            AtomicOp::BitNand(_) => write!(f, "BitNand"),
             AtomicOp::Read => write!(f, "Read"),
             AtomicOp::Write(_) => write!(f, "Write"),
             AtomicOp::Cas(_, _) => write!(f, "Cas"),
@@ -303,11 +305,12 @@ impl<T> AtomicOp<T> {
         match self {
             AtomicOp::Min(slice)
             | AtomicOp::Max(slice)
-            | AtomicOp::Sum(slice)
+            | AtomicOp::Sum(slice) // sum == add depending on the backend. We use sum/add to do subtraction as well
+            | AtomicOp::Sub(slice)
+            | AtomicOp::Prod(slice)
             | AtomicOp::BitOr(slice)
             | AtomicOp::BitXor(slice)
             | AtomicOp::BitAnd(slice)
-            | AtomicOp::BitNand(slice)
             | AtomicOp::Write(slice)
             | AtomicOp::Cas(slice, _) => Some(slice),
             AtomicOp::Read => None,
@@ -324,6 +327,7 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T>;
+    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
     fn atomic_op_all<T: Remote>(
         &self,
@@ -349,9 +353,9 @@ pub(crate) trait AsAtomic: Copy + std::fmt::Debug {
     fn store(&mut self, val: Self);
     fn swap(&mut self, val: Self) -> Self;
     fn fetch_add(&mut self, val: Self) -> Self;
-    // fn fetch_sub(&mut self, val: Self) -> Self;
+    fn fetch_mul(&mut self, val: Self) -> Self;
+    fn fetch_sub(&mut self, val: Self) -> Self;
     fn fetch_and(&mut self, val: Self) -> Self;
-    fn fetch_nand(&mut self, val: Self) -> Self;
     fn fetch_or(&mut self, val: Self) -> Self;
     fn fetch_xor(&mut self, val: Self) -> Self;
     fn fetch_max(&mut self, val: Self) -> Self;
@@ -383,17 +387,27 @@ macro_rules! impl_as_atomic {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
                     atomic.fetch_add(val, Ordering::SeqCst)
                 }
-                // fn fetch_sub(&mut self, val: Self) -> Self {
-                //     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
-                //     atomic.fetch_sub(val, Ordering::SeqCst)
-                // }
+                fn fetch_mul(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    let mut cur = atomic.load(Ordering::SeqCst);
+                    let mut new = cur * val;
+                    while atomic
+                        .compare_exchange(cur, new, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_err()
+                    {
+                        std::thread::yield_now();
+                        cur = atomic.load(Ordering::SeqCst);
+                        new = cur * val;
+                    }
+                    cur
+                }
+                fn fetch_sub(&mut self, val: Self) -> Self {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.fetch_sub(val, Ordering::SeqCst)
+                }
                 fn fetch_and(&mut self, val: Self) -> Self {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
                     atomic.fetch_and(val, Ordering::SeqCst)
-                }
-                fn fetch_nand(&mut self, val: Self) -> Self {
-                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
-                    atomic.fetch_nand(val, Ordering::SeqCst)
                 }
                 fn fetch_or(&mut self, val: Self) -> Self {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
@@ -510,6 +524,12 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
         AtomicOp::Sum(val) => {
             (&mut *(dst as *mut A)).fetch_add(*val);
         }
+        AtomicOp::Sub(val) => {
+            (&mut *(dst as *mut A)).fetch_sub(*val);
+        }
+        AtomicOp::Prod(val) => {
+            (&mut *(dst as *mut A)).fetch_mul(*val);
+        }
         AtomicOp::BitOr(val) => {
             (&mut *(dst as *mut A)).fetch_or(*val);
         }
@@ -518,9 +538,6 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
         }
         AtomicOp::BitAnd(val) => {
             (&mut *(dst as *mut A)).fetch_and(*val);
-        }
-        AtomicOp::BitNand(val) => {
-            (&mut *(dst as *mut A)).fetch_nand(*val);
         }
         AtomicOp::Read => {
             panic!("Read atomic op not supported in this context");
@@ -540,10 +557,11 @@ unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A,
         AtomicOp::Min(val) => (&mut *(dst as *mut A)).fetch_min(*val),
         AtomicOp::Max(val) => (&mut *(dst as *mut A)).fetch_max(*val),
         AtomicOp::Sum(val) => (&mut *(dst as *mut A)).fetch_add(*val),
+        AtomicOp::Sub(val) => (&mut *(dst as *mut A)).fetch_sub(*val),
+        AtomicOp::Prod(val) => (&mut *(dst as *mut A)).fetch_mul(*val),
         AtomicOp::BitOr(val) => (&mut *(dst as *mut A)).fetch_or(*val),
         AtomicOp::BitXor(val) => (&mut *(dst as *mut A)).fetch_xor(*val),
         AtomicOp::BitAnd(val) => (&mut *(dst as *mut A)).fetch_and(*val),
-        AtomicOp::BitNand(val) => (&mut *(dst as *mut A)).fetch_nand(*val),
         AtomicOp::Read => (&*dst).load(),
         AtomicOp::Write(val) => (&mut *(dst as *mut A)).swap(*val),
         AtomicOp::Cas(_, _) => panic!("Cas atomic op not supported in this context"),

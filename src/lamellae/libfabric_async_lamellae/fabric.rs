@@ -99,6 +99,20 @@ enum BarrierImpl {
     Manual(usize, AtomicUsize),
 }
 
+#[derive(Clone, Copy)]
+enum AtomicOpKind {
+    Min,
+    Max,
+    Sum,
+    Prod,
+    BitOr,
+    BitXor,
+    BitAnd,
+    Read,
+    Write,
+    Cas,
+}
+
 type RmaAtomicCollEp =
     libfabric::info_caps_type!(FabInfoCaps::ATOMIC, FabInfoCaps::RMA, FabInfoCaps::COLL);
 type SpinCq = libfabric::async_cq_caps_type!();
@@ -321,6 +335,50 @@ impl OfiAsync {
         }
     }
 
+    fn atomic_op_avail_inner<T: AsFiType>(&self, op: AtomicOpKind) -> bool {
+        unsafe {
+            match op {
+                AtomicOpKind::Min => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Min).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Min).is_ok()
+                }
+                AtomicOpKind::Max => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Max).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Max).is_ok()
+                }
+                AtomicOpKind::Sum => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Sum).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Sum).is_ok()
+                }
+                AtomicOpKind::Prod => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Prod).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Prod).is_ok()
+                }
+                AtomicOpKind::BitOr => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Bor).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Bor).is_ok()
+                }
+                AtomicOpKind::BitXor => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Bxor).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Bxor).is_ok()
+                }
+                AtomicOpKind::BitAnd => {
+                    self.ep.atomicvalid::<T>(AtomicOp::Band).is_ok()
+                        && self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Band).is_ok()
+                }
+                AtomicOpKind::Read => self.ep.fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead).is_ok(),
+                AtomicOpKind::Write => {
+                    self.ep.atomicvalid::<T>(AtomicOp::AtomicWrite).is_ok()
+                        && self
+                            .ep
+                            .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicWrite)
+                            .is_ok()
+                }
+                AtomicOpKind::Cas => self.ep.compare_atomicvalid::<T>(CompareAtomicOp::Cswap).is_ok(),
+            }
+        }
+    }
+
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
         let id = std::any::TypeId::of::<T>();
 
@@ -344,6 +402,47 @@ impl OfiAsync {
             self.atomic_avail_inner::<usize>()
         } else if id == std::any::TypeId::of::<isize>() {
             self.atomic_avail_inner::<isize>()
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn atomic_op_avail<T: 'static>(&self, op: LamellarAtomicOp<T>) -> bool {
+        let op_kind = match op {
+            LamellarAtomicOp::Min(_) => AtomicOpKind::Min,
+            LamellarAtomicOp::Max(_) => AtomicOpKind::Max,
+            LamellarAtomicOp::Sum(_) => AtomicOpKind::Sum,
+            LamellarAtomicOp::Sub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
+            LamellarAtomicOp::Prod(_) => AtomicOpKind::Prod,
+            LamellarAtomicOp::BitOr(_) => AtomicOpKind::BitOr,
+            LamellarAtomicOp::BitXor(_) => AtomicOpKind::BitXor,
+            LamellarAtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
+            LamellarAtomicOp::Read => AtomicOpKind::Read,
+            LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
+            LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+        };
+
+        let id = std::any::TypeId::of::<T>();
+        if id == std::any::TypeId::of::<u8>() {
+            self.atomic_op_avail_inner::<u8>(op_kind)
+        } else if id == std::any::TypeId::of::<u16>() {
+            self.atomic_op_avail_inner::<u16>(op_kind)
+        } else if id == std::any::TypeId::of::<u32>() {
+            self.atomic_op_avail_inner::<u32>(op_kind)
+        } else if id == std::any::TypeId::of::<u64>() {
+            self.atomic_op_avail_inner::<u64>(op_kind)
+        } else if id == std::any::TypeId::of::<i8>() {
+            self.atomic_op_avail_inner::<i8>(op_kind)
+        } else if id == std::any::TypeId::of::<i16>() {
+            self.atomic_op_avail_inner::<i16>(op_kind)
+        } else if id == std::any::TypeId::of::<i32>() {
+            self.atomic_op_avail_inner::<i32>(op_kind)
+        } else if id == std::any::TypeId::of::<i64>() {
+            self.atomic_op_avail_inner::<i64>(op_kind)
+        } else if id == std::any::TypeId::of::<usize>() {
+            self.atomic_op_avail_inner::<usize>(op_kind)
+        } else if id == std::any::TypeId::of::<isize>() {
+            self.atomic_op_avail_inner::<isize>(op_kind)
         } else {
             false
         }
@@ -1226,6 +1325,43 @@ impl From<LibfabricAsyncAlloc> for CommAlloc {
 
 static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 impl LibfabricAsyncAlloc {
+    unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
+        let num_bytes = std::mem::size_of::<OFI>();
+        let mut bytes = vec![0u8; num_bytes];
+        std::ptr::copy_nonoverlapping(
+            (&value as *const OFI).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            num_bytes,
+        );
+        for byte in bytes.iter_mut() {
+            *byte = !*byte;
+        }
+
+        let mut carry: u16 = 1;
+        #[cfg(target_endian = "little")]
+        for byte in bytes.iter_mut() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+        #[cfg(target_endian = "big")]
+        for byte in bytes.iter_mut().rev() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+
+        let mut result = std::mem::MaybeUninit::<OFI>::uninit();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        result.assume_init()
+    }
+
     pub(crate) fn new(
         ofi: Arc<OfiAsync>,
         mem: Arc<memmap::MmapMut>,
@@ -1848,7 +1984,12 @@ impl LibfabricAsyncAlloc {
         let remote_key = remote_alloc_info.key();
 
         let src = op.src().expect("Atomic operation has no source");
-        let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+        let src = *(src as *const T as *const OFI);
+        let src = match op {
+            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            _ => src,
+        };
+        let buf = std::slice::from_ref(&src);
         self.ofi.post_put(|| {
             self.ofi.ep.atomic_inject_to(
                 buf,
@@ -1878,7 +2019,12 @@ impl LibfabricAsyncAlloc {
         let remote_key = remote_alloc_info.key();
 
         let src = op.src().expect("Atomic operation has no source");
-        let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+        let src = *(src as *const T as *const OFI);
+        let src = match op {
+            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            _ => src,
+        };
+        let buf = std::slice::from_ref(&src);
         // self.ofi.post_put(|| {
         self.ofi
             .ep
@@ -1991,7 +2137,12 @@ impl LibfabricAsyncAlloc {
         let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
         match op.src() {
             Some(src) => {
-                let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+                let src = *(src as *const T as *const OFI);
+                let src = match op {
+                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    _ => src,
+                };
+                let buf = std::slice::from_ref(&src);
                 self.ofi.post_get(|| {
                     self.ofi.ep.fetch_atomic_from(
                         buf,
@@ -2045,7 +2196,12 @@ impl LibfabricAsyncAlloc {
         let mut ctx = self.ofi.info_entry.allocate_context();
         match op.src() {
             Some(src) => {
-                let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+                let src = *(src as *const T as *const OFI);
+                let src = match op {
+                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    _ => src,
+                };
+                let buf = std::slice::from_ref(&src);
                 // self.ofi.post_get(|| {
                 self.ofi
                     .ep
@@ -2173,7 +2329,8 @@ impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
             LamellarAtomicOp::Min(_) => AtomicOp::Min,
             LamellarAtomicOp::Max(_) => AtomicOp::Max,
             LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
-            // LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
+            LamellarAtomicOp::Sub(_) => AtomicOp::Sum, // Sub can be implemented as Add with negative value
+            LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
             // LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
             // LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
             // LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
@@ -2193,7 +2350,8 @@ impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::Min(_) => FetchAtomicOp::Min,
             LamellarAtomicOp::Max(_) => FetchAtomicOp::Max,
             LamellarAtomicOp::Sum(_) => FetchAtomicOp::Sum,
-            // LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
+            LamellarAtomicOp::Sub(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
             // LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
             // LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
             // LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,
@@ -2214,10 +2372,8 @@ impl<T> From<LamellarAtomicOp<T>> for AtomicOp {
             LamellarAtomicOp::Min(_) => AtomicOp::Min,
             LamellarAtomicOp::Max(_) => AtomicOp::Max,
             LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
-            // LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
-            // LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
-            // LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
-            // LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
+            LamellarAtomicOp::Sub(_) => AtomicOp::Sum, // Sub can be implemented as Add with negative value
+            LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
             LamellarAtomicOp::BitOr(_) => AtomicOp::Bor,
             LamellarAtomicOp::BitXor(_) => AtomicOp::Bxor,
             LamellarAtomicOp::BitAnd(_) => AtomicOp::Band,
@@ -2234,7 +2390,8 @@ impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
             LamellarAtomicOp::Min(_) => FetchAtomicOp::Min,
             LamellarAtomicOp::Max(_) => FetchAtomicOp::Max,
             LamellarAtomicOp::Sum(_) => FetchAtomicOp::Sum,
-            // LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
+            LamellarAtomicOp::Sub(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
             // LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
             // LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
             // LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,

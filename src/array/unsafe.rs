@@ -16,7 +16,7 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode, WeakDarc};
 use crate::env_var::config;
-use crate::lamellae::{AllocationType, CommProgress};
+use crate::lamellae::{AllocationType, AtomicOp, CommInfo, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;
@@ -65,7 +65,25 @@ impl std::fmt::Debug for UnsafeArrayData {
 pub struct UnsafeArray<T: Remote> {
     pub(crate) inner: UnsafeArrayInner,
     pub(crate) mem_region: MemoryRegion<T>,
+    pub(crate) atomic_support: UnsafeAtomicOpSupport,
     phantom: PhantomData<T>,
+}
+
+#[derive(crate::Deserialize, crate::Serialize, Clone, Copy, Debug, Default)]
+pub(crate) struct UnsafeAtomicOpSupport {
+    pub(crate) load: bool, //read
+    pub(crate) store: bool, //write
+    pub(crate) swap: bool, //cas
+    pub(crate) add: bool, // this is for add and sub
+    pub(crate) fetch_add: bool,
+    pub(crate) prod: bool,
+    pub(crate) fetch_prod: bool,
+    pub(crate) bit_or: bool,
+    pub(crate) fetch_bit_or: bool,
+    pub(crate) bit_xor: bool,
+    pub(crate) fetch_bit_xor: bool,
+    pub(crate) bit_and: bool,
+    pub(crate) fetch_bit_and: bool,
 }
 
 impl<T: Remote> Clone for UnsafeArray<T> {
@@ -73,6 +91,7 @@ impl<T: Remote> Clone for UnsafeArray<T> {
         UnsafeArray {
             inner: self.inner.clone(),
             mem_region: unsafe { self.mem_region.as_base::<T>() },
+            atomic_support: self.atomic_support,
             phantom: PhantomData,
         }
     }
@@ -102,16 +121,23 @@ impl<T: Dist> serde::Serialize for UnsafeArray<T> {
     }
 }
 
-impl<'de, T: Dist> serde::Deserialize<'de> for UnsafeArray<T> {
+impl<'de, T: Dist + 'static> serde::Deserialize<'de> for UnsafeArray<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let array: __UnsafeArraySerde<T> = __UnsafeArraySerde::deserialize(deserializer)?;
-        let mem_region = unsafe { array.array.data.mem_region.as_base::<T>() };
+        let inner = array.array;
+        let mem_region = unsafe { inner.data.mem_region.as_base::<T>() };
+        let sample = mem_region.as_slice()[0];
+        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
+            inner.data.team.lamellae.comm(),
+            sample,
+        );
         Ok(UnsafeArray {
-            inner: array.array,
+            inner,
             mem_region,
+            atomic_support,
             phantom: PhantomData,
         })
     }
@@ -320,6 +346,7 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
                 sub: false,
             },
             mem_region,
+            atomic_support: Self::detect_atomic_support(team.lamellae.comm(), T::default()),
             phantom: PhantomData,
         };
 
@@ -332,6 +359,27 @@ impl<T: Dist + ArrayOps + 'static> UnsafeArray<T> {
     }
 }
 impl<T: Dist + 'static> UnsafeArray<T> {
+    pub(crate) fn detect_atomic_support(
+        comm: &crate::lamellae::Comm,
+        sample: T,
+    ) -> UnsafeAtomicOpSupport {
+        UnsafeAtomicOpSupport {
+            load: comm.atomic_op_avail::<T>(AtomicOp::Read),
+            store: comm.atomic_op_avail::<T>(AtomicOp::Write(sample)),
+            swap: comm.atomic_op_avail::<T>(AtomicOp::Write(sample)),
+            add: comm.atomic_op_avail::<T>(AtomicOp::Sum(sample)),
+            fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(sample)),
+            prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(sample)),
+            fetch_prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(sample)),
+            bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(sample)),
+            fetch_bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(sample)),
+            bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(sample)),
+            fetch_bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(sample)),
+            bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(sample)),
+            fetch_bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(sample)),
+        }
+    }
+
     #[doc(alias("One-sided", "onesided"))]
     /// Change the distribution this array handle uses to index into the data of the array.
     ///
@@ -981,23 +1029,36 @@ impl<T: Dist> AsyncFrom<NetworkAtomicArray<T>> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> From<UnsafeByteArray> for UnsafeArray<T> {
+impl<T: Dist + 'static> From<UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: UnsafeByteArray) -> Self {
-        let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
+        let inner = array.inner;
+        let mem_region = unsafe { inner.data.mem_region.as_base::<T>() };
+        let sample = mem_region.as_slice()[0];
+        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
+            inner.data.team.lamellae.comm(),
+            sample,
+        );
         UnsafeArray {
-            inner: array.inner,
+            inner,
             mem_region,
+            atomic_support,
             phantom: PhantomData,
         }
     }
 }
 
-impl<T: Dist> From<&UnsafeByteArray> for UnsafeArray<T> {
+impl<T: Dist + 'static> From<&UnsafeByteArray> for UnsafeArray<T> {
     fn from(array: &UnsafeByteArray) -> Self {
         let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
+        let sample = mem_region.as_slice()[0];
+        let atomic_support = UnsafeArray::<T>::detect_atomic_support(
+            array.inner.data.team.lamellae.comm(),
+            sample,
+        );
         UnsafeArray {
             inner: array.inner.clone(),
             mem_region,
+            atomic_support,
             phantom: PhantomData,
         }
     }
@@ -1288,6 +1349,7 @@ impl<T: Dist> SubArray<T> for UnsafeArray<T> {
         UnsafeArray {
             inner: inner,
             mem_region,
+            atomic_support: self.atomic_support,
             phantom: PhantomData,
         }
     }

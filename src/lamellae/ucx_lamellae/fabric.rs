@@ -7,6 +7,7 @@ mod worker;
 use context::Context;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
+use endpoint::ATOMIC_PUT_TMP;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::Worker;
 
@@ -24,6 +25,7 @@ use crate::{
 use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
 use pmi::{pmi::Pmi, pmix::PmiX};
+use lamellar_ucx_sys::ucp_atomic_op_t;
 
 use std::{collections::HashMap, sync::{
     atomic::{AtomicUsize, AtomicU32, Ordering},
@@ -31,7 +33,7 @@ use std::{collections::HashMap, sync::{
 }};
 use tracing::{debug, trace};
 
-struct UcxBarrier {
+pub(crate) struct UcxBarrier {
     counter: AtomicUsize,
     sub_counter: AtomicU32,
     num_pes: usize,
@@ -72,7 +74,7 @@ impl UcxBarrier {
         let my_barrier = self.sub_counter.fetch_add(1, Ordering::SeqCst);
         let phase_offset = (my_barrier as usize & 1) * self.num_pes;
         let barrier_alloc = &self.sub_buffer;
-        let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<u32>() };
+        let barrier_vec =  barrier_alloc.as_mut_slice::<u32>() ;
         let mut last_seen_guard = self.sub_last_seen.lock().unwrap();
         let last_seen_vec = last_seen_guard.as_mut_slice();
         trace!(target: "ucx", "PE {} entering sub barrier id: {my_barrier} with pes: {:?} ", self.my_pe, pes);
@@ -88,6 +90,7 @@ impl UcxBarrier {
                     send_pe,
                     phase_offset + self.my_pe,
                     std::slice::from_ref(&my_barrier),
+                    false,
                     false,
                 );
             };
@@ -151,15 +154,16 @@ impl UcxBarrier {
                         round*n + i-1,
                         std::slice::from_ref(&my_barrier),
                         false,
+                        false,
                     );
                 };
             }
 
             for i in 1..=n {
-                let recv_pe = (my_pe as i64
-                    - i as i64 * (n as i64 + 1).pow(round as u32))
-                .rem_euclid(num_pes as i64);
-                let barrier_vec = unsafe { barrier_alloc.as_mut_slice::<usize>() };
+                // let _recv_pe = (my_pe as i64
+                //     - i as i64 * (n as i64 + 1).pow(round as u32))
+                // .rem_euclid(num_pes as i64);
+                let barrier_vec =  barrier_alloc.as_mut_slice::<usize>() ;
 
                 while my_barrier > barrier_vec[round*n +i-1] {
                     barrier_alloc.worker.progress();
@@ -887,6 +891,54 @@ impl std::fmt::Debug for UcxAlloc {
 }
 
 impl UcxAlloc {
+    unsafe fn negate_atomic_value<T: Copy>(value: T) -> T {
+        let num_bytes = std::mem::size_of::<T>();
+        let mut bytes = vec![0u8; num_bytes];
+        std::ptr::copy_nonoverlapping(
+            (&value as *const T).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            num_bytes,
+        );
+        for byte in bytes.iter_mut() {
+            *byte = !*byte;
+        }
+
+        let mut carry: u16 = 1;
+        #[cfg(target_endian = "little")]
+        for byte in bytes.iter_mut() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+        #[cfg(target_endian = "big")]
+        for byte in bytes.iter_mut().rev() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+
+        let mut result = std::mem::MaybeUninit::<T>::uninit();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        result.assume_init()
+    }
+
+    fn ucx_atomic_update<T: Copy>(op: &AtomicOp<T>) -> (ucp_atomic_op_t, T) {
+        match op {
+            AtomicOp::Sum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, *val),
+            AtomicOp::Sub(val) => (
+                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
+                unsafe { Self::negate_atomic_value(*val) },
+            ),
+            _ => panic!("Unsupported atomic operation"),
+        }
+    }
+
     pub(crate) fn new(
         mem: MemoryHandle,
         data_num_bytes: usize,
@@ -1166,6 +1218,7 @@ impl UcxAlloc {
         pe: usize,
         offset: usize, //with respect to T
         src_addr: &[T],
+        blocking: bool,
         managed: bool,
     ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
@@ -1200,21 +1253,30 @@ impl UcxAlloc {
             offset,
             remote_addr + offset
         );
-        self.endpoints[pe].put(
+        let req = self.endpoints[pe].put(
             src_addr.as_ptr() as _,
             src_addr.len() * std::mem::size_of::<T>(),
             remote_addr + offset,
             rkey,
             managed,
-        )
+        );
+        if blocking {
+            if let Some(req) = req {
+                req.wait().expect("blocking_put failed");
+            }
+            None
+        } else {
+            req
+        }
     }
 
     pub(crate) unsafe fn inner_get<T: Copy>(
         &self,
         pe: usize,
         offset: usize,
+        blocking: bool,
         dst_addr: &mut [T],
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         trace!(target: "ucx",
             "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
@@ -1233,68 +1295,32 @@ impl UcxAlloc {
                 dst_addr.as_mut_ptr() as *mut u8,
                 dst_addr.len() * std::mem::size_of::<T>(),
             );
-            return UcxRequest::new(std::ptr::null_mut(), self.worker.clone(), false);
+            return None;
         }
         let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
             (remote_info.addr, &remote_info.rkey)
         } else {
             panic!("inner_get missing remote key for pe {}", pe);
         };
-        self.endpoints[pe].get(
+        let req = self.endpoints[pe].get(
             dst_addr.as_mut_ptr() as _,
             dst_addr.len() * std::mem::size_of::<T>(),
             remote_addr + offset,
             rkey,
-        )
-    }
-
-    pub(crate) unsafe fn blocking_inner_get<T: Copy>(
-        &self,
-        pe: usize,
-        offset: usize,
-        dst_addr: &mut [T],
-    ) {
-        let offset = offset * std::mem::size_of::<T>();
-        trace!(
-            target: "ucx",
-            "get_inner pe {} offset {} dst_addr len {} * size_of T {} total bytes {}, alloc local size {}",
-            pe,
-            offset,
-            dst_addr.len(),
-            std::mem::size_of::<T>(),
-            dst_addr.len() * std::mem::size_of::<T>(),
-            self.num_bytes(),
         );
-        assert!(offset + dst_addr.len() * std::mem::size_of::<T>() <= self.num_bytes());
-        #[cfg(feature = "enable-on-node-shmem")]
-        if let Some(addr) = self.same_node_addr(pe, offset) {
-            std::ptr::copy_nonoverlapping(
-                addr.as_ptr::<u8>(),
-                dst_addr.as_mut_ptr() as *mut u8,
-                dst_addr.len() * std::mem::size_of::<T>(),
-            );
-            return;
-        }
-
-        let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
-            (remote_info.addr, &remote_info.rkey)
+        if blocking {
+            req.wait().expect("blocking_get failed");
+            None
         } else {
-            panic!("blocking_inner_get missing remote key for pe {}", pe);
-        };
-        self.endpoints[pe]
-            .blocking_get(
-                dst_addr.as_mut_ptr() as _,
-                dst_addr.len() * std::mem::size_of::<T>(),
-                remote_addr + offset,
-                rkey,
-            )
-            .unwrap();
+            Some(req)
+        }
     }
 
     pub(crate) fn inner_atomic_op<T: Copy + 'static>(
         &self,
         pe: usize,
         offset: usize,
+        blocking: bool,
         op: &AtomicOp<T>,
         managed: bool,
     ) -> Option<UcxRequest> {
@@ -1307,16 +1333,34 @@ impl UcxAlloc {
                 return None;
             }
         }
-        match op {
+        let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
+            (remote_info.addr, &remote_info.rkey)
+        } else {
+            panic!("inner_atomic_op missing remote key for pe {}", pe);
+        };
+        let req = match op {
             AtomicOp::Write(val) => {
-                let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
-                    (remote_info.addr, &remote_info.rkey)
-                } else {
-                    panic!("inner_atomic_op missing remote key for pe {}", pe);
-                };
-                self.endpoints[pe].atomic_put(*val, remote_addr + offset, rkey, managed)
+                self.endpoints[pe].atomic_swap(
+                    *val,
+                    &ATOMIC_PUT_TMP as *const _ as *mut T,
+                    remote_addr + offset,
+                    rkey,
+                    managed,
+                )
+            }
+            AtomicOp::Sum(_) | AtomicOp::Sub(_) => {
+                let (ucx_op, val) = Self::ucx_atomic_update(op);
+                self.endpoints[pe].atomic_op(ucx_op, val, remote_addr + offset, rkey, managed)
             }
             _ => panic!("Unsupported atomic operation"),
+        };
+        if blocking {
+            if let Some(req) = req {
+                req.wait().expect("blocking_atomic_op failed");
+            }
+            None
+        } else {
+            req
         }
     }
 
@@ -1324,19 +1368,20 @@ impl UcxAlloc {
         &self,
         pe: usize,
         offset: usize,
+        blocking: bool,
         op: &AtomicOp<T>,
         result: &mut [T],
-    ) -> UcxRequest {
+    ) -> Option<UcxRequest> {
         let offset = offset * std::mem::size_of::<T>();
         debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         #[cfg(feature = "enable-on-node-shmem")]
         {
             if let Some(addr) = self.same_node_addr(pe, offset) {
                 crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-                return UcxRequest::new(std::ptr::null_mut(), self.worker.clone(), false);
+                return None;
             }
         }
-        match op {
+        let req = match op {
             AtomicOp::Read => {
                 let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
                     (remote_info.addr, &remote_info.rkey)
@@ -1345,61 +1390,28 @@ impl UcxAlloc {
                 };
                 self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, rkey)
             }
-            AtomicOp::Write(val) => {
+            AtomicOp::Write(_) | AtomicOp::Sum(_) | AtomicOp::Sub(_) => {
+                let (ucx_op, val) = Self::ucx_atomic_update(op);
                 let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
                     (remote_info.addr, &remote_info.rkey)
                 } else {
-                    panic!("inner_atomic_fetch_op missing remote key for pe {} (write)", pe);
+                    panic!("inner_atomic_fetch_op missing remote key for pe {}", pe);
                 };
-                self.endpoints[pe].atomic_swap(
-                    *val,
+                self.endpoints[pe].atomic_fetch_op(
+                    ucx_op,
+                    val,
                     result.as_mut_ptr(),
                     remote_addr + offset,
                     rkey,
                 )
             }
             _ => panic!("Unsupported atomic operation"),
-        }
-    }
-
-    pub(crate) fn blocking_inner_atomic_fetch_op<T: Copy + 'static>(
-        &self,
-        pe: usize,
-        offset: usize,
-        op: &AtomicOp<T>,
-        result: &mut [T],
-    ) {
-        let offset = offset * std::mem::size_of::<T>();
-        debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
-        #[cfg(feature = "enable-on-node-shmem")]
-        {
-            if let Some(addr) = self.same_node_addr(pe, offset) {
-                crate::lamellae::comm::atomic::net_atomic_fetch_op(op, &addr, result.as_mut_ptr());
-                return;
-            }
-        }
-        match op {
-            AtomicOp::Read => {
-                let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
-                    (remote_info.addr, &remote_info.rkey)
-                } else {
-                    panic!("blocking_inner_atomic_fetch_op missing remote key for pe {} (read)", pe);
-                };
-                self.endpoints[pe]
-                    .blocking_atomic_get(result.as_mut_ptr(), remote_addr + offset, rkey)
-                    .expect("blocking_atomic_get failed");
-            }
-            AtomicOp::Write(val) => {
-                let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
-                    (remote_info.addr, &remote_info.rkey)
-                } else {
-                    panic!("blocking_inner_atomic_fetch_op missing remote key for pe {} (write)", pe);
-                };
-                self.endpoints[pe]
-                    .blocking_atomic_swap(*val, result.as_mut_ptr(), remote_addr + offset, rkey)
-                    .expect("blocking_atomic_swap failed");
-            }
-            _ => panic!("Unsupported atomic operation"),
+        };
+        if blocking {
+            req.wait().expect("blocking_atomic_fetch_op failed");
+            None
+        } else {
+            Some(req)
         }
     }
 

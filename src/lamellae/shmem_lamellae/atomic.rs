@@ -160,6 +160,13 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
+    fn atomic_op_blocking<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
+    }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
@@ -259,6 +266,18 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
             counters,
         }
         .into()
+    }
+    fn atomic_op_blocking<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.start();
+        let remote_dst_addr = remote_dst_base + offset;
+        net_atomic_op(&op, &CommAllocAddr(remote_dst_addr));
     }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(

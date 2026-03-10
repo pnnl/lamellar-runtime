@@ -125,6 +125,16 @@ impl<T> CommAllocRdma for CommSlice<T> {
         }
         self.inner_alloc.put(scheduler, counters, src, pe, offset)
     }
+    fn put_blocking<U: Remote>(&self, src: U, pe: usize, offset: usize) {
+        if std::any::type_name::<T>() != std::any::type_name::<U>() {
+            println!(
+                "Type mismatch in put_blocking: CommSlice<{:?}> vs put_blocking<{:?}>",
+                std::any::type_name::<T>(),
+                std::any::type_name::<U>()
+            );
+        }
+        self.inner_alloc.put_blocking(src, pe, offset)
+    }
     fn put_unmanaged<U: Remote>(&self, src: U, pe: usize, offset: usize) {
         if std::any::type_name::<T>() != std::any::type_name::<U>() {
             println!(

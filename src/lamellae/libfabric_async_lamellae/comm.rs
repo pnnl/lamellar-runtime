@@ -1,7 +1,7 @@
 use crate::{
     config,
     lamellae::{
-        comm::{CommInfo, CommMem, CommProgress, CommShutdown},
+        comm::{AtomicOp, CommInfo, CommMem, CommProgress, CommShutdown},
         AllocationType,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
@@ -127,6 +127,9 @@ impl CommInfo for LibfabricAsyncComm {
     }
     fn atomic_avail<T: 'static>(&self) -> bool {
         self.ofi.atomic_avail::<T>()
+    }
+    fn atomic_op_avail<T: 'static>(&self, op: AtomicOp<T>) -> bool {
+        self.ofi.atomic_op_avail::<T>(op)
     }
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64

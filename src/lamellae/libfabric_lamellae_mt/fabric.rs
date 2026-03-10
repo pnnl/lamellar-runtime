@@ -60,6 +60,20 @@ enum BarrierImpl {
     Pmi(Arc<PmiX>),
 }
 
+#[derive(Clone, Copy)]
+enum AtomicOpKind {
+    Min,
+    Max,
+    Sum,
+    Prod,
+    BitOr,
+    BitXor,
+    BitAnd,
+    Read,
+    Write,
+    Cas,
+}
+
 struct CommGroup {
     mapped_addresses: Vec<MappedAddress>,
     ep: ConnectionlessEndpoint<RmaAtomicCollEp>,
@@ -493,6 +507,51 @@ impl Ofi {
         }
     }
 
+    fn atomic_op_avail_inner<T: AsFiType>(&self, op: AtomicOpKind) -> bool {
+        let cg = &self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)];
+        unsafe {
+            match op {
+                AtomicOpKind::Min => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Min).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Min).is_ok()
+                }
+                AtomicOpKind::Max => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Max).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Max).is_ok()
+                }
+                AtomicOpKind::Sum => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Sum).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Sum).is_ok()
+                }
+                AtomicOpKind::Prod => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Prod).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Prod).is_ok()
+                }
+                AtomicOpKind::BitOr => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Bor).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Bor).is_ok()
+                }
+                AtomicOpKind::BitXor => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Bxor).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Bxor).is_ok()
+                }
+                AtomicOpKind::BitAnd => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::Band).is_ok()
+                        && cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::Band).is_ok()
+                }
+                AtomicOpKind::Read => cg.ep.fetch_atomicvalid::<T>(FetchAtomicOp::AtomicRead).is_ok(),
+                AtomicOpKind::Write => {
+                    cg.ep.atomicvalid::<T>(AtomicOp::AtomicWrite).is_ok()
+                        && cg
+                            .ep
+                            .fetch_atomicvalid::<T>(FetchAtomicOp::AtomicWrite)
+                            .is_ok()
+                }
+                AtomicOpKind::Cas => cg.ep.compare_atomicvalid::<T>(CompareAtomicOp::Cswap).is_ok(),
+            }
+        }
+    }
+
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
         let id = std::any::TypeId::of::<T>();
 
@@ -516,6 +575,47 @@ impl Ofi {
             self.atomic_avail_inner::<usize>()
         } else if id == std::any::TypeId::of::<isize>() {
             self.atomic_avail_inner::<isize>()
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn atomic_op_avail<T: 'static>(&self, op: LamellarAtomicOp<T>) -> bool {
+        let op_kind = match op {
+            LamellarAtomicOp::Min(_) => AtomicOpKind::Min,
+            LamellarAtomicOp::Max(_) => AtomicOpKind::Max,
+            LamellarAtomicOp::Sum(_) => AtomicOpKind::Sum,
+            LamellarAtomicOp::Sub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
+            LamellarAtomicOp::Prod(_) => AtomicOpKind::Prod,
+            LamellarAtomicOp::BitOr(_) => AtomicOpKind::BitOr,
+            LamellarAtomicOp::BitXor(_) => AtomicOpKind::BitXor,
+            LamellarAtomicOp::BitAnd(_) => AtomicOpKind::BitAnd,
+            LamellarAtomicOp::Read => AtomicOpKind::Read,
+            LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
+            LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+        };
+
+        let id = std::any::TypeId::of::<T>();
+        if id == std::any::TypeId::of::<u8>() {
+            self.atomic_op_avail_inner::<u8>(op_kind)
+        } else if id == std::any::TypeId::of::<u16>() {
+            self.atomic_op_avail_inner::<u16>(op_kind)
+        } else if id == std::any::TypeId::of::<u32>() {
+            self.atomic_op_avail_inner::<u32>(op_kind)
+        } else if id == std::any::TypeId::of::<u64>() {
+            self.atomic_op_avail_inner::<u64>(op_kind)
+        } else if id == std::any::TypeId::of::<i8>() {
+            self.atomic_op_avail_inner::<i8>(op_kind)
+        } else if id == std::any::TypeId::of::<i16>() {
+            self.atomic_op_avail_inner::<i16>(op_kind)
+        } else if id == std::any::TypeId::of::<i32>() {
+            self.atomic_op_avail_inner::<i32>(op_kind)
+        } else if id == std::any::TypeId::of::<i64>() {
+            self.atomic_op_avail_inner::<i64>(op_kind)
+        } else if id == std::any::TypeId::of::<usize>() {
+            self.atomic_op_avail_inner::<usize>(op_kind)
+        } else if id == std::any::TypeId::of::<isize>() {
+            self.atomic_op_avail_inner::<isize>(op_kind)
         } else {
             false
         }
@@ -1267,6 +1367,43 @@ impl From<LibfabricMtAlloc> for CommAlloc {
 
 static ALLOC_ID: AtomicUsize = AtomicUsize::new(0);
 impl LibfabricMtAlloc {
+    unsafe fn negate_atomic_value<OFI: Copy>(value: OFI) -> OFI {
+        let num_bytes = std::mem::size_of::<OFI>();
+        let mut bytes = vec![0u8; num_bytes];
+        std::ptr::copy_nonoverlapping(
+            (&value as *const OFI).cast::<u8>(),
+            bytes.as_mut_ptr(),
+            num_bytes,
+        );
+        for byte in bytes.iter_mut() {
+            *byte = !*byte;
+        }
+
+        let mut carry: u16 = 1;
+        #[cfg(target_endian = "little")]
+        for byte in bytes.iter_mut() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+        #[cfg(target_endian = "big")]
+        for byte in bytes.iter_mut().rev() {
+            let sum = *byte as u16 + carry;
+            *byte = sum as u8;
+            carry = sum >> 8;
+            if carry == 0 {
+                break;
+            }
+        }
+
+        let mut result = std::mem::MaybeUninit::<OFI>::uninit();
+        std::ptr::copy_nonoverlapping(bytes.as_ptr(), result.as_mut_ptr().cast::<u8>(), num_bytes);
+        result.assume_init()
+    }
+
     pub(crate) fn new(
         ofi: Arc<Ofi>,
         mem: Arc<memmap::MmapMut>,
@@ -1722,28 +1859,29 @@ impl LibfabricMtAlloc {
         pe: usize,
         offset: usize,
         op: &LamellarAtomicOp<T>,
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         unsafe {
             if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
-                self.typed_atomic_op::<T, u8>(pe, offset, op)
+                self.typed_atomic_op::<T, u8>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
-                self.typed_atomic_op::<T, u16>(pe, offset, op)
+                self.typed_atomic_op::<T, u16>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
-                self.typed_atomic_op::<T, u32>(pe, offset, op)
+                self.typed_atomic_op::<T, u32>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
-                self.typed_atomic_op::<T, u64>(pe, offset, op)
+                self.typed_atomic_op::<T, u64>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
-                self.typed_atomic_op::<T, usize>(pe, offset, op)
+                self.typed_atomic_op::<T, usize>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
-                self.typed_atomic_op::<T, i8>(pe, offset, op)
+                self.typed_atomic_op::<T, i8>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
-                self.typed_atomic_op::<T, i16>(pe, offset, op)
+                self.typed_atomic_op::<T, i16>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
-                self.typed_atomic_op::<T, i32>(pe, offset, op)
+                self.typed_atomic_op::<T, i32>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
-                self.typed_atomic_op::<T, i64>(pe, offset, op)
+                self.typed_atomic_op::<T, i64>(pe, offset, op, blocking)
             } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
-                self.typed_atomic_op::<T, isize>(pe, offset, op)
+                self.typed_atomic_op::<T, isize>(pe, offset, op, blocking)
             } else {
                 panic!("Unsupported atomic operation type");
             }
@@ -1755,6 +1893,7 @@ impl LibfabricMtAlloc {
         pe: usize,
         offset: usize,
         op: &LamellarAtomicOp<T>,
+        blocking: bool,
     ) -> Result<(), libfabric::error::Error> {
         let offset = offset * std::mem::size_of::<T>(); //we allocate memoryregions from libfabric as u8;
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes()); //we use num_bytes instead of mem.len() to allow for sub-allocations, offset + 1 because atomics operate on a single element and we verifying we arent missaligned
@@ -1766,12 +1905,16 @@ impl LibfabricMtAlloc {
         let remote_key = remote_alloc_info.key();
 
         let src = op.src().expect("Atomic operation has no source");
-        let src = &*(src as *const T as *const OFI);
-        let buf = std::slice::from_ref(src);
+        let src = *(src as *const T as *const OFI);
+        let src = match op {
+            LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            _ => src,
+        };
+        let buf = std::slice::from_ref(&src);
         // let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(&src));
         let cg =
             &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
-        cg.post_put(false, || {
+        cg.post_put(blocking, || {
             cg.ep.atomic_inject_to(
                 buf,
                 &cg.mapped_addresses[pe],
@@ -1842,7 +1985,12 @@ impl LibfabricMtAlloc {
 
         match op.src() {
             Some(src) => {
-                let buf = std::slice::from_ref(std::mem::transmute::<&T, &OFI>(src));
+                let src = *(src as *const T as *const OFI);
+                let src = match op {
+                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    _ => src,
+                };
+                let buf = std::slice::from_ref(&src);
                 cg.post_get(blocking, || {
                     cg.ep.fetch_atomic_from(
                         buf,

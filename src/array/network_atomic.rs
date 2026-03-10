@@ -8,6 +8,7 @@ use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
 use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::r#unsafe::UnsafeAtomicOpSupport;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
@@ -15,6 +16,7 @@ use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 use crate::array::*;
 use crate::{Darc, Remote};
+use crate::lamellae::{AtomicOp, CommInfo};
 
 use serde::ser::SerializeSeq;
 use std::any::TypeId;
@@ -787,6 +789,7 @@ impl<T: Dist + std::fmt::Debug> std::fmt::Debug for NetworkAtomicElement<T> {
 pub struct NetworkAtomicArray<T: Remote> {
     pub(crate) array: UnsafeArray<T>,
     pub(crate) orig_t: NetworkAtomicType,
+    pub(crate) op_support: UnsafeAtomicOpSupport,
 }
 
 impl<T: Remote> crate::active_messaging::DarcSerde for NetworkAtomicArray<T> {
@@ -1037,6 +1040,26 @@ impl<T: Dist + ArrayOps + std::default::Default> NetworkAtomicArray<T> {
 
 #[doc(hidden)]
 impl<T: Dist> NetworkAtomicArray<T> {
+    pub(crate) fn detect_op_support(array: &UnsafeArray<T>) -> UnsafeAtomicOpSupport {
+        let comm = array.inner.data.team.lamellae.comm();
+        let dummy_val = array.dummy_val();
+        UnsafeAtomicOpSupport {
+            load: comm.atomic_op_avail::<T>(AtomicOp::Read),
+            store: comm.atomic_op_avail::<T>(AtomicOp::Write(dummy_val)),
+            swap: comm.atomic_op_avail::<T>(AtomicOp::Write(dummy_val)),
+            add: comm.atomic_op_avail::<T>(AtomicOp::Sum(dummy_val)),
+            fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(dummy_val)),
+            prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(dummy_val)),
+            fetch_prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(dummy_val)),
+            bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(dummy_val)),
+            fetch_bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(dummy_val)),
+            bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(dummy_val)),
+            fetch_bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(dummy_val)),
+            bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(dummy_val)),
+            fetch_bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(dummy_val)),
+        }
+    }
+
     pub fn network_type(&self) -> NetworkAtomicType {
         self.orig_t
     }
@@ -1059,6 +1082,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
         NetworkAtomicArray {
             array: self.array.use_distribution(distribution),
             orig_t: self.orig_t,
+            op_support: self.op_support,
         }
     }
 
@@ -1118,9 +1142,11 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NetworkAtomicArray<T> {
         array
             .await_on_outstanding(DarcMode::NetworkAtomicArray)
             .await;
+        let op_support = Self::detect_op_support(&array);
         NetworkAtomicArray {
             array: array,
             orig_t: NetworkAtomicType::of::<T>(),
+            op_support,
         }
     }
 }
@@ -1178,9 +1204,11 @@ impl<T: Dist> From<NetworkAtomicArray<T>> for AtomicByteArray {
 //#[doc(hidden)]
 impl<T: Dist> From<NetworkAtomicByteArray> for NetworkAtomicArray<T> {
     fn from(array: NetworkAtomicByteArray) -> Self {
+        let array: UnsafeArray<T> = array.array.into();
         NetworkAtomicArray {
-            array: array.array.into(),
-            orig_t: array.orig_t,
+            orig_t: NetworkAtomicType::of::<T>(),
+            op_support: Self::detect_op_support(&array),
+            array,
         }
     }
 }
@@ -1199,9 +1227,11 @@ impl<T: Dist> From<&mut NetworkAtomicByteArray> for NetworkAtomicArray<T> {
 //#[doc(hidden)]
 impl<T: Dist> From<NetworkAtomicByteArray> for AtomicArray<T> {
     fn from(array: NetworkAtomicByteArray) -> Self {
+        let array: UnsafeArray<T> = array.array.into();
         NetworkAtomicArray {
-            array: array.array.into(),
-            orig_t: array.orig_t,
+            orig_t: NetworkAtomicType::of::<T>(),
+            op_support: NetworkAtomicArray::<T>::detect_op_support(&array),
+            array,
         }
         .into()
     }
@@ -1359,6 +1389,7 @@ impl<T: Dist> SubArray<T> for NetworkAtomicArray<T> {
         NetworkAtomicArray {
             array: self.array.sub_array(range),
             orig_t: self.orig_t,
+            op_support: self.op_support,
         }
     }
     fn global_index(&self, sub_index: usize) -> usize {

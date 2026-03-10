@@ -300,6 +300,10 @@ impl<T: Remote> SharedMemoryRegion<T> {
         RTMemoryRegionRDMA::<T>::put(self, pe, index, data)
     }
 
+    pub unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
+        RTMemoryRegionRDMA::<T>::put_blocking(self, pe, index, data)
+    }
+
     pub unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
         RTMemoryRegionRDMA::<T>::put_unmanaged(self, pe, index, data)
     }
@@ -481,6 +485,11 @@ impl<T: Remote> RTMemoryRegionRDMA<T> for SharedMemoryRegion<T> {
         self.mr
             .as_base::<T>()
             .put(pe, self.sub_region_offset + index, data)
+    }
+    unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
+        self.mr
+            .as_base::<T>()
+            .put_blocking(pe, self.sub_region_offset + index, data)
     }
     unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
         self.mr

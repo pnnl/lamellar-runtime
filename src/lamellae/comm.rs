@@ -148,6 +148,12 @@ pub(crate) trait CommInfo {
     fn atomic_avail<T: 'static>(&self) -> bool
     where
         Self: Sized;
+    fn atomic_op_avail<T: 'static>(&self, _op: AtomicOp<T>) -> bool
+    where
+        Self: Sized,
+    {
+        self.atomic_avail::<T>()
+    }
     #[allow(non_snake_case)]
     fn MB_sent(&self) -> f64;
 }

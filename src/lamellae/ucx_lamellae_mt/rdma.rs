@@ -56,6 +56,7 @@ impl<T: Remote> UcxMtPutFuture<T> {
                     pe,
                     self.offset,
                     std::slice::from_ref(&src),
+                    false,
                     true,
                 )
             };
@@ -74,7 +75,7 @@ impl<T: Remote> UcxMtPutFuture<T> {
         );
         if pe != self.my_pe {
             self.request = unsafe {
-                UcxMtAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), true)
+                UcxMtAlloc::put_inner(&self.alloc, pe, self.offset, src.as_slice(), false, true)
             };
         } else {
             self.alloc.as_mut_slice()[self.offset..self.offset + src.len()]
@@ -190,11 +191,12 @@ impl<T: Remote> UcxMtGetFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_at(&mut self) {
         unsafe {
-            self.request = Some(self.alloc.inner_get(
+            self.request = self.alloc.inner_get(
                 self.pe,
                 self.offset,
+                false,
                 std::slice::from_mut(&mut *self.result),
-            ));
+            );
         }
         self.spawned = true;
     }
@@ -277,7 +279,9 @@ impl<T: Remote> UcxMtGetBufferFuture<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn exec_get(&mut self) {
         unsafe {
-            self.request = Some(self.alloc.inner_get(self.pe, self.offset, &mut self.result));
+            self.request = self
+                .alloc
+                .inner_get(self.pe, self.offset, false, &mut self.result);
         }
     }
 
@@ -361,9 +365,15 @@ pub(crate) struct UcxMtGetIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxMtGetIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
         if self.pe != self.my_pe {
-            self.request = Some(unsafe {
-                UcxMtAlloc::inner_get(&self.alloc, self.pe, self.offset, self.dst.as_mut_slice())
-            });
+            self.request = unsafe {
+                UcxMtAlloc::inner_get(
+                    &self.alloc,
+                    self.pe,
+                    self.offset,
+                    false,
+                    self.dst.as_mut_slice(),
+                )
+            };
         } else {
             let len = self.dst.len();
             self.dst
@@ -466,6 +476,15 @@ impl CommAllocRdma for UcxMtAlloc {
         }
         .into()
     }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        if pe != self.my_pe {
+            let _ = unsafe {
+                UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), true, true)
+            };
+        } else {
+            self.as_mut_slice()[offset] = src;
+        }
+    }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         trace!(
             "put unmanaged to dst: {:x} offset<T>: {:?} final addr {:x} len: 1 num bytes {}",
@@ -477,7 +496,9 @@ impl CommAllocRdma for UcxMtAlloc {
         if pe != self.my_pe {
             // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
             // not that the operation has completed on the remote side
-            unsafe { UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false) };
+            let _ = unsafe {
+                UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false, false)
+            };
         } else {
             self.as_mut_slice()[offset] = src;
             // let dst = (self.start() + offset) as *mut T;
@@ -524,7 +545,7 @@ impl CommAllocRdma for UcxMtAlloc {
         if pe != self.my_pe {
             // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
             // not that the operation has completed on the remote side
-            unsafe { UcxMtAlloc::put_inner(&self, pe, offset, src.as_slice(), false) };
+            let _ = unsafe { UcxMtAlloc::put_inner(&self, pe, offset, src.as_slice(), false, false) };
         } else {
             self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
             // let dst = self.start() + offset;
@@ -564,7 +585,7 @@ impl CommAllocRdma for UcxMtAlloc {
                 // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
                 // not that the operation has completed on the remote side
                 unsafe {
-                    UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false)
+                    UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), false, false)
                 };
             } else {
                 self.as_mut_slice()[offset] = src;
@@ -611,7 +632,7 @@ impl CommAllocRdma for UcxMtAlloc {
             if pe != self.my_pe {
                 // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
                 // not that the operation has completed on the remote side
-                unsafe { UcxMtAlloc::put_inner(&self, pe, offset, src.as_slice(), false) };
+                let _ = unsafe { UcxMtAlloc::put_inner(&self, pe, offset, src.as_slice(), false, false) };
             } else {
                 self.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
                 // let dst = self.start() + offset;
@@ -651,7 +672,7 @@ impl CommAllocRdma for UcxMtAlloc {
     fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
-        unsafe { self.blocking_inner_get(pe, offset, val_slice) };
+        let _ = unsafe { self.inner_get(pe, offset, true, val_slice) };
         val
     }
 
@@ -686,7 +707,7 @@ impl CommAllocRdma for UcxMtAlloc {
 
     fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
         let mut buf = vec![T::default(); len];
-        unsafe { self.blocking_inner_get(pe, offset, buf.as_mut_slice()) };
+        let _ = unsafe { self.inner_get(pe, offset, true, buf.as_mut_slice()) };
         buf
     }
 
@@ -718,7 +739,7 @@ impl CommAllocRdma for UcxMtAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         if pe != self.my_pe {
-            unsafe { self.blocking_inner_get(pe, offset, dst.as_mut_slice()) };
+            let _ = unsafe { self.inner_get(pe, offset, true, dst.as_mut_slice()) };
         } else {
             let len = dst.len();
             dst.as_mut_slice()
@@ -732,7 +753,7 @@ impl CommAllocRdma for UcxMtAlloc {
         mut dst: LamellarBuffer<T, B>,
     ) {
         if pe != self.my_pe {
-            let _ = unsafe { UcxMtAlloc::inner_get(&self, pe, offset, dst.as_mut_slice()) };
+            let _ = unsafe { UcxMtAlloc::inner_get(&self, pe, offset, false, dst.as_mut_slice()) };
         } else {
             let len = dst.len();
             dst.as_mut_slice()
@@ -768,6 +789,20 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         }
         .into()
     }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "put_blocking called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        if pe != self.alloc.my_pe {
+            let _ = unsafe {
+                UcxMtAlloc::put_inner(&self.alloc, pe, offset, std::slice::from_ref(&src), true, true)
+            };
+        } else {
+            self.alloc.as_mut_slice()[offset] = src;
+        }
+    }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
@@ -777,8 +812,8 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         if pe != self.alloc.my_pe {
             // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
             // not that the operation has completed on the remote side
-            unsafe {
-                UcxMtAlloc::put_inner(&self.alloc, pe, offset, std::slice::from_ref(&src), false)
+            let _ = unsafe {
+                UcxMtAlloc::put_inner(&self.alloc, pe, offset, std::slice::from_ref(&src), false, false)
             };
         } else {
             self.alloc.as_mut_slice()[offset] = src;
@@ -825,7 +860,9 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         if pe != self.alloc.my_pe {
             // for ucx put operation waiting on the request simply ensures the input buffer is free to reuse
             // not that the operation has completed on the remote side
-            unsafe { UcxMtAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false) };
+            let _ = unsafe {
+                UcxMtAlloc::put_inner(&self.alloc, pe, offset, src.as_slice(), false, false)
+            };
         } else {
             self.alloc.as_mut_slice()[offset..offset + src.len()].copy_from_slice(src.as_slice());
         }
@@ -892,7 +929,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         );
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
-        unsafe { self.alloc.blocking_inner_get(pe, offset, val_slice) };
+        let _ = unsafe { self.alloc.inner_get(pe, offset, true, val_slice) };
         val
     }
     fn get_buffer<T: Remote>(
@@ -932,8 +969,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         unsafe {
             dst.set_len(len);
             if pe != self.alloc.my_pe {
-                self.alloc
-                    .blocking_inner_get(pe, offset, dst.as_mut_slice());
+                let _ = self.alloc.inner_get(pe, offset, true, dst.as_mut_slice());
             } else {
                 dst.as_mut_slice()
                     .copy_from_slice(&self.alloc.as_mut_slice()[offset..(offset + len)]);
@@ -981,7 +1017,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         );
         if pe != self.alloc.my_pe {
             let _ = unsafe {
-                UcxMtAlloc::blocking_inner_get(&self.alloc, pe, offset, dst.as_mut_slice())
+                UcxMtAlloc::inner_get(&self.alloc, pe, offset, true, dst.as_mut_slice())
             };
         } else {
             let len = dst.len();
@@ -1001,7 +1037,9 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
             pe, self.remote_pe
         );
         if pe != self.alloc.my_pe {
-            let _ = unsafe { UcxMtAlloc::inner_get(&self.alloc, pe, offset, dst.as_mut_slice()) };
+            let _ = unsafe {
+                UcxMtAlloc::inner_get(&self.alloc, pe, offset, false, dst.as_mut_slice())
+            };
         } else {
             let len = dst.len();
             dst.as_mut_slice()

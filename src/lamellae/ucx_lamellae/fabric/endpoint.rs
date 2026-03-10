@@ -86,7 +86,7 @@ pub(crate) struct Endpoint {
 unsafe impl Send for Endpoint {}
 unsafe impl Sync for Endpoint {}
 
-static ATOMIC_PUT_TMP: AtomicUsize = AtomicUsize::new(0);
+pub(crate) static ATOMIC_PUT_TMP: AtomicUsize = AtomicUsize::new(0);
 
 impl Endpoint {
     pub(crate) fn new(worker: Arc<Worker>, remote_address: &[u8]) -> Result<Arc<Endpoint>, Error> {
@@ -240,58 +240,9 @@ impl Endpoint {
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
-    pub(crate) fn blocking_get(
+    pub(crate) fn atomic_op<T>(
         &self,
-        buf: *const u8,
-        size: usize,
-        remote_addr: usize,
-        rkey: &RKey,
-    ) -> Result<(), Error> {
-        let request = unsafe {
-            ucp_get_nbx(
-                self.handle,
-                buf as _,
-                size as _,
-                remote_addr as _,
-                rkey.handle,
-                &ucp_request_param_t {
-                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FLAG_FAST_CMPL as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
-                    flags: 0,
-                    request: std::ptr::null_mut(),
-                    cb: ucp_request_param_t__bindgen_ty_1 { send: None },
-                    datatype: 0,
-                    user_data: std::ptr::null_mut(),
-                    reply_buffer: std::ptr::null_mut(),
-                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
-                    recv_info: ucp_request_param_t__bindgen_ty_2 {
-                        length: std::ptr::null_mut(),
-                    },
-                    memh: std::ptr::null_mut(),
-                } as _,
-            )
-        };
-        if request.is_null() {
-            Ok(())
-        } else if UCS_PTR_IS_PTR(request) {
-            loop {
-                let _ = self.worker.progress();
-                // if UCS_PTR_IS_PTR(request) {
-                if unsafe { ucp_request_check_status(request as _) } != ucs_status_t::UCS_INPROGRESS
-                {
-                    break;
-                }
-                // }
-            }
-            unsafe { ucp_request_free(request as _) };
-            Ok(())
-        } else {
-            Error::from_ptr(request)
-        }
-    }
-
-    pub(crate) fn atomic_put<T>(
-        &self,
+        op: ucp_atomic_op_t,
         value: T,
         remote_addr: usize,
         rkey: &RKey,
@@ -303,21 +254,20 @@ impl Endpoint {
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
-                ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP,
+                op,
                 &value as *const T as _,
                 1 as _,
                 remote_addr as _,
                 rkey.handle,
                 &ucp_request_param_t {
                     op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
                         | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
                     flags: 0,
                     request: std::ptr::null_mut(),
                     cb: ucp_request_param_t__bindgen_ty_1 { send: None },
                     datatype: ucp_dt_make_contig(std::mem::size_of::<T>() as _),
                     user_data: std::ptr::null_mut(),
-                    reply_buffer: &ATOMIC_PUT_TMP as *const _ as *mut _,
+                    reply_buffer: std::ptr::null_mut(),
                     memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
                     recv_info: ucp_request_param_t__bindgen_ty_2 {
                         length: std::ptr::null_mut(),
@@ -371,20 +321,22 @@ impl Endpoint {
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
-    pub(crate) fn blocking_atomic_get<T>(
+    pub(crate) fn atomic_swap<T>(
         &self,
+        // buf: *const u8,
+        value: T,
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
-    ) -> Result<(), Error> {
+        managed: bool,
+    ) -> Option<UcxRequest> {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
         // println!("Val: {value:?}");
-        let zero: MaybeUninit<T> = MaybeUninit::uninit();
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
-                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
-                zero.as_ptr() as _,
+                ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP,
+                &value as *const T as _,
                 1 as _,
                 remote_addr as _,
                 rkey.handle,
@@ -406,39 +358,27 @@ impl Endpoint {
                 },
             )
         };
-        if request.is_null() {
-            Ok(())
-        } else if UCS_PTR_IS_PTR(request) {
-            loop {
-                let _ = self.worker.progress();
-                // if UCS_PTR_IS_PTR(request) {
-                if unsafe { ucp_request_check_status(request as _) } != ucs_status_t::UCS_INPROGRESS
-                {
-                    break;
-                }
-                // }
-            }
-            unsafe { ucp_request_free(request as _) };
-            Ok(())
+        let req = UcxRequest::new(request, self.worker.clone(), false);
+        if managed {
+            Some(req)
         } else {
-            Error::from_ptr(request)
+            None
         }
     }
 
-    pub(crate) fn atomic_swap<T>(
+    pub(crate) fn atomic_fetch_op<T>(
         &self,
-        // buf: *const u8,
+        op: ucp_atomic_op_t,
         value: T,
         reply_buf: *mut T,
         remote_addr: usize,
         rkey: &RKey,
     ) -> UcxRequest {
         assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
-        // println!("Val: {value:?}");
         let request = unsafe {
             ucp_atomic_op_nbx(
                 self.handle,
-                ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP,
+                op,
                 &value as *const T as _,
                 1 as _,
                 remote_addr as _,
@@ -463,59 +403,7 @@ impl Endpoint {
         };
         UcxRequest::new(request, self.worker.clone(), false)
     }
-    pub(crate) fn blocking_atomic_swap<T>(
-        &self,
-        // buf: *const u8,
-        value: T,
-        reply_buf: *mut T,
-        remote_addr: usize,
-        rkey: &RKey,
-    ) -> Result<(), Error> {
-        assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
-        let request = unsafe {
-            ucp_atomic_op_nbx(
-                self.handle,
-                ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP,
-                &value as *const T as _,
-                1 as _,
-                remote_addr as _,
-                rkey.handle,
-                &ucp_request_param_t {
-                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
-                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
-                    flags: 0,
-                    request: std::ptr::null_mut(),
-                    cb: ucp_request_param_t__bindgen_ty_1 { send: None },
-                    datatype: ucp_dt_make_contig(std::mem::size_of::<T>() as _),
-                    user_data: std::ptr::null_mut(),
-                    reply_buffer: reply_buf as *mut _,
-                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
-                    recv_info: ucp_request_param_t__bindgen_ty_2 {
-                        length: std::ptr::null_mut(),
-                    },
-                    memh: std::ptr::null_mut(),
-                },
-            )
-        };
-        if request.is_null() {
-            Ok(())
-        } else if UCS_PTR_IS_PTR(request) {
-            loop {
-                let _ = self.worker.progress();
-                // if UCS_PTR_IS_PTR(request) {
-                if unsafe { ucp_request_check_status(request as _) } != ucs_status_t::UCS_INPROGRESS
-                {
-                    break;
-                }
-                // }
-            }
-            unsafe { ucp_request_free(request as _) };
-            Ok(())
-        } else {
-            Error::from_ptr(request)
-        }
-    }
+
 }
 
 impl Drop for Endpoint {

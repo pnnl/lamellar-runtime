@@ -42,7 +42,7 @@ impl<T: Send + 'static> LibfabricMtAtomicFuture<T> {
             self.offset
         );
         for pe in &self.remote_pes {
-            LibfabricMtAlloc::atomic_op_inner(&self.alloc, *pe, self.offset, &self.op).unwrap();
+            LibfabricMtAlloc::atomic_op_inner(&self.alloc, *pe, self.offset, &self.op,false).unwrap();
         }
         self.spawned = true;
     }
@@ -185,8 +185,11 @@ impl CommAllocAtomic for LibfabricMtAlloc {
         }
         .into()
     }
+    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        LibfabricMtAlloc::atomic_op_inner(self, pe, offset, &op, true).unwrap();
+    }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
-        LibfabricMtAlloc::atomic_op_inner(self, pe, offset, &op).unwrap();
+        LibfabricMtAlloc::atomic_op_inner(self, pe, offset, &op,false).unwrap();
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -208,7 +211,7 @@ impl CommAllocAtomic for LibfabricMtAlloc {
     }
     fn atomic_op_all_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, offset: usize) {
         for pe in 0..self.num_pes() {
-            LibfabricMtAlloc::atomic_op_inner(self, pe, offset, &op).unwrap();
+            LibfabricMtAlloc::atomic_op_inner(self, pe, offset, &op,false).unwrap();
         }
     }
     fn atomic_fetch_op<T: Remote>(
@@ -265,13 +268,21 @@ impl CommAllocAtomic for OneSidedLibfabricMtAlloc {
         }
         .into()
     }
+    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic op called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricMtAlloc::atomic_op_inner(&self.alloc, pe, offset, &op, true).unwrap();
+    }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
             pe, self.remote_pe
         );
-        LibfabricMtAlloc::atomic_op_inner(&self.alloc, pe, offset, &op).unwrap();
+        LibfabricMtAlloc::atomic_op_inner(&self.alloc, pe, offset, &op,false).unwrap();
     }
     fn atomic_op_all<T: Remote>(
         &self,

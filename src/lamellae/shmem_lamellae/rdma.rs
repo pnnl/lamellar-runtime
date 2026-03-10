@@ -308,6 +308,9 @@ impl CommAllocRdma for ShmemAlloc {
         }
         .into()
     }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        self.put_unmanaged(src, pe, offset)
+    }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
@@ -578,6 +581,9 @@ impl CommAllocRdma for OneSidedShmemAlloc {
             counters,
         }
         .into()
+    }
+    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+        self.put_unmanaged(src, pe, offset)
     }
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
         assert_eq!(

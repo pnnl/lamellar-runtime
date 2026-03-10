@@ -472,6 +472,9 @@ pub(crate) trait RTMemoryRegionRDMA<T: Remote> {
     unsafe fn put(&self, pe: usize, index: usize, data: T) -> RdmaHandle<T>;
 
     #[doc(alias("One-sided", "onesided"))]
+    unsafe fn put_blocking(&self, pe: usize, index: usize, data: T);
+
+    #[doc(alias("One-sided", "onesided"))]
     unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T);
 
     #[doc(alias("One-sided", "onesided"))]
@@ -936,6 +939,14 @@ impl<T: Remote> MemoryRegion<T> {
             .put(&self.scheduler, self.counters.clone(), data, pe, index)
     }
 
+    pub(crate) unsafe fn put_blocking(&self, pe: usize, index: usize, data: T) {
+        // if std::any::type_name::<R>() != std::any::type_name::<T>() {
+        //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
+        // }
+        trace!("put blocking memregion {:?} index: {:?}", self.alloc, index);
+        self.alloc.inner_alloc.put_blocking(data, pe, index)
+    }
+
     pub(crate) unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
         // if std::any::type_name::<R>() != std::any::type_name::<T>() {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
@@ -1179,6 +1190,16 @@ impl<T: Remote> MemoryRegion<T> {
         self.alloc
             .inner_alloc
             .atomic_op(&self.scheduler, self.counters.clone(), op, pe, index)
+    }
+    pub (crate) fn atomic_op_blocking(&self, pe: usize, index: usize, op: AtomicOp<T>) {
+        trace!(
+            "atomic_op blocking memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc
+            .inner_alloc
+            .atomic_op_blocking(op, pe, index)
     }
     pub(crate) fn atomic_op_unmanaged(&self, pe: usize, index: usize, op: AtomicOp<T>) {
         trace!(
