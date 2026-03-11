@@ -35,6 +35,7 @@ fn main() {
         }
     }
     println!("cargo:rerun-if-env-changed=DEP_UCX_ROOT");
+    println!("cargo:rerun-if-env-changed=DEP_UCC_ROOT");
     #[cfg(feature = "enable-ucx")]
     {
         if let Ok(lamellar_ucx_lib_dir) = env::var("DEP_UCX_ROOT") {
@@ -47,6 +48,12 @@ fn main() {
                 "unable to set lamellar-ucx backend, recompile with 'enable-ucx' feature {:?}",
                 env::vars()
             )
+        }
+
+        if let Ok(lamellar_ucc_root) = env::var("DEP_UCC_ROOT") {
+            let lib_path = PathBuf::from(lamellar_ucc_root).join("lib");
+            println!("cargo:rustc-link-search=native={}", lib_path.display());
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{}", lib_path.display());
         }
     }
 

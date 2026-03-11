@@ -10,7 +10,7 @@ use std::{
 
 use super::{context::Context, endpoint::Endpoint, error::Error, UcxAlloc, UcxBarrier};
 use lamellar_ucx_sys::*;
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::{pmi::Pmi};
 
 use tracing::{debug, trace};
 
@@ -181,7 +181,7 @@ impl MemoryHandleInner {
     pub(crate) fn exchange_key_pmi(
         &self,
         endpoints: &[Arc<Endpoint>],
-        pmi: &Arc<PmiX>,
+        pmi: &Arc<dyn Pmi>,
     ) -> Result<HashMap<usize, RemoteAddressInfo>, Error> {
         let rkey = self.pack();
         let mut address_and_key = self.addr.to_ne_bytes().to_vec();

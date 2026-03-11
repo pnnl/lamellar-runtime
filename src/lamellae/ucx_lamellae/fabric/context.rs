@@ -2,7 +2,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 
 use lamellar_ucx_sys::*;
 
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::{pmi::Pmi};
 use tracing::debug;
 
 use super::{error::Error, worker::Worker};
@@ -60,12 +60,12 @@ unsafe impl Sync for Context {}
 
 impl Context {
     /// Creates and initializes a UCP application context with default configuration.
-    pub(crate) fn new(pmi: Arc<PmiX>) -> Result<Arc<Self>, Error> {
+    pub(crate) fn new(pmi: Arc<dyn Pmi>) -> Result<Arc<Self>, Error> {
         Self::new_with_config(&Config::default(), pmi)
     }
 
     /// Creates and initializes a UCP application context with specified configuration.
-    pub(crate) fn new_with_config(config: &Config, pmi: Arc<PmiX>) -> Result<Arc<Self>, Error> {
+    pub(crate) fn new_with_config(config: &Config, pmi: Arc<dyn Pmi>) -> Result<Arc<Self>, Error> {
         let features = ucp_feature::UCP_FEATURE_RMA
             | ucp_feature::UCP_FEATURE_AMO64
             | ucp_feature::UCP_FEATURE_AMO32;
