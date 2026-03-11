@@ -1821,7 +1821,7 @@ impl UcxAlloc {
     pub(crate) fn wait_ucc_request(&self, req: &UccRequest) -> Result<(), ucc::Error> {
         if let Some(ucc_team) = &self.ucc_team {
             while let Err(err) = req.test() {
-                if matches!(err, Error::Inprogress) {
+                if !matches!(err, Error::Inprogress) {
                     return Err(err);
                 } 
                 ucc_team.context.progress()?;

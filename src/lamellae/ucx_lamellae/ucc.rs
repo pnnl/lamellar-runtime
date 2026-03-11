@@ -118,10 +118,10 @@ impl Drop for UccLib {
     }
 }
 
-#[derive(Debug)]
 pub(crate) struct UccContext {
     _lib: UccLib,
     handle: ucc_context_h,
+    params: Box<UccTeamParams>, // pin?
 }
 
 
@@ -133,11 +133,11 @@ impl UccContext {
     pub(crate) fn new(ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
         let lib = UccLib::new();
         let config = CtxConfig::new(&lib);
-        let mut params = UccTeamParams {
+        let mut params = Box::new(UccTeamParams {
             my_pe: ucx_alloc.my_pe,
             pes: (0..ucx_alloc.num_pes).collect(),
             ucx_alloc: ucx_alloc.clone(),
-        };
+        });
         let ctx_params = ucc_context_params_t {
             mask: (ucc_context_params_field_UCC_CONTEXT_PARAM_FIELD_TYPE
                 | ucc_context_params_field_UCC_CONTEXT_PARAM_FIELD_OOB) as u64,
@@ -149,7 +149,7 @@ impl UccContext {
                 req_free: Some(req_free),
                 n_oob_eps: ucx_alloc.num_pes as u32,
                 oob_ep: ucx_alloc.my_pe as u32,
-                coll_info: &mut params as *mut UccTeamParams as *mut c_void,
+                coll_info: &mut *params as *mut UccTeamParams as *mut c_void,
             },
             ctx_id: ucx_alloc.my_pe as u64,
             mem_params: ucc_mem_map_params { 
@@ -167,6 +167,7 @@ impl UccContext {
         Ok(Self {
             _lib: lib,
             handle: unsafe { ctx.assume_init() },
+            params,
         })
     }
 
@@ -187,6 +188,8 @@ unsafe impl Sync for UccTeam {}
 pub(crate) struct UccTeam {
     handle: ucc_team_h,
     pub(crate) context: Arc<UccContext>,
+    params: Box<UccTeamParams>, // pin?
+
 }
 
 pub(crate) struct UccTeamParams {
@@ -198,18 +201,18 @@ pub(crate) struct UccTeamParams {
 impl UccTeam {
     pub(crate) fn new(my_pe: usize, pes: &[usize], ctx: Arc<UccContext>, ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
         let mut handle: MaybeUninit<ucc_team_h> = MaybeUninit::uninit();
-        let mut params = UccTeamParams {
+        let mut params = Box::new(UccTeamParams {
             my_pe,
             pes: pes.to_vec(),
             ucx_alloc: ucx_alloc.clone(),
-        };
+        });
         let ucc_coll_info = ucc_oob_coll_t {
             allgather: Some(oob_collective),    
             req_test: Some(req_test),
             req_free: Some(req_free),
             n_oob_eps: pes.len() as u32,
             oob_ep: my_pe as u32,
-            coll_info: &mut params as *mut UccTeamParams as *mut c_void,
+            coll_info: &mut *params as *mut UccTeamParams as *mut c_void,
         };
 
         // let is_contiguous = ucx_alloc.num_pes).windows(2).all(|w| w[1] == w[0] + 1);
@@ -283,6 +286,7 @@ impl UccTeam {
         Ok(Self {
             handle,
             context: ctx.clone(),
+            params,
         })
     }
 }
@@ -320,6 +324,18 @@ fn rust_type_to_ucc_dtype<T: 'static>() -> ucc_datatype_t {
         UCC_DT_INT64
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
         UCC_DT_UINT64
+    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+        if cfg!(target_pointer_width = "64") {
+            UCC_DT_INT64
+        } else {
+            UCC_DT_INT32
+        }
+    } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+        if cfg!(target_pointer_width = "64") {
+            UCC_DT_UINT64
+        } else {
+            UCC_DT_UINT32
+        }
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f32>() {
         UCC_DT_FLOAT32
     } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<f64>() {
@@ -404,11 +420,12 @@ impl UccTeam {
     fn post_coll_req(&self, mut coll_args: ucc_coll_args_t) -> Result<UccRequest, Error> {
         let mut coll_req= MaybeUninit::uninit();
         let err = unsafe {ucc_collective_init(&mut coll_args, coll_req.as_mut_ptr(), self.handle)};
-        Error::from_status(err)?;
         let coll_req = unsafe { coll_req.assume_init() };
-        let err = unsafe {ucc_collective_post(coll_req)};
+        let req = unsafe {UccRequest::new(coll_req)};
         Error::from_status(err)?;
-        Ok(unsafe {UccRequest::new(coll_req)})
+        let err = unsafe {ucc_collective_post(req.req_handle)};
+        Error::from_status(err)?;
+        Ok(req)
     }
 
     pub(crate) fn allreduce<T: 'static>(
