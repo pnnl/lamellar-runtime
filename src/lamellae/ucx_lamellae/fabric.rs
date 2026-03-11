@@ -8,6 +8,7 @@ use context::Context;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
 use endpoint::ATOMIC_PUT_TMP;
+use lamellar_ucc_sys::ucc_status_t_UCC_INPROGRESS;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::Worker;
 
@@ -16,7 +17,7 @@ use crate::config;
 use crate::{
     lamellae::{
         comm::alloc::*, AllocError, AllocResult, AllocationType, AtomicOp, CommAlloc,
-        CommAllocAddr, CommAllocInner, FabricError,
+        collective::{AllReduceOp, RootOrSliceMut, RootSrcOrSliceMut, RootSrcSliceOrNone},  ucx_lamellae::ucc::{self, Error, UccContext, UccRequest, UccTeam}, CommAllocAddr, CommAllocInner, CommAllocType, FabricError
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
 };
@@ -24,6 +25,7 @@ use crate::{
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
+use pmi::pmi::{Pmi, PmiBuilder};
 #[cfg(feature = "enable-on-node-shmem")]
 use std::ffi::c_void;
 
@@ -184,7 +186,7 @@ impl UcxBarrier {
 }
 
 pub(crate) struct UcxWorld {
-    pmi: Arc<PmiX>,
+    pmi: Arc<dyn Pmi>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
     #[cfg(feature = "enable-on-node-shmem")]
@@ -198,8 +200,11 @@ pub(crate) struct UcxWorld {
     endpoints: Vec<Arc<Endpoint>>,
     mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
     remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
+    ucc_context: Option<Arc<UccContext>>,
+    ucc_world_team: Option<Arc<UccTeam>>,
     exchange_buffer: Option<UcxAlloc>,
     barrier: Option<Arc<Mutex<UcxBarrier>>>,
+    ucc_world_buffer: Option<Arc<UcxAlloc>>,
 }
 
 #[cfg(feature = "enable-on-node-shmem")]
@@ -218,7 +223,7 @@ impl std::fmt::Debug for UcxWorld {
 impl UcxWorld {
     pub(crate) fn new() -> Self {
         let my_pmi = Arc::new(
-            PmiX::new()
+            PmiBuilder::init()
                 .map_err(|e| {
                     eprintln!("Error initializing PMI: {:?}", e);
                     FabricError::InitError(1)
@@ -228,13 +233,13 @@ impl UcxWorld {
         let context = Context::new(my_pmi.clone()).unwrap();
         let worker = context.create_worker().unwrap();
 
-        let addresses = worker.exchange_address(&my_pmi).unwrap();
+        let addresses = worker.exchange_address(my_pmi.clone()).unwrap();
 
         let endpoints = addresses
             .iter()
             .map(|a| Endpoint::new(worker.clone(), a).unwrap())
             .collect::<Vec<_>>();
-
+        
         let my_pe = my_pmi.rank();
         let num_pes = my_pmi.ranks().len();
         #[cfg(feature = "enable-on-node-shmem")]
@@ -261,7 +266,7 @@ impl UcxWorld {
             &context,
             &endpoints,
             &worker,
-            &my_pmi,
+            my_pmi.clone(),
             num_pes,
             my_pe,
             #[cfg(feature = "enable-on-node-shmem")]
@@ -282,7 +287,7 @@ impl UcxWorld {
             &context,
             &endpoints,
             &worker,
-            &my_pmi,
+            my_pmi.clone(),
             num_pes,
             my_pe,
             #[cfg(feature = "enable-on-node-shmem")]
@@ -293,9 +298,11 @@ impl UcxWorld {
             job_id,
             mem_handles.clone(),
             remote_keys.clone(),
+            None,
         )
         .unwrap();
-        UcxWorld {
+    
+        let mut world = UcxWorld {
             pmi: my_pmi,
             my_pe,
             num_pes,
@@ -310,13 +317,30 @@ impl UcxWorld {
             endpoints,
             mem_handles,
             remote_keys,
+            ucc_context: None,
+            ucc_world_team: None,
             exchange_buffer: Some(exchange_buffer),
             barrier: Some(Arc::new(Mutex::new(UcxBarrier::new(
                 num_pes,
                 my_pe,
                 barrier_buffer,
             )))),
-        }
+            ucc_world_buffer: None,
+        };
+    
+        let alloc = Arc::new(world.alloc(4*1024, 8, AllocationType::Global));
+        world.ucc_world_buffer = Some(alloc.clone());
+
+        alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
+        world.barrier();
+        let ucc_context = Arc::new(UccContext::new(alloc.clone()).unwrap());
+        world.barrier();
+        alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
+        let ucc_world_team = UccTeam::new(my_pe, &(0..num_pes).collect::<Vec<_>>(), ucc_context.clone(), alloc.clone()).unwrap();
+
+        world.ucc_context = Some(ucc_context);
+        world.ucc_world_team = Some(Arc::new(ucc_world_team));
+        world
     }
 
     // Found this was necessary in the offchance that the first call to a intranode PE
@@ -395,9 +419,9 @@ impl UcxWorld {
     fn initial_alloc(
         exchange_buffer: bool,
         context: &Arc<Context>,
-        endpoints: &Vec<Arc<Endpoint>>,
-        worker: &Arc<Worker>,
-        pmi: &Arc<PmiX>,
+        util_endpoints: &Vec<Arc<Endpoint>>,
+        comm_groups: &Vec<CommGroup>,
+        pmi: Arc<dyn Pmi>,
         num_pes: usize,
         my_pe: usize,
         #[cfg(feature = "enable-on-node-shmem")] same_node_pes: &Vec<bool>,
@@ -405,6 +429,7 @@ impl UcxWorld {
         #[cfg(feature = "enable-on-node-shmem")] job_id: usize,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
         remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
+        ucc_context: Option<Arc<UccContext>>,
     ) -> AllocResult<UcxAlloc> {
         let data_size = if exchange_buffer {
             let mem_handle = MemoryHandleInner::alloc(context, 1024); //dummy allocation to get the size of the exchange buffer
@@ -480,6 +505,7 @@ impl UcxWorld {
             buffer_keys.clone(),
             mem_handles.clone(),
             remote_keys.clone(),
+            None,
         )?;
         mem_handles.lock().unwrap().push(alloc.clone());
         remote_keys
@@ -571,6 +597,7 @@ impl UcxWorld {
             buffer_keys.clone(),
             self.mem_handles.clone(),
             self.remote_keys.clone(),
+            self.ucc_world_team.clone(),
         )
         .expect("UcxAlloc::new failed");
         self.mem_handles.lock().unwrap().push(alloc.clone());
@@ -855,6 +882,7 @@ pub(crate) struct UcxAlloc {
     endpoints: Arc<Vec<Arc<Endpoint>>>,
     remote_keys: Arc<HashMap<usize, RemoteAddressInfo>>,
     alloc_table: AllocTable,
+    ucc_team: Option<Arc<UccTeam>>,
 }
 
 #[lamellar_prof::prof]
@@ -882,6 +910,7 @@ impl Clone for UcxAlloc {
             endpoints: self.endpoints.clone(),
             remote_keys: self.remote_keys.clone(),
             alloc_table: self.alloc_table.clone(),
+            ucc_team: self.ucc_team.clone(),
         }
     }
 }
@@ -1027,11 +1056,12 @@ impl UcxAlloc {
         my_remote_keys: HashMap<usize, RemoteAddressInfo>,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
         remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
+        ucc_team: Option<Arc<UccTeam>>,
     ) -> AllocResult<Self> {
         let ref_cnt_offset = data_num_bytes + padding;
         let fabric_ref_cnt_offset = data_num_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
-        let alloc = Self {
+        let mut alloc = Self {
             mem,
             data_num_bytes,
             my_pe,
@@ -1049,7 +1079,10 @@ impl UcxAlloc {
             endpoints: Arc::new(endpoints),
             remote_keys: Arc::new(my_remote_keys),
             alloc_table: AllocTable::Fabric(mem_handles.clone(), remote_keys.clone()),
+            ucc_team,
         };
+
+
         unsafe {
             (&*(alloc.mem.inner.as_ptr().add(alloc.fabric_ref_cnt_offset) as *mut AtomicUsize))
                 .store(encoded, Ordering::SeqCst);
@@ -1099,7 +1132,7 @@ impl UcxAlloc {
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
             self.increment_rt_ref_count();
         }
-        let alloc = UcxAlloc {
+        let mut alloc = UcxAlloc {
             mem: self.mem.sub_alloc(offset, size),
             data_num_bytes: size,
             my_pe: self.my_pe,
@@ -1117,7 +1150,10 @@ impl UcxAlloc {
             endpoints: self.endpoints.clone(),
             remote_keys: Arc::new(remote_keys),
             alloc_table: self.alloc_table.clone(),
+            ucc_team: self.ucc_team.clone(),
         };
+
+
         debug!(target: "ucx", "Created UCX sub-allocation: {:?}", alloc);
         Ok(alloc)
     }
@@ -1164,7 +1200,7 @@ impl UcxAlloc {
         let mem = self.mem.sub_alloc(offset, size);
         let addr = mem.addr;
 
-        let alloc = UcxAlloc {
+        let mut alloc = UcxAlloc {
             mem,
             data_num_bytes: data_bytes,
             my_pe: self.my_pe,
@@ -1187,6 +1223,7 @@ impl UcxAlloc {
                 mem_handles.clone(),
                 remote_keys.clone(),
             ),
+            ucc_team: self.ucc_team.clone(),
         };
 
         unsafe {
@@ -1220,7 +1257,7 @@ impl UcxAlloc {
 
         let padding = decode_padding(encoded_ref_count);
 
-        let alloc = Self {
+        let mut alloc = Self {
             mem: self.mem.clone(),
             data_num_bytes: self.data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
             my_pe: self.my_pe,
@@ -1243,7 +1280,9 @@ impl UcxAlloc {
                 mem_handles.clone(),
                 remote_keys.clone(),
             ),
+            ucc_team: self.ucc_team.clone(),
         };
+
 
         debug!(target: "ucx", "Converted UCX alloc to rt-alloc: {:?}", alloc);
         Ok(alloc)
@@ -1572,6 +1611,225 @@ impl UcxAlloc {
             None
         } else {
             Some(req)
+        }
+    }
+
+    pub(crate) fn allgather_inner<T: Copy + 'static>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let req = ucc_team
+                .allgather(src, result)?;
+
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for allgather");
+        }
+    }
+
+    pub(crate) fn allreduce_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let req = ucc_team
+                .allreduce(src, result, op.clone())?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for allreduce");
+        }
+    }
+
+    pub(crate) fn allreduce_inplace_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src_and_result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        let src = unsafe { std::slice::from_raw_parts(src_and_result.as_ptr(), src_and_result.len()) };
+        self.allreduce_inner(op, src, src_and_result, blocking)
+    }
+
+    pub(crate) fn alltoall_inner<T: Copy + 'static>(
+        &self,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let req = ucc_team.alltoall(src, result)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for alltoall");
+        }
+    }
+
+    pub(crate) fn reduce_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let (result, root_pe) = match slice_or_pe {
+                RootOrSliceMut::Root(result) => (Some(result), self.my_pe),
+                RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+            };
+            let res = match result {
+                Some(res) => res,
+                None => unsafe {
+                    std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())
+                },
+            };
+
+            let req = ucc_team.reduce(src, res, root_pe, op.clone())?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for reduce");
+        }
+    }
+
+    pub(crate) fn gather_inner<T: Copy + 'static>(
+        &self,
+        src: &[T],
+        slice_or_pe: RootOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let (result, root_pe) = match slice_or_pe {
+                RootOrSliceMut::Root(result) => (Some(result), self.my_pe),
+                RootOrSliceMut::NotRoot(root_pe) => (None, root_pe),
+            };
+            let res = match result {
+                Some(res) => res,
+                None => unsafe {
+                    std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len())
+                },
+            };
+
+            let req = ucc_team.gather(src, res, root_pe)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for gather");
+        }
+    }
+
+    pub(crate) fn broadcast_inner<T: Copy + 'static>(
+        &self,
+        root_src: RootSrcOrSliceMut<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let (res, root_pe) = match root_src {
+                RootSrcOrSliceMut::Root(src) => {
+                    (unsafe { std::slice::from_raw_parts_mut(src.as_ptr() as *mut T, src.len()) }, self.my_pe)
+                }
+                RootSrcOrSliceMut::NotRoot(result, root_pe) => (result, root_pe),
+            };
+
+            let src = unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) };
+            let req = ucc_team.broadcast(src, res, root_pe)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for broadcast");
+        }
+    }
+
+    pub(crate) fn scatter_inner<T: Copy + 'static>(
+        &self,
+        res: &mut [T],
+        src_or_root_pe: RootSrcSliceOrNone<'_, T>,
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let (src, root_pe) = match src_or_root_pe {
+                RootSrcSliceOrNone::Root(src) => (src, self.my_pe),
+                RootSrcSliceOrNone::NotRoot(root_pe) => {
+                    (unsafe { std::slice::from_raw_parts(res.as_ptr(), res.len()) }, root_pe)
+                }
+            };
+
+            let req = ucc_team.scatter(src, res, root_pe)?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for scatter");
+        }
+    }
+
+    pub(crate) fn reduce_scatter_inner<T: Copy + 'static>(
+        &self,
+        op: &AllReduceOp,
+        src: &[T],
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<Option<UccRequest>, ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            let req = ucc_team.reduce_scatter(src, result, op.clone())?;
+            if blocking {
+                self.wait_ucc_request(&req)?;
+                Ok(None)
+            } else {
+                Ok(Some(req))
+            }
+        } else {
+            panic!("UCC team not initialized for reduce_scatter");
+        }
+    }
+
+    pub(crate) fn wait_ucc_request(&self, req: &UccRequest) -> Result<(), ucc::Error> {
+        if let Some(ucc_team) = &self.ucc_team {
+            while let Err(err) = req.test() {
+                if matches!(err, Error::Inprogress) {
+                    return Err(err);
+                } 
+                ucc_team.context.progress()?;
+            }
+            Ok(())
+        }
+        else {
+            panic!("UCC team not initialized for waiting on UCC request");
         }
     }
 

@@ -3,7 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 
 use super::{context::Context, error::Error};
 
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::{pmi::Pmi};
 
 use tracing::*;
 
@@ -123,7 +123,7 @@ impl Worker {
         })
     }
 
-    pub(crate) fn exchange_address(&self, pmi: &Arc<PmiX>) -> Result<Vec<Vec<u8>>, Error> {
+    pub(crate) fn exchange_address(&self, pmi: Arc<dyn Pmi>,wid: usize) -> Result<Vec<Vec<u8>>, Error> {
         let my_address = self.address().unwrap();
         pmi.put("worker_address", my_address.as_ref()).unwrap();
         pmi.exchange().unwrap();

@@ -20,6 +20,28 @@ use crate::lamellae::libfabric_lamellae::collective::{
     LibfabricCollectiveReduceScatterIntoBufferFuture
 };
 
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::collective::{
+    UcxCollectiveAllBroadcastFuture,
+    UcxCollectiveAllBroadcastIntoBufferFuture,
+    UcxCollectiveAllGatherFuture,
+    UcxCollectiveAllGatherIntoBufferFuture,
+    UcxCollectiveAllReduceFuture,
+    UcxCollectiveAllReduceInPlaceFuture,
+    UcxCollectiveAllReduceIntoBufferFuture,
+    UcxCollectiveBroadcastFuture,
+    UcxCollectiveBroadcastIntoBufferFuture,
+    UcxCollectiveGatherFuture,
+    UcxCollectiveGatherIntoBufferFuture,
+    UcxCollectiveReduceFuture,
+    UcxCollectiveReduceInPlaceFuture,
+    UcxCollectiveReduceIntoBufferFuture,
+    UcxCollectiveReduceScatterFuture,
+    UcxCollectiveReduceScatterIntoBufferFuture,
+    UcxCollectiveScatterFuture,
+    UcxCollectiveScatterIntoBufferFuture,
+};
+
 use crate::{
     active_messaging::AMCounters, memregion::MemregionRdmaInputInner, scheduler::Scheduler, AsLamellarBuffer, LamellarBuffer, LamellarTask, MemregionRdmaInput, Remote
 };
@@ -27,9 +49,7 @@ use crate::{
 use futures_util::Future;
 use pin_project::pin_project;
 use std::{
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
+    pin::Pin, sync::Arc, task::{Context, Poll}
 };
 
 #[must_use = " CollectiveAllReduceOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
@@ -47,8 +67,8 @@ pub(crate) enum CollectiveAllReduceOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllReduceFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -64,7 +84,7 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
             // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            CollectiveAllReduceOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -83,8 +103,8 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -103,8 +123,8 @@ impl<T: Remote> Future for CollectiveAllReduceOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -126,8 +146,8 @@ pub(crate) enum CollectiveAllReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllReduceIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -142,8 +162,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -162,8 +182,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceIntoBufferOpHandle<T,
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -182,8 +202,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceIntoBuffer
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -205,8 +225,8 @@ pub(crate) enum CollectiveAllReduceInPlaceOpFuture<T: Remote, B: AsLamellarBuffe
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllReduceInPlaceFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -221,8 +241,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceInPlaceOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -241,8 +261,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllReduceInPlaceOpHandle<T, B>
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceInPlaceOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -261,8 +281,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllReduceInPlaceOpH
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllReduceInPlaceOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -286,8 +306,8 @@ pub(crate) enum CollectiveReduceOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveReduceFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -302,8 +322,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -322,8 +342,8 @@ impl<T: Remote> CollectiveReduceOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -342,8 +362,8 @@ impl<T: Remote> Future for CollectiveReduceOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -366,8 +386,8 @@ pub(crate) enum CollectiveReduceIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveReduceIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -382,8 +402,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -402,8 +422,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceIntoBufferOpHandle<T, B>
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -422,8 +442,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceIntoBufferOpH
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -446,8 +466,8 @@ pub(crate) enum CollectiveReduceInPlaceOpFuture<T> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveReduceInPlaceFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -502,8 +522,8 @@ impl<T: Remote> Future for CollectiveReduceInPlaceOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceInPlaceOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -526,8 +546,8 @@ pub(crate) enum CollectiveAllGatherOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllGatherFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -542,8 +562,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllGatherOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -562,8 +582,8 @@ impl<T: Remote> CollectiveAllGatherOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllGatherOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -582,8 +602,8 @@ impl<T: Remote> Future for CollectiveAllGatherOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllGatherOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -605,8 +625,8 @@ pub(crate) enum CollectiveAllGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllGatherIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -621,8 +641,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllGatherIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -641,8 +661,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllGatherIntoBufferOpHandle<T,
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllGatherIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -661,8 +681,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllGatherIntoBuffer
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllGatherIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -685,8 +705,8 @@ pub(crate) enum CollectiveGatherOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveGatherFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -701,8 +721,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveGatherOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -721,8 +741,8 @@ impl<T: Remote> CollectiveGatherOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveGatherOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -741,8 +761,8 @@ impl<T: Remote> Future for CollectiveGatherOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveGatherOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -765,8 +785,8 @@ pub(crate) enum CollectiveGatherIntoBufferOpFuture<T: Remote, B: AsLamellarBuffe
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveGatherIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -781,8 +801,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveGatherIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -801,8 +821,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveGatherIntoBufferOpHandle<T, B>
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveGatherIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -821,8 +841,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveGatherIntoBufferOpH
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveGatherIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -845,8 +865,8 @@ pub(crate) enum CollectiveAllBroadcastOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllBroadcastFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -861,8 +881,8 @@ impl<T: Remote> CollectiveAllBroadcastOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllBroadcastOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -881,8 +901,8 @@ impl<T: Remote> CollectiveAllBroadcastOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllBroadcastOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -901,8 +921,8 @@ impl<T: Remote> Future for CollectiveAllBroadcastOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllBroadcastOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -924,8 +944,8 @@ pub(crate) enum CollectiveAllBroadcastIntoBufferOpFuture<T: Remote, B: AsLamella
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveAllBroadcastIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -940,8 +960,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllBroadcastIntoBufferOpHandle
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllBroadcastIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -960,8 +980,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveAllBroadcastIntoBufferOpHandle
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllBroadcastIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -980,8 +1000,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveAllBroadcastIntoBuf
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveAllBroadcastIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -1003,8 +1023,8 @@ pub(crate) enum CollectiveBroadcastOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveBroadcastFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -1019,8 +1039,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveBroadcastOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -1039,8 +1059,8 @@ impl<T: Remote> CollectiveBroadcastOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveBroadcastOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -1059,8 +1079,8 @@ impl<T: Remote> Future for CollectiveBroadcastOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveBroadcastOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -1082,8 +1102,8 @@ pub(crate) enum CollectiveBroadcastIntoBufferOpFuture<T: Remote, B: AsLamellarBu
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveBroadcastIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -1098,8 +1118,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveBroadcastIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -1118,8 +1138,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveBroadcastIntoBufferOpHandle<T,
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveBroadcastIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -1138,8 +1158,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveBroadcastIntoBuffer
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveBroadcastIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -1162,8 +1182,8 @@ pub(crate) enum CollectiveScatterOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveScatterFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -1178,8 +1198,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveScatterOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -1198,8 +1218,8 @@ impl<T: Remote> CollectiveScatterOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveScatterOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -1218,8 +1238,8 @@ impl<T: Remote> Future for CollectiveScatterOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveScatterOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -1241,8 +1261,8 @@ pub(crate) enum CollectiveScatterIntoBufferOpFuture<T: Remote, B: AsLamellarBuff
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveScatterIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -1257,8 +1277,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveScatterIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -1277,8 +1297,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveScatterIntoBufferOpHandle<T, B
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveScatterIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -1297,8 +1317,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveScatterIntoBufferOp
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveScatterIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -1321,8 +1341,8 @@ pub(crate) enum CollectiveReduceScatterOpFuture<T: Remote> {
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveReduceScatterFuture<T>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -1337,8 +1357,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceScatterOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -1357,8 +1377,8 @@ impl<T: Remote> CollectiveReduceScatterOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceScatterOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -1377,8 +1397,8 @@ impl<T: Remote> Future for CollectiveReduceScatterOpHandle<T> {
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceScatterOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -1400,8 +1420,8 @@ pub(crate) enum CollectiveReduceScatterIntoBufferOpFuture<T: Remote, B: AsLamell
     // LibfabricMt(#[pin] LibfabricMtAtomicFuture<T>),
     // #[cfg(feature = "enable-libfabric-async")]
     // LibfabricAsync(#[pin] LibfabricAsyncAtomicFuture<T>),
-    // #[cfg(feature = "enable-ucx")]
-    // Ucx(#[pin] UcxAtomicFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxCollectiveReduceScatterIntoBufferFuture<T, B>),
     // Shmem(#[pin] ShmemAtomicFuture<T>),
     // Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -1416,8 +1436,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceScatterIntoBufferOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -1436,8 +1456,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> CollectiveReduceScatterIntoBufferOpHandl
             // AtomicFetchOpFuture::LibfabricMt(f) => f.spawn(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.spawn(),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceScatterIntoBufferOpFuture::Ucx(f) => f.spawn(),
             // AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             // AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -1456,8 +1476,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for CollectiveReduceScatterIntoBu
             // AtomicFetchOpFutureProj::LibfabricMt(f) => f.poll(cx),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFutureProj::LibfabricAsync(f) => f.poll(cx),
-            // #[cfg(feature = "enable-ucx")]
-            // AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            CollectiveReduceScatterIntoBufferOpFutureProj::Ucx(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             // AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }

@@ -2191,6 +2191,10 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_all(scheduler, counters, src, op)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.reduce_all(scheduler, counters, src, op)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2249,6 +2253,10 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_into_buffer(scheduler, counters, src, op, buffer)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.reduce_all_into_buffer(scheduler, counters, src, op, buffer)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2304,6 +2312,10 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.reduce_all_in_place(scheduler, counters, src_and_dst, op)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.reduce_all_in_place(scheduler, counters, src_and_dst, op)
             }
             _ => {
@@ -2368,6 +2380,10 @@ impl CommAllocCollectiveReduce for CommAllocInner {
 
                 inner_alloc.reduce(scheduler, counters, op, src, root_pe)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.reduce(scheduler, counters, op, src, root_pe)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2424,6 +2440,10 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.reduce_into_buffer(scheduler, counters, op, src, root_or_buffer)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.reduce_into_buffer(scheduler, counters, op, src, root_or_buffer)
             }
             _ => {
@@ -2543,6 +2563,10 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.gather_all(scheduler, counters, src)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.gather_all(scheduler, counters, src)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2598,6 +2622,10 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.gather_all_into_buffer(scheduler, counters, src, buffer)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.gather_all_into_buffer(scheduler, counters, src, buffer)
             }
             _ => {
@@ -2661,6 +2689,10 @@ impl CommAllocCollectiveGather for CommAllocInner {
 
                 inner_alloc.gather(scheduler, counters, src, root_pe)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.gather(scheduler, counters, src, root_pe)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2716,6 +2748,10 @@ impl CommAllocCollectiveGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.gather_into_buffer(scheduler, counters, src, root_or_buffer)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.gather_into_buffer(scheduler, counters, src, root_or_buffer)
             }
             _ => {
@@ -2778,6 +2814,10 @@ impl CommAllocCollectiveAllBroadcast for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.broadcast_all(scheduler, counters, src)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.broadcast_all(scheduler, counters, src)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2833,6 +2873,10 @@ impl CommAllocCollectiveAllBroadcast for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.broadcast_all_into_buffer(scheduler, counters, src, buffer)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.broadcast_all_into_buffer(scheduler, counters, src, buffer)
             }
             _ => {
@@ -2897,6 +2941,10 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
 
                 inner_alloc.broadcast(scheduler, counters, src_or_root_pe)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.broadcast(scheduler, counters, src_or_root_pe)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -2951,6 +2999,10 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer)
             }
             _ => {
@@ -3014,6 +3066,10 @@ impl CommAllocCollectiveScatter for CommAllocInner {
 
                 inner_alloc.scatter(scheduler, counters, src_or_root_pe)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.scatter(scheduler, counters, src_or_root_pe)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -3069,6 +3125,10 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe)
             }
             _ => {
@@ -3133,6 +3193,10 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter(scheduler, counters, op, src, len)
             }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter(scheduler, counters, op, src, len)
+            }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
             }
@@ -3189,6 +3253,10 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, src, buffer)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
                 inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, src, buffer)
             }
             _ => {
