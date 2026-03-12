@@ -42,6 +42,7 @@ use libfabric::cntr::WaitCntr;
 use libfabric::comm::atomic::AtomicFetchEp;
 use libfabric::comm::atomic::AtomicValidEp;
 use libfabric::comm::atomic::AtomicWriteEp;
+use libfabric::comm::atomic::AtomicCASEp;
 use libfabric::comm::collective::CollectiveAttr;
 use libfabric::comm::rma::ReadEp;
 use libfabric::comm::rma::WriteEp;
@@ -2084,6 +2085,51 @@ impl LibfabricAsyncAlloc {
         }
     }
 
+    pub(crate) async fn atomic_compare_exchange_op_inner<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        current: T,
+        new: T,
+        result: &mut [T],
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_atomic_compare_exchange_op::<T, u8>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_atomic_compare_exchange_op::<T, u16>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_atomic_compare_exchange_op::<T, u32>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_atomic_compare_exchange_op::<T, u64>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_atomic_compare_exchange_op::<T, usize>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_atomic_compare_exchange_op::<T, i8>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_atomic_compare_exchange_op::<T, i16>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_atomic_compare_exchange_op::<T, i32>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_atomic_compare_exchange_op::<T, i64>(pe, offset, current, new, result)
+                    .await
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_atomic_compare_exchange_op::<T, isize>(pe, offset, current, new, result)
+                    .await
+            } else {
+                panic!("Unsupported atomic operation type");
+            }
+        }
+    }
+
     pub(crate) fn atomic_fetch_op_inner_unmanaged<T: 'static>(
         &self,
         pe: usize,
@@ -2239,6 +2285,47 @@ impl LibfabricAsyncAlloc {
                 // })?;
             }
         };
+
+        Ok(())
+    }
+
+    async unsafe fn typed_atomic_compare_exchange_op<T, OFI: AsFiType>(
+        &self,
+        pe: usize,
+        offset: usize,
+        current: T,
+        new: T,
+        result: &mut [T],
+    ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+
+        let new = *(&new as *const T as *const OFI);
+        let current = *(&current as *const T as *const OFI);
+        let res = std::mem::transmute::<&mut [T], &mut [OFI]>(result);
+        let mut ctx = self.ofi.info_entry.allocate_context();
+
+        self.ofi
+            .ep
+            .compare_atomic_swap_to_async(
+                std::slice::from_ref(&new),
+                None,
+                std::slice::from_ref(&current),
+                None,
+                res,
+                None,
+                &self.ofi.mapped_addresses[pe],
+                remote_dst_addr,
+                &remote_key,
+                &mut ctx,
+            )
+            .await?;
 
         Ok(())
     }

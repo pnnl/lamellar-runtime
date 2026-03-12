@@ -21,7 +21,7 @@ use crate::lamellar_team::IntoLamellarTeam;
 use crate::memregion::Dist;
 use crate::scheduler::LamellarTask;
 
-use std::any::TypeId;
+use std::any::{type_name, TypeId};
 use std::collections::HashSet;
 // use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -921,6 +921,50 @@ impl<T: Dist> Iterator for AtomicLocalDataIter<T> {
 }
 
 impl<T: Dist + ArrayOps + std::default::Default + 'static> AtomicArray<T> {
+    pub fn print_network_atomic_avail(&self) {
+        match self {
+            AtomicArray::NetworkAtomicArray(array) => {
+                let ops = array.op_support;
+                let n_s = "[Comm: NIC RDMA, Op: NIC Atomic]";
+                let s = "[Comm: AM, Op: CPU atomic]";
+                println!(
+                    "[LAMELLAR ATOMIC] AtomicArray<{}> [CPU + NIC HW atomic support]:\n load={}\n store={}\n swap={}\n compare_exchange={}\n add={}\n sub={}\n fetch_add={}\n fetch_sub={}\n prod={}\n fetch_prod={}\n bit_or={}\n fetch_bit_or={}\n bit_xor={}\n fetch_bit_xor={}\n bit_and={}\n fetch_bit_and={}",
+                    type_name::<T>(),
+                    if ops.load { n_s } else { s },
+                    if ops.store { n_s } else { s },
+                    if ops.swap { n_s } else { s },
+                    if ops.cas { n_s } else { s },
+                    if ops.add { n_s } else { s },
+                    if ops.add { n_s } else { s }, // sub uses add capability
+                    if ops.fetch_add { n_s } else { s },
+                    if ops.fetch_add { n_s } else { s }, // fetch_sub uses fetch_add capability
+                    if ops.prod { n_s } else { s },
+                    if ops.fetch_prod { n_s } else { s },
+                    if ops.bit_or { n_s } else { s },
+                    if ops.fetch_bit_or { n_s } else { s },
+                    if ops.bit_xor { n_s } else { s },
+                    if ops.fetch_bit_xor { n_s } else { s },
+                    if ops.bit_and { n_s } else { s },
+                    if ops.fetch_bit_and { n_s } else { s },
+                );
+            }
+            AtomicArray::NativeAtomicArray(_) => {
+                let s = "[Comm: AM, Op: CPU atomic]";
+                println!(
+                    "[LAMELLAR ATOMIC] AtomicArray<{}> [CPU atomic support]:\n load={s}\n store={s}\n swap={s}\n compare_exchange={s}\n add={s}\n sub={s}\n fetch_add={s}\n fetch_sub={s}\n prod={s}\n fetch_prod={s}\n bit_or={s}\n fetch_bit_or={s}\n bit_xor={s}\n fetch_bit_xor={s}\n bit_and={s}\n fetch_bit_and={s}",
+                    type_name::<T>(),
+                );
+            }
+            AtomicArray::GenericAtomicArray(_) => {
+                let s = "[Comm: AM, OP: Mutex]";
+                println!(
+                    "[LAMELLAR ATOMIC] AtomicArray<{}> [No HW atomic support]:\n load={s}\n store={s}\n swap={s}\n compare_exchange={s}\n add={s}\n sub={s}\n fetch_add={s}\n fetch_sub={s}\n prod={s}\n fetch_prod={s}\n bit_or={s}\n fetch_bit_or={s}\n bit_xor={s}\n fetch_bit_xor={s}\n bit_and={s}\n fetch_bit_and={s}",
+                    type_name::<T>(),
+                );
+            }
+        }
+    }
+
     #[doc(alias = "Collective")]
     /// Construct a new AtomicArray with a length of `array_size` whose data will be layed out with the provided `distribution` on the PE's specified by the `team`.
     /// `team` is commonly a [LamellarWorld][crate::LamellarWorld] or [LamellarTeam] (instance or reference).

@@ -60,16 +60,12 @@ fn default_dissemination_factor() -> usize {
 
 fn default_backend() -> String {
     if cfg!(feature = "enable-rofi-c") {
-        println!("rofi_c");
         return "rofi_c".to_owned();
-    } else if cfg!(feature = "enable-rofi-rust") {
-        return "rofi_rust".to_owned();
     } else if cfg!(feature = "enable-libfabric") {
         return "libfabric".to_owned();
     } else if cfg!(feature = "enable-libfabric-async") {
         return "libfabric-async".to_owned();
     } else {
-        println!("local");
         return "local".to_owned();
     }
 }

@@ -1,5 +1,7 @@
 use crate::array::network_atomic::*;
-use crate::array::operations::handle::{ArrayFetchOpHandle, FetchOpState, OpState};
+use crate::array::operations::handle::{
+    ArrayFetchOpHandle, ArrayResultOpHandle, FetchOpState, OpState, ResultOpState,
+};
 use crate::array::operations::read_only::LocalReadOnlyOps;
 use crate::array::private::LamellarArrayPrivate;
 // use crate::array::Network_atomic::rdma::atomic_store;
@@ -96,6 +98,24 @@ impl<T: ElementOps + 'static> AccessOps<T> for NetworkAtomicArray<T> {
             panic!("invalid index");
         }
     }
+
+    fn store_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.store {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Store, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Write(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
     fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         if !self.op_support.swap {
             return self
@@ -163,6 +183,76 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
             panic!("invalid index");
         }
     }
+
+    fn add_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.add {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Sum(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.op_support.add {
+            return self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Sub(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn sub_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.add {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Sub(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_sub(&self, index: usize, val: T) {
+        if !self.op_support.add {
+            self.array
+                .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::Sub(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
     fn blocking_add(&self, index: usize, val: T) {
         if !self.op_support.add {
             self.array
@@ -178,6 +268,24 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
             panic!("invalid index");
         }
     }
+
+    fn mul_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.prod {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Prod(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
     fn fetch_add<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         if !self.op_support.fetch_add {
             return self
@@ -199,6 +307,88 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
                 array: self.clone().into(),
                 state: FetchOpState::Network(handle),
             }
+        } else {
+            panic!("invalid index");
+        }
+    }
+    fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.op_support.prod {
+            return self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Prod(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_mul(&self, index: usize, val: T) {
+        if !self.op_support.prod {
+            self.array
+                .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::Prod(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.op_support.fetch_prod {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchMul,
+                    self.as_lamellar_byte_array(),
+                )
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::Prod(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_fetch_mul(&self, index: usize, val: T) -> T {
+        if !self.op_support.fetch_prod {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchMul,
+                    self.as_lamellar_byte_array(),
+                )
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Prod(val))
         } else {
             panic!("invalid index");
         }
@@ -230,11 +420,358 @@ impl<T: ElementArithmeticOps + 'static> ArithmeticOps<T> for NetworkAtomicArray<
     }
 }
 
-impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {}
+impl<T: ElementBitWiseOps + 'static> BitWiseOps<T> for NetworkAtomicArray<T> {
+    fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.op_support.bit_and {
+            return self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::BitAnd(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_bit_and(&self, index: usize, val: T) {
+        if !self.op_support.bit_and {
+            self.array
+                .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::BitAnd(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn bit_and_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.bit_and {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::BitAnd(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_fetch_bit_and(&self, index: usize, val: T) -> T {
+        if !self.op_support.fetch_bit_and {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchAnd,
+                    self.as_lamellar_byte_array(),
+                )
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::BitAnd(val))
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.op_support.fetch_bit_and {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchAnd,
+                    self.as_lamellar_byte_array(),
+                )
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::BitAnd(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.op_support.bit_or {
+            return self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::BitOr(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_bit_or(&self, index: usize, val: T) {
+        if !self.op_support.bit_or {
+            self.array
+                .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::BitOr(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn bit_or_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.bit_or {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::BitOr(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_fetch_bit_or(&self, index: usize, val: T) -> T {
+        if !self.op_support.fetch_bit_or {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchOr,
+                    self.as_lamellar_byte_array(),
+                )
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::BitOr(val))
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.op_support.fetch_bit_or {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchOr,
+                    self.as_lamellar_byte_array(),
+                )
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::BitOr(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.op_support.bit_xor {
+            return self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::BitXor(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_bit_xor(&self, index: usize, val: T) {
+        if !self.op_support.bit_xor {
+            self.array
+                .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::BitXor(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn bit_xor_unmanaged(&self, index: usize, val: T) {
+        if !self.op_support.bit_xor {
+            let _ = self
+                .array
+                .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::BitXor(val));
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.op_support.fetch_bit_xor {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchXor,
+                    self.as_lamellar_byte_array(),
+                )
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::BitXor(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_fetch_bit_xor(&self, index: usize, val: T) -> T {
+        if !self.op_support.fetch_bit_xor {
+            return self
+                .array
+                .initiate_batch_fetch_op_2(
+                    val,
+                    index,
+                    ArrayOpCmd::FetchXor,
+                    self.as_lamellar_byte_array(),
+                )
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::BitXor(val))
+        } else {
+            panic!("invalid index");
+        }
+    }
+}
 
 impl<T: ElementShiftOps + 'static> ShiftOps<T> for NetworkAtomicArray<T> {}
 
-impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for NetworkAtomicArray<T> {}
+impl<T: ElementCompareEqOps + 'static> CompareExchangeOps<T> for NetworkAtomicArray<T> {
+    fn compare_exchange<'a>(&self, index: usize, current: T, new: T) -> ArrayResultOpHandle<T> {
+        if !self.op_support.cas {
+            return self
+                .inner_array()
+                .initiate_batch_result_op_2(
+                    new,
+                    index,
+                    ArrayOpCmd::CompareExchange(current),
+                    self.as_lamellar_byte_array(),
+                )
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .array
+                .mem_region
+                .atomic_compare_exchange(pe, offset, current, new);
+            ArrayResultOpHandle {
+                array: self.clone().into(),
+                state: ResultOpState::Network(handle),
+            }
+        } else {
+            panic!("invalid index");
+        }
+    }
+
+    fn blocking_compare_exchange(&self, index: usize, current: T, new: T) -> Result<T, T> {
+        if !self.op_support.cas {
+            return self
+                .inner_array()
+                .initiate_batch_result_op_2(
+                    new,
+                    index,
+                    ArrayOpCmd::CompareExchange(current),
+                    self.as_lamellar_byte_array(),
+                )
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.array
+                .mem_region
+                .atomic_compare_exchange_blocking(pe, offset, current, new)
+        } else {
+            panic!("invalid index");
+        }
+    }
+}
 
 impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T>
     for NetworkAtomicArray<T>

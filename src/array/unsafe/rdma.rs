@@ -207,14 +207,15 @@ impl<T: Dist> UnsafeArray<T> {
         let num_elems_pe = num_elems / num_pes; //we add plus one to ensure we allocate enough space
         let pe_start_index = global_index / num_pes;
         let mut rdma_requests = FuturesOrdered::new();
-        for pe in 0..std::cmp::min(num_elems, num_pes) {
-            let pe = (start_pe + pe) % num_pes;
+        let remainder = num_elems % num_pes;
+        for offset in 0..std::cmp::min(num_elems, num_pes) {
+            let pe = (start_pe + offset) % num_pes;
             let mut pe_index = pe_start_index;
             if pe < start_pe {
                 pe_index += 1;
             }
             let mut pe_num_elems = num_elems_pe;
-            if pe >= start_pe && pe < start_pe + (num_elems % num_pes) {
+            if offset < remainder {
                 pe_num_elems += 1;
             }
             unsafe {

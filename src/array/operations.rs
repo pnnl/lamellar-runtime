@@ -190,16 +190,16 @@ impl<T: Dist> From<ArrayOpCmd<Vec<u8>>> for ArrayOpCmd<T> {
             ArrayOpCmd::Get => ArrayOpCmd::Get,
             ArrayOpCmd::CompareExchange(old) => {
                 let old_t = unsafe {
-                    std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>())
+                    std::slice::from_raw_parts(old.as_ptr() as *const T, 1)
                 };
                 ArrayOpCmd::CompareExchange(old_t[0])
             }
             ArrayOpCmd::CompareExchangeEps(old, eps) => {
                 let old_t = unsafe {
-                    std::slice::from_raw_parts(old.as_ptr() as *const T, std::mem::size_of::<T>())
+                    std::slice::from_raw_parts(old.as_ptr() as *const T, 1)
                 };
                 let eps_t = unsafe {
-                    std::slice::from_raw_parts(eps.as_ptr() as *const T, std::mem::size_of::<T>())
+                    std::slice::from_raw_parts(eps.as_ptr() as *const T, 1)
                 };
                 ArrayOpCmd::CompareExchangeEps(old_t[0], eps_t[0])
             }

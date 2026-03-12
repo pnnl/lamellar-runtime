@@ -3,7 +3,7 @@ use libfabric::{
     av_set::AddressVectorSetBuilder,
     cntr::{Counter, CounterBuilder, ReadCntr, WaitCntr},
     comm::{
-        atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp},
+        atomic::{AtomicFetchEp, AtomicValidEp, AtomicWriteEp, AtomicCASEp},
         collective::{CollectiveAttr, CollectiveEp},
         rma::{ReadEp, WriteEp},
     },
@@ -2020,6 +2020,83 @@ impl LibfabricMtAlloc {
                 })?;
             }
         };
+
+        Ok(())
+    }
+
+    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        current: T,
+        new: T,
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        unsafe {
+            if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+                self.typed_atomic_compare_exchange_op::<T, u8>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+                self.typed_atomic_compare_exchange_op::<T, u16>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+                self.typed_atomic_compare_exchange_op::<T, u32>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+                self.typed_atomic_compare_exchange_op::<T, u64>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+                self.typed_atomic_compare_exchange_op::<T, usize>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+                self.typed_atomic_compare_exchange_op::<T, i8>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+                self.typed_atomic_compare_exchange_op::<T, i16>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+                self.typed_atomic_compare_exchange_op::<T, i32>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+                self.typed_atomic_compare_exchange_op::<T, i64>(pe, offset, current, new, result, blocking)
+            } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+                self.typed_atomic_compare_exchange_op::<T, isize>(pe, offset, current, new, result, blocking)
+            } else {
+                panic!("Unsupported atomic operation type");
+            }
+        }
+    }
+
+    unsafe fn typed_atomic_compare_exchange_op<T, OFI: AsFiType>(
+        &self,
+        pe: usize,
+        offset: usize,
+        current: T,
+        new: T,
+        result: &mut [T],
+        blocking: bool,
+    ) -> Result<(), libfabric::error::Error> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_alloc_info = self.remote_allocs.get(&pe).expect(&format!(
+            "PE {} is not part of the sub allocation group",
+            pe
+        ));
+        let remote_dst_addr = remote_alloc_info.mem_address().add(offset);
+        let remote_key = remote_alloc_info.key();
+
+        let new = *(&new as *const T as *const OFI);
+        let current = *(&current as *const T as *const OFI);
+        let res = &mut *(result as *mut [T] as *mut [OFI]);
+        let cg =
+            &self.ofi.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id) % self.ofi.comm_groups.len()];
+
+        cg.post_get(blocking, || {
+            cg.ep.compare_atomic_swap_to(
+                std::slice::from_ref(&new),
+                None,
+                std::slice::from_ref(&current),
+                None,
+                res,
+                None,
+                &cg.mapped_addresses[pe],
+                remote_dst_addr,
+                &remote_key,
+            )
+        })?;
 
         Ok(())
     }

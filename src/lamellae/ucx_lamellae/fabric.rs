@@ -334,6 +334,23 @@ impl UcxWorld {
         }
     }
 
+    pub(crate) fn atomic_op_avail<T: 'static>(&self, op: &AtomicOp<T>) -> bool {
+        if !self.atomic_avail::<T>() {
+            return false;
+        }
+        matches!(
+            op,
+            AtomicOp::Read
+                | AtomicOp::Write(_)
+                | AtomicOp::Cas(_, _)
+                | AtomicOp::Sum(_)
+                | AtomicOp::Sub(_)
+                | AtomicOp::BitOr(_)
+                | AtomicOp::BitXor(_)
+                | AtomicOp::BitAnd(_)
+        )
+    }
+
     fn initial_alloc(
         exchange_buffer: bool,
         context: &Arc<Context>,
@@ -930,11 +947,15 @@ impl UcxAlloc {
 
     fn ucx_atomic_update<T: Copy>(op: &AtomicOp<T>) -> (ucp_atomic_op_t, T) {
         match op {
+            AtomicOp::Write(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP, *val),
             AtomicOp::Sum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, *val),
             AtomicOp::Sub(val) => (
                 ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
                 unsafe { Self::negate_atomic_value(*val) },
             ),
+            AtomicOp::BitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, *val),
+            AtomicOp::BitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, *val),
+            AtomicOp::BitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, *val),
             _ => panic!("Unsupported atomic operation"),
         }
     }
@@ -1348,16 +1369,20 @@ impl UcxAlloc {
                     managed,
                 )
             }
-            AtomicOp::Sum(_) | AtomicOp::Sub(_) => {
+            AtomicOp::Sum(_)
+            | AtomicOp::Sub(_)
+            | AtomicOp::BitAnd(_)
+            | AtomicOp::BitOr(_)
+            | AtomicOp::BitXor(_) => {
                 let (ucx_op, val) = Self::ucx_atomic_update(op);
                 self.endpoints[pe].atomic_op(ucx_op, val, remote_addr + offset, rkey, managed)
             }
             _ => panic!("Unsupported atomic operation"),
         };
         if blocking {
-            if let Some(req) = req {
-                req.wait().expect("blocking_atomic_op failed");
-            }
+            self.endpoints[pe]
+                .ep_wait_all()
+                .expect("blocking_atomic_op failed");
             None
         } else {
             req
@@ -1390,7 +1415,12 @@ impl UcxAlloc {
                 };
                 self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, rkey)
             }
-            AtomicOp::Write(_) | AtomicOp::Sum(_) | AtomicOp::Sub(_) => {
+            AtomicOp::Write(_)
+            | AtomicOp::Sum(_)
+            | AtomicOp::Sub(_)
+            | AtomicOp::BitAnd(_)
+            | AtomicOp::BitOr(_)
+            | AtomicOp::BitXor(_) => {
                 let (ucx_op, val) = Self::ucx_atomic_update(op);
                 let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
                     (remote_info.addr, &remote_info.rkey)
@@ -1409,6 +1439,50 @@ impl UcxAlloc {
         };
         if blocking {
             req.wait().expect("blocking_atomic_fetch_op failed");
+            None
+        } else {
+            Some(req)
+        }
+    }
+
+    pub(crate) fn inner_atomic_compare_exchange_op<T: Copy + 'static>(
+        &self,
+        pe: usize,
+        offset: usize,
+        blocking: bool,
+        compare: T,
+        result: &mut [T],
+    ) -> Option<UcxRequest> {
+        let offset = offset * std::mem::size_of::<T>();
+        debug_assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        #[cfg(feature = "enable-on-node-shmem")]
+        {
+            if let Some(addr) = self.same_node_addr(pe, offset) {
+                result[0] = crate::lamellae::comm::atomic::net_atomic_compare_exchange(
+                    compare,
+                    result[0],
+                    &addr,
+                )
+                .unwrap_or_else(|v| v);
+                return None;
+            }
+        }
+        let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
+            (remote_info.addr, &remote_info.rkey)
+        } else {
+            panic!("inner_atomic_compare_exchange_op missing remote key for pe {}", pe);
+        };
+        // result[0] must be pre-initialized to `new` (Z) before calling;
+        // after completion it holds the original remote value (old Y).
+        let req = self.endpoints[pe].atomic_compare_swap(
+            compare,
+            result.as_mut_ptr(),
+            remote_addr + offset,
+            rkey,
+        );
+        if blocking {
+            req.wait()
+                .expect("blocking_atomic_compare_exchange_op failed");
             None
         } else {
             Some(req)

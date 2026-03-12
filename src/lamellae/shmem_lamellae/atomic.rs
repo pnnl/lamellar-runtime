@@ -2,9 +2,10 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::{
         comm::atomic::{
-            AtomicFetchOpFuture, AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
+            AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
+            AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
         },
-        net_atomic_fetch_op, net_atomic_op,
+        net_atomic_compare_exchange, net_atomic_fetch_op, net_atomic_op,
         shmem_lamellae::fabric::{OneSidedShmemAlloc, ShmemAlloc},
         CommAllocAddr, CommAllocAtomic,
     },
@@ -137,6 +138,67 @@ impl<T: Remote> Future for ShmemAtomicFetchFuture<T> {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub(crate) struct ShmemAtomicCompareExchangeFuture<T> {
+    pub(super) dst: CommAllocAddr,
+    current: T,
+    new: T,
+    result: Option<Result<T, T>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+}
+
+impl<T: Remote> ShmemAtomicCompareExchangeFuture<T> {
+    fn exec_op(&mut self) {
+        self.result = Some(net_atomic_compare_exchange(self.current, self.new, &self.dst));
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) -> Result<T, T> {
+        self.exec_op();
+        self.result.take().expect("compare_exchange result should be set")
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
+        self.exec_op();
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(
+            async move { self.result.take().expect("compare_exchange result should be set") },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for ShmemAtomicCompareExchangeFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<ShmemAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHandle<T> {
+    fn from(f: ShmemAtomicCompareExchangeFuture<T>) -> AtomicCompareExchangeOpHandle<T> {
+        AtomicCompareExchangeOpHandle {
+            future: AtomicCompareExchangeFuture::Shmem(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for ShmemAtomicCompareExchangeFuture<T> {
+    type Output = Result<T, T>;
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        Poll::Ready(self.result.take().expect("compare_exchange result should be set"))
+    }
+}
+
 impl CommAllocAtomic for ShmemAlloc {
     fn atomic_op<T: Remote>(
         &self,
@@ -146,7 +208,7 @@ impl CommAllocAtomic for ShmemAlloc {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T> {
-        println!("atomic_op called on ShmemAlloc for pe: {} {:?}", pe, self);
+        // println!("atomic_op called on ShmemAlloc for pe: {} {:?}", pe, self);
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
@@ -237,6 +299,43 @@ impl CommAllocAtomic for ShmemAlloc {
         let mut result = T::default();
         net_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr), &mut result as *mut T);
         result
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        ShmemAtomicCompareExchangeFuture {
+            dst: CommAllocAddr(remote_dst_addr),
+            current,
+            new,
+            result: None,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_base = self.pe_base_offset(pe);
+        let remote_dst_addr = remote_dst_base + offset;
+        net_atomic_compare_exchange(current, new, &CommAllocAddr(remote_dst_addr))
     }
 }
 
@@ -343,5 +442,50 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         let mut result = T::default();
         net_atomic_fetch_op(&op, &CommAllocAddr(remote_dst_addr), &mut result as *mut T);
         result
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic compare exchange called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_addr = self.start() + offset;
+        ShmemAtomicCompareExchangeFuture {
+            dst: CommAllocAddr(remote_dst_addr),
+            current,
+            new,
+            result: None,
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+        }
+        .into()
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking atomic compare exchange called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let offset = offset * std::mem::size_of::<T>();
+        assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
+        let remote_dst_addr = self.start() + offset;
+        net_atomic_compare_exchange(current, new, &CommAllocAddr(remote_dst_addr))
     }
 }

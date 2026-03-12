@@ -1047,6 +1047,7 @@ impl<T: Dist> NetworkAtomicArray<T> {
             load: comm.atomic_op_avail::<T>(AtomicOp::Read),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(dummy_val)),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(dummy_val)),
+            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(dummy_val, dummy_val)),
             add: comm.atomic_op_avail::<T>(AtomicOp::Sum(dummy_val)),
             fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(dummy_val)),
             prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(dummy_val)),

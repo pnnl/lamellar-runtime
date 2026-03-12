@@ -23,7 +23,7 @@ use crate::{
     },
     memregion::{AsLamellarBuffer, LamellarBuffer, MemregionRdmaInputInner},
     scheduler::Scheduler,
-    AtomicFetchOpHandle, AtomicOpHandle, Deserialize, RdmaHandle, Remote, Serialize,
+    AtomicFetchOpHandle, AtomicOpHandle, AtomicCompareExchangeOpHandle, Deserialize, RdmaHandle, Remote, Serialize,
 };
 
 use derive_more::{Add, Into, Sub};
@@ -1988,6 +1988,148 @@ impl CommAllocAtomic for CommAllocInner {
             #[cfg(feature = "enable-rofi-c")]
             CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => {
                 inner_alloc.blocking_atomic_fetch_op(op, pe, offset)
+            }
+        }
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::RofiCAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => {
+                inner_alloc.atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+            }
+        }
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        match self {
+            CommAllocInner::Raw(_addr, _size) => {
+                panic!("Raw allocation not supported")
+            }
+            CommAllocInner::LocalAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            CommAllocInner::ShmemAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            CommAllocInner::OneSidedShmemAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::LibfabricMtAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricMtAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric")]
+            CommAllocInner::OneSidedLibfabricAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::LibfabricAsyncAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-libfabric-async")]
+            CommAllocInner::OneSidedLibfabricAsyncAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::UcxMtAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-ucx")]
+            CommAllocInner::OneSidedUcxMtAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::RofiCAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
+            }
+            #[cfg(feature = "enable-rofi-c")]
+            CommAllocInner::OneSidedRofiCAlloc(inner_alloc) => {
+                inner_alloc.blocking_atomic_compare_exchange(current, new, pe, offset)
             }
         }
     }

@@ -126,7 +126,7 @@ impl Endpoint {
     }
 
     // When to use ep_wait_all vs worker wait all?
-    #[allow(dead_code)]
+    // #[allow(dead_code)]
     pub(crate) fn ep_wait_all(&self) -> Result<(), Error> {
         let params = ucp_request_param_t {
             op_attr_mask: 0,
@@ -364,6 +364,43 @@ impl Endpoint {
         } else {
             None
         }
+    }
+
+    pub(crate) fn atomic_compare_swap<T>(
+        &self,
+        compare: T,
+        reply_buf: *mut T,
+        remote_addr: usize,
+        rkey: &RKey,
+    ) -> UcxRequest {
+        assert!(std::mem::size_of::<T>() == 8 || std::mem::size_of::<T>() == 4);
+        let request = unsafe {
+            ucp_atomic_op_nbx(
+                self.handle,
+                ucp_atomic_op_t::UCP_ATOMIC_OP_CSWAP,
+                &compare as *const T as _,
+                1 as _,
+                remote_addr as _,
+                rkey.handle,
+                &ucp_request_param_t {
+                    op_attr_mask: ucp_op_attr_t::UCP_OP_ATTR_FIELD_DATATYPE as u32
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_REPLY_BUFFER as u32
+                        | ucp_op_attr_t::UCP_OP_ATTR_FIELD_MEMORY_TYPE as u32,
+                    flags: 0,
+                    request: std::ptr::null_mut(),
+                    cb: ucp_request_param_t__bindgen_ty_1 { send: None },
+                    datatype: ucp_dt_make_contig(std::mem::size_of::<T>() as _),
+                    user_data: std::ptr::null_mut(),
+                    reply_buffer: reply_buf as *mut _,
+                    memory_type: ucs_memory_type::UCS_MEMORY_TYPE_HOST,
+                    recv_info: ucp_request_param_t__bindgen_ty_2 {
+                        length: std::ptr::null_mut(),
+                    },
+                    memh: std::ptr::null_mut(),
+                },
+            )
+        };
+        UcxRequest::new(request, self.worker.clone(), false)
     }
 
     pub(crate) fn atomic_fetch_op<T>(

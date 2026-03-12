@@ -1,8 +1,8 @@
 use crate::{
     active_messaging::AMCounters,
     lamellae::comm::atomic::{
-        AtomicFetchOpFuture, AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
-        CommAllocAtomic,
+        AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
+        AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle, CommAllocAtomic,
     },
     warnings::RuntimeWarning,
     LamellarTask, Remote,
@@ -22,6 +22,14 @@ use std::{
 };
 
 use tracing::trace;
+
+fn compare_exchange_result<T: PartialEq>(old: T, current: T) -> Result<T, T> {
+    if old == current {
+        Ok(old)
+    } else {
+        Err(old)
+    }
+}
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct UcxMtAtomicFuture<T> {
@@ -184,6 +192,90 @@ impl<T: Remote + Send + 'static> Future for UcxMtAtomicFetchFuture<T> {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub(crate) struct UcxMtAtomicCompareExchangeFuture<T> {
+    pub(crate) alloc: UcxMtAlloc,
+    pub(super) remote_pe: usize,
+    pub(crate) offset: usize,
+    pub(super) current: T,
+    pub(super) new: T,
+    pub(crate) result: Box<T>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+    pub(crate) request: Option<UcxRequest>,
+}
+
+impl<T: Remote + Send + PartialEq + 'static> UcxMtAtomicCompareExchangeFuture<T> {
+    fn exec_op(&mut self) {
+        // Pre-initialize result with `new` (UCX CSWAP uses reply_buf as both Z input and result output)
+        *self.result = self.new;
+        self.request = UcxMtAlloc::inner_atomic_compare_exchange_op(
+            &self.alloc,
+            self.remote_pe,
+            self.offset,
+            false,
+            self.current,
+            std::slice::from_mut(self.result.as_mut()),
+        );
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) -> Result<T, T> {
+        self.exec_op();
+        if let Some(request) = self.request.take() {
+            request.wait().expect("Failed to wait for UcxRequest");
+        }
+        compare_exchange_result(*self.result, self.current)
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
+        self.exec_op();
+        let current = self.current;
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(
+            async move {
+                if let Some(request) = self.request.take() {
+                    request.wait().expect("Failed to wait for UcxRequest");
+                }
+                compare_exchange_result(*self.result, current)
+            },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for UcxMtAtomicCompareExchangeFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<UcxMtAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHandle<T> {
+    fn from(f: UcxMtAtomicCompareExchangeFuture<T>) -> AtomicCompareExchangeOpHandle<T> {
+        AtomicCompareExchangeOpHandle {
+            future: AtomicCompareExchangeFuture::UcxMt(f),
+        }
+    }
+}
+
+impl<T: Remote + Send + PartialEq + 'static> Future for UcxMtAtomicCompareExchangeFuture<T> {
+    type Output = Result<T, T>;
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        if let Some(request) = self.request.take() {
+            request.wait().expect("Failed to wait for UcxRequest");
+        }
+        Poll::Ready(compare_exchange_result(*self.result, self.current))
+    }
+}
+
 impl CommAllocAtomic for UcxMtAlloc {
     fn atomic_op<T: Remote>(
         &self,
@@ -270,6 +362,49 @@ impl CommAllocAtomic for UcxMtAlloc {
             std::slice::from_mut(&mut result),
         );
         result
+    }
+
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        UcxMtAtomicCompareExchangeFuture {
+            alloc: self.clone(),
+            remote_pe: pe,
+            offset,
+            current,
+            new,
+            result: Box::new(new),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        let mut result = new;
+        UcxMtAlloc::inner_atomic_compare_exchange_op(
+            self,
+            pe,
+            offset,
+            true,
+            current,
+            std::slice::from_mut(&mut result),
+        );
+        compare_exchange_result(result, current)
     }
 }
 
@@ -371,5 +506,58 @@ impl CommAllocAtomic for OneSidedUcxMtAlloc {
             std::slice::from_mut(&mut result),
         );
         result
+    }
+
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic compare exchange called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        UcxMtAtomicCompareExchangeFuture {
+            alloc: self.alloc.clone(),
+            remote_pe: pe,
+            offset,
+            current,
+            new,
+            result: Box::new(new),
+            spawned: false,
+            scheduler: scheduler.clone(),
+            counters,
+            request: None,
+        }
+        .into()
+    }
+
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking atomic compare exchange called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let mut result = new;
+        UcxMtAlloc::inner_atomic_compare_exchange_op(
+            &self.alloc,
+            pe,
+            offset,
+            true,
+            current,
+            std::slice::from_mut(&mut result),
+        );
+        compare_exchange_result(result, current)
     }
 }

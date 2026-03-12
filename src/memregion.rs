@@ -1331,6 +1331,46 @@ impl<T: Remote> MemoryRegion<T> {
         Ok(self.alloc.as_comm_slice())
     }
 }
+impl<T: Remote + PartialEq> MemoryRegion<T> {
+     pub(crate) fn atomic_compare_exchange(
+        &self,
+        pe: usize,
+        index: usize,
+        current: T,
+        new: T,
+    ) -> crate::lamellae::AtomicCompareExchangeOpHandle<T> {
+        trace!(
+            "atomic_compare_exchange memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc.inner_alloc.atomic_compare_exchange(
+            &self.scheduler,
+            self.counters.clone(),
+            current,
+            new,
+            pe,
+            index,
+        )
+    }
+
+    pub(crate) fn atomic_compare_exchange_blocking(
+        &self,
+        pe: usize,
+        index: usize,
+        current: T,
+        new: T,
+    ) -> Result<T, T> {
+        trace!(
+            "atomic_compare_exchange blocking memregion {:?} index: {:?}",
+            self.alloc,
+            index
+        );
+        self.alloc
+            .inner_alloc
+            .blocking_atomic_compare_exchange(current, new, pe, index)
+    }
+}
 
 impl<T: Remote> MemRegionId for MemoryRegion<T> {
     #[tracing::instrument(skip_all, level = "debug")]

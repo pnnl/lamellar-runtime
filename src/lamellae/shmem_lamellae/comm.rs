@@ -1,12 +1,15 @@
 use crate::{
     config,
-    lamellae::comm::{CommInfo, CommProgress, CommShutdown},
+    lamellae::{
+        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
+        comm::atomic::atomic_type_supported,
+    },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
     Backend,
 };
 
 use super::{
-    fabric::{ShmemAlloc, ShmemAllocator},
+    fabric::{ ShmemAlloc,ShmemAllocator},
     CommandQueue,
 };
 
@@ -108,31 +111,10 @@ impl CommInfo for ShmemComm {
         Backend::Shmem
     }
     fn atomic_avail<T: 'static>(&self) -> bool {
-        let id = std::any::TypeId::of::<T>();
-
-        if id == std::any::TypeId::of::<u8>() {
-            true
-        } else if id == std::any::TypeId::of::<u16>() {
-            true
-        } else if id == std::any::TypeId::of::<u32>() {
-            true
-        } else if id == std::any::TypeId::of::<u64>() {
-            true
-        } else if id == std::any::TypeId::of::<i8>() {
-            true
-        } else if id == std::any::TypeId::of::<i16>() {
-            true
-        } else if id == std::any::TypeId::of::<i32>() {
-            true
-        } else if id == std::any::TypeId::of::<i64>() {
-            true
-        } else if id == std::any::TypeId::of::<usize>() {
-            true
-        } else if id == std::any::TypeId::of::<isize>() {
-            true
-        } else {
-            false
-        }
+        atomic_type_supported::<T>()
+    }
+    fn atomic_op_avail<T: 'static>(&self, _op: AtomicOp<T>) -> bool {
+        atomic_type_supported::<T>()
     }
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64

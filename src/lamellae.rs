@@ -9,7 +9,7 @@ pub(crate) mod shmem_utils;
 use crate::{active_messaging::Msg, config, lamellar_arch::LamellarArchRT, scheduler::Scheduler};
 pub(crate) use comm::*;
 
-pub use comm::atomic::{AtomicFetchOpHandle, AtomicOpHandle};
+pub use comm::atomic::{AtomicFetchOpHandle, AtomicOpHandle, AtomicCompareExchangeOpHandle};
 pub use comm::rdma::RdmaHandle;
 use local_lamellae::{Local, LocalBuilder};
 use shmem_lamellae::{Shmem, ShmemBuilder};
@@ -98,19 +98,6 @@ impl Default for Backend {
                 #[cfg(not(feature = "enable-rofi-c"))]
                 panic!("unable to set rofi C backend, recompile with 'enable-rofi-c' feature")
             }
-            "rofi_rust" => {
-                #[cfg(feature = "enable-rofi-rust")]
-                return Backend::RofiRust;
-                #[cfg(not(feature = "enable-rofi-rust"))]
-                panic!("unable to set rofi-rust backend, recompile with 'enable-rofi-rust' feature")
-            }
-            "rofi_rust_async" => {
-                #[cfg(feature = "enable-rofi-rust")]
-                return Backend::RofiRustAsync;
-                #[cfg(not(feature = "enable-rofi-rust"))]
-                panic!("unable to set rofi-rust backend, recompile with 'enable-rofi-rust' feature")
-            }
-
             "libfabric" => {
                 #[cfg(feature = "enable-libfabric")]
                 return Backend::Libfabric;
@@ -483,12 +470,6 @@ pub(crate) fn create_lamellae(backend: Backend, num_threads: usize) -> LamellaeB
                 &domain,
                 num_threads,
             ))
-        }
-        #[cfg(feature = "enable-libfabric-async")]
-        Backend::LibfabricAsync => {
-            let provider = config().rofi_provider.clone();
-            let domain = config().rofi_domain.clone();
-            LamellaeBuilder::LibfabricAsyncBuilder(LibfabricAsyncBuilder::new(&provider, &domain))
         }
         #[cfg(feature = "enable-libfabric-async")]
         Backend::LibfabricAsync => {

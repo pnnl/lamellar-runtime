@@ -114,6 +114,14 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
     }
 
+    fn blocking_bit_and(&self, index: usize, val: T) {
+        self.bit_and(index, val).block();
+    }
+
+    fn bit_and_unmanaged(&self, index: usize, val: T) {
+        let _ = self.bit_and(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -190,6 +198,10 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    fn blocking_fetch_bit_and(&self, index: usize, val: T) -> T {
+        self.fetch_bit_and(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -257,6 +269,14 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
+    }
+
+    fn blocking_bit_or(&self, index: usize, val: T) {
+        self.bit_or(index, val).block();
+    }
+
+    fn bit_or_unmanaged(&self, index: usize, val: T) {
+        let _ = self.bit_or(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
@@ -335,6 +355,10 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    fn blocking_fetch_bit_or(&self, index: usize, val: T) -> T {
+        self.fetch_bit_or(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -402,6 +426,14 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
     fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
+    }
+
+    fn blocking_bit_xor(&self, index: usize, val: T) {
+        self.bit_xor(index, val).block();
+    }
+
+    fn bit_xor_unmanaged(&self, index: usize, val: T) {
+        let _ = self.bit_xor(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,
@@ -478,6 +510,10 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    fn blocking_fetch_bit_xor(&self, index: usize, val: T) -> T {
+        self.fetch_bit_xor(index, val).block()
     }
 
     /// This call performs a batched vesion of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,
@@ -613,6 +649,14 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
     }
 
+    unsafe fn blocking_bit_and(&self, index: usize, val: T) {
+        self.bit_and(index, val).block();
+    }
+
+    unsafe fn bit_and_unmanaged(&self, index: usize, val: T) {
+        let _ = self.bit_and(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -689,6 +733,10 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .into()
     }
 
+    unsafe fn blocking_fetch_bit_and(&self, index: usize, val: T) -> T {
+        self.fetch_bit_and(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -756,6 +804,14 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
+    }
+
+    unsafe fn blocking_bit_or(&self, index: usize, val: T) {
+        self.bit_or(index, val).block();
+    }
+
+    unsafe fn bit_or_unmanaged(&self, index: usize, val: T) {
+        let _ = self.bit_or(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
@@ -834,6 +890,10 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .into()
     }
 
+    unsafe fn blocking_fetch_bit_or(&self, index: usize, val: T) -> T {
+        self.fetch_bit_or(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -901,6 +961,14 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
     unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
+    }
+
+    unsafe fn blocking_bit_xor(&self, index: usize, val: T) {
+        self.bit_xor(index, val).block();
+    }
+
+    unsafe fn bit_xor_unmanaged(&self, index: usize, val: T) {
+        let _ = self.bit_xor(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,
@@ -977,6 +1045,10 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    unsafe fn blocking_fetch_bit_xor(&self, index: usize, val: T) -> T {
+        self.fetch_bit_xor(index, val).block()
     }
 
     /// This call performs a batched vesion of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,

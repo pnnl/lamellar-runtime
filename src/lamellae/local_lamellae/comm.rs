@@ -1,6 +1,7 @@
 use crate::{
     lamellae::{
-        comm::{CommInfo, CommProgress, CommShutdown},
+        comm::{AtomicOp, CommInfo, CommProgress, CommShutdown},
+        comm::atomic::atomic_type_supported,
         AllocError, AllocResult, CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType,
     },
     Backend,
@@ -114,7 +115,10 @@ impl CommInfo for LocalComm {
         Backend::Local
     }
     fn atomic_avail<T: 'static>(&self) -> bool {
-        false
+        atomic_type_supported::<T>()
+    }
+    fn atomic_op_avail<T: 'static>(&self, _op: AtomicOp<T>) -> bool {
+        atomic_type_supported::<T>()
     }
     fn MB_sent(&self) -> f64 {
         (self.put_amt.load(Ordering::SeqCst) + self.get_amt.load(Ordering::SeqCst)) as f64

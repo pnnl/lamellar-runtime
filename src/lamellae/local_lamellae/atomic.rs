@@ -2,10 +2,12 @@ use crate::{
     active_messaging::AMCounters,
     lamellae::{
         comm::atomic::{
-            AtomicFetchOpFuture, AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
+            AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
+            AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
         },
         local_lamellae::comm::LocalAlloc,
-        net_atomic_fetch_op, net_atomic_op, CommAllocAddr, CommAllocAtomic,
+        net_atomic_compare_exchange, net_atomic_fetch_op, net_atomic_op, CommAllocAddr,
+        CommAllocAtomic,
     },
     warnings::RuntimeWarning,
     LamellarTask, Remote,
@@ -139,6 +141,73 @@ impl<T: Remote> Future for LocalAtomicFetchFuture<T> {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub(crate) struct LocalAtomicCompareExchangeFuture<T> {
+    alloc: Arc<LocalAlloc>,
+    offset: usize,
+    current: T,
+    new: T,
+    result: Option<Result<T, T>>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+}
+
+impl<T: Remote> LocalAtomicCompareExchangeFuture<T> {
+    fn exec_op(&mut self) {
+        assert!(self.offset < unsafe { self.alloc.as_mut_slice::<T>().len() });
+        self.result = Some(net_atomic_compare_exchange(
+            self.current,
+            self.new,
+            &CommAllocAddr(self.alloc.start() + self.offset),
+        ));
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) -> Result<T, T> {
+        self.exec_op();
+        self.result.take().expect("compare_exchange result should be set")
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
+        self.exec_op();
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(
+            async move { self.result.take().expect("compare_exchange result should be set") },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LocalAtomicCompareExchangeFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<LocalAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHandle<T> {
+    fn from(f: LocalAtomicCompareExchangeFuture<T>) -> AtomicCompareExchangeOpHandle<T> {
+        AtomicCompareExchangeOpHandle {
+            future: AtomicCompareExchangeFuture::Local(f),
+        }
+    }
+}
+
+impl<T: Remote> Future for LocalAtomicCompareExchangeFuture<T> {
+    type Output = Result<T, T>;
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        Poll::Ready(self.result.take().expect("compare_exchange result should be set"))
+    }
+}
+
 impl CommAllocAtomic for Arc<LocalAlloc> {
     fn atomic_op<T: Remote>(
         &self,
@@ -211,5 +280,36 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         let mut result = T::default();
         net_atomic_fetch_op(&op, &CommAllocAddr(self.start() + offset), &mut result);
         result
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        _pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        LocalAtomicCompareExchangeFuture {
+            alloc: self.clone(),
+            offset,
+            current,
+            new,
+            result: None,
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        _pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
+        net_atomic_compare_exchange(current, new, &CommAllocAddr(self.start() + offset))
     }
 }

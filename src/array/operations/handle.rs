@@ -1,6 +1,9 @@
 use crate::{
     array::{AmDist, LamellarByteArray},
-    lamellae::{AtomicFetchOpHandle, AtomicOpHandle, RdmaGetHandle, Remote},
+    lamellae::{
+        AtomicCompareExchangeOpHandle, AtomicFetchOpHandle, AtomicOpHandle, RdmaGetHandle,
+        Remote,
+    },
     lamellar_request::LamellarRequest,
     scheduler::LamellarTask,
     warnings::RuntimeWarning,
@@ -435,18 +438,19 @@ impl<R: AmDist> Future for ArrayFetchBatchOpHandle<R> {
 
 /// a task handle for a single array operation that returns a result
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
-pub struct ArrayResultOpHandle<R: AmDist> {
+pub struct ArrayResultOpHandle<R: Dist + PartialEq> {
     // dropped handle triggered by AmHandle
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) state: ResultOpState<R>,
 }
 
-pub(crate) enum ResultOpState<R: AmDist> {
+pub(crate) enum ResultOpState<R: Remote + PartialEq> {
     Req(AmHandle<Vec<Result<R, R>>>),
+    Network(AtomicCompareExchangeOpHandle<R>),
     Launched(LamellarTask<Vec<Result<R, R>>>),
 }
 
-impl<R: AmDist> ArrayResultOpHandle<R> {
+impl<R: Dist + PartialEq> ArrayResultOpHandle<R> {
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -458,6 +462,7 @@ impl<R: AmDist> ArrayResultOpHandle<R> {
                 self.state = ResultOpState::Launched(req.spawn());
                 self.array.team().spawn(self)
             }
+            ResultOpState::Network(handle) => handle.spawn(),
             _ => panic!("ArrayResultOpHandle should already have been spawned"),
         }
     }
@@ -474,12 +479,13 @@ impl<R: AmDist> ArrayResultOpHandle<R> {
                 self.state = ResultOpState::Launched(req.spawn());
                 self.array.team().block_on(self)
             }
+            ResultOpState::Network(handle) => handle.block(),
             ResultOpState::Launched(ref _req) => self.array.team().block_on(self),
         }
     }
 }
 
-impl<R: AmDist> Future for ArrayResultOpHandle<R> {
+impl<R: Dist + PartialEq> Future for ArrayResultOpHandle<R> {
     type Output = Result<R, R>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match &mut self.state {
@@ -487,6 +493,9 @@ impl<R: AmDist> Future for ArrayResultOpHandle<R> {
                 if req.ready_or_set_waker(cx.waker()) {
                     return Poll::Ready(req.val().pop().expect("should have a single request"));
                 }
+            }
+            ResultOpState::Network(req) => {
+                return Pin::new(req).poll(cx);
             }
             ResultOpState::Launched(req) => {
                 if let Poll::Ready(mut res) = Future::poll(Pin::new(req), cx) {
@@ -501,7 +510,7 @@ impl<R: AmDist> Future for ArrayResultOpHandle<R> {
 /// a task handle for a batched array operation that returns results
 #[pin_project(PinnedDrop)]
 #[must_use = "Array operation handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called. Ignoring the resulting value with 'let _ = ...' will cause the operation to NOT BE executed."]
-pub struct ArrayResultBatchOpHandle<R: AmDist> {
+pub struct ArrayResultBatchOpHandle<R: AmDist > {
     pub(crate) array: LamellarByteArray, //prevents prematurely performing a local drop
     pub(crate) state: BatchResultOpState<R>, //reqs: ,
     results: Vec<Result<R, R>>,
@@ -513,7 +522,7 @@ pub(crate) enum BatchResultOpState<R> {
 }
 
 #[pinned_drop]
-impl<R: AmDist> PinnedDrop for ArrayResultBatchOpHandle<R> {
+impl<R: AmDist > PinnedDrop for ArrayResultBatchOpHandle<R> {
     fn drop(self: Pin<&mut Self>) {
         let mut this = self.project();
         if let BatchResultOpState::Reqs(reqs) = &mut this.state {
@@ -525,7 +534,7 @@ impl<R: AmDist> PinnedDrop for ArrayResultBatchOpHandle<R> {
     }
 }
 
-impl<R: AmDist> ArrayResultBatchOpHandle<R> {
+impl<R: AmDist > ArrayResultBatchOpHandle<R> {
     /// This method will spawn the associated Array Operation on the work queue,
     /// initiating the remote operation.
     ///
@@ -566,7 +575,7 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
     }
 }
 
-impl<R: AmDist> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHandle<R> {
+impl<R: Dist + PartialEq> From<ArrayResultBatchOpHandle<R>> for ArrayResultOpHandle<R> {
     fn from(mut req: ArrayResultBatchOpHandle<R>) -> Self {
         let handle = match &mut req.state {
             BatchResultOpState::Reqs(reqs) => Self {
@@ -601,7 +610,7 @@ impl<R: AmDist> ArrayResultBatchOpHandle<R> {
     }
 }
 
-impl<R: AmDist> Future for ArrayResultBatchOpHandle<R> {
+impl<R: AmDist > Future for ArrayResultBatchOpHandle<R> {
     type Output = Vec<Result<R, R>>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();

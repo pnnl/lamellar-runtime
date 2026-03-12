@@ -83,7 +83,7 @@ impl<T> CommSlice<T> {
     }
 
     pub(crate) fn index_addr(&self, index: usize) -> CommAllocAddr {
-        assert!(index < self.inner_alloc.size());
+        assert!(index < self.len());
         self.inner_alloc.addr() + index * std::mem::size_of::<T>()
     }
 

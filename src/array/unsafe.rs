@@ -74,6 +74,7 @@ pub(crate) struct UnsafeAtomicOpSupport {
     pub(crate) load: bool, //read
     pub(crate) store: bool, //write
     pub(crate) swap: bool, //cas
+    pub(crate) cas: bool,
     pub(crate) add: bool, // this is for add and sub
     pub(crate) fetch_add: bool,
     pub(crate) prod: bool,
@@ -367,6 +368,7 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             load: comm.atomic_op_avail::<T>(AtomicOp::Read),
             store: comm.atomic_op_avail::<T>(AtomicOp::Write(sample)),
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(sample)),
+            cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(sample, sample)),
             add: comm.atomic_op_avail::<T>(AtomicOp::Sum(sample)),
             fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(sample)),
             prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(sample)),

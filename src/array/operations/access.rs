@@ -104,6 +104,10 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
         self.store(index, val).block();
     }
 
+    fn store_unmanaged(&self, index: usize, val: T) {
+        let _ = self.store(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [store][AccessOps::store] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -314,6 +318,10 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
 
     unsafe fn blocking_store(&self, index: usize, val: T) {
         self.store(index, val).block();
+    }
+
+    unsafe fn store_unmanaged(&self, index: usize, val: T) {
+        let _ = self.store(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [store][AccessOps::store] function,

@@ -1,24 +1,30 @@
 #[cfg(feature = "enable-libfabric-async")]
 use crate::lamellae::libfabric_async_lamellae::atomic::{
-    LibfabricAsyncAtomicFetchFuture, LibfabricAsyncAtomicFuture,
+    LibfabricAsyncAtomicCompareExchangeFuture, LibfabricAsyncAtomicFetchFuture,
+    LibfabricAsyncAtomicFuture,
 };
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::atomic::{
-    LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
+    LibfabricAtomicCompareExchangeFuture, LibfabricAtomicFetchFuture, LibfabricAtomicFuture,
 };
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae_mt::atomic::{
-    LibfabricMtAtomicFetchFuture, LibfabricMtAtomicFuture,
+    LibfabricMtAtomicCompareExchangeFuture, LibfabricMtAtomicFetchFuture,
+    LibfabricMtAtomicFuture,
 };
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::atomic::{UcxAtomicFetchFuture, UcxAtomicFuture};
 #[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae::atomic::UcxAtomicCompareExchangeFuture;
+#[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae_mt::atomic::{UcxMtAtomicFetchFuture, UcxMtAtomicFuture};
+#[cfg(feature = "enable-ucx")]
+use crate::lamellae::ucx_lamellae_mt::atomic::UcxMtAtomicCompareExchangeFuture;
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
-        local_lamellae::atomic::{LocalAtomicFetchFuture, LocalAtomicFuture},
-        shmem_lamellae::atomic::{ShmemAtomicFetchFuture, ShmemAtomicFuture},
+        local_lamellae::atomic::{LocalAtomicFetchFuture, LocalAtomicFuture,LocalAtomicCompareExchangeFuture},
+        shmem_lamellae::atomic::{ShmemAtomicFetchFuture, ShmemAtomicFuture,ShmemAtomicCompareExchangeFuture},
         CommAllocAddr,
     },
     scheduler::Scheduler,
@@ -26,11 +32,26 @@ use crate::{
 };
 
 use futures_util::Future;
+pub(crate) fn atomic_type_supported<T: 'static>() -> bool {
+    let type_id = std::any::TypeId::of::<T>();
+    type_id == std::any::TypeId::of::<u8>()
+        || type_id == std::any::TypeId::of::<u16>()
+        || type_id == std::any::TypeId::of::<u32>()
+        || type_id == std::any::TypeId::of::<u64>()
+        || type_id == std::any::TypeId::of::<usize>()
+        || type_id == std::any::TypeId::of::<i8>()
+        || type_id == std::any::TypeId::of::<i16>()
+        || type_id == std::any::TypeId::of::<i32>()
+        || type_id == std::any::TypeId::of::<i64>()
+        || type_id == std::any::TypeId::of::<isize>()
+}
+
 use pin_project::pin_project;
 use std::{
     pin::Pin,
     sync::{atomic::*, Arc},
     task::{Context, Poll},
+    cmp::PartialEq,
 };
 // pub(crate) trait NetworkAtomic {
 //     fn supported() -> bool {
@@ -267,6 +288,88 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
     }
 }
 
+#[must_use = " AtomicCompareExchangeOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+#[pin_project]
+pub struct AtomicCompareExchangeOpHandle<T> {
+    #[pin]
+    pub(crate) future: AtomicCompareExchangeFuture<T>,
+}
+
+#[pin_project(project = AtomicCompareExchangeFutureProj)]
+pub(crate) enum AtomicCompareExchangeFuture<T> {
+    #[cfg(feature = "enable-libfabric")]
+    Libfabric(#[pin] LibfabricAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-libfabric")]
+    LibfabricMt(#[pin] LibfabricMtAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-libfabric-async")]
+    LibfabricAsync(#[pin] LibfabricAsyncAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    Ucx(#[pin] UcxAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-ucx")]
+    UcxMt(#[pin] UcxMtAtomicCompareExchangeFuture<T>),
+    Shmem(#[pin] ShmemAtomicCompareExchangeFuture<T>),
+    Local(#[pin] LocalAtomicCompareExchangeFuture<T>),
+}
+
+impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
+    pub fn block(self) -> Result<T, T> {
+        match self.future {
+            #[cfg(feature = "enable-libfabric")]
+            AtomicCompareExchangeFuture::Libfabric(f) => f.block(),
+            #[cfg(feature = "enable-libfabric")]
+            AtomicCompareExchangeFuture::LibfabricMt(f) => f.block(),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicCompareExchangeFuture::LibfabricAsync(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicCompareExchangeFuture::Ucx(f) => f.block(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicCompareExchangeFuture::UcxMt(f) => f.block(),
+            AtomicCompareExchangeFuture::Shmem(f) => f.block(),
+            AtomicCompareExchangeFuture::Local(f) => f.block(),
+        }
+    }
+
+    #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
+    pub fn spawn(self) -> LamellarTask<Result<T, T>> {
+        match self.future {
+            #[cfg(feature = "enable-libfabric")]
+            AtomicCompareExchangeFuture::Libfabric(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric")]
+            AtomicCompareExchangeFuture::LibfabricMt(f) => f.spawn(),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicCompareExchangeFuture::LibfabricAsync(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicCompareExchangeFuture::Ucx(f) => f.spawn(),
+            #[cfg(feature = "enable-ucx")]
+            AtomicCompareExchangeFuture::UcxMt(f) => f.spawn(),
+            AtomicCompareExchangeFuture::Shmem(f) => f.spawn(),
+            AtomicCompareExchangeFuture::Local(f) => f.spawn(),
+        }
+    }
+}
+
+impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
+    type Output = Result<T, T>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        match this.future.project() {
+            #[cfg(feature = "enable-libfabric")]
+            AtomicCompareExchangeFutureProj::Libfabric(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric")]
+            AtomicCompareExchangeFutureProj::LibfabricMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-libfabric-async")]
+            AtomicCompareExchangeFutureProj::LibfabricAsync(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            AtomicCompareExchangeFutureProj::Ucx(f) => f.poll(cx),
+            #[cfg(feature = "enable-ucx")]
+            AtomicCompareExchangeFutureProj::UcxMt(f) => f.poll(cx),
+            AtomicCompareExchangeFutureProj::Shmem(f) => f.poll(cx),
+            AtomicCompareExchangeFutureProj::Local(f) => f.poll(cx),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) enum AtomicOp<T> {
     Min(T),
@@ -346,6 +449,36 @@ pub(crate) trait CommAllocAtomic {
         offset: usize,
     ) -> AtomicFetchOpHandle<T>;
     fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T;
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        let _ = scheduler;
+        let _ = counters;
+        let _ = current;
+        let _ = new;
+        let _ = pe;
+        let _ = offset;
+        panic!("atomic_compare_exchange not supported for this backend")
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        let _ = current;
+        let _ = new;
+        let _ = pe;
+        let _ = offset;
+        panic!("blocking_atomic_compare_exchange not supported for this backend")
+    }
 }
 
 pub(crate) trait AsAtomic: Copy + std::fmt::Debug {
@@ -360,9 +493,7 @@ pub(crate) trait AsAtomic: Copy + std::fmt::Debug {
     fn fetch_xor(&mut self, val: Self) -> Self;
     fn fetch_max(&mut self, val: Self) -> Self;
     fn fetch_min(&mut self, val: Self) -> Self;
-    // fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>
-    // where
-    //     Self: Sized;
+    fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self>;
 }
 
 //create a macro the implements AsAtomic for all the primitive integer types
@@ -425,10 +556,10 @@ macro_rules! impl_as_atomic {
                     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
                     atomic.fetch_min(val, Ordering::SeqCst)
                 }
-                // fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self> {
-                //     let atomic = unsafe { &*(self as *mut $t as *mut $a) };
-                //     atomic.compare_exchange(current, new, Ordering::SeqCst , Ordering::Relaxed)
-                // }
+                fn compare_exchange(&mut self, current: Self, new: Self) -> Result<Self, Self> {
+                    let atomic = unsafe { &*(self as *mut $t as *mut $a) };
+                    atomic.compare_exchange(current, new, Ordering::SeqCst, Ordering::SeqCst)
+                }
             }
         )*
     };
@@ -450,7 +581,7 @@ impl_as_atomic!(
 //TODO maybe I need to change this to mutable reference? so that the compiler knows we are changing the data?
 
 pub(crate) fn net_atomic_op<T: 'static>(op: &AtomicOp<T>, dst_addr: &CommAllocAddr) {
-    println!("net_atomic_op called dst_addr: {:x}", dst_addr);
+    // println!("net_atomic_op called dst_addr: {:x}", dst_addr);
     unsafe {
         if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
             // println!("im here u8");
@@ -515,6 +646,38 @@ pub(crate) fn net_atomic_fetch_op<T: 'static>(
     }
 }
 
+pub(crate) fn net_atomic_compare_exchange<T: Copy + 'static>(
+    current: T,
+    new: T,
+    dst_addr: &CommAllocAddr,
+) -> Result<T, T> {
+    unsafe {
+        if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u8>() {
+            typed_atomic_compare_exchange::<u8, T>(current, new, &*(dst_addr.as_ptr() as *const u8))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u16>() {
+            typed_atomic_compare_exchange::<u16, T>(current, new, &*(dst_addr.as_ptr() as *const u16))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u32>() {
+            typed_atomic_compare_exchange::<u32, T>(current, new, &*(dst_addr.as_ptr() as *const u32))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<u64>() {
+            typed_atomic_compare_exchange::<u64, T>(current, new, &*(dst_addr.as_ptr() as *const u64))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<usize>() {
+            typed_atomic_compare_exchange::<usize, T>(current, new, &*(dst_addr.as_ptr() as *const usize))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i8>() {
+            typed_atomic_compare_exchange::<i8, T>(current, new, &*(dst_addr.as_ptr() as *const i8))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i16>() {
+            typed_atomic_compare_exchange::<i16, T>(current, new, &*(dst_addr.as_ptr() as *const i16))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i32>() {
+            typed_atomic_compare_exchange::<i32, T>(current, new, &*(dst_addr.as_ptr() as *const i32))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<i64>() {
+            typed_atomic_compare_exchange::<i64, T>(current, new, &*(dst_addr.as_ptr() as *const i64))
+        } else if std::any::TypeId::of::<T>() == std::any::TypeId::of::<isize>() {
+            typed_atomic_compare_exchange::<isize, T>(current, new, &*(dst_addr.as_ptr() as *const isize))
+        } else {
+            panic!("Unsupported atomic operation type");
+        }
+    }
+}
+
 unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     match op {
@@ -567,6 +730,19 @@ unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A,
         AtomicOp::Cas(_, _) => panic!("Cas atomic op not supported in this context"),
     };
     (result as *mut A).write(res);
+}
+
+unsafe fn typed_atomic_compare_exchange<A: AsAtomic, T: Copy>(
+    current: T,
+    new: T,
+    dst: *const A,
+) -> Result<T, T> {
+    let current = *(&current as *const T as *const A);
+    let new = *(&new as *const T as *const A);
+    match (&mut *(dst as *mut A)).compare_exchange(current, new) {
+        Ok(old) => Ok(*(&old as *const A as *const T)),
+        Err(old) => Err(*(&old as *const A as *const T)),
+    }
 }
 
 //TODO compare and swap

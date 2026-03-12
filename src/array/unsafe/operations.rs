@@ -1212,6 +1212,19 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
         }
     }
 
+    unsafe fn store_unmanaged(&self, index: usize, val: T) {
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            unsafe {
+                self.mem_region.put_unmanaged(pe, offset, val);
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
     unsafe fn swap<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
         // println!("in Network atomic swap");
         if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
@@ -1253,13 +1266,637 @@ impl<T: ElementOps + 'static> UnsafeAccessOps<T> for UnsafeArray<T> {
     }
 }
 
-impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T> {}
+impl<T: ElementArithmeticOps + 'static> UnsafeArithmeticOps<T> for UnsafeArray<T> {
+    unsafe fn add<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.atomic_support.add {
+            return self.initiate_op(val, index, ArrayOpCmd::Add, self.clone().into());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Sum(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
 
-impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {}
+    unsafe fn blocking_add(&self, index: usize, val: T) {
+        if !self.atomic_support.add {
+            self.initiate_op(val, index, ArrayOpCmd::Add, self.clone().into())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::Sum(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn add_unmanaged(&self, index: usize, val: T) {
+        if !self.atomic_support.add {
+            let _ = self
+                .initiate_op(val, index, ArrayOpCmd::Add, self.clone().into())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Sum(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.atomic_support.add {
+            return self.initiate_op(val, index, ArrayOpCmd::Sub, self.clone().into());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Sub(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn sub_unmanaged(&self, index: usize, val: T) {
+        if !self.atomic_support.add {
+            let _ = self
+                .initiate_op(val, index, ArrayOpCmd::Sub, self.clone().into())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Sub(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_sub(&self, index: usize, val: T) {
+        if !self.atomic_support.add {
+            self.initiate_op(val, index, ArrayOpCmd::Sub, self.clone().into())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::Sub(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn fetch_add<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.atomic_support.fetch_add {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAdd, self.clone().into())
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::Sum(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_fetch_add(&self, index: usize, val: T) -> T {
+        if !self.atomic_support.fetch_add {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAdd, self.clone().into())
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Sum(val))
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn fetch_sub<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.atomic_support.fetch_add {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchSub, self.clone().into())
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::Sub(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_fetch_sub(&self, index: usize, val: T) -> T {
+        if !self.atomic_support.fetch_add {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchSub, self.clone().into())
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Sub(val))
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.atomic_support.prod {
+            return self.initiate_op(val, index, ArrayOpCmd::Mul, self.clone().into());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::Prod(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_mul(&self, index: usize, val: T) {
+        if !self.atomic_support.prod {
+            self.initiate_op(val, index, ArrayOpCmd::Mul, self.clone().into())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::Prod(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn mul_unmanaged(&self, index: usize, val: T) {
+        if !self.atomic_support.prod {
+            let _ = self
+                .initiate_op(val, index, ArrayOpCmd::Mul, self.clone().into())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::Prod(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn fetch_mul<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.atomic_support.fetch_prod {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchMul, self.clone().into())
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::Prod(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_fetch_mul(&self, index: usize, val: T) -> T {
+        if !self.atomic_support.fetch_prod {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchMul, self.clone().into())
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::Prod(val))
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+}
+
+impl<T: ElementBitWiseOps + 'static> UnsafeBitWiseOps<T> for UnsafeArray<T> {
+    unsafe fn bit_and<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.atomic_support.bit_and {
+            return self.initiate_op(val, index, ArrayOpCmd::And, self.clone().into());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::BitAnd(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_bit_and(&self, index: usize, val: T) {
+        if !self.atomic_support.bit_and {
+            self.initiate_op(val, index, ArrayOpCmd::And, self.clone().into())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::BitAnd(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn bit_and_unmanaged(&self, index: usize, val: T) {
+        if !self.atomic_support.bit_and {
+            let _ = self
+                .initiate_op(val, index, ArrayOpCmd::And, self.clone().into())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::BitAnd(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_fetch_bit_and(&self, index: usize, val: T) -> T {
+        if !self.atomic_support.fetch_bit_and {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAnd, self.clone().into())
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::BitAnd(val))
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn fetch_bit_and<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.atomic_support.fetch_bit_and {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchAnd, self.clone().into())
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::BitAnd(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn bit_or<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.atomic_support.bit_or {
+            return self.initiate_op(val, index, ArrayOpCmd::Or, self.clone().into());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::BitOr(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_bit_or(&self, index: usize, val: T) {
+        if !self.atomic_support.bit_or {
+            self.initiate_op(val, index, ArrayOpCmd::Or, self.clone().into())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::BitOr(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn bit_or_unmanaged(&self, index: usize, val: T) {
+        if !self.atomic_support.bit_or {
+            let _ = self
+                .initiate_op(val, index, ArrayOpCmd::Or, self.clone().into())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::BitOr(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_fetch_bit_or(&self, index: usize, val: T) -> T {
+        if !self.atomic_support.fetch_bit_or {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchOr, self.clone().into())
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::BitOr(val))
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn fetch_bit_or<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.atomic_support.fetch_bit_or {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchOr, self.clone().into())
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::BitOr(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn bit_xor<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
+        if !self.atomic_support.bit_xor {
+            return self.initiate_op(val, index, ArrayOpCmd::Xor, self.clone().into());
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_op(pe, offset, AtomicOp::BitXor(val));
+            ArrayOpHandle {
+                array: self.clone().into(),
+                state: OpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_bit_xor(&self, index: usize, val: T) {
+        if !self.atomic_support.bit_xor {
+            self.initiate_op(val, index, ArrayOpCmd::Xor, self.clone().into())
+                .block();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_blocking(pe, offset, AtomicOp::BitXor(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn bit_xor_unmanaged(&self, index: usize, val: T) {
+        if !self.atomic_support.bit_xor {
+            let _ = self
+                .initiate_op(val, index, ArrayOpCmd::Xor, self.clone().into())
+                .spawn();
+            return;
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_op_unmanaged(pe, offset, AtomicOp::BitXor(val));
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn fetch_bit_xor<'a>(&self, index: usize, val: T) -> ArrayFetchOpHandle<T> {
+        if !self.atomic_support.fetch_bit_xor {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchXor, self.clone().into())
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_fetch_op(pe, offset, AtomicOp::BitXor(val));
+            ArrayFetchOpHandle {
+                array: self.clone().into(),
+                state: FetchOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_fetch_bit_xor(&self, index: usize, val: T) -> T {
+        if !self.atomic_support.fetch_bit_xor {
+            return self
+                .initiate_batch_fetch_op_2(val, index, ArrayOpCmd::FetchXor, self.clone().into())
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_fetch_op_blocking(pe, offset, AtomicOp::BitXor(val))
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+}
 
 impl<T: ElementShiftOps + 'static> UnsafeShiftOps<T> for UnsafeArray<T> {}
 
-impl<T: ElementCompareEqOps + 'static> UnsafeCompareExchangeOps<T> for UnsafeArray<T> {}
+impl<T: ElementCompareEqOps + 'static> UnsafeCompareExchangeOps<T> for UnsafeArray<T> {
+    unsafe fn compare_exchange<'a>(
+        &self,
+        index: usize,
+        current: T,
+        new: T,
+    ) -> ArrayResultOpHandle<T> {
+        if !self.atomic_support.cas {
+            return self
+                .initiate_batch_result_op_2(
+                    new,
+                    index,
+                    ArrayOpCmd::CompareExchange(current),
+                    self.clone().into(),
+                )
+                .into();
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            let handle = self
+                .mem_region
+                .atomic_compare_exchange(pe, offset, current, new);
+            ArrayResultOpHandle {
+                array: self.clone().into(),
+                state: ResultOpState::Network(handle),
+            }
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+
+    unsafe fn blocking_compare_exchange(
+        &self,
+        index: usize,
+        current: T,
+        new: T,
+    ) -> Result<T, T> {
+        if !self.atomic_support.cas {
+            return self
+                .initiate_batch_result_op_2(
+                    new,
+                    index,
+                    ArrayOpCmd::CompareExchange(current),
+                    self.clone().into(),
+                )
+                .block()[0];
+        }
+        if let Some((pe, offset)) = self.pe_and_offset_for_global_index(index) {
+            self.mem_region
+                .atomic_compare_exchange_blocking(pe, offset, current, new)
+        } else {
+            panic!(
+                "Index: {index} out of bounds for array of len: {:?}",
+                self.inner.size
+            );
+        }
+    }
+}
 
 impl<T: ElementComparePartialEqOps + 'static> UnsafeCompareExchangeEpsilonOps<T>
     for UnsafeArray<T>

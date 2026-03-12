@@ -134,6 +134,10 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
             .into()
     }
 
+    fn blocking_compare_exchange(&self, index: usize, current: T, new: T) -> Result<T, T> {
+        self.compare_exchange(index, current, new).block()
+    }
+
     /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
     ///
     /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
@@ -306,6 +310,16 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
             .into()
     }
 
+    fn blocking_compare_exchange_epsilon(
+        &self,
+        index: usize,
+        current: T,
+        new: T,
+        eps: T,
+    ) -> Result<T, T> {
+        self.compare_exchange_epsilon(index, current, new, eps).block()
+    }
+
     /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
     ///
     /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
@@ -465,6 +479,10 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    unsafe fn blocking_compare_exchange(&self, index: usize, current: T, new: T) -> Result<T, T> {
+        self.compare_exchange(index, current, new).block()
     }
 
     /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
@@ -634,6 +652,16 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    unsafe fn blocking_compare_exchange_epsilon(
+        &self,
+        index: usize,
+        current: T,
+        new: T,
+        eps: T,
+    ) -> Result<T, T> {
+        self.compare_exchange_epsilon(index, current, new, eps).block()
     }
 
     /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,

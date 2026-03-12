@@ -1,7 +1,8 @@
 use crate::{
     active_messaging::AMCounters,
     lamellae::comm::atomic::{
-        AtomicFetchOpFuture, AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
+        AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
+        AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle,
         CommAllocAtomic,
     },
     warnings::RuntimeWarning,
@@ -22,6 +23,14 @@ use std::{
 };
 
 use tracing::trace;
+
+fn compare_exchange_result<T: PartialEq>(old: T, current: T) -> Result<T, T> {
+    if old == current {
+        Ok(old)
+    } else {
+        Err(old)
+    }
+}
 
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricAtomicFuture<T> {
@@ -166,6 +175,77 @@ impl<T: Remote> Future for LibfabricAtomicFetchFuture<T> {
     }
 }
 
+#[pin_project(PinnedDrop)]
+pub(crate) struct LibfabricAtomicCompareExchangeFuture<T> {
+    pub(crate) alloc: LibfabricAlloc,
+    pub(super) remote_pe: usize,
+    pub(crate) offset: usize,
+    current: T,
+    new: T,
+    pub(crate) result: Box<T>,
+    pub(crate) scheduler: Arc<Scheduler>,
+    pub(crate) counters: Vec<Arc<AMCounters>>,
+    pub(crate) spawned: bool,
+}
+
+impl<T: Remote + PartialEq> LibfabricAtomicCompareExchangeFuture<T> {
+    fn exec_op(&mut self) {
+        LibfabricAlloc::atomic_compare_exchange_op_inner(
+            &self.alloc,
+            self.remote_pe,
+            self.offset,
+            self.current,
+            self.new,
+            std::slice::from_mut(self.result.as_mut()),
+            false,
+        )
+        .unwrap();
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) -> Result<T, T> {
+        self.exec_op();
+        self.alloc.ofi.wait_all().unwrap();
+        compare_exchange_result(*self.result, self.current)
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
+        self.exec_op();
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for LibfabricAtomicCompareExchangeFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<LibfabricAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHandle<T> {
+    fn from(f: LibfabricAtomicCompareExchangeFuture<T>) -> AtomicCompareExchangeOpHandle<T> {
+        AtomicCompareExchangeOpHandle {
+            future: AtomicCompareExchangeFuture::Libfabric(f),
+        }
+    }
+}
+
+impl<T: Remote + PartialEq> Future for LibfabricAtomicCompareExchangeFuture<T> {
+    type Output = Result<T, T>;
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.ofi.wait_all().unwrap();
+        Poll::Ready(compare_exchange_result(*self.result, self.current))
+    }
+}
+
 impl CommAllocAtomic for LibfabricAlloc {
     fn atomic_op<T: Remote>(
         &self,
@@ -241,6 +321,48 @@ impl CommAllocAtomic for LibfabricAlloc {
         LibfabricAlloc::atomic_fetch_op_inner(self, pe, offset, &op, mut_result_slice, true)
             .unwrap();
         result
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        LibfabricAtomicCompareExchangeFuture {
+            alloc: self.clone(),
+            remote_pe: pe,
+            offset,
+            current,
+            new,
+            result: Box::new(T::default()),
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        let mut result = T::default();
+        LibfabricAlloc::atomic_compare_exchange_op_inner(
+            self,
+            pe,
+            offset,
+            current,
+            new,
+            std::slice::from_mut(&mut result),
+            true,
+        )
+        .unwrap();
+        compare_exchange_result(result, current)
     }
 }
 
@@ -334,5 +456,57 @@ impl CommAllocAtomic for OneSidedLibfabricAlloc {
         LibfabricAlloc::atomic_fetch_op_inner(&self.alloc, pe, offset, &op, mut_result_slice, true)
             .unwrap();
         result
+    }
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic compare exchange called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        LibfabricAtomicCompareExchangeFuture {
+            alloc: self.alloc.clone(),
+            remote_pe: pe,
+            offset,
+            current,
+            new,
+            result: Box::new(T::default()),
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
+    }
+    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        assert_eq!(
+            pe, self.remote_pe,
+            "blocking atomic compare exchange called on OneSidedLibfabricAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        let mut result = T::default();
+        LibfabricAlloc::atomic_compare_exchange_op_inner(
+            &self.alloc,
+            pe,
+            offset,
+            current,
+            new,
+            std::slice::from_mut(&mut result),
+            true,
+        )
+        .unwrap();
+        compare_exchange_result(result, current)
     }
 }

@@ -131,6 +131,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.add(index, val).block();
     }
 
+    fn add_unmanaged(&self, index: usize, val: T) {
+        let _ = self.add(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -282,6 +286,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 
     fn blocking_sub(&self, index: usize, val: T) {
         self.sub(index, val).block();
+    }
+
+    fn sub_unmanaged(&self, index: usize, val: T) {
+        let _ = self.sub(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
@@ -437,6 +445,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.mul(index, val).block();
     }
 
+    fn mul_unmanaged(&self, index: usize, val: T) {
+        let _ = self.mul(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -590,6 +602,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
         self.div(index, val).block();
     }
 
+    fn div_unmanaged(&self, index: usize, val: T) {
+        let _ = self.div(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -741,6 +757,10 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
 
     fn blocking_rem(&self, index: usize, val: T) {
         self.rem(index, val).block();
+    }
+
+    fn rem_unmanaged(&self, index: usize, val: T) {
+        let _ = self.rem(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,
@@ -958,6 +978,14 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
     }
 
+    unsafe fn blocking_add(&self, index: usize, val: T) {
+        self.add(index, val).block();
+    }
+
+    unsafe fn add_unmanaged(&self, index: usize, val: T) {
+        let _ = self.add(index, val).spawn();
+    }
+
     /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -1034,6 +1062,10 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    unsafe fn blocking_fetch_add(&self, index: usize, val: T) -> T {
+        self.fetch_add(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_add][ArithmeticOps::fetch_add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -1101,6 +1133,14 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     unsafe fn sub<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
+    }
+
+    unsafe fn blocking_sub(&self, index: usize, val: T) {
+        self.sub(index, val).block();
+    }
+
+    unsafe fn sub_unmanaged(&self, index: usize, val: T) {
+        let _ = self.sub(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
@@ -1179,6 +1219,10 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    unsafe fn blocking_fetch_sub(&self, index: usize, val: T) -> T {
+        self.fetch_sub(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_sub][ArithmeticOps::fetch_sub] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -1246,6 +1290,14 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     unsafe fn mul<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
+    }
+
+    unsafe fn blocking_mul(&self, index: usize, val: T) {
+        self.mul(index, val).block();
+    }
+
+    unsafe fn mul_unmanaged(&self, index: usize, val: T) {
+        let _ = self.mul(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
@@ -1324,6 +1376,10 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    unsafe fn blocking_fetch_mul(&self, index: usize, val: T) -> T {
+        self.fetch_mul(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_mul][ArithmeticOps::fetch_mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -1391,6 +1447,14 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     unsafe fn div<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
+    }
+
+    unsafe fn blocking_div(&self, index: usize, val: T) {
+        self.div(index, val).block();
+    }
+
+    unsafe fn div_unmanaged(&self, index: usize, val: T) {
+        let _ = self.div(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
@@ -1469,6 +1533,10 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    unsafe fn blocking_fetch_div(&self, index: usize, val: T) -> T {
+        self.fetch_div(index, val).block()
+    }
+
     /// This call performs a batched vesion of the [fetch_div][ArithmeticOps::fetch_div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
@@ -1536,6 +1604,14 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
     unsafe fn rem<'a>(&self, index: usize, val: T) -> ArrayOpHandle<T> {
         self.inner_array()
             .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
+    }
+
+    unsafe fn blocking_rem(&self, index: usize, val: T) {
+        self.rem(index, val).block();
+    }
+
+    unsafe fn rem_unmanaged(&self, index: usize, val: T) {
+        let _ = self.rem(index, val).spawn();
     }
 
     /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,
@@ -1612,6 +1688,10 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
                 self.as_lamellar_byte_array(),
             )
             .into()
+    }
+
+    unsafe fn blocking_fetch_rem(&self, index: usize, val: T) -> T {
+        self.fetch_rem(index, val).block()
     }
 
     /// This call performs a batched vesion of the [fetch_rem][ArithmeticOps::fetch_rem] function,
