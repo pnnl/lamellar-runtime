@@ -1,6 +1,6 @@
 use crate::{
     active_messaging::AMCounters,
-    lamellae::collective::{
+    lamellae::{collective::{
         BroadcastInput, CollectiveAllBroadcastIntoBufferOpFuture,
         CollectiveAllBroadcastIntoBufferOpHandle, CollectiveAllBroadcastOpFuture,
         CollectiveAllBroadcastOpHandle, CollectiveAllGatherIntoBufferOpFuture,
@@ -24,7 +24,7 @@ use crate::{
         CommAllocCollectiveReduceScatter, CommAllocCollectiveScatter, ReduceOp, RootOrBuffer,
         RootOrLamellarBuffer, RootSrcOrBuffer, RootSrcOrLamellarBuffer,
         RootSrcOrLamellarBufferInner, ScatterInput, ScatterInputInner,
-    },
+    }, ucx_lamellae::ucc::UccRequest},
     memregion::MemregionRdmaInputInner,
     scheduler::Scheduler,
     warnings::RuntimeWarning,
@@ -48,19 +48,22 @@ pub(crate) struct UcxCollectiveAllReduceFuture<T: Remote> {
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .allreduce_inner(&self.op, self.src.as_slice(), &mut self.result, true)
+        let req = self.alloc
+            .allreduce_inner(&self.op, self.src.as_slice(), &mut self.result, false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap());
         let mut res = Vec::new();
         std::mem::swap(&mut self.result, &mut res);
         res
@@ -89,6 +92,7 @@ impl<T: Remote> Future for UcxCollectiveAllReduceFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut res = Vec::new();
         std::mem::swap(&mut self.result, &mut res);
         Poll::Ready(res)
@@ -103,19 +107,23 @@ pub(crate) struct UcxCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamella
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .allreduce_inner(&self.op, self.src.as_slice(), self.result.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .allreduce_inner(&self.op, self.src.as_slice(), self.result.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -141,6 +149,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceIntoBuf
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -152,19 +161,23 @@ pub(crate) struct UcxCollectiveAllReduceInPlaceFuture<T: Remote, B: AsLamellarBu
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllReduceInPlaceFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .allreduce_inplace_inner(&self.op, self.result.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .allreduce_inplace_inner(&self.op, self.result.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -190,6 +203,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllReduceInPlace
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -202,19 +216,23 @@ pub(crate) struct UcxCollectiveReduceFuture<T: Remote> {
     pub(crate) target: RootOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveReduceFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .reduce_inner(&self.op, self.src.as_slice(), self.target.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .reduce_inner(&self.op, self.src.as_slice(), self.target.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
             RootOrBuffer::Root(res) => {
                 let mut out = Vec::new();
@@ -248,6 +266,7 @@ impl<T: Remote> Future for UcxCollectiveReduceFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
             RootOrBuffer::Root(res) => {
                 let mut out = Vec::new();
@@ -267,19 +286,23 @@ pub(crate) struct UcxCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBu
     pub(crate) target: RootOrLamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .reduce_inner(&self.op, self.src.as_slice(), self.target.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .reduce_inner(&self.op, self.src.as_slice(), self.target.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -305,6 +328,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceIntoBuffer
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -356,19 +380,23 @@ pub(crate) struct UcxCollectiveAllGatherFuture<T: Remote> {
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveAllGatherFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .allgather_inner(self.src.as_slice(), &mut self.result, true)
+        let req = self
+            .alloc
+            .allgather_inner(self.src.as_slice(), &mut self.result, false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         out
@@ -397,6 +425,7 @@ impl<T: Remote> Future for UcxCollectiveAllGatherFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         Poll::Ready(out)
@@ -410,19 +439,23 @@ pub(crate) struct UcxCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamella
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .allgather_inner(self.src.as_slice(), self.result.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .allgather_inner(self.src.as_slice(), self.result.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -448,6 +481,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllGatherIntoBuf
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -459,19 +493,23 @@ pub(crate) struct UcxCollectiveGatherFuture<T: Remote> {
     pub(crate) target: RootOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveGatherFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .gather_inner(self.src.as_slice(), self.target.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .gather_inner(self.src.as_slice(), self.target.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
             RootOrBuffer::Root(res) => {
                 let mut out = Vec::new();
@@ -505,6 +543,7 @@ impl<T: Remote> Future for UcxCollectiveGatherFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
             RootOrBuffer::Root(res) => {
                 let mut out = Vec::new();
@@ -523,19 +562,23 @@ pub(crate) struct UcxCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBu
     pub(crate) target: RootOrLamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .gather_inner(self.src.as_slice(), self.target.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .gather_inner(self.src.as_slice(), self.target.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -561,6 +604,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveGatherIntoBuffer
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -572,19 +616,23 @@ pub(crate) struct UcxCollectiveAllBroadcastFuture<T: Remote> {
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveAllBroadcastFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .alltoall_inner(self.src.as_slice(), &mut self.result, true)
+        let req = self
+            .alloc
+            .alltoall_inner(self.src.as_slice(), &mut self.result, false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         out
@@ -613,6 +661,7 @@ impl<T: Remote> Future for UcxCollectiveAllBroadcastFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         Poll::Ready(out)
@@ -626,19 +675,23 @@ pub(crate) struct UcxCollectiveAllBroadcastIntoBufferFuture<T: Remote, B: AsLame
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveAllBroadcastIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .alltoall_inner(self.src.as_slice(), self.result.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .alltoall_inner(self.src.as_slice(), self.result.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -664,6 +717,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveAllBroadcastInto
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -674,17 +728,20 @@ pub(crate) struct UcxCollectiveBroadcastFuture<T: Remote> {
     pub(crate) target: RootSrcOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveBroadcastFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc.broadcast_inner(self.target.as_mut_slice(), true).unwrap();
+        let req = self.alloc.broadcast_inner(self.target.as_mut_slice(), false).unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Option<Vec<T>> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
             RootSrcOrBuffer::Root(_) => None,
             RootSrcOrBuffer::NotRoot(items, _) => {
@@ -718,6 +775,7 @@ impl<T: Remote> Future for UcxCollectiveBroadcastFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         match &mut self.target {
             RootSrcOrBuffer::Root(_) => Poll::Ready(None),
             RootSrcOrBuffer::NotRoot(items, _) => {
@@ -735,17 +793,20 @@ pub(crate) struct UcxCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamella
     pub(crate) target: RootSrcOrLamellarBufferInner<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveBroadcastIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc.broadcast_inner(self.target.as_mut_slice(), true).unwrap();
+        let req = self.alloc.broadcast_inner(self.target.as_mut_slice(), false).unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -771,6 +832,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveBroadcastIntoBuf
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -782,19 +844,23 @@ pub(crate) struct UcxCollectiveScatterFuture<T: Remote> {
     src_or_root_pe: ScatterInputInner<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveScatterFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .scatter_inner(&mut self.result, self.src_or_root_pe.as_slice(), true)
+        let req = self
+            .alloc
+            .scatter_inner(&mut self.result, self.src_or_root_pe.as_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         out
@@ -823,6 +889,7 @@ impl<T: Remote> Future for UcxCollectiveScatterFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         Poll::Ready(out)
@@ -836,19 +903,23 @@ pub(crate) struct UcxCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarB
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveScatterIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .scatter_inner(self.result.as_mut_slice(), self.src_or_root_pe.as_slice(), true)
+        let req = self
+            .alloc
+            .scatter_inner(self.result.as_mut_slice(), self.src_or_root_pe.as_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
@@ -874,6 +945,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveScatterIntoBuffe
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -886,19 +958,23 @@ pub(crate) struct UcxCollectiveReduceScatterFuture<T: Remote> {
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote> UcxCollectiveReduceScatterFuture<T> {
     fn exec_op(&mut self) {
-        self.alloc
-            .reduce_scatter_inner(&self.op, self.src.as_slice(), &mut self.result, true)
+        let req = self
+            .alloc
+            .reduce_scatter_inner(&self.op, self.src.as_slice(), &mut self.result, false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         out
@@ -927,6 +1003,7 @@ impl<T: Remote> Future for UcxCollectiveReduceScatterFuture<T> {
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut out = Vec::new();
         std::mem::swap(&mut out, &mut self.result);
         Poll::Ready(out)
@@ -941,26 +1018,30 @@ pub(crate) struct UcxCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLam
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
+    req: Option<UccRequest>,
     pub(crate) spawned: bool,
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> UcxCollectiveReduceScatterIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
-        self.alloc
-            .reduce_scatter_inner(&self.op, self.src.as_slice(), self.result.as_mut_slice(), true)
+        let req = self
+            .alloc
+            .reduce_scatter_inner(&self.op, self.src.as_slice(), self.result.as_mut_slice(), false)
             .unwrap();
+        self.req = req;
         self.spawned = true;
     }
 
     pub(crate) fn block(mut self) {
         self.exec_op();
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
     }
 
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
         self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        self.scheduler.clone().spawn_task(async move {}, counters)
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -979,6 +1060,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for UcxCollectiveReduceScatterInt
         if !self.spawned {
             self.exec_op();
         }
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         Poll::Ready(())
     }
 }
@@ -1002,6 +1084,7 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
                 scheduler: scheduler.clone(),
                 counters,
                 spawned: false,
+                req: None,
             }),
         }
     }
@@ -1023,6 +1106,7 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
                     result: dst,
                     scheduler: scheduler.clone(),
                     counters,
+                    req: None,
                     spawned: false,
                 },
             ),
@@ -1043,6 +1127,7 @@ impl CommAllocCollectiveAllReduce for UcxAlloc {
                 result: source_and_dst,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1073,6 +1158,7 @@ impl CommAllocCollectiveReduce for UcxAlloc {
                 target,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1094,6 +1180,7 @@ impl CommAllocCollectiveReduce for UcxAlloc {
                 target: root_or_buffer,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1116,6 +1203,7 @@ impl CommAllocCollectiveAllGather for UcxAlloc {
                 result: vec![T::default(); len * self.num_pes],
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1135,6 +1223,7 @@ impl CommAllocCollectiveAllGather for UcxAlloc {
                 result: dst,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1164,6 +1253,7 @@ impl CommAllocCollectiveGather for UcxAlloc {
                 target,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1183,6 +1273,7 @@ impl CommAllocCollectiveGather for UcxAlloc {
                 target: root_or_buffer,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1205,6 +1296,7 @@ impl CommAllocCollectiveAllBroadcast for UcxAlloc {
                 result: vec![T::default(); len * self.num_pes],
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1225,6 +1317,7 @@ impl CommAllocCollectiveAllBroadcast for UcxAlloc {
                     result: dst,
                     scheduler: scheduler.clone(),
                     counters,
+                    req: None,
                     spawned: false,
                 },
             ),
@@ -1254,6 +1347,7 @@ impl CommAllocCollectiveBroadcast for UcxAlloc {
                 target,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1271,6 +1365,7 @@ impl CommAllocCollectiveBroadcast for UcxAlloc {
                 target: root_or_buffer.into(),
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1296,6 +1391,7 @@ impl CommAllocCollectiveScatter for UcxAlloc {
                 src_or_root_pe,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1315,6 +1411,7 @@ impl CommAllocCollectiveScatter for UcxAlloc {
                 result,
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1338,6 +1435,7 @@ impl CommAllocCollectiveReduceScatter for UcxAlloc {
                 result: vec![T::default(); len],
                 scheduler: scheduler.clone(),
                 counters,
+                req: None,
                 spawned: false,
             }),
         }
@@ -1361,6 +1459,7 @@ impl CommAllocCollectiveReduceScatter for UcxAlloc {
                     scheduler: scheduler.clone(),
                     counters,
                     spawned: false,
+                    req: None,
                 },
             ),
         }
