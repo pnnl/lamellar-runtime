@@ -5,6 +5,7 @@ mod memory_region;
 mod worker;
 
 use context::Context;
+use crossbeam::thread;
 use endpoint::Endpoint;
 pub(crate) use endpoint::UcxRequest;
 use endpoint::ATOMIC_PUT_TMP;
@@ -334,6 +335,7 @@ impl UcxWorld {
         let ucc_context = Arc::new(UccContext::new(alloc.clone()).unwrap());
         world.barrier();
         alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
+        world.barrier();
         let ucc_world_team = UccTeam::new(my_pe, &(0..num_pes).collect::<Vec<_>>(), ucc_context.clone(), alloc.clone()).unwrap();
 
         world.ucc_context = Some(ucc_context);
@@ -1814,7 +1816,7 @@ impl UcxAlloc {
                 if !matches!(err, Error::Inprogress) {
                     return Err(err);
                 } 
-                ucc_team.context.progress()?;
+                self.progress_all();
             }
             Ok(())
         }
@@ -1823,20 +1825,58 @@ impl UcxAlloc {
         }
     }
 
+    pub(crate) fn progress_all(&self) {
+        if let Some(ucc_team) = &self.ucc_team {
+            ucc_team.context.progress().unwrap();
+        }
+
+        for comm_group in &self.comm_groups {
+            comm_group.worker.progress();
+        }
+    }
+
     pub(crate) fn as_mut_slice<T>(&self) -> &mut [T] {
         self.mem.as_mut_slice()
+    }
+
+    pub(crate) fn wait_ucc_all(&self) {
+        if let Some(ucc_team) = &self.ucc_team {
+            loop {
+                ucc_team.context.progress().unwrap();
+                let completed = ucc_team.req_completed.load(std::sync::atomic::Ordering::SeqCst);
+                let pending = ucc_team.req_pending.load(std::sync::atomic::Ordering::SeqCst);
+                if completed == pending {
+                    break;
+                }
+                std::thread::yield_now();
+            }
+        }
+        // else {
+        //     panic!("UCC team not initialized for waiting on UCC requests");
+        // }
     }
 
     pub(crate) fn wait_all(&self) {
         self.worker
             .wait_all()
             .expect("UcxAlloc::wait_all failed waiting on UCX requests");
+
+        self.wait_ucc_all();
+    }
+
+    pub(crate) fn thread_wait(&self) {
+        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)% self.comm_groups.len()]
+            .worker
+            .wait_all()
+            .expect("UcxAlloc::thread_wait failed waiting on UCX requests");
+        self.wait_ucc_all();
     }
 
     pub(crate) fn wait(&self) {
         self.worker
             .wait_all()
             .expect("UcxAlloc::wait failed waiting on UCX requests");
+        self.wait_ucc_all();
     }
 }
 

@@ -1,5 +1,5 @@
 use lamellar_ucc_sys::*;
-use std::{mem::MaybeUninit, os::raw::c_void, sync::Arc};
+use std::{mem::MaybeUninit, os::raw::c_void, sync::{atomic::AtomicUsize, Arc}};
 
 #[derive(Debug)]
 struct LibConfig {
@@ -189,7 +189,8 @@ pub(crate) struct UccTeam {
     handle: ucc_team_h,
     pub(crate) context: Arc<UccContext>,
     params: Box<UccTeamParams>, // pin?
-
+    pub(crate) req_pending: Arc<AtomicUsize>,
+    pub(crate) req_completed: Arc<AtomicUsize>,
 }
 
 pub(crate) struct UccTeamParams {
@@ -201,6 +202,10 @@ pub(crate) struct UccTeamParams {
 impl UccTeam {
     pub(crate) fn new(my_pe: usize, pes: &[usize], ctx: Arc<UccContext>, ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
         let mut handle: MaybeUninit<ucc_team_h> = MaybeUninit::uninit();
+        let team_rank = pes
+            .iter()
+            .position(|&pe| pe == my_pe)
+            .ok_or(Error::InvalidParam)?;
         let mut params = Box::new(UccTeamParams {
             my_pe,
             pes: pes.to_vec(),
@@ -211,7 +216,7 @@ impl UccTeam {
             req_test: Some(req_test),
             req_free: Some(req_free),
             n_oob_eps: pes.len() as u32,
-            oob_ep: my_pe as u32,
+            oob_ep: team_rank as u32,
             coll_info: &mut *params as *mut UccTeamParams as *mut c_void,
         };
 
@@ -287,6 +292,8 @@ impl UccTeam {
             handle,
             context: ctx.clone(),
             params,
+            req_pending: Arc::new(AtomicUsize::new(0)),
+            req_completed: Arc::new(AtomicUsize::new(0)),
         })
     }
 }
@@ -345,17 +352,26 @@ fn rust_type_to_ucc_dtype<T: 'static>() -> ucc_datatype_t {
     }
 }
 
+unsafe impl Send for UccRequest {}
+unsafe impl Sync for UccRequest {}
+
 pub(crate) struct UccRequest {
     req_handle: ucc_coll_req_h,
+    req_completed: Arc<AtomicUsize>,
 }
 
 impl UccRequest {
-    pub(crate) fn new(req_handle: ucc_coll_req_h) -> Self {
-        Self { req_handle }
+    pub(crate) fn new(req_handle: ucc_coll_req_h, req_completed: Arc<AtomicUsize>) -> Self {
+        Self { 
+            req_handle,
+            req_completed,
+        }
     }
 
     pub(crate) fn test(&self) -> Result<(), Error> {
-        Error::from_status(unsafe { ucc_collective_test_wrapper(self.req_handle) })
+        Error::from_status(unsafe { ucc_collective_test_wrapper(self.req_handle) })?;
+        self.req_completed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
     }
 }
 
@@ -421,7 +437,8 @@ impl UccTeam {
         let mut coll_req= MaybeUninit::uninit();
         let err = unsafe {ucc_collective_init(&mut coll_args, coll_req.as_mut_ptr(), self.handle)};
         let coll_req = unsafe { coll_req.assume_init() };
-        let req = unsafe {UccRequest::new(coll_req)};
+        self.req_pending.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let req = unsafe {UccRequest::new(coll_req, self.req_completed.clone())};
         Error::from_status(err)?;
         let err = unsafe {ucc_collective_post(req.req_handle)};
         Error::from_status(err)?;
@@ -532,13 +549,17 @@ unsafe extern "C" fn oob_collective(
     _request: *mut *mut ::std::os::raw::c_void,
 ) -> ucc_status_t {
     let params = unsafe { &*(allgather_info as *const UccTeamParams) };
-    println!("[{}] size: {}", params.my_pe, size);
+    let my_team_idx = match params.pes.iter().position(|&pe| pe == params.my_pe) {
+        Some(idx) => idx,
+        None => return ucc_status_t_UCC_ERR_INVALID_PARAM,
+    };
+    // println!("[{}] size: {}", params.my_pe, size);
     
     let dst_addr = unsafe { std::slice::from_raw_parts_mut(recv_buf as *mut u8, size * params.pes.len()) };
     let src_buf = unsafe { std::slice::from_raw_parts(src_buf as *const u8, size) };
-    println!("[{}] Source bufer: len:{}, data: {:x?}", params.my_pe, src_buf.len(), src_buf);
+    // println!("[{}] Source bufer: len:{}, data: {:x?}", params.my_pe, src_buf.len(), src_buf);
 
-    if params.my_pe == params.pes[0] {
+    if my_team_idx == 0 {
         for i in 1..params.pes.len() {
             while params.ucx_alloc.as_mut_slice::<u8>()[i] == u8::MAX {
                 params.ucx_alloc.wait();
@@ -569,7 +590,7 @@ unsafe extern "C" fn oob_collective(
         params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, true);
         params.ucx_alloc.wait_all();
         let one = [1u8];
-        params.ucx_alloc.put_inner(params.pes[0], params.my_pe, &one, true);
+        params.ucx_alloc.put_inner(params.pes[0], my_team_idx, &one, true);
         params.ucx_alloc.wait_all();
         while params.ucx_alloc.as_mut_slice::<u8>()[0] == u8::MAX {
             params.ucx_alloc.wait();
@@ -578,8 +599,8 @@ unsafe extern "C" fn oob_collective(
         params.ucx_alloc.as_mut_slice::<u8>()[0] = u8::MAX;
         dst_addr.copy_from_slice(&params.ucx_alloc.as_mut_slice::<u8>()[1..(1+size*params.pes.len())]);
     }
-    println!("Completed allgather in oob_collective");
-    println!("[{}]recv_buf: len:{}, data: {:x?}", params.my_pe, dst_addr.len(), dst_addr);
+    // println!("Completed allgather in oob_collective");
+    // println!("[{}]recv_buf: len:{}, data: {:x?}", params.my_pe, dst_addr.len(), dst_addr);
 
     return ucc_status_t_UCC_OK;
 }
