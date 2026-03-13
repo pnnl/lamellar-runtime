@@ -119,7 +119,7 @@ impl Drop for UccLib {
 }
 
 pub(crate) struct UccContext {
-    _lib: UccLib,
+    lib: Arc<UccLib>,
     handle: ucc_context_h,
     params: Box<UccTeamParams>, // pin?
 }
@@ -130,9 +130,8 @@ unsafe impl Send for UccContext {}
 unsafe impl Sync for UccContext {}
 
 impl UccContext {
-    pub(crate) fn new(ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
-        let lib = UccLib::new();
-        let config = CtxConfig::new(&lib);
+    pub(crate) fn new(ucc_lib: Arc<UccLib>, ucx_alloc: Arc<UcxAlloc>) -> Result<Self, Error> {
+        let config = CtxConfig::new(&ucc_lib);
         let mut params = Box::new(UccTeamParams {
             my_pe: ucx_alloc.my_pe,
             pes: (0..ucx_alloc.num_pes).collect(),
@@ -161,11 +160,11 @@ impl UccContext {
 
         let mut ctx = MaybeUninit::uninit();
 
-        let status = unsafe { ucc_context_create(lib.handle, &ctx_params, config.handle, ctx.as_mut_ptr()) };
+        let status = unsafe { ucc_context_create(ucc_lib.handle, &ctx_params, config.handle, ctx.as_mut_ptr()) };
         Error::from_status(status)?;
 
         Ok(Self {
-            _lib: lib,
+            lib: ucc_lib.clone(),
             handle: unsafe { ctx.assume_init() },
             params,
         })

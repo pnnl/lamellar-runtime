@@ -449,7 +449,7 @@ impl Ofi {
                 .iter()
                 .map(|r| {
                     let addr = my_pmi
-                        .get(&format!("epname_{}", tid), &address_bytes.len(), &r)
+                        .get(&format!("epname_{}", tid), &r)
                         .unwrap();
                     unsafe { Address::from_bytes(&addr) }
                 })

@@ -91,7 +91,7 @@ pub(crate) struct CommGroup{
     coll_cnt_completed: AtomicU64,
     lock: Mutex<()>,
     contexts_cache: Arc<Mutex<Vec<CachedContext>>>,
-    contexts_cache_size_per_thread: usize,
+    contexts_cache_size: usize,
 }
 
 
@@ -173,7 +173,7 @@ impl CommGroup{
         if let Some(ctx) = cache.pop() {
             ctx
         } else {
-            for _ in 0..self.contexts_cache_size_per_thread - 1 {
+            for _ in 0..self.contexts_cache_size - 1 {
                 cache.push(
                     CachedContext{
                         context: Some(self.info_entry.allocate_context()),
@@ -636,7 +636,7 @@ impl Ofi {
             .iter()
             .map(|r| {
                 let addr = my_pmi
-                    .get(&format!("epname"), &address_bytes.len(), &r)
+                    .get(&format!("epname"), &r)
                     .unwrap();
                 unsafe { Address::from_bytes(&addr) }
             })
@@ -648,9 +648,9 @@ impl Ofi {
             let mapped_addresses: Vec<MappedAddress> =
                 mapped_addresses.into_iter().map(|a| a.unwrap()).collect();
                     
-            
-            let mut contexts = Arc::new(Mutex::new(Vec::with_capacity(10)));
-            for _ in 0..10 {
+            let contexts_cache_size = 10;
+            let mut contexts = Arc::new(Mutex::new(Vec::with_capacity(contexts_cache_size)));
+            for _ in 0..contexts_cache_size {
                 contexts.lock().push(
                     CachedContext{
                         context: Some(info_entry.allocate_context()),
@@ -674,7 +674,7 @@ impl Ofi {
                 get_cnt: AtomicU64::new(0),
                 lock: Mutex::new(()),
                 contexts_cache: contexts,
-                contexts_cache_size_per_thread,
+                contexts_cache_size,
             };
         
         let alloc_manager = AllocInfoManager::new();

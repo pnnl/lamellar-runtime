@@ -3,7 +3,7 @@ use std::{mem::MaybeUninit, sync::Arc};
 
 use super::{context::Context, error::Error};
 
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::{pmi::Pmi};
 
 use tracing::trace;
 
@@ -101,7 +101,7 @@ impl Worker {
 
     pub(crate) fn exchange_address(
         &self,
-        pmi: &Arc<PmiX>,
+        pmi: Arc<dyn Pmi>,
         wid: usize,
     ) -> Result<Vec<Vec<u8>>, Error> {
         let my_address = self.address().unwrap();
@@ -115,7 +115,7 @@ impl Worker {
         pmi.exchange().unwrap();
         let mut all_addresses = Vec::new();
         for pe in 0..pmi.ranks().len() {
-            let res = pmi.get(&addr_key, &my_address.as_ref().len(), &pe).unwrap();
+            let res = pmi.get(&addr_key, &pe).unwrap();
             trace!("got worker address from pe {} : {:x?}", pe, res);
             all_addresses.push(res);
         }

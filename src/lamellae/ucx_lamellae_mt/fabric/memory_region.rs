@@ -9,7 +9,7 @@ use std::{
 
 use super::{context::Context, endpoint::Endpoint, error::Error, UcxMtAlloc};
 use lamellar_ucx_sys::*;
-use pmi::{pmi::Pmi, pmix::PmiX};
+use pmi::{pmi::Pmi};
 use std::vec::Vec;
 use tracing::trace;
 
@@ -133,7 +133,7 @@ impl MemoryHandleInner {
     pub(crate) fn exchange_key_pmi(
         &self,
         _endpoints: &[Arc<Endpoint>],
-        pmi: &Arc<PmiX>,
+        pmi: &Arc<dyn Pmi>,
         slots: usize,
     ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {
         let rkey = self.pack();
@@ -152,7 +152,7 @@ impl MemoryHandleInner {
 
         let mut all_rkeys = Vec::new();
         for pe in 0..pmi.ranks().len() {
-            let res = pmi.get(&id, &address_and_key.len(), &pe).unwrap();
+            let res = pmi.get(&id, &pe).unwrap();
             // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
             let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
@@ -166,7 +166,7 @@ impl MemoryHandleInner {
     pub(crate) fn exchange_key_alloc(
         &self,
         _endpoints: &[Arc<Endpoint>],
-        pmi: &Arc<PmiX>,
+        pmi: &Arc<dyn Pmi>,
         exchange_buffer: &UcxMtAlloc,
         slots: usize,
     ) -> Result<Vec<(usize, Arc<RKey>)>, Error> {

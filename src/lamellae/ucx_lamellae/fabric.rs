@@ -13,6 +13,8 @@ use lamellar_ucc_sys::ucc_status_t_UCC_INPROGRESS;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::Worker;
 use crate::config;
+use crate::LAMELLAR_THREAD_ID;
+use super::ucc::UccLib;
 
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::config;
@@ -335,7 +337,8 @@ impl UcxWorld {
 
         alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
         world.barrier();
-        let ucc_context = Arc::new(UccContext::new(alloc.clone()).unwrap());
+        let ucc_lib = Arc::new(UccLib::new());
+        let ucc_context = Arc::new(UccContext::new(ucc_lib.clone(), alloc.clone()).unwrap());
         world.barrier();
         alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);
         world.barrier();
@@ -423,7 +426,7 @@ impl UcxWorld {
         exchange_buffer: bool,
         context: &Arc<Context>,
         util_endpoints: &Vec<Arc<Endpoint>>,
-        comm_groups: &Vec<CommGroup>,
+        worker: &Arc<Worker>,
         pmi: Arc<dyn Pmi>,
         num_pes: usize,
         my_pe: usize,
@@ -504,7 +507,7 @@ impl UcxWorld {
             Arc::new(same_node_segments),
             context.clone(),
             worker.clone(),
-            endpoints.clone(),
+            util_endpoints.clone(),
             buffer_keys.clone(),
             mem_handles.clone(),
             remote_keys.clone(),
@@ -674,6 +677,10 @@ impl UcxWorld {
 
     pub(crate) fn progress(&self) {
         self.worker.progress();
+
+        if let Some(ucc_team) = &self.ucc_world_team {
+            ucc_team.context.progress().expect("Failed to progress UCC context");
+        }
     }
 
     pub(crate) fn barrier(&self) {
@@ -1827,22 +1834,12 @@ impl UcxAlloc {
                 if !matches!(err, Error::Inprogress) {
                     return Err(err);
                 } 
-                self.progress_all();
+                ucc_team.context.progress()?;
             }
             Ok(())
         }
         else {
             panic!("UCC team not initialized for waiting on UCC request");
-        }
-    }
-
-    pub(crate) fn progress_all(&self) {
-        if let Some(ucc_team) = &self.ucc_team {
-            ucc_team.context.progress().unwrap();
-        }
-
-        for comm_group in &self.comm_groups {
-            comm_group.worker.progress();
         }
     }
 
@@ -1875,13 +1872,7 @@ impl UcxAlloc {
         self.wait_ucc_all();
     }
 
-    pub(crate) fn thread_wait(&self) {
-        self.comm_groups[LAMELLAR_THREAD_ID.with(|id| *id)% self.comm_groups.len()]
-            .worker
-            .wait_all()
-            .expect("UcxAlloc::thread_wait failed waiting on UCX requests");
-        self.wait_ucc_all();
-    }
+
 
     pub(crate) fn wait(&self) {
         self.worker
