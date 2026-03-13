@@ -20,6 +20,7 @@ use crate::{
     LAMELLAR_THREAD_ID,
 };
 
+use pmi::{pmi::Pmi, PmiBuilder};
 use lamellar_ucx_sys::ucp_atomic_op_t;
 use pmi::{pmi::Pmi, pmix::PmiX};
 
@@ -36,7 +37,7 @@ pub(crate) struct CommGroup {
 }
 
 pub(crate) struct UcxWorld {
-    pmi: Arc<PmiX>,
+    pmi: Arc<dyn Pmi>,
     pub(crate) my_pe: usize,
     pub(crate) num_pes: usize,
     context: Arc<Context>,
@@ -59,7 +60,7 @@ impl std::fmt::Debug for UcxWorld {
 impl UcxWorld {
     pub(crate) fn new(num_threads: usize) -> Self {
         let my_pmi = Arc::new(
-            PmiX::new()
+            PmiBuilder::init()
                 .map_err(|e| {
                     eprintln!("Error initializing PMI: {:?}", e);
                     FabricError::InitError(1)
@@ -71,7 +72,7 @@ impl UcxWorld {
         // let mut comm_groups = Vec::with_capacity(1);
         for tid in 0..num_threads {
             let worker = context.create_worker().unwrap();
-            let addresses = worker.exchange_address(&my_pmi, tid).unwrap();
+            let addresses = worker.exchange_address(my_pmi.clone(),tid).unwrap();
             let endpoints = addresses
                 .iter()
                 .map(|a| Endpoint::new(worker.clone(), a).unwrap())
@@ -88,7 +89,7 @@ impl UcxWorld {
             &context,
             &utility_comm_group.endpoints,
             &comm_groups,
-            &my_pmi,
+            my_pmi.clone(),
             num_pes,
             my_pe,
             mem_handles.clone(),
@@ -169,7 +170,7 @@ impl UcxWorld {
         context: &Arc<Context>,
         util_endpoints: &Vec<Arc<Endpoint>>,
         comm_groups: &Vec<CommGroup>,
-        pmi: &Arc<PmiX>,
+        pmi: Arc<dyn Pmi>,
         num_pes: usize,
         my_pe: usize,
         mem_handles: Arc<Mutex<Vec<UcxMtAlloc>>>,
@@ -184,7 +185,7 @@ impl UcxWorld {
         // debug!("Initial alloc size: {}", size);
         let mem_handle = MemoryHandleInner::alloc(context, size * num_pes);
         let buffer_keys = mem_handle
-            .exchange_key_pmi(util_endpoints, pmi, comm_groups.len())
+            .exchange_key_pmi(util_endpoints, &pmi, comm_groups.len())
             .unwrap();
 
         let mem = MemoryHandle {

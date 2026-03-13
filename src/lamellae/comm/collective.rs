@@ -83,7 +83,7 @@ impl<T: Remote> CollectiveAllReduceOpHandle<T> {
             // AtomicFetchOpFuture::LibfabricMt(f) => f.block(),
             // #[cfg(feature = "enable-libfabric-async")]
             // AtomicFetchOpFuture::LibfabricAsync(f) => f.block(),
-            // #[cfg(feature = "enable-ucx")]
+            #[cfg(feature = "enable-ucx")]
             CollectiveAllReduceOpFuture::Ucx(f) => f.block(),
             // AtomicFetchOpFuture::Shmem(f) => f.block(),
             // AtomicFetchOpFuture::Local(f) => f.block(),
