@@ -17,7 +17,7 @@ use crate::array::{LamellarRead, LamellarWrite};
 use crate::barrier::BarrierHandle;
 use crate::darc::{Darc, DarcMode};
 use crate::env_var::config;
-use crate::lamellae::{AllocationType, CommProgress};
+use crate::lamellae::{AllocationType, AtomicOp, CommInfo, CommProgress};
 use crate::lamellar_team::{IntoLamellarTeam, LamellarTeamRT};
 use crate::memregion::{Dist, MemoryRegion};
 use crate::scheduler::LamellarTask;

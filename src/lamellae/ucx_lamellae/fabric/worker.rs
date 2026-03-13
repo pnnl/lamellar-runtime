@@ -126,7 +126,6 @@ impl Worker {
     pub(crate) fn exchange_address(&self, pmi: Arc<dyn Pmi>) -> Result<Vec<Vec<u8>>, Error> {
         let my_address = self.address().unwrap();
         let addr_key = format!("worker_address");
-        trace!("exchanging worker address with key {} and address {:?}",addr_key, my_address.as_ref());
         pmi.put(&addr_key, my_address.as_ref()).unwrap();
         pmi.exchange().unwrap();
         let mut all_addresses = Vec::new();
@@ -134,7 +133,6 @@ impl Worker {
             let res = pmi
                 .get(&addr_key, &pe)
                 .unwrap();
-            trace!("got worker address from pe {} : {:x?}",pe, res);
             all_addresses.push(res);
         }
 
