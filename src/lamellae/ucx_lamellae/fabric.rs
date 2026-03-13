@@ -12,6 +12,7 @@ use endpoint::ATOMIC_PUT_TMP;
 use lamellar_ucc_sys::ucc_status_t_UCC_INPROGRESS;
 use memory_region::{MemoryHandle, MemoryHandleInner, RemoteAddressInfo};
 use worker::Worker;
+use crate::config;
 
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::config;
@@ -329,7 +330,7 @@ impl UcxWorld {
             ucc_world_buffer: None,
         };
     
-        let alloc = Arc::new(world.alloc(4*1024, 8, AllocationType::Global));
+        let alloc = Arc::new(world.alloc(config().ucc_oob_init_buffer_size * world.num_pes, 8, AllocationType::Global));
         world.ucc_world_buffer = Some(alloc.clone());
 
         alloc.as_mut_slice().iter_mut().for_each(|x| *x = u8::MAX);

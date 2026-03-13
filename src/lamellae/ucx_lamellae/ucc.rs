@@ -553,7 +553,7 @@ unsafe extern "C" fn oob_collective(
         Some(idx) => idx,
         None => return ucc_status_t_UCC_ERR_INVALID_PARAM,
     };
-    // println!("[{}] size: {}", params.my_pe, size);
+    println!("[{}] size: {}", params.my_pe, size);
     
     let dst_addr = unsafe { std::slice::from_raw_parts_mut(recv_buf as *mut u8, size * params.pes.len()) };
     let src_buf = unsafe { std::slice::from_raw_parts(src_buf as *const u8, size) };
@@ -651,9 +651,9 @@ pub(crate) enum Error {
 }
 
 impl Error {
+    #[allow(non_upper_case_globals)]
     pub(crate) fn from_error(status: ucc_status_t) -> Self {
         debug_assert_ne!(status, ucc_status_t_UCC_OK);
-
         match status {
             ucc_status_t_UCC_INPROGRESS => Self::Inprogress,
             ucc_status_t_UCC_OPERATION_INITIALIZED => Self::Initialized,

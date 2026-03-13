@@ -195,6 +195,10 @@ where
     }
 }
 
+fn default_ucc_oob_init_buffer_size() -> usize {
+    16*1024
+}
+
 #[doc(hidden)]
 #[derive(Deserialize, Debug)]
 pub struct Config {
@@ -267,6 +271,8 @@ pub struct Config {
     /// Disable same-node shared-memory fast path for UCX/libfabric backends, default: false
     #[serde(deserialize_with = "deserialize_bool_or_int_to_bool", default)]
     pub disable_on_node_shmem: Option<bool>,
+    #[serde(default = "default_ucc_oob_init_buffer_size")]
+    pub ucc_oob_init_buffer_size: usize,
 }
 
 #[doc(hidden)]
