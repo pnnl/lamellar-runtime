@@ -843,6 +843,13 @@ impl Drop for UcxWorld {
         trace!(target: "drop", "begin drop UcxWorld");
         debug!("dropping ucx world");
         self.pmi_barrier();
+
+        // Tear down UCC objects first so they release any UCX-side resources
+        // before we clear allocations and drop UCX context state.
+        self.ucc_world_team.take();
+        self.ucc_context.take();
+        self.ucc_world_buffer.take();
+
         self.exchange_buffer.take();
         self.barrier.take();
         self.clear_allocs();
