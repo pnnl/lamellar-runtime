@@ -199,7 +199,7 @@ impl MemoryHandleInner {
 
         let mut all_rkeys = HashMap::new();
         for pe in 0..pmi.ranks().len() {
-            let res = pmi.get(&id, &address_and_key.len(), &pe).unwrap();
+            let res = pmi.get(&id, &pe).unwrap();
             // println!("[exchange_key] {pe}: remote address_and_key {:x?}", res);
             let remote_address = usize::from_ne_bytes(res[0..8].try_into().unwrap());
             // println!("[exchange_key] {pe}: remote_address: {:x}", remote_address);
