@@ -63,7 +63,7 @@ impl<T: Remote> UcxCollectiveAllReduceFuture<T> {
 
     pub(crate) fn block(mut self) -> Vec<T> {
         self.exec_op();
-        self.alloc.wait_ucc_request(self.req.as_ref().unwrap());
+        self.alloc.wait_ucc_request(self.req.as_ref().unwrap()).unwrap();
         let mut res = Vec::new();
         std::mem::swap(&mut self.result, &mut res);
         res
