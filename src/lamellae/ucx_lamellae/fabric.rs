@@ -284,6 +284,7 @@ impl UcxWorld {
 
         Self::warmup_peer_puts(&my_pmi, &worker, &exchange_buffer, my_pe, num_pes);
 
+
         let barrier_buffer = Self::initial_alloc(
             false,
             &context,
@@ -300,7 +301,6 @@ impl UcxWorld {
             job_id,
             mem_handles.clone(),
             remote_keys.clone(),
-            None,
         )
         .unwrap();
     
@@ -424,7 +424,7 @@ impl UcxWorld {
     fn initial_alloc(
         exchange_buffer: bool,
         context: &Arc<Context>,
-        util_endpoints: &Vec<Arc<Endpoint>>,
+        endpoints: &Vec<Arc<Endpoint>>,
         worker: &Arc<Worker>,
         pmi: Arc<dyn Pmi>,
         num_pes: usize,
@@ -434,7 +434,6 @@ impl UcxWorld {
         #[cfg(feature = "enable-on-node-shmem")] job_id: usize,
         mem_handles: Arc<Mutex<Vec<UcxAlloc>>>,
         remote_keys: Arc<Mutex<Vec<(UcxAlloc, HashMap<usize, RemoteAddressInfo>)>>>,
-        ucc_context: Option<Arc<UccContext>>,
     ) -> AllocResult<UcxAlloc> {
         let data_size = if exchange_buffer {
             let mem_handle = MemoryHandleInner::alloc(context, 1024); //dummy allocation to get the size of the exchange buffer
@@ -483,7 +482,7 @@ impl UcxWorld {
             same_node_segments[my_pe] = Some(Arc::new(local_segment));
             (mem_handle, same_node_bases, same_node_segments)
         };
-        let buffer_keys = mem_handle.exchange_key_pmi(endpoints, pmi).unwrap();
+        let buffer_keys = mem_handle.exchange_key_pmi(endpoints, &pmi).unwrap();
 
         let mem = MemoryHandle {
             addr: mem_handle.addr,
@@ -506,7 +505,7 @@ impl UcxWorld {
             Arc::new(same_node_segments),
             context.clone(),
             worker.clone(),
-            util_endpoints.clone(),
+            endpoints.clone(),
             buffer_keys.clone(),
             mem_handles.clone(),
             remote_keys.clone(),
@@ -640,7 +639,7 @@ impl UcxWorld {
             // For sub_alloc we don't create new shared segments here; use placeholders sized to `pes`.
             (vec![None; pes.len()], vec![None; pes.len()])
         };
-
+        let ucc_team = UccTeam::new(self.my_pe, pes, self.ucc_context.as_ref().unwrap().clone(), self.ucc_world_buffer.as_ref().unwrap().clone()).expect("Failed to create UCC team for sub allocation");
         let alloc = UcxAlloc::new(
             mem,
             data_size,
@@ -659,6 +658,7 @@ impl UcxWorld {
             buffer_keys_map.clone(),
             self.mem_handles.clone(),
             self.remote_keys.clone(),
+            Some(Arc::new(ucc_team))
         )
         .expect("UcxAlloc::new failed");
         self.mem_handles.lock().unwrap().push(alloc.clone());
@@ -1067,7 +1067,7 @@ impl UcxAlloc {
         let ref_cnt_offset = data_num_bytes + padding;
         let fabric_ref_cnt_offset = data_num_bytes + padding;
         let encoded = encode_ref_count_and_padding(1, padding);
-        let mut alloc = Self {
+        let alloc = Self {
             mem,
             data_num_bytes,
             my_pe,
@@ -1138,7 +1138,7 @@ impl UcxAlloc {
         if let AllocTable::Runtime(_, _, _, _) = &self.alloc_table {
             self.increment_rt_ref_count();
         }
-        let mut alloc = UcxAlloc {
+        let alloc = UcxAlloc {
             mem: self.mem.sub_alloc(offset, size),
             data_num_bytes: size,
             my_pe: self.my_pe,
@@ -1206,7 +1206,7 @@ impl UcxAlloc {
         let mem = self.mem.sub_alloc(offset, size);
         let addr = mem.addr;
 
-        let mut alloc = UcxAlloc {
+        let alloc = UcxAlloc {
             mem,
             data_num_bytes: data_bytes,
             my_pe: self.my_pe,
@@ -1263,7 +1263,7 @@ impl UcxAlloc {
 
         let padding = decode_padding(encoded_ref_count);
 
-        let mut alloc = Self {
+        let alloc = Self {
             mem: self.mem.clone(),
             data_num_bytes: self.data_num_bytes - padding - std::mem::size_of::<AtomicUsize>(),
             my_pe: self.my_pe,

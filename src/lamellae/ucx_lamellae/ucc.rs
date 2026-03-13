@@ -119,9 +119,9 @@ impl Drop for UccLib {
 }
 
 pub(crate) struct UccContext {
-    lib: Arc<UccLib>,
+    _lib: Arc<UccLib>,
     handle: ucc_context_h,
-    params: Box<UccTeamParams>, // pin?
+    _params: Box<UccTeamParams>, // pin?
 }
 
 
@@ -164,9 +164,9 @@ impl UccContext {
         Error::from_status(status)?;
 
         Ok(Self {
-            lib: ucc_lib.clone(),
+            _lib: ucc_lib.clone(),
             handle: unsafe { ctx.assume_init() },
-            params,
+            _params: params,
         })
     }
 
@@ -437,8 +437,8 @@ impl UccTeam {
         let err = unsafe {ucc_collective_init(&mut coll_args, coll_req.as_mut_ptr(), self.handle)};
         let coll_req = unsafe { coll_req.assume_init() };
         self.req_pending.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let req = unsafe {UccRequest::new(coll_req, self.req_completed.clone())};
-        Error::from_status(err)?;
+        let req = UccRequest::new(coll_req, self.req_completed.clone());
+        Error::from_status(err)?; // we check here to make sure the request will be freed even if init failed.
         let err = unsafe {ucc_collective_post(req.req_handle)};
         Error::from_status(err)?;
         Ok(req)
@@ -450,7 +450,7 @@ impl UccTeam {
         res: &mut [T],
         op: AllReduceOp,
     ) -> Result<UccRequest, Error> {
-        let mut allreduce_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_ALLREDUCE, None, Some(op));
+        let allreduce_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_ALLREDUCE, None, Some(op));
         self.post_coll_req(allreduce_args)
     }
 
@@ -460,7 +460,7 @@ impl UccTeam {
         res: &mut [T],
     ) -> Result<UccRequest, Error> {
         
-        let mut allgather_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_ALLGATHER, None, None);
+        let allgather_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_ALLGATHER, None, None);
         self.post_coll_req(allgather_args)
     }
 
@@ -470,12 +470,12 @@ impl UccTeam {
         res: &mut [T],
     ) -> Result<UccRequest, Error> {
         
-        let mut alltoall_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_ALLTOALL, None, None);
+        let alltoall_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_ALLTOALL, None, None);
         self.post_coll_req(alltoall_args)
     }
 
     pub(crate) fn barrier(&self) -> Result<UccRequest, Error> {
-        let mut barrier_args = generate_coll_args::<i32>(&[], &mut [], ucc_coll_type_t_UCC_COLL_TYPE_BARRIER, None, None);
+        let barrier_args = generate_coll_args::<i32>(&[], &mut [], ucc_coll_type_t_UCC_COLL_TYPE_BARRIER, None, None);
         self.post_coll_req(barrier_args)
     }
 
@@ -486,7 +486,7 @@ impl UccTeam {
         root: usize,
     ) -> Result<UccRequest, Error> {
         
-        let mut bcast_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_BCAST, Some(root), None);
+        let bcast_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_BCAST, Some(root), None);
         self.post_coll_req(bcast_args)
     }
 
@@ -498,7 +498,7 @@ impl UccTeam {
         op: AllReduceOp,
     ) -> Result<UccRequest, Error> {
         
-        let mut reduce_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_REDUCE, Some(root), Some(op));
+        let reduce_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_REDUCE, Some(root), Some(op));
         self.post_coll_req(reduce_args)
     }
 
@@ -508,7 +508,7 @@ impl UccTeam {
         res: &mut [T],
         root: usize,
     ) -> Result<UccRequest, Error> {
-        let mut gather_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_GATHER, Some(root), None);
+        let gather_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_GATHER, Some(root), None);
         self.post_coll_req(gather_args)
     }
 
@@ -518,7 +518,7 @@ impl UccTeam {
         res: &mut [T],
         root: usize,
     ) -> Result<UccRequest, Error> {
-        let mut scatter_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_SCATTER, Some(root), None);
+        let scatter_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_SCATTER, Some(root), None);
         self.post_coll_req(scatter_args)
     }
 
@@ -528,7 +528,7 @@ impl UccTeam {
         res: &mut [T],
         op: AllReduceOp,
     ) -> Result<UccRequest, Error> {
-        let mut reduce_scatter_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_REDUCE_SCATTER, None, Some(op));
+        let reduce_scatter_args = generate_coll_args::<T>(buff, res, ucc_coll_type_t_UCC_COLL_TYPE_REDUCE_SCATTER, None, Some(op));
         self.post_coll_req(reduce_scatter_args)
     }
 }
@@ -552,7 +552,7 @@ unsafe extern "C" fn oob_collective(
         Some(idx) => idx,
         None => return ucc_status_t_UCC_ERR_INVALID_PARAM,
     };
-    println!("[{}] size: {}", params.my_pe, size);
+    // println!("[{}] size: {}", params.my_pe, size);
     
     let dst_addr = unsafe { std::slice::from_raw_parts_mut(recv_buf as *mut u8, size * params.pes.len()) };
     let src_buf = unsafe { std::slice::from_raw_parts(src_buf as *const u8, size) };
@@ -560,45 +560,63 @@ unsafe extern "C" fn oob_collective(
 
     if my_team_idx == 0 {
         for i in 1..params.pes.len() {
+            // println!("PE[{}]: Waiting for PE: {}", params.my_pe, i);
             while params.ucx_alloc.as_mut_slice::<u8>()[i] == u8::MAX {
                 params.ucx_alloc.wait();
                 std::thread::yield_now();
             }
+            // println!("PE[{}]: Done Waiting for PE: {}", params.my_pe, i);
         }
-        params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, true);
-        params.ucx_alloc.wait_all();
+        // println!("PE[{}]: Putting data to self", params.my_pe);
+        params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, false, false);
+        // println!("PE[{}]: Done Putting data to self", params.my_pe);
+        // params.ucx_alloc.wait_all();
         
         for (i, pe) in params.pes.iter().enumerate() {
-            params.ucx_alloc.inner_get(*pe, 1, &mut dst_addr[i*size..(i+1)*size]);
+            // println!("PE[{}]: Getting from PE: {}", params.my_pe, i);
+            
+            params.ucx_alloc.inner_get(*pe, 1, true, &mut dst_addr[i*size..(i+1)*size]);
+            // println!("PE[{}]: Done getting from PE: {}", params.my_pe, i);
         }
-        params.ucx_alloc.wait_all();
+        // params.ucx_alloc.wait_all();
         
         let one = [1u8];
         for (i, pe) in params.pes.iter().skip(1).enumerate() {
             params.ucx_alloc.as_mut_slice::<u8>()[i+1] = u8::MAX;
-            params.ucx_alloc.put_inner(*pe, 1, &dst_addr, true);
+            // println!("PE[{}]: Putting data to PE: {}", params.my_pe, pe);
+            params.ucx_alloc.put_inner(*pe, 1, &dst_addr, false, false);
+            // println!("PE[{}]: Done data Putting  to PE: {}", params.my_pe, pe);
         }
-        params.ucx_alloc.wait_all();
+        // params.ucx_alloc.wait_all();
         
-        for (i, pe) in params.pes.iter().skip(1).enumerate() {
-            params.ucx_alloc.put_inner(*pe, 0, &one, true);
+        for pe in params.pes.iter().skip(1) {
+            // println!("PE[{}]: Putting done to PE: {}", params.my_pe, pe);
+            params.ucx_alloc.put_inner(*pe, 0, &one, false, false);
+            // println!("PE[{}]: Done Putting done to PE: {}", params.my_pe, pe);
         }
-        params.ucx_alloc.wait_all();
+        // params.ucx_alloc.wait_all();
     }
     else {
-        params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, true);
-        params.ucx_alloc.wait_all();
+        // println!("PE[{}]: Putting data to self", params.my_pe);
+        params.ucx_alloc.as_mut_slice::<u8>()[1..src_buf.len()+1].copy_from_slice(src_buf);
+        // params.ucx_alloc.put_inner(params.my_pe, 1, src_buf, false, false);
+        // println!("PE[{}]: Done Putting data to self", params.my_pe);
+        // params.ucx_alloc.wait_all();
         let one = [1u8];
-        params.ucx_alloc.put_inner(params.pes[0], my_team_idx, &one, true);
-        params.ucx_alloc.wait_all();
+        // println!("PE[{}]: Putting data to Root", params.my_pe);
+        params.ucx_alloc.put_inner(params.pes[0], my_team_idx, &one, false, false);
+        // println!("PE[{}]: Done Putting data to Root", params.my_pe);
+        // params.ucx_alloc.wait_all();
+        // println!("PE[{}]: Waiting data from root", params.my_pe);
         while params.ucx_alloc.as_mut_slice::<u8>()[0] == u8::MAX {
             params.ucx_alloc.wait();
             std::thread::yield_now();
         }
+        // println!("PE[{}]: Done waiting data from root", params.my_pe);
         params.ucx_alloc.as_mut_slice::<u8>()[0] = u8::MAX;
         dst_addr.copy_from_slice(&params.ucx_alloc.as_mut_slice::<u8>()[1..(1+size*params.pes.len())]);
     }
-    // println!("Completed allgather in oob_collective");
+    // println!("PE[{}] Completed allgather in oob_collective", params.my_pe);
     // println!("[{}]recv_buf: len:{}, data: {:x?}", params.my_pe, dst_addr.len(), dst_addr);
 
     return ucc_status_t_UCC_OK;
