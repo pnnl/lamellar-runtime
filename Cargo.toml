@@ -29,7 +29,7 @@ libfabric = { git = "https://github.com/pnnl/lamellar.git", features = [
     # "use-async-std",
     "threading-thread-safe",
 ], optional = true }
-pmi = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+pmi = { git = "https://github.com/pnnl/lamellar.git", branch="dev", optional = true }
 pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, features = [
     "vendored",
 ] }
@@ -37,6 +37,7 @@ lamellar_main = { path = "./lamellar_main", optional = true }
 prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
 # lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
 lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+lamellar-ucc-sys = { git = "https://github.com/pnnl/lamellar.git", branch="dev", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 # rofisys = { version = "0.4", optional = true }
