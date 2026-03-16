@@ -35,7 +35,10 @@ use crate::{
 };
 
 #[cfg(feature = "enable-on-node-shmem")]
-use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
+use crate::{
+    config,
+    lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment},
+};
 
 use libc::{sysconf, _SC_PAGESIZE, _SC_PHYS_PAGES};
 use parking_lot::{Mutex, RwLock};
@@ -399,7 +402,7 @@ impl Ofi {
         let mut same_node_pes = vec![false; num_pes];
         #[cfg(feature = "enable-on-node-shmem")]
         if !disable_on_node_shmem {
-            let ranks_on_node = my_pmi.ranks_on_node();
+            let ranks_on_node = my_pmi.ranks_on_node(my_pmi.rank());
             if !ranks_on_node.is_empty() {
                 for pe in ranks_on_node {
                     if pe < same_node_pes.len() {
@@ -2342,7 +2345,7 @@ impl LibfabricAlloc {
         Ok(())
     }
 
-    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static>(
+    pub(crate) fn atomic_compare_exchange_op_inner<T: 'static + Copy>(
         &self,
         pe: usize,
         offset: usize,

@@ -265,7 +265,13 @@ impl CommAllocAtomic for LibfabricMtAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         LibfabricMtAlloc::atomic_op_inner(self, pe, offset, &op, true).unwrap();
     }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
@@ -336,8 +342,9 @@ impl CommAllocAtomic for LibfabricMtAlloc {
         }
         .into()
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,
@@ -356,7 +363,13 @@ impl CommAllocAtomic for LibfabricMtAlloc {
         .unwrap();
         compare_exchange_result(result, current)
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         let mut result = T::default();
         let mut_result_slice = std::slice::from_mut(&mut result);
         LibfabricMtAlloc::atomic_fetch_op_inner(self, pe, offset, &op, mut_result_slice, true)
@@ -390,7 +403,7 @@ impl CommAllocAtomic for OneSidedLibfabricMtAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
@@ -470,7 +483,7 @@ impl CommAllocAtomic for OneSidedLibfabricMtAlloc {
         }
         .into()
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "blocking atomic fetch op called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
@@ -489,8 +502,9 @@ impl CommAllocAtomic for OneSidedLibfabricMtAlloc {
         .unwrap();
         result
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,

@@ -425,18 +425,40 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
         }
         .into()
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
-        unimplemented!();
+    fn atomic_fetch_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+        let mut result = T::default();
+        scheduler.clone().block_on(async {
+            unsafe {
+                LibfabricAsyncAlloc::atomic_fetch_op_inner(
+                    self,
+                    pe,
+                    offset,
+                    op,
+                    std::slice::from_mut(&mut result),
+                )
+                .await
+                .unwrap();
+            }
+        });
+        result
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
+        scheduler.clone().block_on(async {
+            LibfabricAsyncAlloc::atomic_op_inner(self, pe, offset, op)
+                .await
+                .unwrap();
+        });
+    }
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,
         offset: usize,
     ) -> Result<T, T> {
         let mut result = T::default();
-        async_std::task::block_on(async {
+        scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::atomic_compare_exchange_op_inner(
                     self,
@@ -452,6 +474,7 @@ impl CommAllocAtomic for LibfabricAsyncAlloc {
         });
         compare_exchange_result(result, current)
     }
+
 }
 
 impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
@@ -489,6 +512,18 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
             pe, self.remote_pe
         );
         LibfabricAsyncAlloc::atomic_op_inner_unmanaged(&self.alloc, pe, offset, &op).unwrap();
+    }
+    fn atomic_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
+        assert_eq!(
+            pe, self.remote_pe,
+            "atomic_op_blocking called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}",
+            pe, self.remote_pe
+        );
+        scheduler.clone().block_on(async {
+            LibfabricAsyncAlloc::atomic_op_inner(&self.alloc, pe, offset, op)
+                .await
+                .unwrap();
+        });
     }
     fn atomic_op_all<T: Remote>(
         &self,
@@ -559,11 +594,27 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
         }
         .into()
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
-        unimplemented!();
+    fn atomic_fetch_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+        assert_eq!(pe, self.remote_pe, "atomic_fetch_op_blocking called on OneSidedLibfabricAsyncAlloc with incorrect pe: {} expected pe: {}", pe, self.remote_pe);
+        let mut result = T::default();
+        scheduler.clone().block_on(async {
+            unsafe {
+                LibfabricAsyncAlloc::atomic_fetch_op_inner(
+                    &self.alloc,
+                    pe,
+                    offset,
+                    op,
+                    std::slice::from_mut(&mut result),
+                )
+                .await
+                .unwrap();
+            }
+        });
+        result
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,
@@ -575,7 +626,7 @@ impl CommAllocAtomic for OneSidedLibfabricAsyncAlloc {
             pe, self.remote_pe
         );
         let mut result = T::default();
-        async_std::task::block_on(async {
+        scheduler.clone().block_on(async {
             unsafe {
                 LibfabricAsyncAlloc::atomic_compare_exchange_op_inner(
                     &self.alloc,

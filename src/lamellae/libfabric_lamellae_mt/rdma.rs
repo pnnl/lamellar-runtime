@@ -391,7 +391,7 @@ impl CommAllocRdma for LibfabricMtAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
         if pe != self.ofi.my_pe {
             unsafe {
                 LibfabricMtAlloc::inner_put(&self, pe, offset, std::slice::from_ref(&src), true)
@@ -558,7 +558,7 @@ impl CommAllocRdma for LibfabricMtAlloc {
         .into()
     }
 
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
         unsafe {
@@ -599,7 +599,7 @@ impl CommAllocRdma for LibfabricMtAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
         let mut dst = vec![T::default(); len];
         unsafe {
             self.inner_get(pe, offset, &mut dst, true)
@@ -629,6 +629,7 @@ impl CommAllocRdma for LibfabricMtAlloc {
     }
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
@@ -678,7 +679,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "put_blocking called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
@@ -814,7 +815,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
         }
         .into()
     }
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
@@ -853,7 +854,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
         }
         .into()
     }
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get_buffer called on OneSidedLibfabricMtAlloc with incorrect pe: {} expected pe: {}",
@@ -894,6 +895,7 @@ impl CommAllocRdma for OneSidedLibfabricMtAlloc {
     }
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,

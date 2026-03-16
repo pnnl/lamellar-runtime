@@ -222,7 +222,7 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote + 'static>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
@@ -291,7 +291,7 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
         let offset = offset * std::mem::size_of::<T>();
         assert!(offset + std::mem::size_of::<T>() <= self.num_bytes());
         let remote_dst_base = self.pe_base_offset(pe);
@@ -324,8 +324,9 @@ impl CommAllocAtomic for ShmemAlloc {
         }
         .into()
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,
@@ -366,7 +367,7 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote + 'static>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
@@ -429,7 +430,7 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "blocking atomic fetch op called on OneSidedShmemAlloc with incorrect pe: {} expected pe: {}",
@@ -471,8 +472,9 @@ impl CommAllocAtomic for OneSidedShmemAlloc {
         }
         .into()
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,

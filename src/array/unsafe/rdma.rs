@@ -681,7 +681,7 @@ impl<T: Dist> UnsafeArray<T> {
         <Self as LamellarRdmaGet<T>>::get_pe(self, pe, offset, Sealed)
     }
     pub unsafe fn blocking_get_pe(&self, pe: usize, offset: usize) -> T {
-        self.mem_region.alloc.blocking_get(pe, offset)
+        self.mem_region.blocking_get(pe, offset)
     }
     pub unsafe fn get_buffer_pe(
         &self,

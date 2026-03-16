@@ -476,7 +476,7 @@ impl CommAllocRdma for UcxMtAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
         if pe != self.my_pe {
             let _ = unsafe {
                 UcxMtAlloc::put_inner(&self, pe, offset, std::slice::from_ref(&src), true, true)
@@ -669,7 +669,7 @@ impl CommAllocRdma for UcxMtAlloc {
         .into()
     }
 
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         let mut val = T::default();
         let val_slice = std::slice::from_mut(&mut val);
         let _ = unsafe { self.inner_get(pe, offset, true, val_slice) };
@@ -705,7 +705,7 @@ impl CommAllocRdma for UcxMtAlloc {
         .into()
     }
 
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
         let mut buf = vec![T::default(); len];
         let _ = unsafe { self.inner_get(pe, offset, true, buf.as_mut_slice()) };
         buf
@@ -734,6 +734,7 @@ impl CommAllocRdma for UcxMtAlloc {
     }
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,
@@ -789,7 +790,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         }
         .into()
     }
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+    fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "put_blocking called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
@@ -921,7 +922,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         .into()
     }
 
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T {
+    fn blocking_get<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
@@ -959,7 +960,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
         .into()
     }
 
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T> {
+    fn blocking_get_buffer<T: Remote>(&self, _scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T> {
         assert_eq!(
             pe, self.remote_pe,
             "blocking_get_buffer called on OneSidedUcxMtAlloc with incorrect pe: {} expected pe: {}",
@@ -1006,6 +1007,7 @@ impl CommAllocRdma for OneSidedUcxMtAlloc {
     }
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         mut dst: LamellarBuffer<T, B>,

@@ -297,7 +297,13 @@ impl CommAllocAtomic for UcxAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) {
         UcxAlloc::inner_atomic_op(self, pe, offset, true, &op, true);
     }
     fn atomic_op_unmanaged<T: Remote + 'static>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
@@ -351,7 +357,13 @@ impl CommAllocAtomic for UcxAlloc {
         .into()
     }
 
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
+    ) -> T {
         let mut result = T::default();
         UcxAlloc::inner_atomic_fetch_op(
             self,
@@ -388,8 +400,9 @@ impl CommAllocAtomic for UcxAlloc {
         .into()
     }
 
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,
@@ -434,7 +447,7 @@ impl CommAllocAtomic for OneSidedUcxAlloc {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) {
         assert_eq!(
             pe, self.remote_pe,
             "atomic op called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
@@ -490,7 +503,7 @@ impl CommAllocAtomic for OneSidedUcxAlloc {
         .into()
     }
 
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T {
         assert_eq!(
             pe, self.remote_pe,
             "atomic fetch op called on OneSidedUcxAlloc with incorrect pe: {} expected pe: {}",
@@ -537,8 +550,9 @@ impl CommAllocAtomic for OneSidedUcxAlloc {
         .into()
     }
 
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,

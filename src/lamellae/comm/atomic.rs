@@ -430,7 +430,7 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicOpHandle<T>;
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
+    fn atomic_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize);
     fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize);
     fn atomic_op_all<T: Remote>(
         &self,
@@ -448,7 +448,7 @@ pub(crate) trait CommAllocAtomic {
         pe: usize,
         offset: usize,
     ) -> AtomicFetchOpHandle<T>;
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) -> T;
+    fn atomic_fetch_op_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, op: AtomicOp<T>, pe: usize, offset: usize) -> T;
     fn atomic_compare_exchange<T: Remote + PartialEq>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -466,8 +466,9 @@ pub(crate) trait CommAllocAtomic {
         let _ = offset;
         panic!("atomic_compare_exchange not supported for this backend")
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         pe: usize,
@@ -477,7 +478,7 @@ pub(crate) trait CommAllocAtomic {
         let _ = new;
         let _ = pe;
         let _ = offset;
-        panic!("blocking_atomic_compare_exchange not supported for this backend")
+        panic!("atomic_compare_exchange_blocking not supported for this backend")
     }
 }
 

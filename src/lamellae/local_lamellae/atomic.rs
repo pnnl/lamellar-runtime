@@ -227,7 +227,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn atomic_op_blocking<T: Remote>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) {
+    fn atomic_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, _pe: usize, offset: usize) {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         net_atomic_op(&op, &CommAllocAddr(self.start() + offset));
     }
@@ -275,7 +275,7 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn blocking_atomic_fetch_op<T: Remote>(&self, op: AtomicOp<T>, _pe: usize, offset: usize) -> T {
+    fn atomic_fetch_op_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, op: AtomicOp<T>, _pe: usize, offset: usize) -> T {
         assert!(offset < unsafe { self.as_mut_slice::<T>().len() });
         let mut result = T::default();
         net_atomic_fetch_op(&op, &CommAllocAddr(self.start() + offset), &mut result);
@@ -302,8 +302,9 @@ impl CommAllocAtomic for Arc<LocalAlloc> {
         }
         .into()
     }
-    fn blocking_atomic_compare_exchange<T: Remote + PartialEq>(
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
         &self,
+        _scheduler: &Arc<Scheduler>,
         current: T,
         new: T,
         _pe: usize,

@@ -24,6 +24,9 @@ use crate::{
 #[cfg(feature = "enable-on-node-shmem")]
 use crate::lamellae::shmem_utils::{attach_shmem_segment, ShmemSegment};
 
+#[cfg(feature = "enable-on-node-shmem")]
+use std::ffi::c_void;
+
 use pmi::{pmi::Pmi, pmix::PmiX};
 use lamellar_ucx_sys::ucp_atomic_op_t;
 
@@ -237,7 +240,7 @@ impl UcxWorld {
         let mut same_node_pes = vec![false; num_pes];
         #[cfg(feature = "enable-on-node-shmem")]
         if !disable_on_node_shmem {
-            let pes_on_node = my_pmi.ranks_on_node();
+            let pes_on_node = my_pmi.ranks_on_node(my_pmi.rank());
             if !pes_on_node.is_empty() {
                 for pe in pes_on_node {
                     if pe < num_pes {
@@ -569,6 +572,13 @@ impl UcxWorld {
         };
 
         let my_pe = pes.iter().position(|p| *p == self.my_pe).unwrap();
+        #[cfg(feature = "enable-on-node-shmem")]
+        let (same_node_bases, same_node_segments) = if self.disable_on_node_shmem {
+            (vec![None; pes.len()], vec![None; pes.len()])
+        } else {
+            // For sub_alloc we don't create new shared segments here; use placeholders sized to `pes`.
+            (vec![None; pes.len()], vec![None; pes.len()])
+        };
 
         let alloc = UcxAlloc::new(
             mem,
@@ -1438,7 +1448,7 @@ impl UcxAlloc {
             _ => panic!("Unsupported atomic operation"),
         };
         if blocking {
-            req.wait().expect("blocking_atomic_fetch_op failed");
+            req.wait().expect("atomic_fetch_op_blocking failed");
             None
         } else {
             Some(req)
@@ -1482,7 +1492,7 @@ impl UcxAlloc {
         );
         if blocking {
             req.wait()
-                .expect("blocking_atomic_compare_exchange_op failed");
+                .expect("atomic_compare_exchange_blocking_op failed");
             None
         } else {
             Some(req)

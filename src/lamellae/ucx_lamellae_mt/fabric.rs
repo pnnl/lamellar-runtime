@@ -936,7 +936,7 @@ impl UcxMtAlloc {
             _ => panic!("Unsupported atomic operation"),
         };
         if blocking {
-            req.wait().expect("blocking_atomic_fetch_op failed");
+            req.wait().expect("atomic_fetch_op_blocking failed");
             None
         } else {
             Some(req)
@@ -961,7 +961,7 @@ impl UcxMtAlloc {
             .atomic_compare_swap(compare, result.as_mut_ptr(), remote_addr + offset, &rkey);
         if blocking {
             req.wait()
-                .expect("blocking_atomic_compare_exchange_op failed");
+                .expect("atomic_compare_exchange_blocking_op failed");
             None
         } else {
             Some(req)

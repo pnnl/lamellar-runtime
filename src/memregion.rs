@@ -944,7 +944,7 @@ impl<T: Remote> MemoryRegion<T> {
         //     panic!("[LAMELLAR INTERNAL ERROR]: cant put value of type {:?} into memregion of type {:?} (use to_base to convert the memregion to the correct base type)",std::any::type_name::<R>(),std::any::type_name::<T>());
         // }
         trace!("put blocking memregion {:?} index: {:?}", self.alloc, index);
-        self.alloc.inner_alloc.put_blocking(data, pe, index)
+        self.alloc.inner_alloc.put_blocking(&self.scheduler, data, pe, index)
     }
 
     pub(crate) unsafe fn put_unmanaged(&self, pe: usize, index: usize, data: T) {
@@ -1083,7 +1083,7 @@ impl<T: Remote> MemoryRegion<T> {
         // }
         trace!("get blocking memregion {:?} index: {:?}", self.alloc, index);
 
-        self.alloc.inner_alloc.blocking_get(pe, index)
+        self.alloc.inner_alloc.blocking_get(&self.scheduler, pe, index)
     }
 
     //TODO: once we have a reliable asynchronos get wait mechanism, we return a request handle,
@@ -1124,7 +1124,7 @@ impl<T: Remote> MemoryRegion<T> {
             index
         );
 
-        self.alloc.inner_alloc.blocking_get_buffer(pe, index, len)
+        self.alloc.inner_alloc.blocking_get_buffer(&self.scheduler, pe, index, len)
     }
 
     pub(crate) unsafe fn get_into_buffer<B: AsLamellarBuffer<T>>(
@@ -1162,7 +1162,7 @@ impl<T: Remote> MemoryRegion<T> {
 
         self.alloc
             .inner_alloc
-            .blocking_get_into_buffer(pe, index, data)
+            .blocking_get_into_buffer(&self.scheduler, pe, index, data)
     }
 
     pub(crate) unsafe fn get_into_buffer_unmanaged<B: AsLamellarBuffer<T>>(
@@ -1199,7 +1199,7 @@ impl<T: Remote> MemoryRegion<T> {
         );
         self.alloc
             .inner_alloc
-            .atomic_op_blocking(op, pe, index)
+            .atomic_op_blocking(&self.scheduler, op, pe, index)
     }
     pub(crate) fn atomic_op_unmanaged(&self, pe: usize, index: usize, op: AtomicOp<T>) {
         trace!(
@@ -1257,7 +1257,7 @@ impl<T: Remote> MemoryRegion<T> {
         );
         self.alloc
             .inner_alloc
-            .blocking_atomic_fetch_op(op, pe, index)
+            .atomic_fetch_op_blocking(&self.scheduler, op, pe, index)
     }
 
     pub(crate) fn wait_all(&self) {
@@ -1368,7 +1368,7 @@ impl<T: Remote + PartialEq> MemoryRegion<T> {
         );
         self.alloc
             .inner_alloc
-            .blocking_atomic_compare_exchange(current, new, pe, index)
+            .atomic_compare_exchange_blocking(&self.scheduler, current, new, pe, index)
     }
 }
 

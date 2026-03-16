@@ -447,7 +447,7 @@ pub(crate) trait CommAllocRdma {
         pe: usize,
         offset: usize,
     ) -> RdmaHandle<T>;
-    fn put_blocking<T: Remote>(&self, src: T, pe: usize, offset: usize);
+    fn put_blocking<T: Remote>(&self, scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize);
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize);
     fn put_buffer<T: Remote>(
         &self,
@@ -490,7 +490,7 @@ pub(crate) trait CommAllocRdma {
         pe: usize,
         offset: usize,
     ) -> RdmaGetHandle<T>;
-    fn blocking_get<T: Remote>(&self, pe: usize, offset: usize) -> T;
+    fn blocking_get<T: Remote>(&self, scheduler: &Arc<Scheduler>, pe: usize, offset: usize) -> T;
     fn get_buffer<T: Remote>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -499,7 +499,7 @@ pub(crate) trait CommAllocRdma {
         offset: usize,
         len: usize,
     ) -> RdmaGetBufferHandle<T>;
-    fn blocking_get_buffer<T: Remote>(&self, pe: usize, offset: usize, len: usize) -> Vec<T>;
+    fn blocking_get_buffer<T: Remote>(&self, scheduler: &Arc<Scheduler>, pe: usize, offset: usize, len: usize) -> Vec<T>;
     fn get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
         scheduler: &Arc<Scheduler>,
@@ -510,6 +510,7 @@ pub(crate) trait CommAllocRdma {
     ) -> RdmaGetIntoBufferHandle<T, B>;
     fn blocking_get_into_buffer<T: Remote, B: AsLamellarBuffer<T>>(
         &self,
+        scheduler: &Arc<Scheduler>,
         pe: usize,
         offset: usize,
         dst: LamellarBuffer<T, B>,

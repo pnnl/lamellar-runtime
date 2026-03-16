@@ -42,6 +42,7 @@ use libfabric::cntr::WaitCntr;
 use libfabric::comm::atomic::AtomicFetchEp;
 use libfabric::comm::atomic::AtomicValidEp;
 use libfabric::comm::atomic::AtomicWriteEp;
+use libfabric::async_::comm::atomic::AsyncAtomicCASEp;
 use libfabric::comm::atomic::AtomicCASEp;
 use libfabric::comm::collective::CollectiveAttr;
 use libfabric::comm::rma::ReadEp;
