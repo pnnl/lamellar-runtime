@@ -10,7 +10,6 @@ use lamellar::active_messaging::prelude::*;
 // use lamellar::{Backend, SchedulerType};
 
 // use tracing_flame::FlameLayer;
-use tracing_subscriber::fmt::{self, SubscriberBuilder};
 
 //----------------- Active message returning nothing-----------------//
 #[lamellar::AmData(Debug, Clone)]
@@ -34,25 +33,8 @@ impl LamellarAM for AmNoReturn {
     }
 }
 
-// fn setup_global_subscriber() -> impl Drop {
-//     let fmt_layer = fmt::Layer::default();
-
-//     let (flame_layer, _guard) = FlameLayer::with_file("./tracing.folded").unwrap();
-//     let flame_layer = flame_layer.with_threads_collapsed(true);
-
-//     let subscriber = Registry::default().with(fmt_layer).with(flame_layer);
-
-//     tracing::subscriber::set_global_default(subscriber).expect("Could not set global default");
-//     _guard
-// }
-
 #[lamellar::main]
 fn main() {
-    // let subscriber = tracing_subscriber::FmtSubscriber::builder()
-    //     .with_max_level(Level::TRACE)
-    //     .init();
-    // let _guard = setup_global_subscriber();
-    let subscriber = fmt::init();
     let start = std::time::Instant::now();
     let world = LamellarWorldBuilder::new()
         //.with_lamellae(Default::default()) //if enable-rofi feature is active default is rofi, otherwise local

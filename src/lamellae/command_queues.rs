@@ -1560,7 +1560,7 @@ impl CommandQueue {
         while self.scheduler.active()
             && self.active.load(Ordering::SeqCst) != CmdQStatus::Panic as u8
         {
-            if timer.elapsed().as_secs_f64() > 1.0 {
+            if timer.elapsed().as_secs_f64() > 10.0 {
                 trace!("alloc_task still running");
                 timer = std::time::Instant::now();
                 print = true;

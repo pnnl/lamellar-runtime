@@ -358,10 +358,13 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     }
 
     fn put_unmanaged<T: Remote>(&self, src: T, pe: usize, offset: usize) {
+
         let dst = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe != self.my_pe {
+            trace!("rofi_c put unmanaged val to pe {} addr: {:?}", pe, self.start());
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
         } else {
+            trace!("rofi_c put unmanaged val locally addr: {:?}", self.start());
             unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
         }
     }
@@ -369,9 +372,11 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
         let dst = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe != self.my_pe {
+            trace!("rofi_c put blocking val to pe {} addr: {:?}", pe, self.start());
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
             rofi_c_wait();
         } else {
+            trace!("rofi_c put blocking val locally addr: {:?}", self.start());
             unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
         }
         

@@ -245,6 +245,7 @@ pub use parking_lot;
 //#[doc(hidden)]
 pub use ::tracing;
 pub use ::tracing::*;
+pub use ::tracing_subscriber;
 
 //#[doc(hidden)]
 pub use async_trait;

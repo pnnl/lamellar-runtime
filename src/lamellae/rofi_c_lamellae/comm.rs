@@ -135,5 +135,6 @@ impl Drop for RofiCComm {
             world_ref_count
         );
         self.rofi_c.barrier();
+        rofi_c_finit().expect("rofi-c finalization failed");
     }
 }

@@ -71,6 +71,15 @@ fn main() {
     }
     println!("cargo:rustc-link-arg=-Wl,-rpath,$ORIGIN/shared_libs");
     println!("cargo:rustc-link-arg=-Wl,-rpath,{}/shared_libs",profile_output_dir.display());
+
+    // Link system libraries required by libfabric/ROFI providers
+    // Some providers reference libnuma and libuuid symbols (e.g. uuid_unparse, numa_*).
+    // Ensure the linker includes those libraries when building with these features.
+    #[cfg(any(feature = "enable-rofi-c", feature = "enable-rofi-c-shared", feature = "enable-libfabric"))]
+    {
+        println!("cargo:rustc-link-lib=dylib=numa");
+        println!("cargo:rustc-link-lib=dylib=uuid");
+    }
     
 
     // Generate bash script with library paths

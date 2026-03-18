@@ -5,7 +5,7 @@ use crate::lamellae::{AllocError, AllocResult, AllocationType, RdmaError, RdmaRe
 use std::any::type_name;
 use std::ffi::CString;
 use std::os::raw::c_ulong;
-use tracing::error;
+use tracing::{trace,error};
 
 pub(crate) fn rofi_c_init(provider: &str, domain: &str) -> Result<(), &'static str> {
     let prov_str = CString::new(provider).unwrap();
@@ -20,9 +20,8 @@ pub(crate) fn rofi_c_init(provider: &str, domain: &str) -> Result<(), &'static s
     }
 }
 
-//currently shows unused warning as we are debugging a hang in rofi_c_finit
-
 pub(crate) fn rofi_c_finit() -> Result<(), &'static str> {
+    trace!("finalizing rofi_c");
     let retval = unsafe { rofisys::rofi_finit() as i32 };
     if retval == 0 {
         Ok(())

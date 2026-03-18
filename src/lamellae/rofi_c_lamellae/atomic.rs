@@ -24,6 +24,16 @@ impl CommAllocAtomic for RofiCAlloc {
         unimplemented!("atomic operations not implemented for rofi-c backend")
     }
 
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        _op: AtomicOp<T>,
+        _pe: usize,
+        _offset: usize,
+    ) {
+        unimplemented!("atomic operations not implemented for rofi-c backend")
+    }
+
     fn atomic_op_unmanaged<T: Remote>(&self, _op: AtomicOp<T>, _pe: usize, _offset: usize) {
         unimplemented!("atomic operations not implemented for rofi-c backend")
     }
@@ -73,6 +83,16 @@ impl CommAllocAtomic for OneSidedRofiCAlloc {
         _pe: usize,
         _offset: usize,
     ) -> AtomicOpHandle<T> {
+        unimplemented!("atomic operations not implemented for rofi-c backend")
+    }
+
+    fn atomic_op_blocking<T: Remote>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        _op: AtomicOp<T>,
+        _pe: usize,
+        _offset: usize,
+    ) {
         unimplemented!("atomic operations not implemented for rofi-c backend")
     }
 

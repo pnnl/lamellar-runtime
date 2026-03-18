@@ -10,8 +10,6 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{fmt, EnvFilter};
 // use lamellar::{Backend, SchedulerType};
 
 //----------------- Active message returning nothing-----------------//
@@ -74,16 +72,6 @@ impl LamellarAM for AmReturnUsize {
 
 #[lamellar::main]
 fn main() {
-    let subscriber = tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::from_default_env())
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_thread_ids(true)
-                .with_file(true)
-                .with_line_number(true)
-                .with_level(true),
-        )
-        .init();
     let world = LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
     let _num_pes = world.num_pes();

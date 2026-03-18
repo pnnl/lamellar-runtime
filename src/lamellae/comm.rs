@@ -16,7 +16,7 @@ pub use rdma::Remote;
 #[cfg(feature = "enable-libfabric")]
 use crate::lamellae::libfabric_lamellae::comm::LibfabricComm;
 
-#[cfg(feature = "enable-libfabric")]
+#[cfg(feature = "enable-libfabric-mt")]
 use crate::lamellae::libfabric_lamellae_mt::comm::LibfabricMtComm;
 
 #[cfg(feature = "enable-libfabric-async")]
@@ -26,7 +26,7 @@ use crate::lamellae::libfabric_async_lamellae::comm::LibfabricAsyncComm;
 use crate::lamellae::rofi_c_lamellae::comm::RofiCComm;
 #[cfg(feature = "enable-ucx")]
 use crate::lamellae::ucx_lamellae::comm::UcxComm;
-#[cfg(feature = "enable-ucx")]
+#[cfg(feature = "enable-ucx-mt")]
 use crate::lamellae::ucx_lamellae_mt::comm::UcxMtComm;
 use crate::lamellae::{
     local_lamellae::comm::LocalComm, shmem_lamellae::comm::ShmemComm, AllocationType,
@@ -50,13 +50,13 @@ pub(crate) enum CmdQStatus {
 pub(crate) enum Comm {
     #[cfg(feature = "enable-libfabric")]
     Libfabric(LibfabricComm),
-    #[cfg(feature = "enable-libfabric")]
+    #[cfg(feature = "enable-libfabric-mt")]
     LibfabricMt(LibfabricMtComm),
     #[cfg(feature = "enable-libfabric-async")]
     LibfabricAsync(LibfabricAsyncComm),
     #[cfg(feature = "enable-ucx")]
     Ucx(UcxComm),
-    #[cfg(feature = "enable-ucx")]
+    #[cfg(feature = "enable-ucx-mt")]
     UcxMt(UcxMtComm),
     #[cfg(feature = "enable-rofi-c")]
     RofiC(RofiCComm),

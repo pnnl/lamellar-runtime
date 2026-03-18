@@ -9,9 +9,42 @@ use quote::ToTokens;
 
 
 #[cfg(any(feature = "use-prterun", feature = "use-srun"))]
-fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Option<impl ToTokens>) -> impl ToTokens {
-
+fn create_launch_block(
+    launcher_info: (impl ToTokens, impl ToTokens),
+    ret: Option<impl ToTokens>,
+    // "srun" or "prterun" to control output flag format
+    launcher_type: &str,
+) -> impl ToTokens {
     let (env_var, launcher_path) = launcher_info;
+
+    let output_dir_block = if launcher_type == "srun" {
+        quote! {
+            if !output_dir.is_empty() {
+                let __dir = output_dir.trim_end_matches('/');
+                std::fs::create_dir_all(__dir)
+                    .expect("lamellar_main: failed to create output directory");
+                // srun uses %t to expand to the task ID
+                prterun_args.insert(0, format!("--error={}/pe_%t.err", __dir));
+                prterun_args.insert(0, format!("--output={}/pe_%t.out", __dir));
+            }
+        }
+    } else {
+        // prterun (or other launcher using prterun-style output syntax)
+        quote! {
+            if !output_dir.is_empty() {
+                let __dir = output_dir.trim_end_matches('/');
+                std::fs::create_dir_all(__dir)
+                    .expect("lamellar_main: failed to create output directory");
+                // prterun: use a conservative directive set for compatibility
+                // across PRTE/OpenMPI versions.
+                prterun_args.insert(
+                    0,
+                    format!("--output=directory={}", __dir),
+                );
+            }
+        }
+    };
+
     quote! {
         let prte_launched = std::env::var(#env_var).is_ok();
         if !prte_launched {
@@ -25,24 +58,29 @@ fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Optio
             let mut prterun_args = Vec::<String>::new();
 
             let mut time=false;
+            let mut output_dir = String::new();
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
             if let Some(pos) = pos {
-                args.split_off(pos).into_iter().skip(1).for_each(|x| {
+                let mut extra = args.split_off(pos).into_iter().skip(1);
+                while let Some(x) = extra.next() {
                     if x == "--time" {
                         time = true;
-                    }
-                    else{
+                    } else if x == "--output-dir" {
+                        if let Some(dir) = extra.next() {
+                            output_dir = dir;
+                        }
+                    } else {
                         prterun_args.push(x.to_string());
                     }
-                });
+                }
             }
             let end = args.len();
 
             // After the prterun arguments, add the executable name
             prterun_args.push(exec);
-            
+
             // Add the arguments targeting the application
             prterun_args.extend(args.into_iter());
 
@@ -57,6 +95,7 @@ fn create_launch_block(launcher_info: (impl ToTokens, impl ToTokens), ret: Optio
             if time {
                 launcher_cmd.env("LAMELLAR_MAIN_TIME", "1");
             }
+            #output_dir_block
             println!("Launching with {:?}: {:?} {:?}", #env_var, #launcher_path, prterun_args.join(" "));
             launcher_cmd
                 .env("LD_LIBRARY_PATH", ld_library_path)
@@ -106,10 +145,10 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     };
     
     #[cfg(feature = "use-prterun")]
-    let launch_block = create_launch_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), ret);
-    
+    let launch_block = create_launch_block((quote! {"PRTE_LAUNCHED"}, quote! {prterun_path()}), ret, "prterun");
+
     #[cfg(feature = "use-srun")]
-    let launch_block = create_launch_block((quote! {"SLURM_LOCALID"}, quote! {"srun"}), ret);
+    let launch_block = create_launch_block((quote! {"SLURM_LOCALID"}, quote! {"srun"}), ret, "srun");
     
     let import = if cfg!(feature = "use-prterun") {
         quote! {
@@ -119,12 +158,36 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // Output redirection is handled at the launcher level so capture starts before
+    // user code executes (including C library output during initialization).
+    // srun uses --output/--error, while prterun uses --output directives.
+    #[cfg(any(feature = "use-srun", feature = "use-prterun"))]
+    let pe_output_dir_block = quote! {};
+
     let res = quote! {
         #import
-        
+
         fn main() #ret_type {
             #launch_block
             else {
+                #pe_output_dir_block
+                if let Ok(__lamellar_log) = std::env::var("LAMELLAR_LOG") {
+                    if !__lamellar_log.trim().is_empty() {
+                        use ::lamellar::tracing_subscriber::prelude::*;
+
+                        std::env::set_var("RUST_LOG", &__lamellar_log);
+                        let _ = ::lamellar::tracing_subscriber::registry()
+                            .with(::lamellar::tracing_subscriber::EnvFilter::from_default_env())
+                            .with(
+                                ::lamellar::tracing_subscriber::fmt::layer()
+                                    .with_thread_ids(true)
+                                    .with_file(true)
+                                    .with_line_number(true)
+                                    .with_level(true),
+                            )
+                            .try_init();
+                    }
+                }
                 let mut __lamellar_main_timer = std::time::Instant::now();
                 let result = (|| #block)();
                 if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
