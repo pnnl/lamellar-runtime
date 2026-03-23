@@ -370,15 +370,15 @@ impl<T: Dist + 'static> UnsafeArray<T> {
             swap: comm.atomic_op_avail::<T>(AtomicOp::Write(sample)),
             cas: comm.atomic_op_avail::<T>(AtomicOp::Cas(sample, sample)),
             add: comm.atomic_op_avail::<T>(AtomicOp::Sum(sample)),
-            fetch_add: comm.atomic_op_avail::<T>(AtomicOp::Sum(sample)),
+            fetch_add: comm.atomic_op_avail::<T>(AtomicOp::FetchSum(sample)),
             prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(sample)),
-            fetch_prod: comm.atomic_op_avail::<T>(AtomicOp::Prod(sample)),
+            fetch_prod: comm.atomic_op_avail::<T>(AtomicOp::FetchProd(sample)),
             bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(sample)),
-            fetch_bit_or: comm.atomic_op_avail::<T>(AtomicOp::BitOr(sample)),
+            fetch_bit_or: comm.atomic_op_avail::<T>(AtomicOp::FetchBitOr(sample)),
             bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(sample)),
-            fetch_bit_xor: comm.atomic_op_avail::<T>(AtomicOp::BitXor(sample)),
+            fetch_bit_xor: comm.atomic_op_avail::<T>(AtomicOp::FetchBitXor(sample)),
             bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(sample)),
-            fetch_bit_and: comm.atomic_op_avail::<T>(AtomicOp::BitAnd(sample)),
+            fetch_bit_and: comm.atomic_op_avail::<T>(AtomicOp::FetchBitAnd(sample)),
         }
     }
 

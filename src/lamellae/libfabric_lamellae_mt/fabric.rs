@@ -593,6 +593,14 @@ impl Ofi {
             LamellarAtomicOp::Read => AtomicOpKind::Read,
             LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
             LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+            LamellarAtomicOp::FetchMin(_) => AtomicOpKind::Min,
+            LamellarAtomicOp::FetchMax(_) => AtomicOpKind::Max,
+            LamellarAtomicOp::FetchSum(_) => AtomicOpKind::Sum,
+            LamellarAtomicOp::FetchSub(_) => AtomicOpKind::Sum,
+            LamellarAtomicOp::FetchProd(_) => AtomicOpKind::Prod,
+            LamellarAtomicOp::FetchBitOr(_) => AtomicOpKind::BitOr,
+            LamellarAtomicOp::FetchBitXor(_) => AtomicOpKind::BitXor,
+            LamellarAtomicOp::FetchBitAnd(_) => AtomicOpKind::BitAnd,
         };
 
         let id = std::any::TypeId::of::<T>();
@@ -1908,6 +1916,19 @@ impl LibfabricMtAlloc {
         let src = *(src as *const T as *const OFI);
         let src = match op {
             LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            LamellarAtomicOp::FetchMin(_)
+            | LamellarAtomicOp::FetchMax(_)
+            | LamellarAtomicOp::FetchSum(_)
+            | LamellarAtomicOp::FetchSub(_)
+            | LamellarAtomicOp::FetchProd(_)
+            | LamellarAtomicOp::FetchBitOr(_)
+            | LamellarAtomicOp::FetchBitXor(_)
+            | LamellarAtomicOp::FetchBitAnd(_) => {
+                panic!("Fetch atomic ops must use the fetch path")
+            }
+            LamellarAtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
+            }
             _ => src,
         };
         let buf = std::slice::from_ref(&src);
@@ -1987,7 +2008,20 @@ impl LibfabricMtAlloc {
             Some(src) => {
                 let src = *(src as *const T as *const OFI);
                 let src = match op {
-                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    LamellarAtomicOp::FetchSub(_) => Self::negate_atomic_value(src),
+                    LamellarAtomicOp::Min(_)
+                    | LamellarAtomicOp::Max(_)
+                    | LamellarAtomicOp::Sum(_)
+                    | LamellarAtomicOp::Sub(_)
+                    | LamellarAtomicOp::Prod(_)
+                    | LamellarAtomicOp::BitOr(_)
+                    | LamellarAtomicOp::BitXor(_)
+                    | LamellarAtomicOp::BitAnd(_) => {
+                        panic!("Non-fetch atomic ops must use the non-fetch path")
+                    }
+                    LamellarAtomicOp::Cas(_, _) => {
+                        panic!("Compare atomic ops must use the compare path")
+                    }
                     _ => src,
                 };
                 let buf = std::slice::from_ref(&src);

@@ -5,6 +5,7 @@ use crate::{
             CommAlloc, CommAllocAddr, CommAllocInner, CommAllocType, CommInfo, CommMem,
             CommProgress, CommShutdown,
         },
+        comm::atomic::AtomicOp,
         AllocationType,
     },
     lamellar_alloc::{BTreeAlloc, LamellarAlloc},
@@ -115,7 +116,10 @@ impl CommInfo for RofiCComm {
     where
         Self: Sized,
     {
-        false
+        self.rofi_c.atomic_avail::<T>()
+    }
+    fn atomic_op_avail<T:'static>(&self, op: AtomicOp<T>) -> bool {
+        self.rofi_c.atomic_op_avail(&op)
     }
 }
 

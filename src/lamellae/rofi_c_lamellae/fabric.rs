@@ -42,7 +42,13 @@ impl RofiC {
         Ok(world)
     }
     pub(crate) fn atomic_avail<T: 'static>(&self) -> bool {
-        false
+        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_atomic_avail::<T>()
+    }
+    pub(crate) fn atomic_op_avail<T: 'static>(
+        &self,
+        op: &crate::lamellae::comm::atomic::AtomicOp<T>,
+    ) -> bool {
+        crate::lamellae::rofi_c_lamellae::rofi::rofi_c_atomic_op_avail(op)
     }
     pub(crate) fn alloc(
         &self,

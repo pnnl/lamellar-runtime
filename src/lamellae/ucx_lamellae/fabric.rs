@@ -351,6 +351,11 @@ impl UcxWorld {
                 | AtomicOp::BitOr(_)
                 | AtomicOp::BitXor(_)
                 | AtomicOp::BitAnd(_)
+                | AtomicOp::FetchSum(_)
+                | AtomicOp::FetchSub(_)
+                | AtomicOp::FetchBitOr(_)
+                | AtomicOp::FetchBitXor(_)
+                | AtomicOp::FetchBitAnd(_)
         )
     }
 
@@ -958,14 +963,18 @@ impl UcxAlloc {
     fn ucx_atomic_update<T: Copy>(op: &AtomicOp<T>) -> (ucp_atomic_op_t, T) {
         match op {
             AtomicOp::Write(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_SWAP, *val),
-            AtomicOp::Sum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, *val),
+            AtomicOp::Sum(val) | AtomicOp::FetchSum(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_ADD, *val),
             AtomicOp::Sub(val) => (
                 ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
                 unsafe { Self::negate_atomic_value(*val) },
             ),
-            AtomicOp::BitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, *val),
-            AtomicOp::BitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, *val),
-            AtomicOp::BitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, *val),
+            AtomicOp::FetchSub(val) => (
+                ucp_atomic_op_t::UCP_ATOMIC_OP_ADD,
+                unsafe { Self::negate_atomic_value(*val) },
+            ),
+            AtomicOp::BitAnd(val) | AtomicOp::FetchBitAnd(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_AND, *val),
+            AtomicOp::BitOr(val) | AtomicOp::FetchBitOr(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_OR, *val),
+            AtomicOp::BitXor(val) | AtomicOp::FetchBitXor(val) => (ucp_atomic_op_t::UCP_ATOMIC_OP_XOR, *val),
             _ => panic!("Unsupported atomic operation"),
         }
     }
@@ -1387,6 +1396,19 @@ impl UcxAlloc {
                 let (ucx_op, val) = Self::ucx_atomic_update(op);
                 self.endpoints[pe].atomic_op(ucx_op, val, remote_addr + offset, rkey, managed)
             }
+            AtomicOp::FetchMin(_)
+            | AtomicOp::FetchMax(_)
+            | AtomicOp::FetchSum(_)
+            | AtomicOp::FetchSub(_)
+            | AtomicOp::FetchProd(_)
+            | AtomicOp::FetchBitOr(_)
+            | AtomicOp::FetchBitXor(_)
+            | AtomicOp::FetchBitAnd(_) => {
+                panic!("Fetch atomic ops must use the fetch path")
+            }
+            AtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
+            }
             _ => panic!("Unsupported atomic operation"),
         };
         if blocking {
@@ -1425,12 +1447,11 @@ impl UcxAlloc {
                 };
                 self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, rkey)
             }
-            AtomicOp::Write(_)
-            | AtomicOp::Sum(_)
-            | AtomicOp::Sub(_)
-            | AtomicOp::BitAnd(_)
-            | AtomicOp::BitOr(_)
-            | AtomicOp::BitXor(_) => {
+            AtomicOp::FetchSum(_)
+            | AtomicOp::FetchSub(_)
+            | AtomicOp::FetchBitAnd(_)
+            | AtomicOp::FetchBitOr(_)
+            | AtomicOp::FetchBitXor(_) => {
                 let (ucx_op, val) = Self::ucx_atomic_update(op);
                 let (remote_addr, rkey) = if let Some(remote_info) = self.remote_keys.get(&pe) {
                     (remote_info.addr, &remote_info.rkey)
@@ -1444,6 +1465,20 @@ impl UcxAlloc {
                     remote_addr + offset,
                     rkey,
                 )
+            }
+            AtomicOp::Write(_)
+            | AtomicOp::Min(_)
+            | AtomicOp::Max(_)
+            | AtomicOp::Sum(_)
+            | AtomicOp::Sub(_)
+            | AtomicOp::Prod(_)
+            | AtomicOp::BitAnd(_)
+            | AtomicOp::BitOr(_)
+            | AtomicOp::BitXor(_) => {
+                panic!("Non-fetch atomic ops must use the non-fetch path")
+            }
+            AtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
             }
             _ => panic!("Unsupported atomic operation"),
         };

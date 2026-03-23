@@ -682,8 +682,7 @@ impl Ofi {
         let op_kind = match op {
             LamellarAtomicOp::Min(_) => AtomicOpKind::Min,
             LamellarAtomicOp::Max(_) => AtomicOpKind::Max,
-            LamellarAtomicOp::Sum(_) => AtomicOpKind::Sum,
-            LamellarAtomicOp::Sub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
+            LamellarAtomicOp::Sum(_) | LamellarAtomicOp::Sub(_) => AtomicOpKind::Sum, // Sub can be implemented as Add with negative value
             LamellarAtomicOp::Prod(_) => AtomicOpKind::Prod,
             LamellarAtomicOp::BitOr(_) => AtomicOpKind::BitOr,
             LamellarAtomicOp::BitXor(_) => AtomicOpKind::BitXor,
@@ -691,6 +690,13 @@ impl Ofi {
             LamellarAtomicOp::Read => AtomicOpKind::Read,
             LamellarAtomicOp::Write(_) => AtomicOpKind::Write,
             LamellarAtomicOp::Cas(_, _) => AtomicOpKind::Cas,
+            LamellarAtomicOp::FetchMin(_) => AtomicOpKind::Min,
+            LamellarAtomicOp::FetchMax(_) => AtomicOpKind::Max,
+            LamellarAtomicOp::FetchSum(_) | LamellarAtomicOp::FetchSub(_) => AtomicOpKind::Sum,
+            LamellarAtomicOp::FetchProd(_) => AtomicOpKind::Prod,
+            LamellarAtomicOp::FetchBitOr(_) => AtomicOpKind::BitOr,
+            LamellarAtomicOp::FetchBitXor(_) => AtomicOpKind::BitXor,
+            LamellarAtomicOp::FetchBitAnd(_) => AtomicOpKind::BitAnd,
         };
 
         let id = std::any::TypeId::of::<T>();
@@ -2223,6 +2229,19 @@ impl LibfabricAlloc {
         let src = *(src as *const T as *const OFI);
         let src = match op {
             LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+            LamellarAtomicOp::FetchMin(_)
+            | LamellarAtomicOp::FetchMax(_)
+            | LamellarAtomicOp::FetchSum(_)
+            | LamellarAtomicOp::FetchSub(_)
+            | LamellarAtomicOp::FetchProd(_)
+            | LamellarAtomicOp::FetchBitOr(_)
+            | LamellarAtomicOp::FetchBitXor(_)
+            | LamellarAtomicOp::FetchBitAnd(_) => {
+                panic!("Fetch atomic ops must use the fetch path")
+            }
+            LamellarAtomicOp::Cas(_, _) => {
+                panic!("Compare atomic ops must use the compare path")
+            }
             _ => src,
         };
         let buf = std::slice::from_ref(&src);
@@ -2308,7 +2327,20 @@ impl LibfabricAlloc {
             Some(src) => {
                 let src = *(src as *const T as *const OFI);
                 let src = match op {
-                    LamellarAtomicOp::Sub(_) => Self::negate_atomic_value(src),
+                    LamellarAtomicOp::FetchSub(_) => Self::negate_atomic_value(src),
+                    LamellarAtomicOp::Min(_)
+                    | LamellarAtomicOp::Max(_)
+                    | LamellarAtomicOp::Sum(_)
+                    | LamellarAtomicOp::Sub(_)
+                    | LamellarAtomicOp::Prod(_)
+                    | LamellarAtomicOp::BitOr(_)
+                    | LamellarAtomicOp::BitXor(_)
+                    | LamellarAtomicOp::BitAnd(_) => {
+                        panic!("Non-fetch atomic ops must use the non-fetch path")
+                    }
+                    LamellarAtomicOp::Cas(_, _) => {
+                        panic!("Compare atomic ops must use the compare path")
+                    }
                     _ => src,
                 };
                 let buf = std::slice::from_ref(&src);
@@ -2548,9 +2580,6 @@ impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
             LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
             LamellarAtomicOp::Sub(_) => AtomicOp::Sum, // Sub can be implemented as Add with negative value
             LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
-            // LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
-            // LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
-            // LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
             LamellarAtomicOp::BitOr(_) => AtomicOp::Bor,
             LamellarAtomicOp::BitXor(_) => AtomicOp::Bxor,
             LamellarAtomicOp::BitAnd(_) => AtomicOp::Band,
@@ -2563,20 +2592,17 @@ impl<T> From<&LamellarAtomicOp<T>> for AtomicOp {
 impl<T> From<&LamellarAtomicOp<T>> for FetchAtomicOp {
     fn from(op: &LamellarAtomicOp<T>) -> Self {
         match op {
-            LamellarAtomicOp::Min(_) => FetchAtomicOp::Min,
-            LamellarAtomicOp::Max(_) => FetchAtomicOp::Max,
-            LamellarAtomicOp::Sum(_) => FetchAtomicOp::Sum,
-            LamellarAtomicOp::Sub(_) => FetchAtomicOp::Sum,
-            LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
-            // LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
-            // LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
-            // LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,
-            LamellarAtomicOp::BitOr(_) => FetchAtomicOp::Bor,
-            LamellarAtomicOp::BitXor(_) => FetchAtomicOp::Bxor,
-            LamellarAtomicOp::BitAnd(_) => FetchAtomicOp::Band,
+            LamellarAtomicOp::FetchMin(_) => FetchAtomicOp::Min,
+            LamellarAtomicOp::FetchMax(_) => FetchAtomicOp::Max,
+            LamellarAtomicOp::FetchSum(_) | LamellarAtomicOp::FetchSub(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::FetchProd(_) => FetchAtomicOp::Prod,
+            LamellarAtomicOp::FetchBitOr(_) => FetchAtomicOp::Bor,
+            LamellarAtomicOp::FetchBitXor(_) => FetchAtomicOp::Bxor,
+            LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
             LamellarAtomicOp::Read => FetchAtomicOp::AtomicRead,
-            _ => panic!("unexpected atomic op"),
+            LamellarAtomicOp::Cas(_, _) => panic!("Cas conversion to FetchAtomicOp not supported"),
+            _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
     }
 }
@@ -2588,9 +2614,6 @@ impl<T> From<LamellarAtomicOp<T>> for AtomicOp {
             LamellarAtomicOp::Max(_) => AtomicOp::Max,
             LamellarAtomicOp::Sum(_) => AtomicOp::Sum,
             LamellarAtomicOp::Prod(_) => AtomicOp::Prod,
-            // LamellarAtomicOp::LogicalOr(_) => AtomicOp::Lor,
-            // LamellarAtomicOp::LogicalXor(_) => AtomicOp::Lxor,
-            // LamellarAtomicOp::LogicalAnd(_) => AtomicOp::Land,
             LamellarAtomicOp::BitOr(_) => AtomicOp::Bor,
             LamellarAtomicOp::BitXor(_) => AtomicOp::Bxor,
             LamellarAtomicOp::BitAnd(_) => AtomicOp::Band,
@@ -2603,20 +2626,17 @@ impl<T> From<LamellarAtomicOp<T>> for AtomicOp {
 impl<T> From<LamellarAtomicOp<T>> for FetchAtomicOp {
     fn from(op: LamellarAtomicOp<T>) -> Self {
         match op {
-            LamellarAtomicOp::Min(_) => FetchAtomicOp::Min,
-            LamellarAtomicOp::Max(_) => FetchAtomicOp::Max,
-            LamellarAtomicOp::Sum(_) => FetchAtomicOp::Sum,
-            LamellarAtomicOp::Sub(_) => FetchAtomicOp::Sum,
-            LamellarAtomicOp::Prod(_) => FetchAtomicOp::Prod,
-            // LamellarAtomicOp::LogicalOr(_) => FetchAtomicOp::Lor,
-            // LamellarAtomicOp::LogicalXor(_) => FetchAtomicOp::Lxor,
-            // LamellarAtomicOp::LogicalAnd(_) => FetchAtomicOp::Land,
-            LamellarAtomicOp::BitOr(_) => FetchAtomicOp::Bor,
-            LamellarAtomicOp::BitXor(_) => FetchAtomicOp::Bxor,
-            LamellarAtomicOp::BitAnd(_) => FetchAtomicOp::Band,
+            LamellarAtomicOp::FetchMin(_) => FetchAtomicOp::Min,
+            LamellarAtomicOp::FetchMax(_) => FetchAtomicOp::Max,
+            LamellarAtomicOp::FetchSum(_) | LamellarAtomicOp::FetchSub(_) => FetchAtomicOp::Sum,
+            LamellarAtomicOp::FetchProd(_) => FetchAtomicOp::Prod,
+            LamellarAtomicOp::FetchBitOr(_) => FetchAtomicOp::Bor,
+            LamellarAtomicOp::FetchBitXor(_) => FetchAtomicOp::Bxor,
+            LamellarAtomicOp::FetchBitAnd(_) => FetchAtomicOp::Band,
             LamellarAtomicOp::Write(_) => FetchAtomicOp::AtomicWrite,
             LamellarAtomicOp::Read => FetchAtomicOp::AtomicRead,
-            _ => panic!("unexpected atomic op"),
+            LamellarAtomicOp::Cas(_, _) => panic!("Cas conversion to FetchAtomicOp not supported"),
+            _ => panic!("Non-fetch atomic ops must use non-fetch path"),
         }
     }
 }

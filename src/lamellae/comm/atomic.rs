@@ -20,6 +20,12 @@ use crate::lamellae::ucx_lamellae::atomic::UcxAtomicCompareExchangeFuture;
 use crate::lamellae::ucx_lamellae_mt::atomic::{UcxMtAtomicFetchFuture, UcxMtAtomicFuture};
 #[cfg(feature = "enable-ucx-mt")]
 use crate::lamellae::ucx_lamellae_mt::atomic::UcxMtAtomicCompareExchangeFuture;
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::atomic::RofiCAtomicFuture;
+#[cfg(feature = "enable-rofi-c")]
+use crate::lamellae::rofi_c_lamellae::atomic::{
+    RofiCAtomicCompareExchangeFuture, RofiCAtomicFetchFuture,
+};
 use crate::{
     active_messaging::AMCounters,
     lamellae::{
@@ -133,6 +139,8 @@ pub(crate) enum AtomicOpFuture<T> {
     Ucx(#[pin] UcxAtomicFuture<T>),
     #[cfg(feature = "enable-ucx-mt")]
     UcxMt(#[pin] UcxMtAtomicFuture<T>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCAtomicFuture<T>),
     Shmem(#[pin] ShmemAtomicFuture<T>),
     Local(#[pin] LocalAtomicFuture<T>),
 }
@@ -151,6 +159,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicOpFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicOpFuture::RofiC(f) => f.block(),
             AtomicOpFuture::Shmem(f) => f.block(),
             AtomicOpFuture::Local(f) => f.block(),
         }
@@ -173,6 +183,8 @@ impl<T: Remote> AtomicOpHandle<T> {
             AtomicOpFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicOpFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicOpFuture::RofiC(f) => f.spawn(),
             AtomicOpFuture::Shmem(f) => f.spawn(),
             AtomicOpFuture::Local(f) => f.spawn(),
         }
@@ -195,6 +207,8 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
             AtomicOpFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicOpFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicOpFutureProj::Shmem(f) => f.poll(cx),
             AtomicOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -220,6 +234,8 @@ pub(crate) enum AtomicFetchOpFuture<T> {
     Ucx(#[pin] UcxAtomicFetchFuture<T>),
     #[cfg(feature = "enable-ucx-mt")]
     UcxMt(#[pin] UcxMtAtomicFetchFuture<T>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCAtomicFetchFuture<T>),
     Shmem(#[pin] ShmemAtomicFetchFuture<T>),
     Local(#[pin] LocalAtomicFetchFuture<T>),
 }
@@ -238,6 +254,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicFetchOpFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicFetchOpFuture::RofiC(f) => f.block(),
             AtomicFetchOpFuture::Shmem(f) => f.block(),
             AtomicFetchOpFuture::Local(f) => f.block(),
         }
@@ -260,6 +278,8 @@ impl<T: Remote> AtomicFetchOpHandle<T> {
             AtomicFetchOpFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicFetchOpFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicFetchOpFuture::RofiC(f) => f.spawn(),
             AtomicFetchOpFuture::Shmem(f) => f.spawn(),
             AtomicFetchOpFuture::Local(f) => f.spawn(),
         }
@@ -282,6 +302,8 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
             AtomicFetchOpFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicFetchOpFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicFetchOpFutureProj::RofiC(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Shmem(f) => f.poll(cx),
             AtomicFetchOpFutureProj::Local(f) => f.poll(cx),
         }
@@ -307,6 +329,8 @@ pub(crate) enum AtomicCompareExchangeFuture<T> {
     Ucx(#[pin] UcxAtomicCompareExchangeFuture<T>),
     #[cfg(feature = "enable-ucx-mt")]
     UcxMt(#[pin] UcxMtAtomicCompareExchangeFuture<T>),
+    #[cfg(feature = "enable-rofi-c")]
+    RofiC(#[pin] RofiCAtomicCompareExchangeFuture<T>),
     Shmem(#[pin] ShmemAtomicCompareExchangeFuture<T>),
     Local(#[pin] LocalAtomicCompareExchangeFuture<T>),
 }
@@ -324,6 +348,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFuture::Ucx(f) => f.block(),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicCompareExchangeFuture::UcxMt(f) => f.block(),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicCompareExchangeFuture::RofiC(f) => f.block(),
             AtomicCompareExchangeFuture::Shmem(f) => f.block(),
             AtomicCompareExchangeFuture::Local(f) => f.block(),
         }
@@ -342,6 +368,8 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFuture::Ucx(f) => f.spawn(),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicCompareExchangeFuture::UcxMt(f) => f.spawn(),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicCompareExchangeFuture::RofiC(f) => f.spawn(),
             AtomicCompareExchangeFuture::Shmem(f) => f.spawn(),
             AtomicCompareExchangeFuture::Local(f) => f.spawn(),
         }
@@ -364,6 +392,8 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
             AtomicCompareExchangeFutureProj::Ucx(f) => f.poll(cx),
             #[cfg(feature = "enable-ucx-mt")]
             AtomicCompareExchangeFutureProj::UcxMt(f) => f.poll(cx),
+            #[cfg(feature = "enable-rofi-c")]
+            AtomicCompareExchangeFutureProj::RofiC(f) => f.poll(cx),
             AtomicCompareExchangeFutureProj::Shmem(f) => f.poll(cx),
             AtomicCompareExchangeFutureProj::Local(f) => f.poll(cx),
         }
@@ -372,6 +402,7 @@ impl<T: Remote + PartialEq> Future for AtomicCompareExchangeOpHandle<T> {
 
 #[derive(Clone, Copy)]
 pub(crate) enum AtomicOp<T> {
+    // Non-fetch operations
     Min(T),
     Max(T),
     Sum(T),
@@ -380,8 +411,18 @@ pub(crate) enum AtomicOp<T> {
     BitOr(T),
     BitXor(T),
     BitAnd(T),
-    Read,
     Write(T),
+    // Fetch operations (return the old value)
+    FetchMin(T),
+    FetchMax(T),
+    FetchSum(T),
+    FetchSub(T),
+    FetchProd(T),
+    FetchBitOr(T),
+    FetchBitXor(T),
+    FetchBitAnd(T),
+    Read,
+    // Compare-and-swap
     Cas(T, T),
 }
 
@@ -396,8 +437,16 @@ impl<T> std::fmt::Debug for AtomicOp<T> {
             AtomicOp::BitOr(_) => write!(f, "BitOr"),
             AtomicOp::BitXor(_) => write!(f, "BitXor"),
             AtomicOp::BitAnd(_) => write!(f, "BitAnd"),
-            AtomicOp::Read => write!(f, "Read"),
             AtomicOp::Write(_) => write!(f, "Write"),
+            AtomicOp::FetchMin(_) => write!(f, "FetchMin"),
+            AtomicOp::FetchMax(_) => write!(f, "FetchMax"),
+            AtomicOp::FetchSum(_) => write!(f, "FetchSum"),
+            AtomicOp::FetchSub(_) => write!(f, "FetchSub"),
+            AtomicOp::FetchProd(_) => write!(f, "FetchProd"),
+            AtomicOp::FetchBitOr(_) => write!(f, "FetchBitOr"),
+            AtomicOp::FetchBitXor(_) => write!(f, "FetchBitXor"),
+            AtomicOp::FetchBitAnd(_) => write!(f, "FetchBitAnd"),
+            AtomicOp::Read => write!(f, "Read"),
             AtomicOp::Cas(_, _) => write!(f, "Cas"),
         }
     }
@@ -408,13 +457,21 @@ impl<T> AtomicOp<T> {
         match self {
             AtomicOp::Min(slice)
             | AtomicOp::Max(slice)
-            | AtomicOp::Sum(slice) // sum == add depending on the backend. We use sum/add to do subtraction as well
+            | AtomicOp::Sum(slice)
             | AtomicOp::Sub(slice)
             | AtomicOp::Prod(slice)
             | AtomicOp::BitOr(slice)
             | AtomicOp::BitXor(slice)
             | AtomicOp::BitAnd(slice)
             | AtomicOp::Write(slice)
+            | AtomicOp::FetchMin(slice)
+            | AtomicOp::FetchMax(slice)
+            | AtomicOp::FetchSum(slice)
+            | AtomicOp::FetchSub(slice)
+            | AtomicOp::FetchProd(slice)
+            | AtomicOp::FetchBitOr(slice)
+            | AtomicOp::FetchBitXor(slice)
+            | AtomicOp::FetchBitAnd(slice)
             | AtomicOp::Cas(slice, _) => Some(slice),
             AtomicOp::Read => None,
         }
@@ -712,23 +769,44 @@ unsafe fn typed_atomic_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A) {
         AtomicOp::Min(_) | AtomicOp::Max(_) => {
             panic!("Min/Max atomic ops not supported in this context");
         }
+        AtomicOp::FetchMin(_)
+        | AtomicOp::FetchMax(_)
+        | AtomicOp::FetchSum(_)
+        | AtomicOp::FetchSub(_)
+        | AtomicOp::FetchProd(_)
+        | AtomicOp::FetchBitOr(_)
+        | AtomicOp::FetchBitXor(_)
+        | AtomicOp::FetchBitAnd(_) => {
+            panic!("Fetch atomic ops must use the fetch path");
+        }
     }
 }
 
 unsafe fn typed_atomic_fetch_op<A: AsAtomic, T>(op: &AtomicOp<T>, dst: *const A, result: *mut T) {
     let op = std::mem::transmute::<&AtomicOp<T>, &AtomicOp<A>>(op);
     let res = match op {
-        AtomicOp::Min(val) => (&mut *(dst as *mut A)).fetch_min(*val),
-        AtomicOp::Max(val) => (&mut *(dst as *mut A)).fetch_max(*val),
-        AtomicOp::Sum(val) => (&mut *(dst as *mut A)).fetch_add(*val),
-        AtomicOp::Sub(val) => (&mut *(dst as *mut A)).fetch_sub(*val),
-        AtomicOp::Prod(val) => (&mut *(dst as *mut A)).fetch_mul(*val),
-        AtomicOp::BitOr(val) => (&mut *(dst as *mut A)).fetch_or(*val),
-        AtomicOp::BitXor(val) => (&mut *(dst as *mut A)).fetch_xor(*val),
-        AtomicOp::BitAnd(val) => (&mut *(dst as *mut A)).fetch_and(*val),
+        AtomicOp::FetchMin(val) => (&mut *(dst as *mut A)).fetch_min(*val),
+        AtomicOp::FetchMax(val) => (&mut *(dst as *mut A)).fetch_max(*val),
+        AtomicOp::FetchSum(val) => (&mut *(dst as *mut A)).fetch_add(*val),
+        AtomicOp::FetchSub(val) => (&mut *(dst as *mut A)).fetch_sub(*val),
+        AtomicOp::FetchProd(val) => (&mut *(dst as *mut A)).fetch_mul(*val),
+        AtomicOp::FetchBitOr(val) => (&mut *(dst as *mut A)).fetch_or(*val),
+        AtomicOp::FetchBitXor(val) => (&mut *(dst as *mut A)).fetch_xor(*val),
+        AtomicOp::FetchBitAnd(val) => (&mut *(dst as *mut A)).fetch_and(*val),
         AtomicOp::Read => (&*dst).load(),
         AtomicOp::Write(val) => (&mut *(dst as *mut A)).swap(*val),
         AtomicOp::Cas(_, _) => panic!("Cas atomic op not supported in this context"),
+        // Reject non-fetch variants in fetch path
+        AtomicOp::Min(_)
+        | AtomicOp::Max(_)
+        | AtomicOp::Sum(_)
+        | AtomicOp::Sub(_)
+        | AtomicOp::Prod(_)
+        | AtomicOp::BitOr(_)
+        | AtomicOp::BitXor(_)
+        | AtomicOp::BitAnd(_) => {
+            panic!("Non-fetch atomic ops must use the non-fetch path");
+        }
     };
     (result as *mut A).write(res);
 }

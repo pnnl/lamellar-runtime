@@ -37,6 +37,11 @@ fn create_launch_block(
                     .expect("lamellar_main: failed to create output directory");
                 // prterun: use a conservative directive set for compatibility
                 // across PRTE/OpenMPI versions.
+                
+                prterun_args.insert(
+                    0,
+                    format!("--merge-stderr-to-stdout"),
+                );
                 prterun_args.insert(
                     0,
                     format!("--output=directory={}", __dir),
@@ -59,11 +64,12 @@ fn create_launch_block(
 
             let mut time=false;
             let mut output_dir = String::new();
+            let mut gdb_mode: Option<String> = None;
 
             // Collect any additional arguments after "--" to pass to prterun
             let pos = args.iter().position(|x| x == "--");
             if let Some(pos) = pos {
-                let mut extra = args.split_off(pos).into_iter().skip(1);
+                let mut extra = args.split_off(pos).into_iter().skip(1).peekable();
                 while let Some(x) = extra.next() {
                     if x == "--time" {
                         time = true;
@@ -71,12 +77,32 @@ fn create_launch_block(
                         if let Some(dir) = extra.next() {
                             output_dir = dir;
                         }
+                    } else if x == "--gdb" {
+                        if extra.peek().map(|s| s.as_str()) == Some("bt") {
+                            extra.next();
+                            gdb_mode = Some("bt".to_string());
+                        } else {
+                            gdb_mode = Some("plain".to_string());
+                        }
                     } else {
                         prterun_args.push(x.to_string());
                     }
                 }
             }
             let end = args.len();
+
+            if let Some(ref mode) = gdb_mode {
+                prterun_args.push("rust-gdb".to_string());
+                if mode == "bt" {
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("run".to_string());
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("thread apply all bt full".to_string());
+                    prterun_args.push("--ex".to_string());
+                    prterun_args.push("quit".to_string());
+                }
+                prterun_args.push("--args".to_string());
+            }
 
             // After the prterun arguments, add the executable name
             prterun_args.push(exec);

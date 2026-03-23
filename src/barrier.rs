@@ -419,20 +419,21 @@ enum State {
 
 impl BarrierHandle {
     fn do_send_round(&self, round: usize) {
-        // trace!("do send round {:?}", round);
+        trace!("do send round {:?}", round);
         // let barrier_slice = &[self.barrier_id];
         // let mut reqs = vec![];
         for i in 1..=self.n {
             let team_send_pe = (self.my_index + i * (self.n + 1).pow(round as u32)) % self.num_pes;
             if team_send_pe != self.my_index {
                 let send_pe = self.arch.single_iter(team_send_pe).next().unwrap();
-
+                trace!("sending to pe {:?} for round {:?}", send_pe, round);
                 self.barrier_buf[i - 1].put_unmanaged(self.barrier_id, send_pe, round);
             }
         }
         // for req in reqs.into_iter() {
         //     req.block();
         // }
+        trace!("waiting on sends to complete for round {:?}", round);
         self.barrier_buf[0].wait();
     }
 

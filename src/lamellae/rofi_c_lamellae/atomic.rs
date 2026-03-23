@@ -2,136 +2,471 @@ use std::sync::Arc;
 
 use crate::active_messaging::AMCounters;
 use crate::lamellae::comm::atomic::{
-    AtomicFetchOpHandle, AtomicOp, AtomicOpHandle, CommAllocAtomic,
+    AtomicCompareExchangeFuture, AtomicCompareExchangeOpHandle, AtomicFetchOpFuture,
+    AtomicFetchOpHandle, AtomicOp, AtomicOpFuture, AtomicOpHandle, CommAllocAtomic,
 };
+use crate::lamellae::{net_atomic_compare_exchange, net_atomic_fetch_op, net_atomic_op, CommAllocAddr};
+use crate::warnings::RuntimeWarning;
 use crate::LamellarTask;
 use crate::Remote;
 
 use super::{
     fabric::{OneSidedRofiCAlloc, RofiCAlloc},
+    rofi::{rofi_c_atomic_fetch, rofi_c_atomic_op, rofi_c_compare_atomic},
     Scheduler,
 };
+use futures_util::Future;
+use pin_project::{pin_project, pinned_drop};
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
+fn exec_rofi_atomic_op<T: Remote + Copy + 'static>(alloc: &RofiCAlloc, pe: usize, offset: usize, op: &AtomicOp<T>) {
+    assert!(offset < alloc.num_bytes() / std::mem::size_of::<T>());
+    let addr = (alloc.start() + offset * std::mem::size_of::<T>()) as *mut T;
+    if pe == alloc.my_pe {
+        net_atomic_op(op, &CommAllocAddr(addr as usize));
+        return;
+    }
+    rofi_c_atomic_op(addr, op, pe).expect("rofi-c atomic op failed");
+}
+
+fn exec_rofi_atomic_fetch<T: Remote + Copy + 'static>(alloc: &RofiCAlloc, pe: usize, offset: usize, op: &AtomicOp<T>, result: &mut T) {
+    assert!(offset < alloc.num_bytes() / std::mem::size_of::<T>());
+    let addr = (alloc.start() + offset * std::mem::size_of::<T>()) as *mut T;
+    if pe == alloc.my_pe {
+        net_atomic_fetch_op(op, &CommAllocAddr(addr as usize), result);
+    } else {
+        rofi_c_atomic_fetch(addr, op, result, pe).expect("rofi-c atomic fetch failed");
+    }
+}
+
+fn exec_rofi_compare_atomic<T: Remote + Copy + PartialEq + 'static>(alloc: &RofiCAlloc, pe: usize, offset: usize, current: T, new: T, result: &mut T) {
+    assert!(offset < alloc.num_bytes() / std::mem::size_of::<T>());
+    let addr = (alloc.start() + offset * std::mem::size_of::<T>()) as *mut T;
+    if pe == alloc.my_pe {
+        *result = net_atomic_compare_exchange(current, new, &CommAllocAddr(addr as usize))
+            .unwrap_or_else(|old| old);
+    } else {
+        rofi_c_compare_atomic(addr, current, new, result, pe).expect("rofi-c compare atomic failed");
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct RofiCAtomicFuture<T> {
+    alloc: RofiCAlloc,
+    remote_pes: Vec<usize>,
+    offset: usize,
+    op: AtomicOp<T>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+}
+
+impl<T: Remote + Copy + 'static> RofiCAtomicFuture<T> {
+    fn exec_op(&mut self) {
+        for pe in &self.remote_pes {
+            exec_rofi_atomic_op(&self.alloc, *pe, self.offset, &self.op);
+        }
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) {
+        self.exec_op();
+        self.alloc.wait().expect("rofi-c atomic wait failed");
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<()> {
+        self.exec_op();
+        let alloc = self.alloc.clone();
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.spawn_task(
+            async move {
+                alloc.wait().expect("rofi-c atomic wait failed");
+            },
+            counters,
+        )
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for RofiCAtomicFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<RofiCAtomicFuture<T>> for AtomicOpHandle<T> {
+    fn from(f: RofiCAtomicFuture<T>) -> AtomicOpHandle<T> {
+        AtomicOpHandle {
+            future: AtomicOpFuture::RofiC(f),
+        }
+    }
+}
+
+impl<T: Remote + Copy + 'static> Future for RofiCAtomicFuture<T> {
+    type Output = ();
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.wait().expect("rofi-c atomic wait failed");
+        Poll::Ready(())
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct RofiCAtomicFetchFuture<T> {
+    alloc: RofiCAlloc,
+    remote_pe: usize,
+    offset: usize,
+    op: AtomicOp<T>,
+    result: Box<T>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+}
+
+impl<T: Remote + Copy + 'static> RofiCAtomicFetchFuture<T> {
+    fn exec_op(&mut self) {
+        exec_rofi_atomic_fetch(&self.alloc, self.remote_pe, self.offset, &self.op, self.result.as_mut());
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) -> T {
+        self.exec_op();
+        self.alloc.wait().expect("rofi-c atomic wait failed");
+        *self.result
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<T> {
+        self.exec_op();
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for RofiCAtomicFetchFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<RofiCAtomicFetchFuture<T>> for AtomicFetchOpHandle<T> {
+    fn from(f: RofiCAtomicFetchFuture<T>) -> AtomicFetchOpHandle<T> {
+        AtomicFetchOpHandle {
+            future: AtomicFetchOpFuture::RofiC(f),
+        }
+    }
+}
+
+impl<T: Remote + Copy + 'static> Future for RofiCAtomicFetchFuture<T> {
+    type Output = T;
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.wait().expect("rofi-c atomic wait failed");
+        Poll::Ready(*self.result)
+    }
+}
+
+fn compare_exchange_result<T: PartialEq>(old: T, current: T) -> Result<T, T> {
+    if old == current {
+        Ok(old)
+    } else {
+        Err(old)
+    }
+}
+
+#[pin_project(PinnedDrop)]
+pub(crate) struct RofiCAtomicCompareExchangeFuture<T> {
+    alloc: RofiCAlloc,
+    remote_pe: usize,
+    offset: usize,
+    current: T,
+    new: T,
+    result: Box<T>,
+    scheduler: Arc<Scheduler>,
+    counters: Vec<Arc<AMCounters>>,
+    spawned: bool,
+}
+
+impl<T: Remote + Copy + PartialEq + 'static> RofiCAtomicCompareExchangeFuture<T> {
+    fn exec_op(&mut self) {
+        exec_rofi_compare_atomic(&self.alloc, self.remote_pe, self.offset, self.current, self.new, self.result.as_mut());
+        self.spawned = true;
+    }
+
+    pub(crate) fn block(mut self) -> Result<T, T> {
+        self.exec_op();
+        self.alloc.wait().expect("rofi-c atomic wait failed");
+        compare_exchange_result(*self.result, self.current)
+    }
+
+    pub(crate) fn spawn(mut self) -> LamellarTask<Result<T, T>> {
+        self.exec_op();
+        let mut counters = Vec::new();
+        std::mem::swap(&mut counters, &mut self.counters);
+        self.scheduler.clone().spawn_task(self, counters)
+    }
+}
+
+#[pinned_drop]
+impl<T> PinnedDrop for RofiCAtomicCompareExchangeFuture<T> {
+    fn drop(self: Pin<&mut Self>) {
+        if !self.spawned {
+            RuntimeWarning::DroppedHandle("a RdmaHandle").print();
+        }
+    }
+}
+
+impl<T> From<RofiCAtomicCompareExchangeFuture<T>> for AtomicCompareExchangeOpHandle<T> {
+    fn from(f: RofiCAtomicCompareExchangeFuture<T>) -> AtomicCompareExchangeOpHandle<T> {
+        AtomicCompareExchangeOpHandle {
+            future: AtomicCompareExchangeFuture::RofiC(f),
+        }
+    }
+}
+
+impl<T: Remote + Copy + PartialEq + 'static> Future for RofiCAtomicCompareExchangeFuture<T> {
+    type Output = Result<T, T>;
+
+    fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if !self.spawned {
+            self.exec_op();
+        }
+        self.alloc.wait().expect("rofi-c atomic wait failed");
+        Poll::Ready(compare_exchange_result(*self.result, self.current))
+    }
+}
 
 impl CommAllocAtomic for RofiCAlloc {
     fn atomic_op<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) -> AtomicOpHandle<T> {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+        RofiCAtomicFuture {
+            alloc: self.clone(),
+            remote_pes: vec![pe],
+            offset,
+            op,
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
     }
 
     fn atomic_op_blocking<T: Remote>(
         &self,
         _scheduler: &Arc<Scheduler>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+        exec_rofi_atomic_op(self, pe, offset, &op);
+        self.wait().expect("rofi-c atomic wait failed");
     }
 
-    fn atomic_op_unmanaged<T: Remote>(&self, _op: AtomicOp<T>, _pe: usize, _offset: usize) {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+    fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        exec_rofi_atomic_op(self, pe, offset, &op);
     }
 
     fn atomic_op_all<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
     ) -> AtomicOpHandle<T> {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+        RofiCAtomicFuture {
+            alloc: self.clone(),
+            remote_pes: (0..self.num_pes).collect(),
+            offset,
+            op,
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
     }
 
-    fn atomic_op_all_unmanaged<T: Remote>(&self, _op: AtomicOp<T>, _offset: usize) {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+    fn atomic_op_all_unmanaged<T: Remote>(&self, op: AtomicOp<T>, offset: usize) {
+        for pe in 0..self.num_pes {
+            exec_rofi_atomic_op(self, pe, offset, &op);
+        }
     }
 
     fn atomic_fetch_op<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        unimplemented!("atomic fetch operations not implemented for rofi-c backend")
+        RofiCAtomicFetchFuture {
+            alloc: self.clone(),
+            remote_pe: pe,
+            offset,
+            op,
+            result: Box::new(T::default()),
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
     }
 
     fn atomic_fetch_op_blocking<T: Remote>(
         &self,
         _scheduler: &Arc<Scheduler>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) -> T {
-        unimplemented!("atomic fetch operations not implemented for rofi-c backend")
+        let mut result = T::default();
+        exec_rofi_atomic_fetch(self, pe, offset, &op, &mut result);
+        self.wait().expect("rofi-c atomic wait failed");
+        result
+    }
+
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        RofiCAtomicCompareExchangeFuture {
+            alloc: self.clone(),
+            remote_pe: pe,
+            offset,
+            current,
+            new,
+            result: Box::new(new),
+            scheduler: scheduler.clone(),
+            counters,
+            spawned: false,
+        }
+        .into()
+    }
+
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
+        &self,
+        _scheduler: &Arc<Scheduler>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        let mut result = new;
+        exec_rofi_compare_atomic(self, pe, offset, current, new, &mut result);
+        self.wait().expect("rofi-c atomic wait failed");
+        compare_exchange_result(result, current)
     }
 }
 
 impl CommAllocAtomic for OneSidedRofiCAlloc {
     fn atomic_op<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) -> AtomicOpHandle<T> {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+        self.alloc.atomic_op(scheduler, counters, op, pe, offset)
     }
 
     fn atomic_op_blocking<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+        self.alloc.atomic_op_blocking(scheduler, op, pe, offset)
     }
 
-    fn atomic_op_unmanaged<T: Remote>(&self, _op: AtomicOp<T>, _pe: usize, _offset: usize) {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+    fn atomic_op_unmanaged<T: Remote>(&self, op: AtomicOp<T>, pe: usize, offset: usize) {
+        self.alloc.atomic_op_unmanaged(op, pe, offset)
     }
 
     fn atomic_op_all<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        offset: usize,
     ) -> AtomicOpHandle<T> {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+        self.alloc.atomic_op_all(scheduler, counters, op, offset)
     }
 
-    fn atomic_op_all_unmanaged<T: Remote>(&self, _op: AtomicOp<T>, _offset: usize) {
-        unimplemented!("atomic operations not implemented for rofi-c backend")
+    fn atomic_op_all_unmanaged<T: Remote>(&self, op: AtomicOp<T>, offset: usize) {
+        self.alloc.atomic_op_all_unmanaged(op, offset)
     }
 
     fn atomic_fetch_op<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _counters: Vec<Arc<AMCounters>>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) -> AtomicFetchOpHandle<T> {
-        unimplemented!("atomic fetch operations not implemented for rofi-c backend")
+        self.alloc.atomic_fetch_op(scheduler, counters, op, pe, offset)
     }
 
     fn atomic_fetch_op_blocking<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        _op: AtomicOp<T>,
-        _pe: usize,
-        _offset: usize,
+        scheduler: &Arc<Scheduler>,
+        op: AtomicOp<T>,
+        pe: usize,
+        offset: usize,
     ) -> T {
-        unimplemented!("atomic fetch operations not implemented for rofi-c backend")
+        self.alloc.atomic_fetch_op_blocking(scheduler, op, pe, offset)
+    }
+
+    fn atomic_compare_exchange<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> AtomicCompareExchangeOpHandle<T> {
+        self.alloc
+            .atomic_compare_exchange(scheduler, counters, current, new, pe, offset)
+    }
+
+    fn atomic_compare_exchange_blocking<T: Remote + PartialEq>(
+        &self,
+        scheduler: &Arc<Scheduler>,
+        current: T,
+        new: T,
+        pe: usize,
+        offset: usize,
+    ) -> Result<T, T> {
+        self.alloc
+            .atomic_compare_exchange_blocking(scheduler, current, new, pe, offset)
     }
 }

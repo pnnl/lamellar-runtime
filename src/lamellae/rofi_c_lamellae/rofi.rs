@@ -1,10 +1,10 @@
 extern crate libc;
 
+use crate::lamellae::comm::atomic::AtomicOp;
 use crate::lamellae::{AllocError, AllocResult, AllocationType, RdmaError, RdmaResult};
 
-use std::any::type_name;
+use std::any::TypeId;
 use std::ffi::CString;
-use std::os::raw::c_ulong;
 use tracing::{trace,error};
 
 pub(crate) fn rofi_c_init(provider: &str, domain: &str) -> Result<(), &'static str> {
@@ -119,6 +119,256 @@ pub(crate) fn rofi_c_flush() -> i32 {
 
 pub(crate) fn rofi_c_wait() -> i32 {
     unsafe { rofisys::rofi_wait() }
+}
+
+fn get_rofi_c_dt<T: 'static>() -> Option<rofisys::rofi_datatype_t> {
+    let id = TypeId::of::<T>();
+    if id == TypeId::of::<u8>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_UINT8)
+    } else if id == TypeId::of::<u16>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_UINT16)
+    } else if id == TypeId::of::<u32>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_UINT32)
+    } else if id == TypeId::of::<u64>() || id == TypeId::of::<usize>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_UINT64)
+    } else if id == TypeId::of::<i8>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_INT8)
+    } else if id == TypeId::of::<i16>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_INT16)
+    } else if id == TypeId::of::<i32>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_INT32)
+    } else if id == TypeId::of::<i64>() || id == TypeId::of::<isize>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_INT64)
+    } else if id == TypeId::of::<f32>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_FLOAT)
+    } else if id == TypeId::of::<f64>() {
+        Some(rofisys::rofi_datatype_t_ROFI_DATATYPE_DOUBLE)
+    } else {
+        None
+    }
+}
+
+fn rofi_c_op<T: 'static>(op: &AtomicOp<T>) -> Option<rofisys::rofi_atomic_op_t> {
+    match op {
+        AtomicOp::Min(_) | AtomicOp::FetchMin(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_MIN),
+        AtomicOp::Max(_) | AtomicOp::FetchMax(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_MAX),
+        AtomicOp::Sum(_) | AtomicOp::Sub(_) | AtomicOp::FetchSum(_) | AtomicOp::FetchSub(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_SUM),
+        AtomicOp::Prod(_) | AtomicOp::FetchProd(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_PROD),
+        AtomicOp::BitOr(_) | AtomicOp::FetchBitOr(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BOR),
+        AtomicOp::BitXor(_) | AtomicOp::FetchBitXor(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BXOR),
+        AtomicOp::BitAnd(_) | AtomicOp::FetchBitAnd(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_BAND),
+        AtomicOp::Read => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_READ),
+        AtomicOp::Cas(_, _) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP),
+        AtomicOp::Write(_) => Some(rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_WRITE),
+    }
+}
+
+fn rofi_retry_status(ret: i32) -> RdmaResult {
+    if ret == 0 {
+        Ok(())
+    } else {
+        Err(RdmaError::FabricPutError(ret))
+    }
+}
+
+fn negate_atomic_value<T: Copy + 'static>(value: T) -> T {
+    let id = TypeId::of::<T>();
+    unsafe {
+        if id == TypeId::of::<u8>() {
+            std::mem::transmute_copy(&((0u8).wrapping_sub(std::mem::transmute_copy::<T, u8>(&value))))
+        } else if id == TypeId::of::<u16>() {
+            std::mem::transmute_copy(&((0u16).wrapping_sub(std::mem::transmute_copy::<T, u16>(&value))))
+        } else if id == TypeId::of::<u32>() {
+            std::mem::transmute_copy(&((0u32).wrapping_sub(std::mem::transmute_copy::<T, u32>(&value))))
+        } else if id == TypeId::of::<u64>() {
+            std::mem::transmute_copy(&((0u64).wrapping_sub(std::mem::transmute_copy::<T, u64>(&value))))
+        } else if id == TypeId::of::<usize>() {
+            std::mem::transmute_copy(&((0usize).wrapping_sub(std::mem::transmute_copy::<T, usize>(&value))))
+        } else if id == TypeId::of::<i8>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, i8>(&value)))
+        } else if id == TypeId::of::<i16>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, i16>(&value)))
+        } else if id == TypeId::of::<i32>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, i32>(&value)))
+        } else if id == TypeId::of::<i64>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, i64>(&value)))
+        } else if id == TypeId::of::<isize>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, isize>(&value)))
+        } else if id == TypeId::of::<f32>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, f32>(&value)))
+        } else if id == TypeId::of::<f64>() {
+            std::mem::transmute_copy(&(-std::mem::transmute_copy::<T, f64>(&value)))
+        } else {
+            panic!("rofi-c subtraction not supported for this type")
+        }
+    }
+}
+
+fn operand_ptr<T: Copy + 'static>(op: &AtomicOp<T>) -> Option<T> {
+    match op {
+        AtomicOp::Min(val)
+        | AtomicOp::Max(val)
+        | AtomicOp::Sum(val)
+        | AtomicOp::Prod(val)
+        | AtomicOp::BitOr(val)
+        | AtomicOp::BitXor(val)
+        | AtomicOp::BitAnd(val)
+        | AtomicOp::Write(val)
+        | AtomicOp::FetchMin(val)
+        | AtomicOp::FetchMax(val)
+        | AtomicOp::FetchSum(val)
+        | AtomicOp::FetchProd(val)
+        | AtomicOp::FetchBitOr(val)
+        | AtomicOp::FetchBitXor(val)
+        | AtomicOp::FetchBitAnd(val) => Some(*val),
+        AtomicOp::Sub(val) | AtomicOp::FetchSub(val) => Some(negate_atomic_value(*val)),
+        AtomicOp::Read => None,
+        AtomicOp::Cas(_, new) => Some(*new),
+    }
+}
+
+pub(crate) fn rofi_c_atomic_avail<T: 'static>() -> bool {
+    (unsafe { rofisys::rofi_has_atomics() != 0 }) && get_rofi_c_dt::<T>().is_some()
+}
+
+pub(crate) fn rofi_c_atomic_op_avail<T: 'static>(op: &AtomicOp<T>) -> bool {
+    if unsafe { rofisys::rofi_has_atomics() } == 0 {
+        return false;
+    }
+    if let Some(dt) = get_rofi_c_dt::<T>() {
+        match op {
+            AtomicOp::Cas(_, _) => unsafe { rofisys::rofi_query_compare_atomic(dt, rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP) == 0 },
+            AtomicOp::Read | AtomicOp::FetchMin(_) | AtomicOp::FetchMax(_) | AtomicOp::FetchSum(_) | AtomicOp::FetchSub(_) | AtomicOp::FetchProd(_) | AtomicOp::FetchBitOr(_) | AtomicOp::FetchBitXor(_) | AtomicOp::FetchBitAnd(_) => {
+                if let Some(rop) = rofi_c_op(op) {
+                    unsafe { rofisys::rofi_query_fetch_atomic(dt, rop) == 0 }
+                } else {
+                    false
+                }
+            },
+            _ => {
+                if let Some(rop) = rofi_c_op(op) {
+                    unsafe { rofisys::rofi_query_atomic(dt, rop) == 0 }
+                } else {
+                    false
+                }
+            }
+        }
+    } else {
+        false
+    }
+}
+
+pub(crate) fn rofi_c_atomic_op<T: Copy + 'static>(addr: *mut T, op: &AtomicOp<T>, pe: usize) -> RdmaResult {
+    let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
+    let rop = rofi_c_op(op).expect("atomic op unsupported by rofi-c");
+    let value = operand_ptr(op);
+    let value_ptr = value
+        .as_ref()
+        .map(|val| val as *const T as *const std::ffi::c_void)
+        .unwrap_or(std::ptr::null());
+    let mut ret = unsafe {
+        rofisys::rofi_atomic_op(
+            addr as *mut std::ffi::c_void,
+            value_ptr,
+            1,
+            dt,
+            rop,
+            pe as u32,
+        ) as i32
+    };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_atomic_op(
+                addr as *mut std::ffi::c_void,
+                value_ptr,
+                1,
+                dt,
+                rop,
+                pe as u32,
+            ) as i32
+        };
+    }
+    rofi_retry_status(ret)
+}
+
+pub(crate) fn rofi_c_atomic_fetch<T: Copy + 'static>(
+    addr: *mut T,
+    op: &AtomicOp<T>,
+    result: &mut T,
+    pe: usize,
+) -> RdmaResult {
+    let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
+    let rop = rofi_c_op(op).expect("atomic op unsupported by rofi-c");
+    let value = operand_ptr(op);
+    let value_ptr = value
+        .as_ref()
+        .map(|val| val as *const T as *const std::ffi::c_void)
+        .unwrap_or(std::ptr::null());
+    let mut ret = unsafe {
+        rofisys::rofi_atomic_fetch(
+            addr as *mut std::ffi::c_void,
+            value_ptr,
+            result as *mut T as *mut std::ffi::c_void,
+            1,
+            dt,
+            rop,
+            pe as u32,
+        ) as i32
+    };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_atomic_fetch(
+                addr as *mut std::ffi::c_void,
+                value_ptr,
+                result as *mut T as *mut std::ffi::c_void,
+                1,
+                dt,
+                rop,
+                pe as u32,
+            ) as i32
+        };
+    }
+    rofi_retry_status(ret)
+}
+
+pub(crate) fn rofi_c_compare_atomic<T: Copy + 'static>(
+    addr: *mut T,
+    current: T,
+    new: T,
+    result: &mut T,
+    pe: usize,
+) -> RdmaResult {
+    let dt = get_rofi_c_dt::<T>().expect("type should be atomic");
+    let mut ret = unsafe {
+        rofisys::rofi_compare_atomic(
+            addr as *mut std::ffi::c_void,
+            &new as *const T as *const std::ffi::c_void,
+            &current as *const T as *const std::ffi::c_void,
+            result as *mut T as *mut std::ffi::c_void,
+            1,
+            dt,
+            rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP,
+            pe as u32,
+        ) as i32
+    };
+    while ret == -11 {
+        std::thread::yield_now();
+        ret = unsafe {
+            rofisys::rofi_compare_atomic(
+                addr as *mut std::ffi::c_void,
+                &new as *const T as *const std::ffi::c_void,
+                &current as *const T as *const std::ffi::c_void,
+                result as *mut T as *mut std::ffi::c_void,
+                1,
+                dt,
+                rofisys::rofi_atomic_op_t_ROFI_ATOMIC_OP_CSWAP,
+                pe as u32,
+            ) as i32
+        };
+    }
+    rofi_retry_status(ret)
 }
 
 // data is a reference, user must ensure lifetime is valid until underlying put is complete, thus is unsafe

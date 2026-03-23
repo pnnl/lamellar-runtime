@@ -26,13 +26,19 @@ use super::{fabric::*, rofi::*, Scheduler};
 
 // Mirror libfabric_lamellae's structure: separate futures for put/get/get_buffer/get_into_buffer.
 
+pub(super) enum AllocOp<T: Remote> {
+    Put(usize, T),
+    PutBuf(usize, MemregionRdmaInputInner<T>),
+    PutAll(Vec<usize>, T),
+    PutAllBuf(Vec<usize>, MemregionRdmaInputInner<T>),
+}
+
 #[pin_project(PinnedDrop)]
 pub(crate) struct RofiCPutFuture<T: Remote> {
     my_pe: usize,
     addr: CommAllocAddr,
     offset: usize,
-    src_buf: Option<MemregionRdmaInputInner<T>>,
-    src_val: Option<T>,
+    op: AllocOp<T>,
     scheduler: Arc<Scheduler>,
     counters: Vec<Arc<AMCounters>>,
     spawned: bool,
@@ -58,23 +64,31 @@ impl<T: Remote> RofiCPutFuture<T> {
         }
     }
 
-    pub(crate) fn block(mut self) {
-        if let Some(val) = &self.src_val {
-            self.exec_put_val(self.my_pe, val);
-        } else if let Some(buf) = &self.src_buf {
-            self.exec_put_buf(self.my_pe, buf);
+    fn exec_op(&mut self) {
+        match &self.op {
+            AllocOp::Put(pe, src) => self.exec_put_val(*pe, src),
+            AllocOp::PutBuf(pe, src) => self.exec_put_buf(*pe, src),
+            AllocOp::PutAll(pes, src) => {
+                for pe in pes {
+                    self.exec_put_val(*pe, src);
+                }
+            }
+            AllocOp::PutAllBuf(pes, src) => {
+                for pe in pes {
+                    self.exec_put_buf(*pe, src);
+                }
+            }
         }
-        rofi_c_wait();
         self.spawned = true;
     }
 
+    pub(crate) fn block(mut self) {
+        self.exec_op();
+        rofi_c_wait();
+    }
+
     pub(crate) fn spawn(mut self) -> LamellarTask<()> {
-        if let Some(val) = &self.src_val {
-            self.exec_put_val(self.my_pe, val);
-        } else if let Some(buf) = &self.src_buf {
-            self.exec_put_buf(self.my_pe, buf);
-        }
-        self.spawned = true;
+        self.exec_op();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
         self.scheduler.spawn_task(
@@ -107,12 +121,7 @@ impl<T: Remote> Future for RofiCPutFuture<T> {
     type Output = ();
     fn poll(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.spawned {
-            if let Some(val) = &self.src_val {
-                self.exec_put_val(self.my_pe, val);
-            } else if let Some(buf) = &self.src_buf {
-                self.exec_put_buf(self.my_pe, buf);
-            }
-            self.spawned = true;
+            self.exec_op();
         }
         rofi_c_wait();
         Poll::Ready(())
@@ -149,19 +158,9 @@ impl<T: Remote> RofiCGetFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<T> {
         self.exec_at();
-        // take needed pieces out of self before calling scheduler.spawn_task to avoid moving
-        // borrowed fields into the async closure
-        let scheduler = self.scheduler.clone();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let result = *self.result; // move out of Box<T>
-        scheduler.spawn_task(
-            async move {
-                rofi_c_wait();
-                result
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -221,17 +220,9 @@ impl<T: Remote> RofiCGetBufferFuture<T> {
 
     pub(crate) fn spawn(mut self) -> LamellarTask<Vec<T>> {
         self.exec_at();
-        let scheduler = self.scheduler.clone();
         let mut counters = Vec::new();
         std::mem::swap(&mut counters, &mut self.counters);
-        let result = std::mem::take(&mut self.result);
-        scheduler.spawn_task(
-            async move {
-                rofi_c_wait();
-                result
-            },
-            counters,
-        )
+        self.scheduler.clone().spawn_task(self, counters)
     }
 }
 
@@ -348,8 +339,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
             offset,
-            src_buf: None,
-            src_val: Some(src),
+            op: AllocOp::Put(pe, src),
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -361,10 +351,10 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
 
         let dst = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe != self.my_pe {
-            trace!("rofi_c put unmanaged val to pe {} addr: {:?}", pe, self.start());
+            trace!("rofi_c put unmanaged val to pe {} addr: {:x?}", pe, self.start());
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
         } else {
-            trace!("rofi_c put unmanaged val locally addr: {:?}", self.start());
+            trace!("rofi_c put unmanaged val locally addr: {:x?}", self.start());
             unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
         }
     }
@@ -372,11 +362,11 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_blocking<T: Remote>(&self, _scheduler: &Arc<Scheduler>, src: T, pe: usize, offset: usize) {
         let dst = (self.start() + offset * std::mem::size_of::<T>()) as usize;
         if pe != self.my_pe {
-            trace!("rofi_c put blocking val to pe {} addr: {:?}", pe, self.start());
+            trace!("rofi_c put blocking val to pe {} addr: {:x?}", pe, self.start());
             unsafe { rofi_c_put(std::slice::from_ref(&src), dst, pe).expect("rofi_c_put failed") }
             rofi_c_wait();
         } else {
-            trace!("rofi_c put blocking val locally addr: {:?}", self.start());
+            trace!("rofi_c put blocking val locally addr: {:x?}", self.start());
             unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
         }
         
@@ -394,8 +384,7 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
             my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
             offset,
-            src_buf: Some(src.into()),
-            src_val: None,
+            op: AllocOp::PutBuf(pe, src.into()),
             scheduler: scheduler.clone(),
             counters,
             spawned: false,
@@ -420,80 +409,52 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
 
     fn put_all<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        mut counters: Vec<Arc<AMCounters>>,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         src: T,
-        _offset: usize,
+        offset: usize,
     ) -> RdmaHandle<T> {
-        // naive synchronous put to all pes
-        for pe in 0..self.num_pes {
-            if pe != self.my_pe {
-                unsafe {
-                    rofi_c_put(std::slice::from_ref(&src), self.start() as usize, pe)
-                        .expect("rofi_c_put failed")
-                }
-            } else {
-                unsafe {
-                    std::ptr::copy_nonoverlapping(&src as *const T, self.start() as *mut T, 1)
-                }
-            }
-        }
-        rofi_c_wait();
         RofiCPutFuture {
             my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
-            offset: 0,
-            src_buf: None,
-            src_val: None,
-            scheduler: _scheduler.clone(),
+            offset,
+            op: AllocOp::PutAll((0..self.num_pes).collect(), src),
+            scheduler: scheduler.clone(),
             counters,
-            spawned: true,
+            spawned: false,
         }
         .into()
     }
 
-    fn put_all_unmanaged<T: Remote>(&self, src: T, _offset: usize) {
+    fn put_all_unmanaged<T: Remote>(&self, src: T, offset: usize) {
         for pe in 0..self.num_pes {
+            let dst = (self.start() + offset * std::mem::size_of::<T>()) as usize;
             if pe != self.my_pe {
                 unsafe {
-                    rofi_c_put(std::slice::from_ref(&src), self.start() as usize, pe)
+                    rofi_c_put(std::slice::from_ref(&src), dst, pe)
                         .expect("rofi_c_put failed")
                 }
             } else {
-                unsafe {
-                    std::ptr::copy_nonoverlapping(&src as *const T, self.start() as *mut T, 1)
-                }
+                unsafe { std::ptr::copy_nonoverlapping(&src as *const T, dst as *mut T, 1) }
             }
         }
-        rofi_c_wait();
     }
 
     fn put_all_buffer<T: Remote>(
         &self,
-        _scheduler: &Arc<Scheduler>,
-        mut counters: Vec<Arc<AMCounters>>,
+        scheduler: &Arc<Scheduler>,
+        counters: Vec<Arc<AMCounters>>,
         src: impl Into<MemregionRdmaInputInner<T>>,
-        _offset: usize,
+        offset: usize,
     ) -> RdmaHandle<T> {
-        let src = src.into();
-        for pe in 0..self.num_pes {
-            let dst = self.start();
-            if pe != self.my_pe {
-                unsafe { rofi_c_put(src.as_slice(), dst as usize, pe).expect("rofi_c_put failed") }
-            } else {
-                unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) }
-            }
-        }
-        rofi_c_wait();
         RofiCPutFuture {
             my_pe: self.my_pe,
             addr: CommAllocAddr(self.start()),
-            offset: 0,
-            src_buf: None,
-            src_val: None,
-            scheduler: _scheduler.clone(),
+            offset,
+            op: AllocOp::PutAllBuf((0..self.num_pes).collect(), src.into()),
+            scheduler: scheduler.clone(),
             counters,
-            spawned: true,
+            spawned: false,
         }
         .into()
     }
@@ -501,18 +462,17 @@ impl CommAllocRdma for crate::lamellae::rofi_c_lamellae::fabric::RofiCAlloc {
     fn put_all_buffer_unmanaged<T: Remote>(
         &self,
         src: impl Into<MemregionRdmaInputInner<T>>,
-        _offset: usize,
+        offset: usize,
     ) {
         let src = src.into();
         for pe in 0..self.num_pes {
-            let dst = self.start();
+            let dst = (self.start() + offset * std::mem::size_of::<T>()) as usize;
             if pe != self.my_pe {
-                unsafe { rofi_c_put(src.as_slice(), dst as usize, pe).expect("rofi_c_put failed") }
+                unsafe { rofi_c_put(src.as_slice(), dst, pe).expect("rofi_c_put failed") }
             } else {
                 unsafe { std::ptr::copy_nonoverlapping(src.as_ptr(), dst as *mut T, src.len()) }
             }
         }
-        rofi_c_wait();
     }
 
     fn get<T: Remote>(
