@@ -1938,6 +1938,15 @@ impl LibfabricAlloc {
     //     }
     // }
 
+    pub(crate) unsafe fn as_slice<T: Copy>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.start() as *const T,
+                self.num_bytes() / std::mem::size_of::<T>(),
+            )
+        }
+    }
+
     pub(crate) fn start(&self) -> usize {
         self.range.start
     }

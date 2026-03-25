@@ -1682,7 +1682,8 @@ pub(crate) trait CommAllocCollectiveAllReduce {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         op: ReduceOp,
     ) -> CollectiveAllReduceOpHandle<T>;
     
@@ -1690,7 +1691,8 @@ pub(crate) trait CommAllocCollectiveAllReduce {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         op: ReduceOp,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B>;

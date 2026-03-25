@@ -1288,7 +1288,7 @@ impl<T: Remote> MemoryRegion<T> {
             .atomic_fetch_op_blocking(&self.scheduler, op, pe, index)
     }
 
-    pub(crate) fn reduce_all(&self, src: impl Into<MemregionRdmaInputInner<T>>, op: ReduceOp) -> CollectiveAllReduceOpHandle<T> {
+    pub(crate) fn reduce_all(&self, index: usize, len: usize, op: ReduceOp) -> CollectiveAllReduceOpHandle<T> {
         trace!(
             "reduce_all memregion {:?} ",
             self.alloc,
@@ -1298,15 +1298,17 @@ impl<T: Remote> MemoryRegion<T> {
             .reduce_all(
                 &self.scheduler, 
                 self.counters.clone(), 
-                src,
+                index,
+                len,
                 op,
             )
     }
 
     pub(crate) fn reduce_all_into_buffer<B: AsLamellarBuffer<T>>(
         &self, 
-        op: ReduceOp, 
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
+        op: ReduceOp,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
         trace!(
@@ -1318,7 +1320,8 @@ impl<T: Remote> MemoryRegion<T> {
             .reduce_all_into_buffer(
                 &self.scheduler, 
                 self.counters.clone(), 
-                src,
+                index,
+                len,
                 op,
                 buffer
             )

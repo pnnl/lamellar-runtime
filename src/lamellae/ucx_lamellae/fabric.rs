@@ -1854,6 +1854,10 @@ impl UcxAlloc {
         self.mem.as_mut_slice()
     }
 
+    pub(crate) fn as_slice<T>(&self) -> &[T] {
+        self.mem.as_slice()
+    }
+
     pub(crate) fn wait_ucc_all(&self) {
         if let Some(ucc_team) = &self.ucc_team {
             loop {
