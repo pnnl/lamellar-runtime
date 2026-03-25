@@ -35,8 +35,8 @@ pmix-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true, feat
 ] }
 lamellar_main = { path = "./lamellar_main", optional = true }
 prrte-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
-# lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
-lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
+lamellar-ucx-sys = { path = "../lamellar-repo/communication_frameworks/lamellar-ucx-sys", optional = true }
+# lamellar-ucx-sys = { git = "https://github.com/pnnl/lamellar.git", optional = true }
 memmap = "0.7.0"
 page_size = "0.6.0"
 # rofisys = { version = "0.4", optional = true }

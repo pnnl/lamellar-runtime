@@ -161,7 +161,38 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
     let ret = if ret_result {Some(quote! {Ok(())})} else {None};
     let _output = &func.sig.output;
     let ret_type = func.sig.output;
-    let block = &func.block;
+    let _block = &func.block;
+
+    // Find the LamellarWorldBuilder::new()...build() statement and split the
+    // block around it so we can emit a separate timer for world construction
+    // and one for the application code that follows.
+    let world_build_idx = func.block.stmts.iter().position(|stmt| {
+        quote!(#stmt).to_string().contains("LamellarWorldBuilder")
+    });
+    let timed_body = if let Some(idx) = world_build_idx {
+        let pre = &func.block.stmts[..idx];
+        let world_stmt = &func.block.stmts[idx];
+        let post = &func.block.stmts[idx + 1..];
+        quote! {
+            #(#pre)*
+            let __lamellar_world_build_start = std::time::Instant::now();
+            let mut __lamellar_app_start;
+            {
+                #world_stmt
+                if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
+                    println!("[LAMELLAR_MAIN] world build time: {:?}", __lamellar_world_build_start.elapsed());
+                }
+                __lamellar_app_start = std::time::Instant::now();
+                #(#post)*
+            } // this should enforce that world is dropped across all PEs before we print the application time, which is important for accurate timing of the application code.
+            if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
+                println!("[LAMELLAR_MAIN] application time: {:?}", __lamellar_app_start.elapsed());
+            }
+        }
+    } else {
+        let stmts = &func.block.stmts;
+        quote! { #(#stmts)* }
+    };
 
     #[cfg(not(any(feature = "use-prterun", feature = "use-srun")))]
     let launch_block = quote! {
@@ -214,12 +245,7 @@ pub fn main(_args: TokenStream, item: TokenStream) -> TokenStream {
                             .try_init();
                     }
                 }
-                let mut __lamellar_main_timer = std::time::Instant::now();
-                let result = (|| #block)();
-                if std::env::var("LAMELLAR_MAIN_TIME").is_ok() {
-                    let __lamellar_main_duration = __lamellar_main_timer.elapsed();
-                    println!("[LAMELLAR_MAIN] execution time: {:?}", __lamellar_main_duration);
-                }
+                let result = (|| { #timed_body })();
                 result
             }
         } 

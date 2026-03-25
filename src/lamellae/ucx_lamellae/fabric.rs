@@ -1447,7 +1447,8 @@ impl UcxAlloc {
                 };
                 self.endpoints[pe].atomic_get(result.as_mut_ptr(), remote_addr + offset, rkey)
             }
-            AtomicOp::FetchSum(_)
+            AtomicOp::Write(_)
+            | AtomicOp::FetchSum(_)
             | AtomicOp::FetchSub(_)
             | AtomicOp::FetchBitAnd(_)
             | AtomicOp::FetchBitOr(_)
@@ -1466,8 +1467,7 @@ impl UcxAlloc {
                     rkey,
                 )
             }
-            AtomicOp::Write(_)
-            | AtomicOp::Min(_)
+            AtomicOp::Min(_)
             | AtomicOp::Max(_)
             | AtomicOp::Sum(_)
             | AtomicOp::Sub(_)
