@@ -38,6 +38,14 @@ impl MemoryHandle {
             )
         }
     }
+    pub(crate) fn as_slice<T>(&self) -> &[T] {
+        unsafe {
+            std::slice::from_raw_parts(
+                self.addr as *const T,
+                self.size / std::mem::size_of::<T>(),
+            )
+        }
+    }
 
     pub(crate) fn sub_alloc(&self, offset: usize, size: usize) -> Self {
         assert!(offset + size <= self.size);

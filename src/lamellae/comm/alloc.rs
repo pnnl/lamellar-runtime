@@ -2165,7 +2165,8 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         op: ReduceOp,
     ) -> CollectiveAllReduceOpHandle<T> {
         match self {
@@ -2183,11 +2184,11 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_all(scheduler, counters, src, op)
+                inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_all(scheduler, counters, src, op)
+                inner_alloc.reduce_all(scheduler, counters, index, len, op)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2226,7 +2227,8 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         op: ReduceOp,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
@@ -2245,11 +2247,11 @@ impl CommAllocCollectiveAllReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_all_into_buffer(scheduler, counters, src, op, buffer)
+                inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_all_into_buffer(scheduler, counters, src, op, buffer)
+                inner_alloc.reduce_all_into_buffer(scheduler, counters, index, len, op, buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")

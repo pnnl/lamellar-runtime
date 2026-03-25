@@ -2,60 +2,60 @@ use crate::{array::{collective::{broadcast_handle::{ArrayCollectiveAllBroadcastH
 
 
 impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
-    pub fn sum_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn sum_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .sum_all(src)
+                .sum_all(index, len)
         }
     }
-    pub fn max_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn max_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .max_all(src)
+                .max_all(index, len)
         }
     }
-    pub fn min_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn min_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .min_all(src)
+                .min_all(index, len)
         }
     }
-    pub fn prod_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn prod_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .prod_all(src)
+                .prod_all(index, len)
         }
     }
-    pub fn bit_and_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn bit_and_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .bit_and_all(src)
+                .bit_and_all(index, len)
         }
     }
-    pub fn bit_or_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn bit_or_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .bit_or_all(src)
+                .bit_or_all(index, len)
         }
     }
-    pub fn bit_xor_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllReduceHandle<T> {
+    pub fn bit_xor_all(&self, index: usize, len: usize) -> ArrayCollectiveAllReduceHandle<T> {
         unsafe {
             self
                 .array
                 .array
-                .bit_xor_all(src)
+                .bit_xor_all(index, len)
         }
     }
 
@@ -63,60 +63,60 @@ impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
 
 
 impl<T: Dist> GlobalLockCollectiveMutLocalData<T> {
-    pub fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn sum_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .sum_all_into_buffer(src, buffer)
+                .sum_all_into_buffer(index, len, buffer)
         }
     }
-    pub fn max_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn max_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .max_all_into_buffer(src, buffer)
+                .max_all_into_buffer(index, len, buffer)
         }
     }
-    pub fn min_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn min_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .min_all_into_buffer(src, buffer)
+                .min_all_into_buffer(index, len, buffer)
         }
     }
-    pub fn prod_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn prod_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .prod_all_into_buffer(src, buffer)
+                .prod_all_into_buffer(index, len, buffer)
         }
     }
-    pub fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn bit_and_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .bit_and_all_into_buffer(src, buffer)
+                .bit_and_all_into_buffer(index, len, buffer)
         }
     }
-    pub fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn bit_or_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .bit_or_all_into_buffer(src, buffer)
+                .bit_or_all_into_buffer(index, len, buffer)
         }
     }
-    pub fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
+    pub fn bit_xor_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllReduceIntoBufferHandle<T, B> {
         unsafe {
             self
                 .array
                 .array
-                .bit_xor_all_into_buffer(src, buffer)
+                .bit_xor_all_into_buffer(index, len, buffer)
         }
     }
 

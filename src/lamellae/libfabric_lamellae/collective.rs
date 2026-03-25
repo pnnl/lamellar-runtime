@@ -19,7 +19,8 @@ use std::{
 pub(crate) struct LibfabricCollectiveAllReduceFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
     pub(super) op: ReduceOp,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -34,10 +35,11 @@ impl<T: Remote> LibfabricCollectiveAllReduceFuture<T> {
         //     self.op,
         //     result_ptr
         // );
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         LibfabricAlloc::allreduce_inner(
             &self.alloc,
             &self.op,
-            &self.src.as_slice(),
+            src,
             &mut self.result,
             false,
         )
@@ -101,7 +103,8 @@ impl<T: Remote> Future for LibfabricCollectiveAllReduceFuture<T> {
 pub(crate) struct LibfabricCollectiveAllReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
     pub(super) op: ReduceOp,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -115,10 +118,11 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllReduceIntoBufferFu
         //     self.op,
         //     result_ptr
         // );
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         LibfabricAlloc::allreduce_inner(
             &self.alloc,
             &self.op,
-            &self.src.as_slice(),
+            src,
             self.result.as_mut_slice(),
             false,
         )
@@ -487,15 +491,16 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         op: ReduceOp,
     ) -> CollectiveAllReduceOpHandle<T> {
-        let memregion_in = src.into();
-        let len = memregion_in.len();
+
         LibfabricCollectiveAllReduceFuture {
             alloc: self.clone(),
             op: op,
-            src: memregion_in,
+            index,
+            len,
             result: vec![T::default(); len],
             spawned: false,
             scheduler: scheduler.clone(),
@@ -507,7 +512,8 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         op: ReduceOp,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllReduceIntoBufferOpHandle<T, B> {
@@ -515,7 +521,8 @@ impl CommAllocCollectiveAllReduce for LibfabricAlloc {
         LibfabricCollectiveAllReduceIntoBufferFuture {
             alloc: self.clone(),
             op: op,
-            src: src.into(),
+            index,
+            len,
             result: dst,
             spawned: false,
             scheduler: scheduler.clone(),
