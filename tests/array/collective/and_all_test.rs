@@ -71,7 +71,7 @@ macro_rules! bit_and_all_test{
             array.wait_all();
             array.barrier();
             let final_val = (!0 << num_pes);
-            initialize_mem_region(&shared_mem_region, !(1 as $t << my_pe),0 as $t);
+            initialize_mem_region(&shared_mem_region, !(1 << my_pe) as $t,0 as $t);
             // world.barrier();
 
             for tx_size in 1..=mem_seg_len{
@@ -79,7 +79,7 @@ macro_rules! bit_and_all_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.bit_and_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).spawn()});
+                    reqs.push(unsafe { array.bit_and_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
@@ -116,7 +116,7 @@ macro_rules! bit_and_all_test{
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.bit_and_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).spawn()});
+                    reqs.push(unsafe { array.bit_and_all(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
 
                 let mut i = 0;
@@ -158,7 +158,7 @@ macro_rules! bit_and_all_test{
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        reqs.push(unsafe { sub_array.bit_and_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).spawn()});
+                        reqs.push(unsafe { sub_array.bit_and_all(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                     }
                     // array.wait_all();
                     // sub_array.barrier();

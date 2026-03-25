@@ -254,7 +254,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveAllReduceI
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveReduceFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(super) op: ReduceOp,
     pub(crate) target: RootOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -266,11 +267,12 @@ pub(crate) struct LibfabricCollectiveReduceFuture<T: Remote> {
 
 impl<T: Remote> LibfabricCollectiveReduceFuture<T> {
     fn exec_op(&mut self) {
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         
         LibfabricAlloc::reduce_inner(
             &self.alloc,
             &self.op,
-            self.src.as_slice(),
+            src,
             self.target.as_mut_slice(),
             false,
         )
@@ -342,7 +344,8 @@ impl<T: Remote> Future for LibfabricCollectiveReduceFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveReduceIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(super) op: ReduceOp,
     pub(crate) target: RootOrLamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
@@ -354,11 +357,12 @@ pub(crate) struct LibfabricCollectiveReduceIntoBufferFuture<T: Remote, B: AsLame
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         
         LibfabricAlloc::reduce_inner(
             &self.alloc,
             &self.op,
-            self.src.as_slice(),
+            src,
             self.target.as_mut_slice(),
             false,
         )
@@ -556,11 +560,10 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_pe: usize,
     ) -> CollectiveReduceOpHandle<T> {
-        let memregion_in = src.into();
-        let len = memregion_in.len();
         let target =
             if root_pe != self.ofi.my_pe {
                 RootOrBuffer::NotRoot(root_pe)
@@ -570,7 +573,8 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
             };
         LibfabricCollectiveReduceFuture {
             alloc: self.clone(),
-            src: memregion_in,
+            index,
+            len,
             op: op,
             target,
             spawned: false,
@@ -584,14 +588,16 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         
         LibfabricCollectiveReduceIntoBufferFuture {
             alloc: self.clone(),
             op: op,
-            src: src.into(),
+            index,
+            len,
             target: root_or_buffer,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -627,7 +633,8 @@ impl CommAllocCollectiveReduce for LibfabricAlloc {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveAllGatherFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -636,6 +643,7 @@ pub(crate) struct LibfabricCollectiveAllGatherFuture<T: Remote> {
 
 impl<T: Remote> LibfabricCollectiveAllGatherFuture<T> {
     fn exec_op(&mut self) {
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         let result_ptr = self.result.as_mut_ptr();
         //println!(
         //     "performing collective gather result ptr: {:?} ",
@@ -643,7 +651,7 @@ impl<T: Remote> LibfabricCollectiveAllGatherFuture<T> {
         // );
         LibfabricAlloc::allgather_inner(
             &self.alloc,
-            self.src.as_slice(),
+            src,
             &mut self.result,
             false,
         )
@@ -705,7 +713,8 @@ impl<T: Remote> Future for LibfabricCollectiveAllGatherFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -714,6 +723,7 @@ pub(crate) struct LibfabricCollectiveAllGatherIntoBufferFuture<T: Remote, B: AsL
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         // println!(
         //     "performing collective reduce op: {:?} result ptr: {:?} ",
         //     self.op,
@@ -721,7 +731,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveAllGatherIntoBufferFu
         // );
         LibfabricAlloc::allgather_inner(
             &self.alloc,
-            self.src.as_slice(),
+            src,
             self.result.as_mut_slice(),
             false,
         )
@@ -778,7 +788,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveAllGatherI
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveGatherFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) target: RootOrBuffer<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -789,10 +800,11 @@ pub(crate) struct LibfabricCollectiveGatherFuture<T: Remote> {
 
 impl<T: Remote> LibfabricCollectiveGatherFuture<T> {
     fn exec_op(&mut self) {
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         
         LibfabricAlloc::gather_inner(
             &self.alloc,
-            self.src.as_slice(),
+            src,
             self.target.as_mut_slice(),
             false,
         )
@@ -864,7 +876,8 @@ impl<T: Remote> Future for LibfabricCollectiveGatherFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveGatherIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) target: RootOrLamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -875,10 +888,11 @@ pub(crate) struct LibfabricCollectiveGatherIntoBufferFuture<T: Remote, B: AsLame
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveGatherIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        let src = unsafe { &self.alloc.as_slice()[self.index..self.index+self.len]};
         
         LibfabricAlloc::gather_inner(
             &self.alloc,
-            self.src.as_slice(),
+            src,
             self.target.as_mut_slice(),
             false,
         )
@@ -1086,6 +1100,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveAllBroadca
 pub(crate) struct LibfabricCollectiveBroadcastFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
     pub(crate) target: RootSrcOrBuffer<T> ,
+    pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -1093,6 +1108,7 @@ pub(crate) struct LibfabricCollectiveBroadcastFuture<T: Remote> {
 
 impl<T: Remote> LibfabricCollectiveBroadcastFuture<T> {
     fn exec_op(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_slice() };
         // let result_ptr = self.result.as_mut_ptr();
         // println!(
         //     "performing collective broadcast result ptr: {:?} ",
@@ -1100,7 +1116,7 @@ impl<T: Remote> LibfabricCollectiveBroadcastFuture<T> {
         // );
         LibfabricAlloc::broadcast_inner(
             &self.alloc,
-            self.target.as_mut_slice(),
+            self.target.as_mut_slice(alloc_slice, self.len),
             false,
         )
         .unwrap();
@@ -1172,6 +1188,7 @@ impl<T: Remote> Future for LibfabricCollectiveBroadcastFuture<T> {
 pub(crate) struct LibfabricCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
     pub(crate) target: RootSrcOrLamellarBufferInner<T, B>,
+    pub(crate) len: usize,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -1179,6 +1196,7 @@ pub(crate) struct LibfabricCollectiveBroadcastIntoBufferFuture<T: Remote, B: AsL
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveBroadcastIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_slice() };
         // println!(
         //     "performing collective reduce op: {:?} result ptr: {:?} ",
         //     self.op,
@@ -1186,7 +1204,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveBroadcastIntoBufferFu
         // );
         LibfabricAlloc::broadcast_inner(
             &self.alloc,
-            self.target.as_mut_slice(),
+            self.target.as_mut_slice(alloc_slice, self.len),
             false,
         )
         .unwrap();
@@ -1240,8 +1258,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveBroadcastI
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveScatterFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
+    pub(crate) len: usize,
     pub(crate) result: Vec<T> ,
-    src_or_root_pe: ScatterInputInner<T>,
+    src_or_root_pe: ScatterInputInner,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
     pub(crate) spawned: bool,
@@ -1249,6 +1268,7 @@ pub(crate) struct LibfabricCollectiveScatterFuture<T: Remote> {
 
 impl<T: Remote> LibfabricCollectiveScatterFuture<T> {
     fn exec_op(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_slice() };
         // let result_ptr = self.result.as_mut_ptr();
         // println!(
         //     "performing collective broadcast result ptr: {:?} ",
@@ -1257,7 +1277,7 @@ impl<T: Remote> LibfabricCollectiveScatterFuture<T> {
         LibfabricAlloc::scatter_inner(
             &self.alloc,
             &mut self.result,
-            self.src_or_root_pe.as_slice(),
+            self.src_or_root_pe.as_slice(alloc_slice, self.len),
             false,
         )
         .unwrap();
@@ -1319,7 +1339,8 @@ impl<T: Remote> Future for LibfabricCollectiveScatterFuture<T> {
 #[pin_project(PinnedDrop)]
 pub(crate) struct LibfabricCollectiveScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
-    src_or_root_pe: ScatterInputInner<T>,
+    pub(crate) len: usize,
+    src_or_root_pe: ScatterInputInner,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -1328,6 +1349,7 @@ pub(crate) struct LibfabricCollectiveScatterIntoBufferFuture<T: Remote, B: AsLam
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveScatterIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_slice() };
         // println!(
         //     "performing collective reduce op: {:?} result ptr: {:?} ",
         //     self.op,
@@ -1336,7 +1358,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveScatterIntoBufferFutu
         LibfabricAlloc::scatter_inner(
             &self.alloc,
             self.result.as_mut_slice(),
-            self.src_or_root_pe.as_slice(),
+            self.src_or_root_pe.as_slice(alloc_slice, self.len),
             false,
         )
         .unwrap();
@@ -1393,7 +1415,8 @@ impl<T: Remote, B: AsLamellarBuffer<T>> Future for LibfabricCollectiveScatterInt
 pub(crate) struct LibfabricCollectiveReduceScatterFuture<T: Remote> {
     pub(crate) alloc: LibfabricAlloc,
     pub(super) op: ReduceOp,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) result: Vec<T>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -1402,6 +1425,8 @@ pub(crate) struct LibfabricCollectiveReduceScatterFuture<T: Remote> {
 
 impl<T: Remote> LibfabricCollectiveReduceScatterFuture<T> {
     fn exec_op(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_slice() };
+        let src = &alloc_slice[self.index..self.index + self.len];
         // let result_ptr = self.result.as_mut_ptr();
         // println!(
         //     "performing collective reduce op: {:?} result ptr: {:?} ",
@@ -1411,7 +1436,7 @@ impl<T: Remote> LibfabricCollectiveReduceScatterFuture<T> {
         LibfabricAlloc::reduce_scatter_inner(
             &self.alloc,
             &self.op,
-            &self.src.as_slice(),
+            src,
             &mut self.result,
             false,
         )
@@ -1475,7 +1500,8 @@ impl<T: Remote> Future for LibfabricCollectiveReduceScatterFuture<T> {
 pub(crate) struct LibfabricCollectiveReduceScatterIntoBufferFuture<T: Remote, B: AsLamellarBuffer<T>> {
     pub(crate) alloc: LibfabricAlloc,
     pub(super) op: ReduceOp,
-    pub(crate) src: MemregionRdmaInputInner<T>,
+    pub(crate) index: usize,
+    pub(crate) len: usize,
     pub(crate) result: LamellarBuffer<T, B>,
     pub(crate) scheduler: Arc<Scheduler>,
     pub(crate) counters: Vec<Arc<AMCounters>>,
@@ -1484,6 +1510,8 @@ pub(crate) struct LibfabricCollectiveReduceScatterIntoBufferFuture<T: Remote, B:
 
 impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceScatterIntoBufferFuture<T, B> {
     fn exec_op(&mut self) {
+        let alloc_slice = unsafe { self.alloc.as_slice() };
+        let src = &alloc_slice[self.index..self.index + self.len];
         // println!(
         //     "performing collective reduce op: {:?} result ptr: {:?} ",
         //     self.op,
@@ -1492,7 +1520,7 @@ impl<T: Remote, B: AsLamellarBuffer<T>> LibfabricCollectiveReduceScatterIntoBuff
         LibfabricAlloc::reduce_scatter_inner(
             &self.alloc,
             &self.op,
-            &self.src.as_slice(),
+            src,
             self.result.as_mut_slice(),
             false,
         )
@@ -1552,13 +1580,13 @@ impl CommAllocCollectiveAllGather for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
     ) -> CollectiveAllGatherOpHandle<T> {
-        let memregion_in = src.into();
-        let len = memregion_in.len();
         LibfabricCollectiveAllGatherFuture {
             alloc: self.clone(),
-            src: memregion_in,
+            index,
+            len,
             result: vec![T::default(); len * self.num_pes()],
             spawned: false,
             scheduler: scheduler.clone(),
@@ -1570,13 +1598,15 @@ impl CommAllocCollectiveAllGather for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         
         LibfabricCollectiveAllGatherIntoBufferFuture {
             alloc: self.clone(),
-            src: src.into(),
+            index,
+            len,
             result: dst,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -1590,11 +1620,10 @@ impl CommAllocCollectiveGather for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T> {
-        let memregion_in = src.into();
-        let len = memregion_in.len();
         let target =
             if root_pe != self.ofi.my_pe {
                 RootOrBuffer::NotRoot(root_pe)
@@ -1604,7 +1633,8 @@ impl CommAllocCollectiveGather for LibfabricAlloc {
             };
         LibfabricCollectiveGatherFuture {
             alloc: self.clone(),
-            src: memregion_in,
+            index,
+            len,
             target,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -1616,13 +1646,15 @@ impl CommAllocCollectiveGather for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         
         LibfabricCollectiveGatherIntoBufferFuture {
             alloc: self.clone(),
-            src: src.into(),
+            index,
+            len,
             target: root_or_buffer,
             spawned: false,
             scheduler: scheduler.clone(),
@@ -1675,11 +1707,12 @@ impl CommAllocCollectiveBroadcast for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src_or_pe: BroadcastInput<T>,
+        src_or_pe: BroadcastInput,
+        len: usize,
     ) -> CollectiveBroadcastOpHandle<T> {
         let target = match src_or_pe {
-            BroadcastInput::Root(memregion_rdma_input_inner) => RootSrcOrBuffer::Root(memregion_rdma_input_inner.into()),
-            BroadcastInput::NotRoot(len, root_pe) => RootSrcOrBuffer::NotRoot(vec![T::default(); len], root_pe),
+            BroadcastInput::Root(index) => RootSrcOrBuffer::Root(index),
+            BroadcastInput::NotRoot(root_pe) => RootSrcOrBuffer::NotRoot(vec![T::default(); len], root_pe),
         };
         // let target =
         //     if root_pe != self.ofi.my_pe {
@@ -1691,6 +1724,7 @@ impl CommAllocCollectiveBroadcast for LibfabricAlloc {
         LibfabricCollectiveBroadcastFuture {
             alloc: self.clone(),
             target,
+            len,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1701,12 +1735,14 @@ impl CommAllocCollectiveBroadcast for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        root_or_buffer: RootSrcOrLamellarBuffer<T, B>
+        root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
+        len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         
         LibfabricCollectiveBroadcastIntoBufferFuture {
             alloc: self.clone(),
             target: root_or_buffer.into(),
+            len,
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1720,15 +1756,13 @@ impl CommAllocCollectiveScatter for LibfabricAlloc {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src_or_root_pe: ScatterInput<T>,
+        src_or_root_pe: ScatterInput,
+        len: usize,
     ) -> CollectiveScatterOpHandle<T> {
-        let (src_or_root_pe, len) = match src_or_root_pe {
-            ScatterInput::Root(src, len) => (ScatterInputInner::Root(src.into()), len),
-            ScatterInput::NotRoot(len, root_pe) => (ScatterInputInner::NotRoot(root_pe), len),
-        };
         LibfabricCollectiveScatterFuture {
             alloc: self.clone(),
-            src_or_root_pe,
+            len,
+            src_or_root_pe: src_or_root_pe.into(),
             result: vec![T::default(); len],
             spawned: false,
             scheduler: scheduler.clone(),
@@ -1741,11 +1775,13 @@ impl CommAllocCollectiveScatter for LibfabricAlloc {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         result: LamellarBuffer<T, B>,
-        src_or_root_pe: ScatterInput<T>
+        src_or_root_pe: ScatterInput,
+        len: usize,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         
         LibfabricCollectiveScatterIntoBufferFuture {
             alloc: self.clone(),
+            len,
             result: result,
             src_or_root_pe: src_or_root_pe.into(),
             spawned: false,
@@ -1761,15 +1797,15 @@ impl CommAllocCollectiveReduceScatter for LibfabricAlloc {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize, 
         len: usize,
     ) -> CollectiveReduceScatterOpHandle<T> {
-        let memregion_in = src.into();
         LibfabricCollectiveReduceScatterFuture {
             alloc: self.clone(),
             op: op,
-            src: memregion_in,
-            result: vec![T::default(); len],
+            index,
+            len,
+            result: vec![T::default(); len / self.num_pes()],
             spawned: false,
             scheduler: scheduler.clone(),
             counters,
@@ -1781,14 +1817,15 @@ impl CommAllocCollectiveReduceScatter for LibfabricAlloc {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
-        
         LibfabricCollectiveReduceScatterIntoBufferFuture {
             alloc: self.clone(),
             op: op,
-            src: src.into(),
+            index,
+            len,
             result: dst,
             spawned: false,
             scheduler: scheduler.clone(),

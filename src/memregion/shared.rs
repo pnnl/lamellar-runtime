@@ -529,89 +529,89 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .as_base::<T>()
             .reduce_all_in_place(src_and_dst, ReduceOp::BitAnd)
     }
-    pub unsafe fn min_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+    pub unsafe fn min_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce(ReduceOp::Min, src.into(), root_pe)
+                .reduce(ReduceOp::Min, index, len, root_pe)
     }
-    pub unsafe fn max_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+            pub unsafe fn max_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
-        .reduce(ReduceOp::Max, src.into(), root_pe)
+        .reduce(ReduceOp::Max, index, len, root_pe)
     }
-    pub unsafe fn sum_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+    pub unsafe fn sum_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce(ReduceOp::Sum, src.into(), root_pe)
+                .reduce(ReduceOp::Sum, index, len, root_pe)
     }
-    pub unsafe fn prod_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+            pub unsafe fn prod_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce(ReduceOp::Prod, src.into(), root_pe)
+                .reduce(ReduceOp::Prod, index, len, root_pe)
     }
-    pub unsafe fn bit_or_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+            pub unsafe fn bit_or_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce(ReduceOp::BitOr, src.into(), root_pe)
+                .reduce(ReduceOp::BitOr, index, len, root_pe)
     }
-    pub unsafe fn bit_xor_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+            pub unsafe fn bit_xor_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce(ReduceOp::BitXor, src.into(), root_pe)
+                .reduce(ReduceOp::BitXor, index, len, root_pe)
     }
-    pub unsafe fn bit_and_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveReduceOpHandle<T> {
+            pub unsafe fn bit_and_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveReduceOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce(ReduceOp::BitAnd, src.into(), root_pe)
+                .reduce(ReduceOp::BitAnd, index, len, root_pe)
     }
-    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+            pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Min, src.into(), target)
+                .reduce_into_buffer(ReduceOp::Min, index, len, target)
     }
-    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+            pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
-        .reduce_into_buffer(ReduceOp::Max, src.into(), target)
+        .reduce_into_buffer(ReduceOp::Max, index, len, target)
     }
-    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Sum, src.into(), target)
+                .reduce_into_buffer(ReduceOp::Sum, index, len, target)
     }
-    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+            pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Prod, src.into(), target)
+                .reduce_into_buffer(ReduceOp::Prod, index, len, target)
     }
-    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+            pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::BitOr, src.into(), target)
+                .reduce_into_buffer(ReduceOp::BitOr, index, len, target)
     }
-    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+            pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::BitXor, src.into(), target)
+                .reduce_into_buffer(ReduceOp::BitXor, index, len, target)
     }
-    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
+            pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::BitAnd, src.into(), target)
+                .reduce_into_buffer(ReduceOp::BitAnd, index, len, target)
     }
     // pub unsafe fn min_at_pe_in_place(&self, root_pe: usize) -> CollectiveReduceInPlaceOpHandle<T> {
     //     // let slice = self.as_slice();
@@ -655,29 +655,29 @@ impl<T: Remote> SharedMemoryRegion<T> {
     //         .as_base::<T>()
     //         .reduce_in_place(ReduceOp::BitAnd, root_pe)
     // }
-    pub unsafe fn gather_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> CollectiveAllGatherOpHandle<T> {
+        pub unsafe fn gather_all(&self, index: usize, len: usize) -> CollectiveAllGatherOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .gather_all(src.into())
+            .gather_all(index, len)
     }
-    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>, src: impl Into<MemregionRdmaInput<T>>) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
+        pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .gather_all_into_buffer(src.into(), buffer)
+            .gather_all_into_buffer(index, len, buffer)
     }
-    pub unsafe fn gather_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, root_pe: usize) -> CollectiveGatherOpHandle<T> {
+        pub unsafe fn gather_at_pe(&self, index: usize, len: usize, root_pe: usize) -> CollectiveGatherOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .gather(src.into(), root_pe)
+            .gather(index, len, root_pe)
     }
-    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, root_or_buffer: RootOrLamellarBuffer<T, B>) -> CollectiveGatherIntoBufferOpHandle<T, B> {
+        pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, root_or_buffer: RootOrLamellarBuffer<T, B>) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .gather_into_buffer(src.into(), root_or_buffer)
+            .gather_into_buffer(index, len, root_or_buffer)
     }
     pub unsafe fn broadcast_all(&self,  src: impl Into<MemregionRdmaInput<T>>) -> CollectiveAllBroadcastOpHandle<T> {
         // let slice = self.as_slice();
@@ -691,113 +691,113 @@ impl<T: Remote> SharedMemoryRegion<T> {
             .as_base::<T>()
             .broadcast_all_into_buffer(src.into(), buffer)
     }
-    pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput<T>) -> CollectiveBroadcastOpHandle<T> {
+        pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> CollectiveBroadcastOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .broadcast(src_or_root_pe)
+            .broadcast(src_or_root_pe, len)
     }
-    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, root_or_buffer: RootSrcOrLamellarBuffer<T, B>) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
+        pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, root_or_buffer: RootSrcOrLamellarBuffer<T, B>, len: usize) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .broadcast_into_buffer(root_or_buffer)
+            .broadcast_into_buffer(root_or_buffer, len)
     }
-    pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput<T>) -> CollectiveScatterOpHandle<T> {
+        pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput, len: usize) -> CollectiveScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .scatter(src_or_root_pe)
+            .scatter(src_or_root_pe, len)
     }
-    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, buffer: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput<T>) -> CollectiveScatterIntoBufferOpHandle<T, B> {
+        pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>> (&self, buffer: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput, len: usize) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .scatter_into_buffer(buffer, src_or_root_pe)
+            .scatter_into_buffer(buffer, src_or_root_pe, len)
     }
-    pub unsafe fn min_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+    pub unsafe fn min_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Min, src.into(), len)
+                .reduce_scatter(ReduceOp::Min, index, len)
     }
-    pub unsafe fn max_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+            pub unsafe fn max_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Max, src.into(), len)
+                .reduce_scatter(ReduceOp::Max, index, len)
     }
-    pub unsafe fn sum_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+            pub unsafe fn sum_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Sum, src.into(), len)
+                .reduce_scatter(ReduceOp::Sum, index, len)
     }
-    pub unsafe fn prod_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+            pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Prod, src.into(), len)
+                .reduce_scatter(ReduceOp::Prod, index, len)
     }
-    pub unsafe fn bit_or_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+            pub unsafe fn bit_or_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::BitOr, src.into(), len)
+                .reduce_scatter(ReduceOp::BitOr, index, len)
     }
-    pub unsafe fn bit_xor_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+            pub unsafe fn bit_xor_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::BitXor, src.into(), len)
+                .reduce_scatter(ReduceOp::BitXor, index, len)
     }
-    pub unsafe fn bit_and_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> CollectiveReduceScatterOpHandle<T> {
+            pub unsafe fn bit_and_scatter(&self, index: usize, len: usize) -> CollectiveReduceScatterOpHandle<T> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::BitAnd, src.into(), len)
+                .reduce_scatter(ReduceOp::BitAnd, index, len)
     }
-    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+            pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Min, src.into(), buffer)
+                .reduce_scatter_into_buffer(ReduceOp::Min, index, len, buffer)
     }
-    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+            pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
         .as_base::<T>()
-        .reduce_scatter_into_buffer(ReduceOp::Max, src.into(), buffer)
+        .reduce_scatter_into_buffer(ReduceOp::Max, index, len, buffer)
     }
-    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Sum, src.into(), buffer)
+                .reduce_scatter_into_buffer(ReduceOp::Sum, index, len, buffer)
     }
-    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+            pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Prod, src.into(), buffer)
+                .reduce_scatter_into_buffer(ReduceOp::Prod, index, len, buffer)
     }
-    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+            pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::BitOr, src.into(), buffer)
+                .reduce_scatter_into_buffer(ReduceOp::BitOr, index, len, buffer)
     }
-    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+            pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::BitXor, src.into(), buffer)
+                .reduce_scatter_into_buffer(ReduceOp::BitXor, index, len, buffer)
     }
-    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
+            pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         // let slice = self.as_slice();
         self.mr
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::BitAnd, src.into(), buffer)
+                .reduce_scatter_into_buffer(ReduceOp::BitAnd, index, len, buffer)
     }
     pub fn wait_all(&self) {
         self.mr.wait_all();

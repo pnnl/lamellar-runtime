@@ -70,7 +70,6 @@ macro_rules! gather_all_test{
             initialize_array!($array, array, init_val);
             array.wait_all();
             array.barrier();
-            let final_val = (!0 << num_pes);
             initialize_mem_region(&shared_mem_region, my_pe as $t, 0 as $t);
             // world.barrier();
 
@@ -79,7 +78,7 @@ macro_rules! gather_all_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.gather_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array.gather_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
                 }
                 for req in reqs.drain(..){
                     let buf =req.0.block();
@@ -116,7 +115,7 @@ macro_rules! gather_all_test{
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.gather_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).spawn()}, std::cmp::min(half_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array.gather_all(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size).spawn()}, std::cmp::min(half_len,(tx+1)*tx_size - tx*tx_size)));
                 }
 
                 for req in reqs.drain(..){
@@ -158,7 +157,7 @@ macro_rules! gather_all_test{
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        reqs.push((unsafe { sub_array.gather_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).spawn()}, std::cmp::min(len,(tx+1)*tx_size - tx*tx_size)));
+                        reqs.push((unsafe { sub_array.gather_all(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size).spawn()}, std::cmp::min(len,(tx+1)*tx_size - tx*tx_size)));
                     }
                     // array.wait_all();
                     // sub_array.barrier();
@@ -204,41 +203,40 @@ fn main() {
         "Cyclic" => Distribution::Cyclic,
         _ => panic!("unsupported dist type"),
     };
-
     match array.as_str() {
         "UnsafeArray" => match elem.as_str() {
             "u8" => gather_all_test!(UnsafeArray, u8, len, dist_type),
-            // "u16" => gather_all_test!(UnsafeArray, u16, len, dist_type),
-            // "u32" => gather_all_test!(UnsafeArray, u32, len, dist_type),
-            // "u64" => gather_all_test!(UnsafeArray, u64, len, dist_type),
-            // "u128" => gather_all_test!(UnsafeArray, u128, len, dist_type),
-            // "usize" => gather_all_test!(UnsafeArray, usize, len, dist_type),
-            // "i8" => gather_all_test!(UnsafeArray, i8, len, dist_type),
-            // "i16" => gather_all_test!(UnsafeArray, i16, len, dist_type),
-            // "i32" => gather_all_test!(UnsafeArray, i32, len, dist_type),
-            // "i64" => gather_all_test!(UnsafeArray, i64, len, dist_type),
-            // "i128" => gather_all_test!(UnsafeArray, i128, len, dist_type),
-            // "isize" => gather_all_test!(UnsafeArray, isize, len, dist_type),
-            // "f32" => gather_all_test!(UnsafeArray, f32, len, dist_type),
-            // "f64" => gather_all_test!(UnsafeArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
+            "u16" => gather_all_test!(UnsafeArray, u16, len, dist_type),
+            "u32" => gather_all_test!(UnsafeArray, u32, len, dist_type),
+            "u64" => gather_all_test!(UnsafeArray, u64, len, dist_type),
+            "u128" => gather_all_test!(UnsafeArray, u128, len, dist_type),
+            "usize" => gather_all_test!(UnsafeArray, usize, len, dist_type),
+            "i8" => gather_all_test!(UnsafeArray, i8, len, dist_type),
+            "i16" => gather_all_test!(UnsafeArray, i16, len, dist_type),
+            "i32" => gather_all_test!(UnsafeArray, i32, len, dist_type),
+            "i64" => gather_all_test!(UnsafeArray, i64, len, dist_type),
+            "i128" => gather_all_test!(UnsafeArray, i128, len, dist_type),
+            "isize" => gather_all_test!(UnsafeArray, isize, len, dist_type),
+            "f32" => gather_all_test!(UnsafeArray, f32, len, dist_type),
+            "f64" => gather_all_test!(UnsafeArray, f64, len, dist_type),
+            _ => eprintln!("from test unsupported element type"),
         },
         "AtomicArray" => match elem.as_str() {
             "u8" => gather_all_test!(AtomicArray, u8, len, dist_type),
-            // "u16" => gather_all_test!(AtomicArray, u16, len, dist_type),
-            // "u32" => gather_all_test!(AtomicArray, u32, len, dist_type),
-            // "u64" => gather_all_test!(AtomicArray, u64, len, dist_type),
-            // "u128" => gather_all_test!(AtomicArray, u128, len, dist_type),
-            // "usize" => gather_all_test!(AtomicArray, usize, len, dist_type),
-            // "i8" => gather_all_test!(AtomicArray, i8, len, dist_type),
-            // "i16" => gather_all_test!(AtomicArray, i16, len, dist_type),
-            // "i32" => gather_all_test!(AtomicArray, i32, len, dist_type),
-            // "i64" => gather_all_test!(AtomicArray, i64, len, dist_type),
-            // "i128" => gather_all_test!(AtomicArray, i128, len, dist_type),
-            // "isize" => gather_all_test!(AtomicArray, isize, len, dist_type),
-            // "f32" => gather_all_test!(AtomicArray, f32, len, dist_type),
-            // "f64" => gather_all_test!(AtomicArray, f64, len, dist_type),
-            _ => eprintln!("unsupported element type"),
+            "u16" => gather_all_test!(AtomicArray, u16, len, dist_type),
+            "u32" => gather_all_test!(AtomicArray, u32, len, dist_type),
+            "u64" => gather_all_test!(AtomicArray, u64, len, dist_type),
+            "u128" => gather_all_test!(AtomicArray, u128, len, dist_type),
+            "usize" => gather_all_test!(AtomicArray, usize, len, dist_type),
+            "i8" => gather_all_test!(AtomicArray, i8, len, dist_type),
+            "i16" => gather_all_test!(AtomicArray, i16, len, dist_type),
+            "i32" => gather_all_test!(AtomicArray, i32, len, dist_type),
+            "i64" => gather_all_test!(AtomicArray, i64, len, dist_type),
+            "i128" => gather_all_test!(AtomicArray, i128, len, dist_type),
+            "isize" => gather_all_test!(AtomicArray, isize, len, dist_type),
+            "f32" => gather_all_test!(AtomicArray, f32, len, dist_type),
+            "f64" => gather_all_test!(AtomicArray, f64, len, dist_type),
+            _ => eprintln!("from test unsupported element type"),
         },
         // "LocalLockArray" => match elem.as_str() {
         //     "u8" => gather_all_test!(LocalLockArray, u8, len, dist_type),

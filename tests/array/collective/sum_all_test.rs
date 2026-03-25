@@ -78,13 +78,13 @@ macro_rules! sum_all_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.sum_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size))).spawn()});
+                    reqs.push(unsafe { array.sum_all(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.block();
                     for elem in buf.as_slice().iter(){
-                        if ((i * num_pes as $t - elem) as f32).abs() > 0.0001 {
+                        if (((i * num_pes) as $t - elem) as f32).abs() > 0.0001 {
                             eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
                             success = false;
                         }
@@ -115,15 +115,15 @@ macro_rules! sum_all_test{
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.sum_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size))).spawn()});
+                    reqs.push(unsafe { array.sum_all(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                 }
 
                 let mut i = 0;
                 for req in reqs.drain(..){
                     let buf =req.block();
                     for elem in buf.as_slice().iter(){
-                        if ((i * num_pes as $t - elem) as f32).abs() > 0.0001 {
-                            eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                        if (((i * num_pes) as $t - elem) as f32).abs() > 0.0001 {
+                            eprintln!("{:?} {:?} {:?}",(i * num_pes) as $t,elem,(((i * num_pes) as $t - elem) as f32).abs());
                             success = false;
                         }
                         i+=1;
@@ -157,7 +157,7 @@ macro_rules! sum_all_test{
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        reqs.push(unsafe { sub_array.sum_all(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size))).spawn()});
+                        reqs.push(unsafe { sub_array.sum_all(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size).spawn()});
                     }
                     // array.wait_all();
                     // sub_array.barrier();
@@ -165,8 +165,8 @@ macro_rules! sum_all_test{
                     for req in reqs.drain(..){
                         let buf =req.block();
                         for elem in buf.as_slice().iter(){
-                            if ((i * num_pes as $t - elem) as f32).abs() > 0.0001 {
-                                eprintln!("{:?} {:?} {:?}",i as $t,elem,((i as $t - elem) as f32).abs());
+                            if (((i * num_pes) as $t - elem) as f32).abs() > 0.0001 {
+                                eprintln!("{:?} {:?} {:?}",(i * num_pes) as $t,elem,(((i * num_pes) as $t - elem) as f32).abs());
                                 success = false;
                             }
                             i+=1;
