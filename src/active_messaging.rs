@@ -703,6 +703,16 @@ pub use lamellar_impl::AmData;
 pub use lamellar_impl::AmLocalData;
 
 // //#[doc(hidden)]
+/// This macro is used to setup the attributed type for use as data within an [AmGroup][crate::AmGroup] active message.
+///
+/// Typically you will use this macro in place of `#[derive()]`, as it will manage deriving both the traits
+/// that are provided as well as those required by Lamellar for AM-group active messaging.
+///
+/// This macro is similar to [`AmData`] but is intended for types that will be used specifically within
+/// heterogeneous AM groups (see the [`typed_am_group!`] macro and the [`AmGroup`] type).
+/// It derives serialization/deserialization traits needed for the AM group batching mechanism.
+///
+/// Generally this is paired with the [lamellar::am][am] macro on an implementation of the [LamellarAM] trait.
 pub use lamellar_impl::AmGroupData;
 
 /// This macro is used to associate an implemenation of [LamellarAM] for type that has used the [AmData] attribute macro

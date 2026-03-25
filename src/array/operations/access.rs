@@ -100,15 +100,22 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::store`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::store`] for full documentation.
     fn blocking_store(&self, index: usize, val: T) {
         self.store(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::store`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn store_unmanaged(&self, index: usize, val: T) {
         let _ = self.store(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [store][AccessOps::store] function,
+    /// This call performs a batched version of the [store][AccessOps::store] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [AccessOps] documentation for more information on batch operation input
@@ -178,11 +185,14 @@ pub trait AccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::swap`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::swap`] for full documentation.
     fn blocking_swap(&self, index: usize, val: T) -> T {
         self.swap(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [swap][AccessOps::swap] function,
+    /// This call performs a batched version of the [swap][AccessOps::swap] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [AccessOps] documentation for more information on batch operation input
@@ -316,15 +326,26 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::store`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::store`] for safety requirements.
     unsafe fn blocking_store(&self, index: usize, val: T) {
         self.store(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::store`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::store`] for safety requirements.
     unsafe fn store_unmanaged(&self, index: usize, val: T) {
         let _ = self.store(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [store][AccessOps::store] function,
+    /// This call performs a batched version of the [store][AccessOps::store] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [AccessOps] documentation for more information on batch operation input
@@ -394,11 +415,15 @@ pub trait UnsafeAccessOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::swap`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::swap`] for safety requirements.
     unsafe fn blocking_swap(&self, index: usize, val: T) -> T {
         self.swap(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [swap][AccessOps::swap] function,
+    /// This call performs a batched version of the [swap][AccessOps::swap] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [AccessOps] documentation for more information on batch operation input

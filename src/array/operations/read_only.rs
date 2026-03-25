@@ -84,11 +84,14 @@ pub trait ReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::load`] and immediately blocking the calling thread until the operation completes, returning the value.
+    ///
+    /// See [`Self::load`] for full documentation.
     fn blocking_load(&self, index: usize) -> T {
         self.load(index).block()
     }
 
-    /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
+    /// This call performs a batched version of the [load][ReadOnlyOps::load] function,
     /// return a vector of values rather than a single value.
     ///
     /// Instead of a single index, this function expects a list of indicies to load
@@ -209,7 +212,7 @@ pub trait UnsafeReadOnlyOps<T: ElementOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
-    /// This call performs a batched vesion of the [load][ReadOnlyOps::load] function,
+    /// This call performs a batched version of the [load][ReadOnlyOps::load] function,
     /// return a vector of values rather than a single value.
     ///
     /// Instead of a single index, this function expects a list of indicies to load

@@ -40,7 +40,7 @@ pub(crate) mod private {
 /// Inspired by then OpenMP schedule parameter
 ///
 /// # Possible Options
-/// - Static: Each thread recieves a static range of elements to iterate over, the range length is roughly array.local_data().len()/number of threads on pe
+/// - Static: Each thread receives a static range of elements to iterate over, the range length is roughly array.local_data().len()/number of threads on pe
 /// - Dynaimc: Each thread processes a single element at a time
 /// - Chunk(usize): Each thread prcesses chunk sized range of elements at a time.
 /// - Guided: Similar to chunks, but the chunks decrease in size over time

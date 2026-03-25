@@ -48,6 +48,11 @@ use std::{
     task::{Context, Poll},
 };
 
+/// Marker trait for types that can be used as the element type of an RDMA operation.
+///
+/// A type is `Remote` if it is `Copy + Sync + Send + Default + 'static`.
+/// This is a blanket requirement because RDMA transfers raw bytes and the receiving
+/// PE must be able to construct a valid `T` from those bytes without any allocations.
 pub trait Remote: Copy + Sync + Send + Default + 'static {}
 impl<T: Copy + Sync + Send + Default + 'static> Remote for T {}
 
@@ -148,6 +153,10 @@ impl<T: Remote> Future for RdmaHandle<T> {
     }
 }
 
+/// A task handle for a raw RDMA get (read) operation that returns a single value of type `T`.
+///
+/// Can be awaited as a `Future`, [spawned][RdmaGetHandle::spawn] onto the work queue,
+/// or [blocked on][RdmaGetHandle::block] from a synchronous context.
 #[must_use = " RdmaGetHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct RdmaGetHandle<T: Remote> {
@@ -243,6 +252,10 @@ impl<T: Remote> Future for RdmaGetHandle<T> {
     }
 }
 
+/// A task handle for a raw RDMA get (read) operation that returns a `Vec<T>` buffer.
+///
+/// Can be awaited as a `Future`, [spawned][RdmaGetBufferHandle::spawn] onto the work queue,
+/// or [blocked on][RdmaGetBufferHandle::block] from a synchronous context.
 #[must_use = " RdmaGetHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct RdmaGetBufferHandle<T: Remote> {
@@ -338,7 +351,11 @@ impl<T: Remote> Future for RdmaGetBufferHandle<T> {
     }
 }
 
-#[must_use = " RdmaHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
+/// A task handle for a raw RDMA get (read) operation that reads directly into a user-provided buffer `B`.
+///
+/// Can be awaited as a `Future`, [spawned][RdmaGetIntoBufferHandle::spawn] onto the work queue,
+/// or [blocked on][RdmaGetIntoBufferHandle::block] from a synchronous context.
+#[must_use = " RdmaGetIntoBufferHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct RdmaGetIntoBufferHandle<T: Remote, B: AsLamellarBuffer<T>> {
     #[pin]

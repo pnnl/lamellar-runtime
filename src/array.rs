@@ -156,6 +156,10 @@ pub use global_lock_atomic::{
     GlobalLockMutLocalData, GlobalLockReadGuard, GlobalLockWriteGuard,
 };
 
+/// Provides distributed, local, and one-sided iterator types for LamellarArrays.
+///
+/// See the [iterator module][crate::array::iterator] for full details on the three iterator modes
+/// and their associated adapters.
 pub mod iterator;
 // //#[doc(hidden)]
 pub use iterator::distributed_iterator::DistributedIterator;
@@ -286,6 +290,7 @@ pub enum LamellarArrayRdmaInput<T: Dist> {
     LocalMemRegion(OneSidedMemoryRegion<T>),
     /// Variant containing an owned value that can be used as an input buffer
     Owned(T),
+    /// Variant containing an owned `Vec<T>` whose elements can be used as an input buffer
     OwnedVec(Vec<T>),
 }
 impl<T: Dist> LamellarArrayRdmaInput<T> {
@@ -1383,7 +1388,6 @@ pub trait LamellarArray<T: Dist>:
     ///
     /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
-    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// assert_eq!((pe,offset) ,(2,1));
     ///```
     fn pe_and_offset_for_global_index(&self, index: usize) -> Option<(usize, usize)>;
@@ -1420,7 +1424,6 @@ pub trait LamellarArray<T: Dist>:
     ///
     /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
-    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// let index = cyclic_array.first_global_index_for_pe(0).unwrap();
     /// assert_eq!(index , 0);
     /// let index = cyclic_array.first_global_index_for_pe(1).unwrap();
@@ -1464,7 +1467,6 @@ pub trait LamellarArray<T: Dist>:
     ///
     /// let cyclic_array: UnsafeArray<usize> = UnsafeArray::new(world,16,Distribution::Cyclic).block();
     /// // cyclic array index location = PE0 [0,4,8,12], PE1 [1,5,9,13], PE2 [2,6,10,14], PE3 [3,7,11,15]
-    /// let Some((pe,offset)) = cyclic_array.pe_and_offset_for_global_index(6) else { panic!("out of bounds");};
     /// let index = cyclic_array.last_global_index_for_pe(0).unwrap();
     /// assert_eq!(index , 12);
     /// let index = cyclic_array.last_global_index_for_pe(1).unwrap();

@@ -215,6 +215,11 @@ impl<T: Remote> Future for AtomicOpHandle<T> {
     }
 }
 
+/// A task handle for a remote atomic fetch-and-modify operation (e.g. `fetch_add`, `fetch_and`, etc.)
+/// that returns the previous value of the modified element.
+///
+/// Can be awaited as a `Future`, [spawned][AtomicFetchOpHandle::spawn] onto the work queue,
+/// or [blocked on][AtomicFetchOpHandle::block] from a synchronous context.
 #[must_use = " AtomicFetchOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct AtomicFetchOpHandle<T> {
@@ -310,6 +315,13 @@ impl<T: Remote> Future for AtomicFetchOpHandle<T> {
     }
 }
 
+/// A task handle for a remote atomic compare-and-exchange operation.
+///
+/// Resolves to `Ok(previous_value)` if the exchange succeeded (the current value matched `old`)
+/// or `Err(current_value)` if it failed (the current value did not match `old`).
+///
+/// Can be awaited as a `Future`, [spawned][AtomicCompareExchangeOpHandle::spawn] onto the work queue,
+/// or [blocked on][AtomicCompareExchangeOpHandle::block] from a synchronous context.
 #[must_use = " AtomicCompareExchangeOpHandle: 'new' handles do nothing unless polled or awaited, or 'spawn()' or 'block()' are called"]
 #[pin_project]
 pub struct AtomicCompareExchangeOpHandle<T> {
@@ -336,6 +348,9 @@ pub(crate) enum AtomicCompareExchangeFuture<T> {
 }
 
 impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
+    /// This method will block the calling thread until the associated AtomicCompareExchange Operation completes.
+    ///
+    /// Returns `Ok(previous_value)` if the exchange succeeded, or `Err(current_value)` if it failed.
     pub fn block(self) -> Result<T, T> {
         match self.future {
             #[cfg(feature = "enable-libfabric")]
@@ -355,6 +370,11 @@ impl<T: Remote + PartialEq> AtomicCompareExchangeOpHandle<T> {
         }
     }
 
+    /// This method will spawn the associated (raw) AtomicCompareExchange Operation on the work queue,
+    /// initiating the remote operation.
+    ///
+    /// This function returns a handle that can be used to wait for the operation to complete.
+    /// Resolves to `Ok(previous_value)` on success or `Err(current_value)` on failure.
     #[must_use = "this function returns a future used to poll for completion. Call '.await' on the future otherwise, if  it is ignored (via ' let _ = *.spawn()') or dropped the only way to ensure completion is calling 'wait_all()' on the world or array. Alternatively it may be acceptable to call '.block()' instead of 'spawn()'"]
     pub fn spawn(self) -> LamellarTask<Result<T, T>> {
         match self.future {

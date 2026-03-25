@@ -134,11 +134,15 @@ pub trait CompareExchangeOps<T: ElementCompareEqOps>: private::LamellarArrayPriv
             .into()
     }
 
+    /// Equivalent to calling [`Self::compare_exchange`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// Returns `Ok(old_val)` if the exchange succeeded (current matched), or `Err(current_val)` if it failed.
+    /// See [`Self::compare_exchange`] for full documentation.
     fn blocking_compare_exchange(&self, index: usize, current: T, new: T) -> Result<T, T> {
         self.compare_exchange(index, current, new).block()
     }
 
-    /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
+    /// This call performs a batched version of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
     ///
     /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
     /// Note that presently only a single `current` value can be provided, and will be used for all operations in the batch.
@@ -310,6 +314,10 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::compare_exchange_epsilon`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// Returns `Ok(old_val)` if the exchange succeeded (current was within `eps`), or `Err(current_val)` if it failed.
+    /// See [`Self::compare_exchange_epsilon`] for full documentation.
     fn blocking_compare_exchange_epsilon(
         &self,
         index: usize,
@@ -320,7 +328,7 @@ pub trait CompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         self.compare_exchange_epsilon(index, current, new, eps).block()
     }
 
-    /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
+    /// This call performs a batched version of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
     ///
     /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
     /// Note that presently only a single `current` value and a single `epsilon` value can be provided, and they will be used for all operations in the batch.
@@ -481,11 +489,17 @@ pub trait UnsafeCompareExchangeOps<T: ElementCompareEqOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::compare_exchange`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// Returns `Ok(old_val)` if the exchange succeeded, or `Err(current_val)` if it failed.
+    ///
+    /// # Safety
+    /// See [`Self::compare_exchange`] for safety requirements.
     unsafe fn blocking_compare_exchange(&self, index: usize, current: T, new: T) -> Result<T, T> {
         self.compare_exchange(index, current, new).block()
     }
 
-    /// This call performs a batched vesion of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
+    /// This call performs a batched version of the [compare_exchange][CompareExchangeOps::compare_exchange] function,
     ///
     /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
     /// Note that presently only a single `current` value can be provided, and will be used for all operations in the batch.
@@ -654,6 +668,12 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::compare_exchange_epsilon`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// Returns `Ok(old_val)` if the exchange succeeded, or `Err(current_val)` if it failed.
+    ///
+    /// # Safety
+    /// See [`Self::compare_exchange_epsilon`] for safety requirements.
     unsafe fn blocking_compare_exchange_epsilon(
         &self,
         index: usize,
@@ -664,7 +684,7 @@ pub trait UnsafeCompareExchangeEpsilonOps<T: ElementComparePartialEqOps>:
         self.compare_exchange_epsilon(index, current, new, eps).block()
     }
 
-    /// This call performs a batched vesion of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
+    /// This call performs a batched version of the [compare_exchange_epsilon][CompareExchangeEpsilonOps::compare_exchange_epsilon] function,
     ///
     /// Instead of a single value and index this function expects a list of (new)`vals`, or a list of `indices` or both.
     /// Note that presently only a single `current` value and a single `epsilon` value can be provided, and they will be used for all operations in the batch.

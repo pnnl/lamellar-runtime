@@ -103,9 +103,10 @@ pub trait Dist:
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 #[serde(bound = "T: Remote + serde::Serialize + serde::de::DeserializeOwned")]
 pub enum LamellarMemoryRegion<T: Remote> {
-    ///
+    /// A shared (symmetric) memory region that is accessible from all PEs via RDMA.
     Shared(SharedMemoryRegion<T>),
-    ///
+    /// A one-sided memory region that is local to the calling PE but can be used as the
+    /// source or destination of one-sided RDMA operations.
     Local(OneSidedMemoryRegion<T>),
     // Unsafe(UnsafeArray<T>),
 }

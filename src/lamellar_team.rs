@@ -449,6 +449,20 @@ impl LamellarTeam {
         self.team.am_group_exec_am_all_tg(am, None)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and execute a local active message, pinned to the specified worker thread index.
+    ///
+    /// This is a lower-level variant of [`ActiveMessaging::exec_am_local`] that allows the caller
+    /// to direct the active message to a particular worker thread within this PE.
+    ///
+    /// Returns a future that can be awaited, [spawned][LocalAmHandle::spawn], or [blocked on][LocalAmHandle::block].
+    ///
+    /// # One-sided Operation
+    /// The active message executes only on the calling PE; remote PEs are not involved.
+    ///
+    /// # Note
+    /// The future returned by this function is lazy and does nothing unless awaited,
+    /// [spawned][LocalAmHandle::spawn] or [blocked on][LocalAmHandle::block].
     pub fn exec_am_local_thread<F>(&self, am: F, thread: usize) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,
@@ -456,6 +470,32 @@ impl LamellarTeam {
         self.team.exec_am_local_tg(am, None, Some(thread))
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn an active message on all PEs within this team, returning a handle to retrieve the results.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_all`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The calling PE manages transferring the active message to all remote PEs in the team.
+    /// Results are only available on the calling PE.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_all(MyAm { val: world.my_pe() });
+    /// let results = handle.block();
+    ///```
     pub fn spawn_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
@@ -465,6 +505,33 @@ impl LamellarTeam {
         // trace!("[{:?}] team spawn am all request", self.team.world_pe);
         self.team.spawn_am_all_tg(am, None)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn an active message on a specific PE within this team, returning a handle to retrieve the result.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_pe`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The calling PE manages transferring the active message to the target PE.
+    /// The result is only available on the calling PE.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_pe(0, MyAm { val: world.my_pe() });
+    /// let result = handle.block();
+    ///```
     pub fn spawn_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
@@ -474,6 +541,32 @@ impl LamellarTeam {
         self.team.spawn_am_pe_tg(pe, am, None)
     }
 
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn a local active message on the calling PE, returning a handle to retrieve the result.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_local`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The active message executes only on the calling PE; remote PEs are not involved.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_local(MyLocalAm { val: 21 });
+    /// let result = handle.block();
+    /// assert_eq!(result, 42);
+    ///```
     pub fn spawn_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,

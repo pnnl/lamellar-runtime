@@ -220,6 +220,10 @@ impl LamellarWorld {
     // #[doc(hidden)]
     #[allow(non_snake_case)]
     // #[tracing::instrument(skip_all, level = "debug")]
+    /// Returns the total megabytes sent by this PE across all active lamellae backends.
+    ///
+    /// This is primarily useful for measuring communication overhead during development and profiling.
+    /// Only the value from the first registered backend is currently returned.
     pub fn MB_sent(&self) -> f64 {
         let mut sent = vec![];
         for (_backend, lamellae) in LAMELLAES.read().iter() {
@@ -299,12 +303,66 @@ impl LamellarWorld {
     // pub fn flush(&self) {
     //     self.team_rt.flush();
     // }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn an active message on all PEs, returning a handle to retrieve the results.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_all`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The calling PE manages transferring the active message to all remote PEs.
+    /// Results are only available on the calling PE.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_all(MyAm { val: world.my_pe() });
+    /// let results = handle.block();
+    ///```
     pub fn spawn_am_all<F>(&self, am: F) -> MultiAmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
     {
         self.team.spawn_am_all(am)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn an active message on a specific PE, returning a handle to retrieve the result.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_pe`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The calling PE manages transferring the active message to the target PE.
+    /// The result is only available on the calling PE.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmData(Debug, Clone)]
+    /// struct MyAm { val: usize }
+    ///
+    /// #[lamellar::am]
+    /// impl LamellarAM for MyAm {
+    ///     async fn exec(self) -> usize { lamellar::current_pe }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_pe(0, MyAm { val: world.my_pe() });
+    /// let result = handle.block();
+    ///```
     pub fn spawn_am_pe<F>(&self, pe: usize, am: F) -> AmHandle<F::Output>
     where
         F: RemoteActiveMessage + LamellarAM + Serde + AmDist + 'static,
@@ -312,6 +370,33 @@ impl LamellarWorld {
         assert!(pe < self.num_pes(), "invalid pe: {:?}", pe);
         self.team.spawn_am_pe(pe, am)
     }
+
+    #[doc(alias("One-sided", "onesided"))]
+    /// Launch and immediately spawn a local active message on the calling PE, returning a handle to retrieve the result.
+    ///
+    /// Unlike [`ActiveMessaging::exec_am_local`], the AM is submitted to the work queue immediately —
+    /// there is no need to call `.spawn()` on the returned handle.
+    ///
+    /// # One-sided Operation
+    /// The active message executes only on the calling PE; remote PEs are not involved.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::active_messaging::prelude::*;
+    ///
+    /// #[lamellar::AmLocalData(Debug, Clone)]
+    /// struct MyLocalAm { val: usize }
+    ///
+    /// #[lamellar::local_am]
+    /// impl LamellarAM for MyLocalAm {
+    ///     async fn exec(self) -> usize { self.val * 2 }
+    /// }
+    ///
+    /// let world = lamellar::LamellarWorldBuilder::new().build();
+    /// let handle = world.spawn_am_local(MyLocalAm { val: 21 });
+    /// let result = handle.block();
+    /// assert_eq!(result, 42);
+    ///```
     pub fn spawn_am_local<F>(&self, am: F) -> LocalAmHandle<F::Output>
     where
         F: LamellarActiveMessage + LocalAM + 'static,

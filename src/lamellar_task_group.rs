@@ -44,6 +44,13 @@ pub(crate) struct TaskGroupAmHandleInner {
 }
 
 //#[doc(hidden)]
+/// A handle for a single-PE active message launched within a [`LamellarTaskGroup`].
+///
+/// Returned by [`LamellarTaskGroup::exec_am_pe`] (via the [`ActiveMessaging`] impl on `LamellarTaskGroup`).
+/// Can be awaited as a `Future`, [spawned][TaskGroupAmHandle::spawn] onto the work queue,
+/// or [blocked on][TaskGroupAmHandle::block] from a synchronous context.
+///
+/// Dropping this handle without consuming it emits a [`RuntimeWarning`].
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupAmHandle<T: AmDist> {
@@ -249,6 +256,14 @@ pub(crate) struct TaskGroupMultiAmHandleInner {
 }
 
 //#[doc(hidden)]
+/// A handle for a broadcast (all-PE) active message launched within a [`LamellarTaskGroup`].
+///
+/// Returned by [`LamellarTaskGroup::exec_am_all`] (via the [`ActiveMessaging`] impl on `LamellarTaskGroup`).
+/// Resolves to a `Vec<T>` containing one result per PE in the team, in PE order.
+/// Can be awaited as a `Future`, [spawned][TaskGroupMultiAmHandle::spawn] onto the work queue,
+/// or [blocked on][TaskGroupMultiAmHandle::block] from a synchronous context.
+///
+/// Dropping this handle without consuming it emits a [`RuntimeWarning`].
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupMultiAmHandle<T: AmDist> {
@@ -489,6 +504,14 @@ impl<T: AmDist> Future for TaskGroupMultiAmHandle<T> {
 }
 
 //#[doc(hidden)]
+/// A handle for a local-only active message launched within a [`LamellarTaskGroup`].
+///
+/// Returned by [`LamellarTaskGroup::exec_am_local`] (via the [`ActiveMessaging`] impl on `LamellarTaskGroup`).
+/// The active message executes only on the calling PE; no remote communication is involved.
+/// Can be awaited as a `Future`, [spawned][TaskGroupLocalAmHandle::spawn] onto the work queue,
+/// or [blocked on][TaskGroupLocalAmHandle::block] from a synchronous context.
+///
+/// Dropping this handle without consuming it emits a [`RuntimeWarning`].
 #[derive(Debug)]
 #[pin_project(PinnedDrop)]
 pub struct TaskGroupLocalAmHandle<T> {
@@ -1914,6 +1937,10 @@ impl<T: AmDist> TypedAmGroupBatchReq<T> {
     }
 }
 
+/// Holds the results of a [`typed_am_group!`][crate::typed_am_group] request where the AM returns a value of type `T`.
+///
+/// Provides indexed access via [`at`][TypedAmGroupValResult::at] and iteration via [`len`][TypedAmGroupValResult::len].
+/// This type is the `Val` variant of [`TypedAmGroupResult`].
 #[derive(Clone)]
 pub struct TypedAmGroupValResult<T> {
     reqs: Vec<TypedAmGroupBatchResult<T>>,
@@ -1922,9 +1949,15 @@ pub struct TypedAmGroupValResult<T> {
 }
 
 impl<T> TypedAmGroupValResult<T> {
+    /// Construct a new `TypedAmGroupValResult` from a list of per-PE batch results.
     pub fn new(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupValResult { reqs, cnt, num_pes }
     }
+
+    /// Returns the [`AmGroupResult`] at position `index` within the AM group.
+    ///
+    /// # Panics
+    /// Panics if `index >= self.len()`.
     pub fn at(&self, index: usize) -> AmGroupResult<'_, T> {
         assert!(
             index < self.cnt,
@@ -1952,11 +1985,16 @@ impl<T> TypedAmGroupValResult<T> {
         }
         panic!("AmGroupResult index out of bounds");
     }
+    /// Returns the total number of AMs in this group result.
     pub fn len(&self) -> usize {
         self.cnt
     }
 }
 
+/// Holds the results of a [`typed_am_group!`][crate::typed_am_group] request where the AM returns the unit type `()`.
+///
+/// Provides indexed access via [`at`][TypedAmGroupUnitResult::at] and a count via [`len`][TypedAmGroupUnitResult::len].
+/// This type is the `Unit` variant of [`TypedAmGroupResult`].
 #[derive(Clone)]
 pub struct TypedAmGroupUnitResult<T> {
     reqs: Vec<TypedAmGroupBatchResult<T>>,
@@ -1965,9 +2003,15 @@ pub struct TypedAmGroupUnitResult<T> {
 }
 
 impl<T> TypedAmGroupUnitResult<T> {
+    /// Construct a new `TypedAmGroupUnitResult` from a list of per-PE batch results.
     pub fn new(reqs: Vec<TypedAmGroupBatchResult<T>>, cnt: usize, num_pes: usize) -> Self {
         TypedAmGroupUnitResult { reqs, cnt, num_pes }
     }
+
+    /// Returns the [`AmGroupResult`] at position `index` within the AM group.
+    ///
+    /// # Panics
+    /// Panics if `index >= self.len()`.
     pub fn at(&self, index: usize) -> AmGroupResult<'_, T> {
         assert!(
             index < self.cnt,
@@ -1992,6 +2036,7 @@ impl<T> TypedAmGroupUnitResult<T> {
         }
         panic!("AmGroupResult index out of bounds");
     }
+    /// Returns the total number of AMs in this group result.
     pub fn len(&self) -> usize {
         self.cnt
     }

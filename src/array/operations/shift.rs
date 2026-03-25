@@ -81,7 +81,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::Shl, self.as_lamellar_byte_array())
     }
 
-    /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
+    /// This call performs a batched version of the [shl][ShiftOps::shl] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -157,7 +157,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
-    /// This call performs a batched vesion of the [fetch_shl][ShiftOps::fetch_shl] function,
+    /// This call performs a batched version of the [fetch_shl][ShiftOps::fetch_shl] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -226,7 +226,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::Shr, self.as_lamellar_byte_array())
     }
 
-    /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
+    /// This call performs a batched version of the [shl][ShiftOps::shl] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -302,7 +302,7 @@ pub trait ShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
-    /// This call performs a batched vesion of the [fetch_shr][ShiftOps::fetch_shr] function,
+    /// This call performs a batched version of the [fetch_shr][ShiftOps::fetch_shr] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -408,7 +408,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::Shl, self.as_lamellar_byte_array())
     }
 
-    /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
+    /// This call performs a batched version of the [shl][ShiftOps::shl] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -484,7 +484,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
-    /// This call performs a batched vesion of the [fetch_shl][ShiftOps::fetch_shl] function,
+    /// This call performs a batched version of the [fetch_shl][ShiftOps::fetch_shl] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -553,7 +553,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::Shr, self.as_lamellar_byte_array())
     }
 
-    /// This call performs a batched vesion of the [shl][ShiftOps::shl] function,
+    /// This call performs a batched version of the [shl][ShiftOps::shl] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input
@@ -629,7 +629,7 @@ pub trait UnsafeShiftOps<T: ElementShiftOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
-    /// This call performs a batched vesion of the [fetch_shr][ShiftOps::fetch_shr] function,
+    /// This call performs a batched version of the [fetch_shr][ShiftOps::fetch_shr] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ShiftOps] documentation for more information on batch operation input

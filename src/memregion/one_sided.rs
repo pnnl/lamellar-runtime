@@ -22,6 +22,12 @@ lazy_static! {
 static ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 //#[doc(hidden)]
+/// Internal serialization handle used to transfer a [`OneSidedMemoryRegion`] across PEs via active messages.
+///
+/// This struct is an implementation detail of the network serialization layer for one-sided
+/// memory regions. It is produced when serializing an `OneSidedMemoryRegion` and consumed
+/// on the remote side to reconstruct the region.
+/// This should not be created by user code, and is not intended to be used directly by users of the library.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct NetMemRegionHandle {
     mr_addr: usize,

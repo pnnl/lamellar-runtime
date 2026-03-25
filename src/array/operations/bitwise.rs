@@ -114,15 +114,22 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::bit_and`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::bit_and`] for full documentation.
     fn blocking_bit_and(&self, index: usize, val: T) {
         self.bit_and(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::bit_and`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn bit_and_unmanaged(&self, index: usize, val: T) {
         let _ = self.bit_and(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
+    /// This call performs a batched version of the [bit_and][BitWiseOps::bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -198,11 +205,14 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_bit_and`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_bit_and`] for full documentation.
     fn blocking_fetch_bit_and(&self, index: usize, val: T) -> T {
         self.fetch_bit_and(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
+    /// This call performs a batched version of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -271,15 +281,22 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::bit_or`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::bit_or`] for full documentation.
     fn blocking_bit_or(&self, index: usize, val: T) {
         self.bit_or(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::bit_or`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn bit_or_unmanaged(&self, index: usize, val: T) {
         let _ = self.bit_or(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
+    /// This call performs a batched version of the [bit_or][BitWiseOps::bit_or] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -355,11 +372,14 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_bit_or`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_bit_or`] for full documentation.
     fn blocking_fetch_bit_or(&self, index: usize, val: T) -> T {
         self.fetch_bit_or(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
+    /// This call performs a batched version of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -428,15 +448,22 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::bit_xor`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::bit_xor`] for full documentation.
     fn blocking_bit_xor(&self, index: usize, val: T) {
         self.bit_xor(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::bit_xor`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn bit_xor_unmanaged(&self, index: usize, val: T) {
         let _ = self.bit_xor(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,
+    /// This call performs a batched version of the [bit_xor][BitWiseOps::bit_xor] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -512,11 +539,14 @@ pub trait BitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<T> {
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_bit_xor`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_bit_xor`] for full documentation.
     fn blocking_fetch_bit_xor(&self, index: usize, val: T) -> T {
         self.fetch_bit_xor(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,
+    /// This call performs a batched version of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -649,15 +679,26 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .initiate_op(val, index, ArrayOpCmd::And, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::bit_and`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::bit_and`] for safety requirements.
     unsafe fn blocking_bit_and(&self, index: usize, val: T) {
         self.bit_and(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::bit_and`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::bit_and`] for safety requirements.
     unsafe fn bit_and_unmanaged(&self, index: usize, val: T) {
         let _ = self.bit_and(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [bit_and][BitWiseOps::bit_and] function,
+    /// This call performs a batched version of the [bit_and][BitWiseOps::bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -733,11 +774,15 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_bit_and`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_bit_and`] for safety requirements.
     unsafe fn blocking_fetch_bit_and(&self, index: usize, val: T) -> T {
         self.fetch_bit_and(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
+    /// This call performs a batched version of the [fetch_bit_and][BitWiseOps::fetch_bit_and] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -806,15 +851,26 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .initiate_op(val, index, ArrayOpCmd::Or, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::bit_or`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::bit_or`] for safety requirements.
     unsafe fn blocking_bit_or(&self, index: usize, val: T) {
         self.bit_or(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::bit_or`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::bit_or`] for safety requirements.
     unsafe fn bit_or_unmanaged(&self, index: usize, val: T) {
         let _ = self.bit_or(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [bit_or][BitWiseOps::bit_or] function,
+    /// This call performs a batched version of the [bit_or][BitWiseOps::bit_or] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -890,11 +946,15 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_bit_or`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_bit_or`] for safety requirements.
     unsafe fn blocking_fetch_bit_or(&self, index: usize, val: T) -> T {
         self.fetch_bit_or(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
+    /// This call performs a batched version of the [fetch_bit_or][BitWiseOps::fetch_bit_or] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -963,15 +1023,26 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .initiate_op(val, index, ArrayOpCmd::Xor, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::bit_xor`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::bit_xor`] for safety requirements.
     unsafe fn blocking_bit_xor(&self, index: usize, val: T) {
         self.bit_xor(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::bit_xor`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::bit_xor`] for safety requirements.
     unsafe fn bit_xor_unmanaged(&self, index: usize, val: T) {
         let _ = self.bit_xor(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [bit_xor][BitWiseOps::bit_xor] function,
+    /// This call performs a batched version of the [bit_xor][BitWiseOps::bit_xor] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input
@@ -1047,11 +1118,15 @@ pub trait UnsafeBitWiseOps<T: ElementBitWiseOps>: private::LamellarArrayPrivate<
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_bit_xor`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_bit_xor`] for safety requirements.
     unsafe fn blocking_fetch_bit_xor(&self, index: usize, val: T) -> T {
         self.fetch_bit_xor(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,
+    /// This call performs a batched version of the [fetch_bit_xor][BitWiseOps::fetch_bit_xor] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [BitWiseOps] documentation for more information on batch operation input

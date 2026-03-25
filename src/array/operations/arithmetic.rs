@@ -127,15 +127,22 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::add`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::add`] for full documentation.
     fn blocking_add(&self, index: usize, val: T) {
         self.add(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::add`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn add_unmanaged(&self, index: usize, val: T) {
         let _ = self.add(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
+    /// This call performs a batched version of the [add][ArithmeticOps::add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -211,11 +218,14 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_add`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_add`] for full documentation.
     fn blocking_fetch_add(&self, index: usize, val: T) -> T {
         self.fetch_add(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_add][ArithmeticOps::fetch_add] function,
+    /// This call performs a batched version of the [fetch_add][ArithmeticOps::fetch_add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -284,15 +294,22 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::sub`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::sub`] for full documentation.
     fn blocking_sub(&self, index: usize, val: T) {
         self.sub(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::sub`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn sub_unmanaged(&self, index: usize, val: T) {
         let _ = self.sub(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
+    /// This call performs a batched version of the [sub][ArithmeticOps::sub] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -368,11 +385,14 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_sub`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_sub`] for full documentation.
     fn blocking_fetch_sub(&self, index: usize, val: T) -> T {
         self.fetch_sub(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_sub][ArithmeticOps::fetch_sub] function,
+    /// This call performs a batched version of the [fetch_sub][ArithmeticOps::fetch_sub] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -441,15 +461,22 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::mul`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::mul`] for full documentation.
     fn blocking_mul(&self, index: usize, val: T) {
         self.mul(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::mul`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn mul_unmanaged(&self, index: usize, val: T) {
         let _ = self.mul(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
+    /// This call performs a batched version of the [mul][ArithmeticOps::mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -525,11 +552,14 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_mul`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_mul`] for full documentation.
     fn blocking_fetch_mul(&self, index: usize, val: T) -> T {
         self.fetch_mul(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_mul][ArithmeticOps::fetch_mul] function,
+    /// This call performs a batched version of the [fetch_mul][ArithmeticOps::fetch_mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -598,15 +628,22 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::div`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::div`] for full documentation.
     fn blocking_div(&self, index: usize, val: T) {
         self.div(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::div`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn div_unmanaged(&self, index: usize, val: T) {
         let _ = self.div(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
+    /// This call performs a batched version of the [div][ArithmeticOps::div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -682,11 +719,14 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_div`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_div`] for full documentation.
     fn blocking_fetch_div(&self, index: usize, val: T) -> T {
         self.fetch_div(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_div][ArithmeticOps::fetch_div] function,
+    /// This call performs a batched version of the [fetch_div][ArithmeticOps::fetch_div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -755,15 +795,22 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::rem`] and immediately blocking the calling thread until the operation completes.
+    ///
+    /// See [`Self::rem`] for full documentation.
     fn blocking_rem(&self, index: usize, val: T) {
         self.rem(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::rem`] and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
     fn rem_unmanaged(&self, index: usize, val: T) {
         let _ = self.rem(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,
+    /// This call performs a batched version of the [rem][ArithmeticOps::rem] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -839,11 +886,14 @@ pub trait ArithmeticOps<T: Dist + ElementArithmeticOps>: private::LamellarArrayP
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_rem`] and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// See [`Self::fetch_rem`] for full documentation.
     fn blocking_fetch_rem(&self, index: usize, val: T) -> T {
         self.fetch_rem(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_rem][ArithmeticOps::fetch_rem] function,
+    /// This call performs a batched version of the [fetch_rem][ArithmeticOps::fetch_rem] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -978,15 +1028,26 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .initiate_op(val, index, ArrayOpCmd::Add, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::add`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::add`] for safety requirements.
     unsafe fn blocking_add(&self, index: usize, val: T) {
         self.add(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::add`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::add`] for safety requirements.
     unsafe fn add_unmanaged(&self, index: usize, val: T) {
         let _ = self.add(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [add][ArithmeticOps::add] function,
+    /// This call performs a batched version of the [add][ArithmeticOps::add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1062,11 +1123,15 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_add`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_add`] for safety requirements.
     unsafe fn blocking_fetch_add(&self, index: usize, val: T) -> T {
         self.fetch_add(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_add][ArithmeticOps::fetch_add] function,
+    /// This call performs a batched version of the [fetch_add][ArithmeticOps::fetch_add] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1135,15 +1200,26 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .initiate_op(val, index, ArrayOpCmd::Sub, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::sub`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::sub`] for safety requirements.
     unsafe fn blocking_sub(&self, index: usize, val: T) {
         self.sub(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::sub`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::sub`] for safety requirements.
     unsafe fn sub_unmanaged(&self, index: usize, val: T) {
         let _ = self.sub(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [sub][ArithmeticOps::sub] function,
+    /// This call performs a batched version of the [sub][ArithmeticOps::sub] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1219,11 +1295,15 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_sub`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_sub`] for safety requirements.
     unsafe fn blocking_fetch_sub(&self, index: usize, val: T) -> T {
         self.fetch_sub(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_sub][ArithmeticOps::fetch_sub] function,
+    /// This call performs a batched version of the [fetch_sub][ArithmeticOps::fetch_sub] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1292,15 +1372,26 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .initiate_op(val, index, ArrayOpCmd::Mul, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::mul`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::mul`] for safety requirements.
     unsafe fn blocking_mul(&self, index: usize, val: T) {
         self.mul(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::mul`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::mul`] for safety requirements.
     unsafe fn mul_unmanaged(&self, index: usize, val: T) {
         let _ = self.mul(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [mul][ArithmeticOps::mul] function,
+    /// This call performs a batched version of the [mul][ArithmeticOps::mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1376,11 +1467,15 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_mul`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_mul`] for safety requirements.
     unsafe fn blocking_fetch_mul(&self, index: usize, val: T) -> T {
         self.fetch_mul(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_mul][ArithmeticOps::fetch_mul] function,
+    /// This call performs a batched version of the [fetch_mul][ArithmeticOps::fetch_mul] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1449,15 +1544,26 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .initiate_op(val, index, ArrayOpCmd::Div, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::div`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::div`] for safety requirements.
     unsafe fn blocking_div(&self, index: usize, val: T) {
         self.div(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::div`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::div`] for safety requirements.
     unsafe fn div_unmanaged(&self, index: usize, val: T) {
         let _ = self.div(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [div][ArithmeticOps::div] function,
+    /// This call performs a batched version of the [div][ArithmeticOps::div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1533,11 +1639,15 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_div`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_div`] for safety requirements.
     unsafe fn blocking_fetch_div(&self, index: usize, val: T) -> T {
         self.fetch_div(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_div][ArithmeticOps::fetch_div] function,
+    /// This call performs a batched version of the [fetch_div][ArithmeticOps::fetch_div] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1606,15 +1716,26 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .initiate_op(val, index, ArrayOpCmd::Rem, self.as_lamellar_byte_array())
     }
 
+    /// Equivalent to calling [`Self::rem`] (unsafe) and immediately blocking the calling thread until the operation completes.
+    ///
+    /// # Safety
+    /// See [`Self::rem`] for safety requirements.
     unsafe fn blocking_rem(&self, index: usize, val: T) {
         self.rem(index, val).block();
     }
 
+    /// Equivalent to calling [`Self::rem`] (unsafe) and immediately spawning the returned handle on the work queue.
+    ///
+    /// The operation is launched immediately but the caller has no means to directly observe completion;
+    /// use [`wait_all`][crate::ActiveMessaging::wait_all] or a subsequent barrier to synchronize.
+    ///
+    /// # Safety
+    /// See [`Self::rem`] for safety requirements.
     unsafe fn rem_unmanaged(&self, index: usize, val: T) {
         let _ = self.rem(index, val).spawn();
     }
 
-    /// This call performs a batched vesion of the [rem][ArithmeticOps::rem] function,
+    /// This call performs a batched version of the [rem][ArithmeticOps::rem] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input
@@ -1690,11 +1811,15 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
             .into()
     }
 
+    /// Equivalent to calling [`Self::fetch_rem`] (unsafe) and immediately blocking the calling thread until the operation completes, returning the old value.
+    ///
+    /// # Safety
+    /// See [`Self::fetch_rem`] for safety requirements.
     unsafe fn blocking_fetch_rem(&self, index: usize, val: T) -> T {
         self.fetch_rem(index, val).block()
     }
 
-    /// This call performs a batched vesion of the [fetch_rem][ArithmeticOps::fetch_rem] function,
+    /// This call performs a batched version of the [fetch_rem][ArithmeticOps::fetch_rem] function,
     ///
     /// Instead of a single value and index this function expects a list of `vals`, or a list of `indices` or both.
     /// Please see the general [ArithmeticOps] documentation for more information on batch operation input

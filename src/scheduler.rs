@@ -17,6 +17,23 @@ use std::task::{Context, Poll};
 
 static LAMELLAR_THREAD_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
 thread_local! {
+    /// A thread-local unique identifier for the current Lamellar worker thread.
+    ///
+    /// Each thread that accesses this value is assigned a monotonically increasing `usize`
+    /// ID on first access. IDs are assigned globally across all threads in the process.
+    ///
+    /// This is useful for fine-grained per-thread diagnostics, pinning work to specific
+    /// threads (e.g., via [`LamellarTeam::exec_am_local_thread`][crate::LamellarTeam::exec_am_local_thread]),
+    /// and low-level scheduler introspection.
+    ///
+    /// # Examples
+    ///```
+    /// use lamellar::LAMELLAR_THREAD_ID;
+    ///
+    /// LAMELLAR_THREAD_ID.with(|id| {
+    ///     println!("current thread id: {}", id);
+    /// });
+    ///```
     pub static LAMELLAR_THREAD_ID: usize = LAMELLAR_THREAD_ID_COUNTER.fetch_add(1, Ordering::SeqCst);
 }
 
