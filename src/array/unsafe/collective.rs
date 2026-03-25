@@ -330,13 +330,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn sum_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn sum_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::Sum, src.into(), pe);
+            .reduce(ReduceOp::Sum, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -345,13 +345,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn max_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn max_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::Max, src.into(), pe);
+            .reduce(ReduceOp::Max, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -360,13 +360,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn min_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn min_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::Min, src.into(), pe);
+            .reduce(ReduceOp::Min, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -375,13 +375,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn prod_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::Prod, src.into(), pe);
+            .reduce(ReduceOp::Prod, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -390,13 +390,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_or_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_or_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::BitOr, src.into(), pe);
+            .reduce(ReduceOp::BitOr, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -405,13 +405,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_and_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_and_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::BitAnd, src.into(), pe);
+            .reduce(ReduceOp::BitAnd, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -420,13 +420,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_xor_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_xor_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce(ReduceOp::BitXor, src.into(), pe);
+            .reduce(ReduceOp::BitXor, index, len, pe);
 
         ArrayCollectiveReduceHandle {
             array: self.as_lamellar_byte_array(),
@@ -437,13 +437,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Sum, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::Sum, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -452,13 +452,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Max, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::Max, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -467,13 +467,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Min, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::Min, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -482,13 +482,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::Prod, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::Prod, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -497,13 +497,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::BitOr, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::BitOr, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -512,13 +512,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::BitAnd, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::BitAnd, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -527,13 +527,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_into_buffer(ReduceOp::BitXor, src.into(), dst);
+            .reduce_into_buffer(ReduceOp::BitXor, index, len, dst);
 
         ArrayCollectiveReduceIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -651,13 +651,13 @@ impl<T: Dist> UnsafeArray<T> {
 // }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn gather_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllGatherHandle<T> {
+    pub unsafe fn gather_all(&self, index: usize, len: usize) -> ArrayCollectiveAllGatherHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .gather_all(src.into());
+            .gather_all(index, len);
 
         ArrayCollectiveAllGatherHandle {
             array: self.as_lamellar_byte_array(),
@@ -668,13 +668,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
+    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .gather_all_into_buffer(src.into(), buffer);
+            .gather_all_into_buffer(index, len, buffer);
 
         ArrayCollectiveAllGatherIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -685,13 +685,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn gather_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveGatherHandle<T> {
+    pub unsafe fn gather_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveGatherHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .gather(src.into(), pe);
+            .gather(index, len, pe);
 
         ArrayCollectiveGatherHandle {
             array: self.as_lamellar_byte_array(),
@@ -702,13 +702,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
+    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, dst: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .gather_into_buffer(src.into(), dst);
+            .gather_into_buffer(index, len, dst);
 
         ArrayCollectiveGatherIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -753,13 +753,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput<T>) -> ArrayCollectiveBroadcastHandle<T> {
+    pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> ArrayCollectiveBroadcastHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .broadcast(src_or_root_pe);
+            .broadcast(src_or_root_pe, len);
 
         ArrayCollectiveBroadcastHandle {
             array: self.as_lamellar_byte_array(),
@@ -770,13 +770,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootSrcOrLamellarBuffer<T, B>) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
+    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, dst: RootSrcOrLamellarBuffer<T, B>, len: usize) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .broadcast_into_buffer(dst);
+            .broadcast_into_buffer(dst, len);
 
         ArrayCollectiveBroadcastIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -787,13 +787,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput<T>) -> ArrayCollectiveScatterHandle<T> {
+    pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .scatter(src_or_root_pe);
+            .scatter(src_or_root_pe, len);
 
         ArrayCollectiveScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -804,13 +804,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput<T>) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
+    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .scatter_into_buffer(buffer, src_or_root_pe);
+            .scatter_into_buffer(buffer, src_or_root_pe, len);
 
         ArrayCollectiveScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -822,13 +822,13 @@ impl<T: Dist> UnsafeArray<T> {
 
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn sum_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn sum_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Sum, src.into(), len);
+            .reduce_scatter(ReduceOp::Sum, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -837,13 +837,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn max_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn max_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Max, src.into(), len);
+            .reduce_scatter(ReduceOp::Max, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -852,13 +852,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn min_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn min_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Min, src.into(), len);
+            .reduce_scatter(ReduceOp::Min, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -867,13 +867,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn prod_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::Prod, src.into(), len);
+            .reduce_scatter(ReduceOp::Prod, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -882,13 +882,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_and_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn bit_and_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::BitAnd, src.into(), len);
+            .reduce_scatter(ReduceOp::BitAnd, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -897,13 +897,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_xor_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn bit_xor_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::BitXor, src.into(), len);
+            .reduce_scatter(ReduceOp::BitXor, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -912,13 +912,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_or_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn bit_or_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter(ReduceOp::BitOr, src.into(), len);
+            .reduce_scatter(ReduceOp::BitOr, index, len);
 
         ArrayCollectiveReduceScatterHandle {
             array: self.as_lamellar_byte_array(),
@@ -929,13 +929,13 @@ impl<T: Dist> UnsafeArray<T> {
 }
 
 impl<T: Dist> UnsafeArray<T> {
-    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Sum, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::Sum, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -944,13 +944,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Max, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::Max, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -959,13 +959,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Min, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::Min, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -974,13 +974,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::Prod, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::Prod, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -989,13 +989,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::BitAnd, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::BitAnd, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -1004,13 +1004,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::BitXor, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::BitXor, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),
@@ -1019,13 +1019,13 @@ impl<T: Dist> UnsafeArray<T> {
         }
     }
 
-    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         let req = self
             .inner
             .data
             .mem_region
             .as_base::<T>()
-            .reduce_scatter_into_buffer(ReduceOp::BitOr, src.into(), buffer);
+            .reduce_scatter_into_buffer(ReduceOp::BitOr, index, len, buffer);
 
         ArrayCollectiveReduceScatterIntoBufferHandle {
             array: self.as_lamellar_byte_array(),

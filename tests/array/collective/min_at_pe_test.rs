@@ -79,7 +79,7 @@ macro_rules! min_at_pe_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.min_at_pe(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)), 0).spawn()});
+                    reqs.push(unsafe { array.min_at_pe(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size, 0).spawn()});
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
@@ -119,7 +119,7 @@ macro_rules! min_at_pe_test{
                 for tx in (0..num_txs){
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    reqs.push(unsafe { array.min_at_pe(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)), 0).spawn()});
+                    reqs.push(unsafe { array.min_at_pe(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size, 0).spawn()});
                 }
 
                 let mut i = 0;
@@ -164,7 +164,7 @@ macro_rules! min_at_pe_test{
                     for tx in (0..num_txs){
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        reqs.push(unsafe { sub_array.min_at_pe(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)), 0).spawn()});
+                        reqs.push(unsafe { sub_array.min_at_pe(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size, 0).spawn()});
                     }
                     // array.wait_all();
                     // sub_array.barrier();

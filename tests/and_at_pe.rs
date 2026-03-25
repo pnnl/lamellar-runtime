@@ -67,13 +67,13 @@ macro_rules! create_and_at_pe_tests {
     }
 }
 
-// create_and_at_pe_tests!(
-//     (UnsafeArray, AtomicArray),
-//     ("Block", "Cyclic"),
-//     (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
-//     (2, 3, 4),
-//     (4, 19, 128)
-// );
+create_and_at_pe_tests!(
+    (UnsafeArray, AtomicArray),
+    ("Block", "Cyclic"),
+    (u8, u16, u32, u128, usize, i8, i16, i32, i128, isize, f32, f64),
+    (2, 3, 4),
+    (4, 19, 128)
+);
 
 // create_and_at_pe_tests!(
 //     (GlobalLockArray),

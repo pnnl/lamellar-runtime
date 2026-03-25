@@ -81,11 +81,11 @@ macro_rules! scatter_from_pe_test{
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
                     let scatter_in = if my_pe == 0 {
-                        ScatterInput::root(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)), (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes)
+                        ScatterInput::root(tx * tx_size)
                     } else {
-                        ScatterInput::not_root((std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes, 0)
+                        ScatterInput::not_root(0)
                     };
-                    reqs.push((unsafe { array.scatter_from_pe(scatter_in).spawn()}, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+                    reqs.push((unsafe { array.scatter_from_pe(scatter_in, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
@@ -121,13 +121,13 @@ macro_rules! scatter_from_pe_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     let scatter_in = if my_pe == 0 {
-                        ScatterInput::root(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)), (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes)
+                        ScatterInput::root(tx * tx_size)
                     } else {
-                        ScatterInput::not_root((std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes, 0)
+                        ScatterInput::not_root(0)
                     };
                     // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(half_len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)).as_slice());}
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.scatter_from_pe(scatter_in).spawn()}, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+                    reqs.push((unsafe { array.scatter_from_pe(scatter_in, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
                 }
 
                 let mut i = 0;
@@ -168,13 +168,13 @@ macro_rules! scatter_from_pe_test{
                     let mut reqs = vec![];
                     for tx in (0..num_txs){
                         let scatter_in = if my_pe == 0 {
-                            ScatterInput::root(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)), (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes)
+                            ScatterInput::root(tx * tx_size)
                         } else {
-                            ScatterInput::not_root((std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes, 0)
+                            ScatterInput::not_root(0)
                         };
                         // unsafe{println!("tx_size {:?} tx {:?} sindex: {:?} eindex: {:?} {:?}",tx_size,tx, tx*tx_size,std::cmp::min(len,(tx+1)*tx_size),&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)).as_slice());}
                         #[allow(unused_unsafe)]
-                        reqs.push((unsafe { sub_array.scatter_from_pe(scatter_in).spawn()}, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
+                        reqs.push((unsafe { sub_array.scatter_from_pe(scatter_in, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes).spawn()}, (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes ));
                     }
                     // array.wait_all();
                     // sub_array.barrier();

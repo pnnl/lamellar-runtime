@@ -2361,7 +2361,8 @@ impl CommAllocCollectiveReduce for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_pe: usize,
     ) -> CollectiveReduceOpHandle<T> {
         match self {
@@ -2379,12 +2380,11 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-
-                inner_alloc.reduce(scheduler, counters, op, src, root_pe)
+                inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce(scheduler, counters, op, src, root_pe)
+                inner_alloc.reduce(scheduler, counters, op, index, len, root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2424,7 +2424,8 @@ impl CommAllocCollectiveReduce for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveReduceIntoBufferOpHandle<T, B> {
         match self {
@@ -2442,11 +2443,11 @@ impl CommAllocCollectiveReduce for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_into_buffer(scheduler, counters, op, src, root_or_buffer)
+                inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_into_buffer(scheduler, counters, op, src, root_or_buffer)
+                inner_alloc.reduce_into_buffer(scheduler, counters, op, index, len, root_or_buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2546,7 +2547,8 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
     ) -> CollectiveAllGatherOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -2563,11 +2565,11 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.gather_all(scheduler, counters, src)
+                inner_alloc.gather_all(scheduler, counters, index, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather_all(scheduler, counters, src)
+                inner_alloc.gather_all(scheduler, counters, index, len)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2606,7 +2608,8 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B> {
         match self {
@@ -2624,11 +2627,11 @@ impl CommAllocCollectiveAllGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.gather_all_into_buffer(scheduler, counters, src, buffer)
+                inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather_all_into_buffer(scheduler, counters, src, buffer)
+                inner_alloc.gather_all_into_buffer(scheduler, counters, index, len, buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2670,7 +2673,8 @@ impl CommAllocCollectiveGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T> {
         match self {
@@ -2688,12 +2692,11 @@ impl CommAllocCollectiveGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-
-                inner_alloc.gather(scheduler, counters, src, root_pe)
+                inner_alloc.gather(scheduler, counters, index, len, root_pe)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather(scheduler, counters, src, root_pe)
+                inner_alloc.gather(scheduler, counters, index, len, root_pe)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2732,7 +2735,8 @@ impl CommAllocCollectiveGather for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveGatherIntoBufferOpHandle<T, B> {
         match self {
@@ -2750,11 +2754,11 @@ impl CommAllocCollectiveGather for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.gather_into_buffer(scheduler, counters, src, root_or_buffer)
+                inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.gather_into_buffer(scheduler, counters, src, root_or_buffer)
+                inner_alloc.gather_into_buffer(scheduler, counters, index, len, root_or_buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2923,7 +2927,8 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src_or_root_pe: BroadcastInput<T>,
+        src_or_root_pe: BroadcastInput,
+        len: usize,
     ) -> CollectiveBroadcastOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -2941,11 +2946,11 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
 
-                inner_alloc.broadcast(scheduler, counters, src_or_root_pe)
+                inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.broadcast(scheduler, counters, src_or_root_pe)
+                inner_alloc.broadcast(scheduler, counters, src_or_root_pe, len)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -2984,7 +2989,8 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        root_or_buffer: RootSrcOrLamellarBuffer<T, B>
+        root_or_buffer: RootSrcOrLamellarBuffer<T, B>,
+        len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -3001,11 +3007,11 @@ impl CommAllocCollectiveBroadcast for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer)
+                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer)
+                inner_alloc.broadcast_into_buffer(scheduler, counters, root_or_buffer, len)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -3048,7 +3054,8 @@ impl CommAllocCollectiveScatter for CommAllocInner {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src_or_root_pe: ScatterInput<T>,
+        src_or_root_pe: ScatterInput,
+        len: usize,
     ) -> CollectiveScatterOpHandle<T> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -3066,11 +3073,11 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
 
-                inner_alloc.scatter(scheduler, counters, src_or_root_pe)
+                inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.scatter(scheduler, counters, src_or_root_pe)
+                inner_alloc.scatter(scheduler, counters, src_or_root_pe, len)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -3110,7 +3117,8 @@ impl CommAllocCollectiveScatter for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         buf: LamellarBuffer<T, B>,
-        src_or_root_pe: ScatterInput<T>,
+        src_or_root_pe: ScatterInput,
+        len: usize,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B> {
         match self {
             // CommAllocInner::Raw(_addr, _size) => {
@@ -3127,11 +3135,11 @@ impl CommAllocCollectiveScatter for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe)
+                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe)
+                inner_alloc.scatter_into_buffer(scheduler, counters, buf, src_or_root_pe, len)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -3175,7 +3183,7 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
         len: usize,
     ) -> CollectiveReduceScatterOpHandle<T> {
         match self {
@@ -3193,11 +3201,11 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter(scheduler, counters, op, src, len)
+                inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter(scheduler, counters, op, src, len)
+                inner_alloc.reduce_scatter(scheduler, counters, op, index, len)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")
@@ -3237,7 +3245,8 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         buffer: LamellarBuffer<T, B>,
     ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B> {
         match self {
@@ -3255,11 +3264,11 @@ impl CommAllocCollectiveReduceScatter for CommAllocInner {
             // }
             #[cfg(feature = "enable-libfabric")]
             CommAllocInner::LibfabricAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, src, buffer)
+                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
             }
             #[cfg(feature = "enable-ucx")]
             CommAllocInner::UcxAlloc(inner_alloc) => {
-                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, src, buffer)
+                inner_alloc.reduce_scatter_into_buffer(scheduler, counters, op, index, len, buffer)
             }
             _ => {
                 panic!("Collective reduce not supported for this CommAlloc type")

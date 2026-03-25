@@ -79,7 +79,7 @@ macro_rules! max_scatter_test{
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.max_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array.max_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
                 }
                 let mut i = 0;
                 for req in reqs.drain(..){
@@ -118,7 +118,7 @@ macro_rules! max_scatter_test{
                 for tx in (0..num_txs){
                     let chunk_size = (std::cmp::min(half_len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.max_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
+                    reqs.push((unsafe { array.max_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
                 }
 
                 let mut i = 0;
@@ -162,7 +162,7 @@ macro_rules! max_scatter_test{
                     for tx in (0..num_txs){
                         let chunk_size = (std::cmp::min(len,(tx+1)*tx_size) - tx*tx_size)/num_pes;
                         #[allow(unused_unsafe)]
-                        reqs.push((unsafe { sub_array.max_scatter(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)), chunk_size).spawn()}, chunk_size));
+                        reqs.push((unsafe { sub_array.max_scatter(tx * tx_size, chunk_size).spawn()}, chunk_size));
                     }
                     // array.wait_all();
                     // sub_array.barrier();

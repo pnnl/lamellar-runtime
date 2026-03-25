@@ -43,7 +43,7 @@ use crate::lamellae::ucx_lamellae::collective::{
 };
 
 use crate::{
-    active_messaging::AMCounters, memregion::MemregionRdmaInputInner, scheduler::Scheduler, AsLamellarBuffer, LamellarBuffer, LamellarTask, MemregionRdmaInput, Remote
+    active_messaging::AMCounters, memregion::MemregionRdmaInputInner, scheduler::Scheduler, AsLamellarBuffer, LamellarBuffer, LamellarTask, Remote
 };
 
 use futures_util::Future;
@@ -1505,87 +1505,87 @@ pub(crate) enum RootOrBuffer<T> {
 }
 
 
-pub enum BroadcastInput<T:Remote> {
-    Root(MemregionRdmaInput<T>),
-    NotRoot(usize, usize)
+pub enum BroadcastInput {
+    Root(usize),
+    NotRoot(usize)
 }
 
-pub(crate) enum BroadcastInputInner<T:Remote> {
-    Root(MemregionRdmaInputInner<T>),
-    NotRoot(usize, usize)
+pub(crate) enum BroadcastInputInner {
+    Root(usize),
+    NotRoot(usize)
 }
 
 
-impl<T: Remote> From<BroadcastInput<T>> for BroadcastInputInner<T> {
-    fn from(value: BroadcastInput<T>) -> Self {
+impl From<BroadcastInput> for BroadcastInputInner {
+    fn from(value: BroadcastInput) -> Self {
         match value {
-            BroadcastInput::Root(memregion_rdma_input) => BroadcastInputInner::Root(memregion_rdma_input.into()),
-            BroadcastInput::NotRoot(len,  root_pe) => BroadcastInputInner::NotRoot(len, root_pe),
+            BroadcastInput::Root(index) => BroadcastInputInner::Root(index),
+            BroadcastInput::NotRoot(root_pe) => BroadcastInputInner::NotRoot(root_pe),
         }
     }
 }
 
-impl<T: Remote> BroadcastInput<T> {
-    pub fn root(src: impl Into<MemregionRdmaInput<T>>) -> Self {
-        Self::Root(src.into())
+impl BroadcastInput {
+    pub fn root(index: usize) -> Self {
+        Self::Root(index)
     }
 
-    pub fn not_root(len: usize, root_pe: usize) -> Self {
-        Self::NotRoot(len, root_pe)
+    pub fn not_root(root_pe: usize) -> Self {
+        Self::NotRoot(root_pe)
     }
 }
 
 pub(crate) enum RootSrcOrBuffer<T: Remote> {
-    Root(MemregionRdmaInputInner<T>), 
+    Root(usize), 
     NotRoot(Vec<T>, usize) 
 }
 
 impl<T: Remote, B: AsLamellarBuffer<T>> From<RootSrcOrLamellarBuffer<T, B>> for RootSrcOrLamellarBufferInner<T, B> {
     fn from(value: RootSrcOrLamellarBuffer<T, B>) -> Self {
         match value {
-            RootSrcOrLamellarBuffer::Root(memregion_rdma_input) => RootSrcOrLamellarBufferInner::Root(memregion_rdma_input.into()),
+            RootSrcOrLamellarBuffer::Root(index) => RootSrcOrLamellarBufferInner::Root(index),
             RootSrcOrLamellarBuffer::NotRoot(lamellar_buffer, root_pe) => RootSrcOrLamellarBufferInner::NotRoot(lamellar_buffer, root_pe),
         }
     }
 }
 
 pub enum RootSrcOrLamellarBufferInner<T: Remote, B: AsLamellarBuffer<T>> {
-    Root(MemregionRdmaInputInner<T>), 
+    Root(usize), 
     NotRoot(LamellarBuffer<T, B>, usize) 
 }
 
 pub enum RootSrcOrLamellarBuffer<T: Remote, B: AsLamellarBuffer<T>> {
-    Root(MemregionRdmaInput<T>), 
+    Root(usize), 
     NotRoot(LamellarBuffer<T, B>, usize) 
 }
 
-pub enum ScatterInput<T: Remote> {
-    Root(MemregionRdmaInput<T>, usize),
-    NotRoot(usize, usize)
-}
-
-
-impl<T: Remote> ScatterInput<T> {
-    pub fn root(src: impl Into<MemregionRdmaInput<T>>, chunk_size: usize) -> Self {
-        Self::Root(src.into(), chunk_size)
-    }
-
-    pub fn not_root(len: usize, root_pe: usize) -> Self {
-        Self::NotRoot(len, root_pe)
-    }
-}
-
-pub(crate) enum ScatterInputInner<T: Remote> {
-    Root(MemregionRdmaInputInner<T>),
+pub enum ScatterInput {
+    Root(usize),
     NotRoot(usize)
 }
 
 
-impl<T: Remote> From<ScatterInput<T>> for ScatterInputInner<T> {
-    fn from(value: ScatterInput<T>) -> Self {
+impl ScatterInput {
+    pub fn root(index: usize) -> Self {
+        Self::Root(index)
+    }
+
+    pub fn not_root(root_pe: usize) -> Self {
+        Self::NotRoot(root_pe)
+    }
+}
+
+pub(crate) enum ScatterInputInner {
+    Root(usize),
+    NotRoot(usize)
+}
+
+
+impl From<ScatterInput> for ScatterInputInner {
+    fn from(value: ScatterInput) -> Self {
         match value {
-            ScatterInput::Root(memregion_rdma_input, _) => ScatterInputInner::Root(memregion_rdma_input.into()),
-            ScatterInput::NotRoot(len,  root_pe) => ScatterInputInner::NotRoot(root_pe),
+            ScatterInput::Root(index) => ScatterInputInner::Root(index),
+            ScatterInput::NotRoot(root_pe) => ScatterInputInner::NotRoot(root_pe),
         }
     }
 }
@@ -1603,18 +1603,18 @@ pub(crate) enum RootSrcOrSliceMut<'a, T> {
 }
 
 impl<T: Remote>  RootSrcOrBuffer<T> {
-    pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootSrcOrSliceMut<'a, T> {
+    pub(crate) fn as_mut_slice<'a>(&'a mut self, alloc_slice: &'a [T], len: usize) -> RootSrcOrSliceMut<'a, T> {
         match self {
-            RootSrcOrBuffer::Root(memregion_in) => RootSrcOrSliceMut::Root(memregion_in.as_slice()),
+            RootSrcOrBuffer::Root(index) => RootSrcOrSliceMut::Root(&alloc_slice[*index..*index + len]),
             RootSrcOrBuffer::NotRoot(vec, pe) => RootSrcOrSliceMut::NotRoot(vec, *pe)
         }
     }
 }
 
-impl<T: Remote>  ScatterInputInner<T> {
-    pub(crate) fn as_slice<'a>(&'a self) -> RootSrcSliceOrNone<'a, T> {
+impl ScatterInputInner {
+    pub(crate) fn as_slice<'a, T>(&'a self, alloc_slice: &'a [T], len: usize) -> RootSrcSliceOrNone<'a, T> {
         match self {
-            ScatterInputInner::Root(memregion_in) => RootSrcSliceOrNone::Root(memregion_in.as_slice()),
+            ScatterInputInner::Root(index) => RootSrcSliceOrNone::Root(&alloc_slice[*index..*index + len]),
             ScatterInputInner::NotRoot(pe) => RootSrcSliceOrNone::NotRoot(*pe)
         }
     }
@@ -1650,9 +1650,9 @@ impl<T: Remote, B: AsLamellarBuffer<T>> RootOrLamellarBuffer<T, B> {
 } 
 
 impl<T: Remote, B: AsLamellarBuffer<T>> RootSrcOrLamellarBufferInner<T, B> {
-    pub(crate) fn as_mut_slice<'a>(&'a mut self) -> RootSrcOrSliceMut<'a, T> {
+    pub(crate) fn as_mut_slice<'a>(&'a mut self, alloc_slice: &'a [T], len: usize) -> RootSrcOrSliceMut<'a, T> {
         match self {
-            RootSrcOrLamellarBufferInner::Root(memregion_in) => RootSrcOrSliceMut::Root(memregion_in.as_slice()),
+            RootSrcOrLamellarBufferInner::Root(index) => RootSrcOrSliceMut::Root(&alloc_slice[*index..*index + len]),
             RootSrcOrLamellarBufferInner::NotRoot(lamellar_buffer, pe) => RootSrcOrSliceMut::NotRoot(lamellar_buffer.as_mut_slice(), *pe),
         }
     }
@@ -1712,7 +1712,8 @@ pub(crate) trait CommAllocCollectiveReduce {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_pe: usize,
     ) -> CollectiveReduceOpHandle<T>;
     
@@ -1721,7 +1722,8 @@ pub(crate) trait CommAllocCollectiveReduce {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveReduceIntoBufferOpHandle<T, B>;
     
@@ -1739,13 +1741,15 @@ pub(crate) trait CommAllocCollectiveAllGather {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
     ) -> CollectiveAllGatherOpHandle<T>;
     fn gather_all_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveAllGatherIntoBufferOpHandle<T, B>;
 }
@@ -1755,14 +1759,16 @@ pub(crate) trait CommAllocCollectiveGather {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_pe: usize,
     ) -> CollectiveGatherOpHandle<T>;
     fn gather_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         root_or_buffer: RootOrLamellarBuffer<T, B>
     ) -> CollectiveGatherIntoBufferOpHandle<T, B>;
 }
@@ -1788,13 +1794,15 @@ pub(crate) trait CommAllocCollectiveBroadcast {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src_or_root_pe: BroadcastInput<T>,
+        src_or_root_pe: BroadcastInput,
+        len: usize,
     ) -> CollectiveBroadcastOpHandle<T>;
     fn broadcast_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         dst: RootSrcOrLamellarBuffer<T, B>,
+        len: usize,
     ) -> CollectiveBroadcastIntoBufferOpHandle<T, B>;
 }
 
@@ -1803,14 +1811,16 @@ pub(crate) trait CommAllocCollectiveScatter {
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
-        src_or_root_pe: ScatterInput<T>,
+        src_or_root_pe: ScatterInput,
+        len: usize,
     ) -> CollectiveScatterOpHandle<T>;
     fn scatter_into_buffer<T: Remote, B: AsLamellarBuffer<T>> (
         &self,
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         dst: LamellarBuffer<T, B>,
-        src_or_root_pe: ScatterInput<T>,
+        src_or_root_pe: ScatterInput,
+        len: usize,
     ) -> CollectiveScatterIntoBufferOpHandle<T, B>;
 }
 
@@ -1820,7 +1830,7 @@ pub(crate) trait CommAllocCollectiveReduceScatter {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
         len: usize,
     ) -> CollectiveReduceScatterOpHandle<T>;
     
@@ -1829,7 +1839,8 @@ pub(crate) trait CommAllocCollectiveReduceScatter {
         scheduler: &Arc<Scheduler>,
         counters: Vec<Arc<AMCounters>>,
         op: ReduceOp,
-        src: impl Into<MemregionRdmaInputInner<T>>,
+        index: usize,
+        len: usize,
         dst: LamellarBuffer<T, B>,
     ) -> CollectiveReduceScatterIntoBufferOpHandle<T, B>;
 

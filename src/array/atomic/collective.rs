@@ -240,78 +240,78 @@ impl<T: Dist> AtomicArray<T> {
 
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn sum_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn sum_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .sum_at_pe(src, pe)
+                    .sum_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn max_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn max_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .max_at_pe(src, pe)
+                    .max_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn min_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn min_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .min_at_pe(src, pe)
+                    .min_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn prod_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn prod_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .prod_at_pe(src, pe)
+                    .prod_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_and_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_and_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_and_at_pe(src, pe)
+                    .bit_and_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_xor_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_xor_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_xor_at_pe(src, pe)
+                    .bit_xor_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_or_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveReduceHandle<T> {
+    pub unsafe fn bit_or_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveReduceHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_or_at_pe(src, pe)
+                    .bit_or_at_pe(index, len, pe)
             }
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
          }
@@ -319,79 +319,79 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn sum_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .sum_at_pe_into_buffer(src, target)
+                    .sum_at_pe_into_buffer(index, len, target)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn max_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .max_at_pe_into_buffer(src, target)
+                    .max_at_pe_into_buffer(index, len, target)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn min_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .min_at_pe_into_buffer(src, target)
+                    .min_at_pe_into_buffer(index, len, target)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn prod_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .prod_at_pe_into_buffer(src, target)
+                    .prod_at_pe_into_buffer(index, len, target)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_and_at_pe_into_buffer(src, target)
+                    .bit_and_at_pe_into_buffer(index, len, target)
 
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_xor_at_pe_into_buffer(src, target)
+                    .bit_xor_at_pe_into_buffer(index, len, target)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveReduceIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_or_at_pe_into_buffer(src, target)
+                    .bit_or_at_pe_into_buffer(index, len, target)
             }
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
          }
@@ -479,23 +479,23 @@ impl<T: Dist> AtomicArray<T> {
 
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn gather_all(&self, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllGatherHandle<T> {
+    pub unsafe fn gather_all(&self, index: usize, len: usize) -> ArrayCollectiveAllGatherHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .gather_all(src)
+                    .gather_all(index, len)
             }
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
          }
     }
 
-    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, buffer: LamellarBuffer<T, B>, src: impl Into<MemregionRdmaInput<T>>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
+    pub unsafe fn gather_all_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveAllGatherIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .gather_all_into_buffer(src, buffer)
+                    .gather_all_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
@@ -503,23 +503,23 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn gather_at_pe(&self, src: impl Into<MemregionRdmaInput<T>>, pe: usize) -> ArrayCollectiveGatherHandle<T> {
+    pub unsafe fn gather_at_pe(&self, index: usize, len: usize, pe: usize) -> ArrayCollectiveGatherHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .gather_at_pe(src, pe)
+                    .gather_at_pe(index, len, pe)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
+    pub unsafe fn gather_at_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, target: RootOrLamellarBuffer<T, B>) -> ArrayCollectiveGatherIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .gather_at_pe_into_buffer(src, target)
+                    .gather_at_pe_into_buffer(index, len, target)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
@@ -551,23 +551,23 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput<T>) -> ArrayCollectiveBroadcastHandle<T> {
+    pub unsafe fn broadcast_from_pe(&self, src_or_root_pe: BroadcastInput, len: usize) -> ArrayCollectiveBroadcastHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .broadcast_from_pe(src_or_root_pe)
+                    .broadcast_from_pe(src_or_root_pe, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootSrcOrLamellarBuffer<T, B>) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
+    pub unsafe fn broadcast_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, target: RootSrcOrLamellarBuffer<T, B>, len: usize) -> ArrayCollectiveBroadcastIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .broadcast_from_pe_into_buffer(target)
+                    .broadcast_from_pe_into_buffer(target, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
@@ -575,23 +575,23 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput<T>) -> ArrayCollectiveScatterHandle<T> {
+    pub unsafe fn scatter_from_pe(&self, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .scatter_from_pe(src_or_root_pe)
+                    .scatter_from_pe(src_or_root_pe, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buf: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput<T>) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
+    pub unsafe fn scatter_from_pe_into_buffer<B: AsLamellarBuffer<T>>(&self, buf: LamellarBuffer<T, B>, src_or_root_pe: ScatterInput, len: usize) -> ArrayCollectiveScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .scatter_from_pe_into_buffer(buf, src_or_root_pe)
+                    .scatter_from_pe_into_buffer(buf, src_or_root_pe, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
@@ -600,78 +600,78 @@ impl<T: Dist> AtomicArray<T> {
 
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn sum_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn sum_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .sum_scatter(src, len)
+                    .sum_scatter(index, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn max_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn max_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .max_scatter(src, len)
+                    .max_scatter(index, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn min_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn min_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .min_scatter(src, len)
+                    .min_scatter(index, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn prod_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn prod_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .prod_scatter(src, len)
+                    .prod_scatter(index, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_and_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn bit_and_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_and_scatter(src, len)
+                    .bit_and_scatter(index, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_xor_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn bit_xor_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_or_scatter(src, len)
+                    .bit_xor_scatter(index, len)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_or_scatter(&self, src: impl Into<MemregionRdmaInput<T>>, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
+    pub unsafe fn bit_or_scatter(&self, index: usize, len: usize) -> ArrayCollectiveReduceScatterHandle<T> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_or_scatter(src, len)
+                    .bit_or_scatter(index, len)
             }
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
          }
@@ -679,78 +679,78 @@ impl<T: Dist> AtomicArray<T> {
 }
 
 impl<T: Dist> AtomicArray<T> {
-    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn sum_scatter_into_buffer<B: AsLamellarBuffer<T>>(&self, index: usize, len: usize, buffer: LamellarBuffer<T, B>) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .sum_scatter_into_buffer(src, buffer)
+                    .sum_scatter_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn max_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .max_scatter_into_buffer(src, buffer)
+                    .max_scatter_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn min_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .min_scatter_into_buffer(src, buffer)
+                    .min_scatter_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn prod_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .prod_scatter_into_buffer(src, buffer)
+                    .prod_scatter_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_and_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_and_scatter_into_buffer(src, buffer)
+                    .bit_and_scatter_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_xor_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_xor_scatter_into_buffer(src, buffer)
+                    .bit_xor_scatter_into_buffer(index, len, buffer)
             },
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
         }
     }
 
-    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, src: impl Into<MemregionRdmaInput<T>>, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
+    pub unsafe fn bit_or_scatter_into_buffer<B: AsLamellarBuffer<T>> (&self, index: usize, len: usize, buffer: LamellarBuffer<T, B> ) -> ArrayCollectiveReduceScatterIntoBufferHandle<T, B> {
         match self {
             AtomicArray::NetworkAtomicArray(array) => {
                 array
                     .array
-                    .bit_or_scatter_into_buffer(src, buffer)
+                    .bit_or_scatter_into_buffer(index, len, buffer)
             }
             _ => {todo!("collective reduce operations currently only supported on network atomic arrays")}
          }

@@ -71,7 +71,7 @@ macro_rules! gather_to_pe_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.gather_at_pe(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(mem_seg_len,(tx+1)*tx_size)), root_pe).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array.gather_at_pe(tx * tx_size, std::cmp::min(mem_seg_len,(tx+1)*tx_size) - tx * tx_size, root_pe).spawn()}, std::cmp::min(mem_seg_len,(tx+1)*tx_size - tx*tx_size)));
                 }
                 for req in reqs.drain(..){
                     let maybe_buf = req.0.block();
@@ -104,7 +104,7 @@ macro_rules! gather_to_pe_test{
                 let mut reqs = vec![];
                 for tx in (0..num_txs){
                     #[allow(unused_unsafe)]
-                    reqs.push((unsafe { array.gather_at_pe(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(half_len,(tx+1)*tx_size)), root_pe).spawn()}, std::cmp::min(half_len,(tx+1)*tx_size - tx*tx_size)));
+                    reqs.push((unsafe { array.gather_at_pe(tx * tx_size, std::cmp::min(half_len,(tx+1)*tx_size) - tx * tx_size, root_pe).spawn()}, std::cmp::min(half_len,(tx+1)*tx_size - tx*tx_size)));
                 }
                 for req in reqs.drain(..){
                     let maybe_buf = req.0.block();
@@ -139,7 +139,7 @@ macro_rules! gather_to_pe_test{
                     let mut reqs = vec![];
                     for tx in (0..num_txs){
                         #[allow(unused_unsafe)]
-                        reqs.push((unsafe { sub_array.gather_at_pe(&shared_mem_region.sub_region(tx*tx_size..std::cmp::min(len,(tx+1)*tx_size)), root_pe).spawn()}, std::cmp::min(len,(tx+1)*tx_size - tx*tx_size)));
+                        reqs.push((unsafe { sub_array.gather_at_pe(tx * tx_size, std::cmp::min(len,(tx+1)*tx_size) - tx * tx_size, root_pe).spawn()}, std::cmp::min(len,(tx+1)*tx_size - tx*tx_size)));
                     }
                     for req in reqs.drain(..){
                         let maybe_buf = req.0.block();
