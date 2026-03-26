@@ -125,7 +125,7 @@ fn main() {
     if my_pe == 0 {
         let _ = world
             .exec_am_pe(
-                1,
+                num_pes - 1,
                 RdmaAM {
                     array: array.clone(),
                     orig_pe: my_pe,

@@ -20,6 +20,7 @@ impl LamellarAm for StringDarcAm {
 fn main() {
     let world = lamellar::LamellarWorldBuilder::new().build();
     let my_pe = world.my_pe();
+    let num_pes = world.num_pes();
     world.clone().block_on(async move {
         let string_data = LocalRwDarc::new(&world, format!("Orig String on PE: {}", my_pe))
             .await
@@ -30,7 +31,7 @@ fn main() {
         if my_pe == 0 {
             world
                 .exec_am_pe(
-                    1,
+                    num_pes - 1,
                     StringDarcAm {
                         new_data: String::from("Modified string from 0"),
                         data: string_data.clone(),
