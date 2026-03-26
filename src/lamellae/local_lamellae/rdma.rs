@@ -47,8 +47,8 @@ impl<T: Remote> LocalFuture<T> {
             },
             AllocOp::PutBuf(src) => unsafe {
                 let alloc_slice = self.alloc.as_mut_slice();
-                assert!(self.index + src.len() < alloc_slice.len());
-                alloc_slice[self.index..src.len()].copy_from_slice(src.as_slice());
+                assert!(self.index + src.len() <= alloc_slice.len());
+                alloc_slice[self.index..(self.index + src.len())].copy_from_slice(src.as_slice());
             },
         }
 
