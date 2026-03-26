@@ -9,7 +9,7 @@ pub(crate) mod rdma;
 use crate::array::atomic::AtomicElement;
 
 // use crate::array::private::LamellarArrayPrivate;
-use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
+use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::{array::*, Darc};
 // use crate::darc::Darc;
 use crate::array::private::ArrayExecAm;
@@ -839,29 +839,6 @@ pub struct __NativeAtomicByteArray {
     pub(crate) orig_t: NativeAtomicType,
 }
 impl __NativeAtomicByteArray {
-    pub fn downgrade(array: &__NativeAtomicByteArray) -> __NativeAtomicByteArrayWeak {
-        __NativeAtomicByteArrayWeak {
-            array: __UnsafeByteArray::downgrade(&array.array),
-            orig_t: array.orig_t,
-        }
-    }
-}
-
-/// Internal runtime weak-reference wrapper for `__NativeAtomicByteArray` used by the runtime.
-/// Not intended for direct use by library users.
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct __NativeAtomicByteArrayWeak {
-    pub(crate) array: __UnsafeByteArrayWeak,
-    pub(crate) orig_t: NativeAtomicType,
-}
-
-impl __NativeAtomicByteArrayWeak {
-    pub fn upgrade(&self) -> Option<__NativeAtomicByteArray> {
-        Some(__NativeAtomicByteArray {
-            array: self.array.upgrade()?,
-            orig_t: self.orig_t,
-        })
-    }
 }
 
 /// Internal runtime local-data wrapper for NativeAtomic arrays.

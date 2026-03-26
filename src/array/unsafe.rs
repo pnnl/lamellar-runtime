@@ -161,12 +161,6 @@ pub struct __UnsafeByteArray {
 }
 
 impl __UnsafeByteArray {
-    pub(crate) fn downgrade(array: &__UnsafeByteArray) -> __UnsafeByteArrayWeak {
-        __UnsafeByteArrayWeak {
-            inner: UnsafeArrayInner::downgrade(&array.inner),
-        }
-    }
-
     pub fn mut_local_data<T: Dist>(&self) -> &mut [T] {
         unsafe {
             let u8_slice = self.inner.local_as_mut_slice();
@@ -179,25 +173,6 @@ impl __UnsafeByteArray {
     }
     pub fn local_data<T: Dist>(&self) -> &[T] {
         self.mut_local_data()
-    }
-}
-
-/// Internal runtime weak-reference wrapper for `__UnsafeByteArray` used by the runtime.
-///
-/// Active message payloads rely on this weak wrapper to hold references without owning the array;
-/// use the public array types for application logic.
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct __UnsafeByteArrayWeak {
-    pub(crate) inner: UnsafeArrayInnerWeak,
-}
-
-impl __UnsafeByteArrayWeak {
-    pub fn upgrade(&self) -> Option<__UnsafeByteArray> {
-        if let Some(inner) = self.inner.upgrade() {
-            Some(__UnsafeByteArray { inner })
-        } else {
-            None
-        }
     }
 }
 

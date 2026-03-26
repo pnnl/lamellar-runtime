@@ -7,7 +7,7 @@ mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
+use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::array::r#unsafe::UnsafeAtomicOpSupport;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
@@ -806,29 +806,6 @@ pub struct __NetworkAtomicByteArray {
     pub(crate) orig_t: NetworkAtomicType,
 }
 impl __NetworkAtomicByteArray {
-    pub fn downgrade(array: &__NetworkAtomicByteArray) -> __NetworkAtomicByteArrayWeak {
-        __NetworkAtomicByteArrayWeak {
-            array: __UnsafeByteArray::downgrade(&array.array),
-            orig_t: array.orig_t,
-        }
-    }
-}
-
-/// Internal runtime weak-reference wrapper for `__NetworkAtomicByteArray` used by the runtime.
-/// Not intended for direct use by library users.
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct __NetworkAtomicByteArrayWeak {
-    pub(crate) array: __UnsafeByteArrayWeak,
-    pub(crate) orig_t: NetworkAtomicType,
-}
-
-impl __NetworkAtomicByteArrayWeak {
-    pub fn upgrade(&self) -> Option<__NetworkAtomicByteArray> {
-        Some(__NetworkAtomicByteArray {
-            array: self.array.upgrade()?,
-            orig_t: self.orig_t,
-        })
-    }
 }
 
 /// Internal runtime local-data wrapper for NetworkAtomic arrays.

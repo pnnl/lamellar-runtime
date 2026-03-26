@@ -1435,15 +1435,13 @@ fn create_buffered_ops(
     native: bool,
     rt: bool,
 ) -> proc_macro2::TokenStream {
-    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident, syn::Ident)> = vec![
+    let mut atomic_array_types: Vec<(syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockArray"),
-            quote::format_ident!("__LocalLockByteArrayWeak"),
             quote::format_ident!("__LocalLockByteArray"),
         ),
         (
             quote::format_ident!("GlobalLockArray"),
-            quote::format_ident!("__GlobalLockByteArrayWeak"),
             quote::format_ident!("__GlobalLockByteArray"),
         ),
     ];
@@ -1451,13 +1449,11 @@ fn create_buffered_ops(
     if native {
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("__NativeAtomicByteArrayWeak"),
             quote::format_ident!("__NativeAtomicByteArray"),
         ));
     } else {
         atomic_array_types.push((
             quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("__GenericAtomicByteArrayWeak"),
             quote::format_ident!("__GenericAtomicByteArray"),
         ));
     }
@@ -1484,7 +1480,7 @@ fn create_buffered_ops(
     );
     expanded.extend(buf_op_impl);
 
-    for (array_type, _byte_array_type_weak, byte_array_type) in atomic_array_types {
+    for (array_type, byte_array_type) in atomic_array_types {
         let buf_op_impl = create_buf_ops(
             typeident.clone(),
             array_type.clone(),

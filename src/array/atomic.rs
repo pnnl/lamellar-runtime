@@ -711,26 +711,6 @@ pub enum __AtomicByteArray {
 }
 
 impl __AtomicByteArray {
-    //#[doc(hidden)]
-    pub fn downgrade(array: &__AtomicByteArray) -> __AtomicByteArrayWeak {
-        match array {
-            __AtomicByteArray::NativeAtomicByteArray(array) => {
-                __AtomicByteArrayWeak::NativeAtomicByteArrayWeak(
-                    __NativeAtomicByteArray::downgrade(array),
-                )
-            }
-            __AtomicByteArray::GenericAtomicByteArray(array) => {
-                __AtomicByteArrayWeak::GenericAtomicByteArrayWeak(
-                    __GenericAtomicByteArray::downgrade(array),
-                )
-            }
-            __AtomicByteArray::NetworkAtomicByteArray(array) => {
-                __AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(
-                    __NetworkAtomicByteArray::downgrade(array),
-                )
-            }
-        }
-    }
     pub(crate) fn team(&self) -> Darc<LamellarTeamRT> {
         match self {
             __AtomicByteArray::NativeAtomicByteArray(array) => {
@@ -771,35 +751,6 @@ impl crate::active_messaging::DarcSerde for __AtomicByteArray {
     //         AtomicByteArray::GenericAtomicByteArray(array) => array.des(cur_pe),
     //     }
     // }
-}
-
-/// Internal runtime weak-reference enum for atomic byte-array variants.
-///
-/// Active messages capture weak references via this enum so the handler can upgrade them even when
-/// the generic parameters are unknown; rely on the public array types for high-level code.
-#[enum_dispatch]
-#[derive(Clone)]
-pub enum __AtomicByteArrayWeak {
-    NativeAtomicByteArrayWeak(__NativeAtomicByteArrayWeak),
-    GenericAtomicByteArrayWeak(__GenericAtomicByteArrayWeak),
-    NetworkAtomicByteArrayWeak(__NetworkAtomicByteArrayWeak),
-}
-
-impl __AtomicByteArrayWeak {
-    //#[doc(hidden)]
-    pub fn upgrade(&self) -> Option<__AtomicByteArray> {
-        match self {
-            __AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
-                Some(__AtomicByteArray::NativeAtomicByteArray(array.upgrade()?))
-            }
-            __AtomicByteArrayWeak::GenericAtomicByteArrayWeak(array) => {
-                Some(__AtomicByteArray::GenericAtomicByteArray(array.upgrade()?))
-            }
-            __AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(array) => {
-                Some(__AtomicByteArray::NetworkAtomicByteArray(array.upgrade()?))
-            }
-        }
-    }
 }
 
 /// Provides access to a PEs local data to provide "local" indexing while maintaining safety guarantees of the array type.

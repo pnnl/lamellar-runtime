@@ -120,39 +120,39 @@ pub use r#unsafe::{
         multi_val_single_idx_ops_new, single_val_multi_idx_ops, single_val_multi_idx_ops_new,
         BatchReturnType,
     },
-    UnsafeArray, __UnsafeByteArray, __UnsafeByteArrayWeak,
+    UnsafeArray, __UnsafeByteArray,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, __ReadOnlyByteArray, __ReadOnlyByteArrayWeak, ReadOnlyLocalChunks};
+pub use read_only::{ReadOnlyArray, __ReadOnlyByteArray, ReadOnlyLocalChunks};
 
 pub(crate) mod atomic;
-pub use atomic::{AtomicArray, __AtomicByteArray, __AtomicByteArrayWeak, AtomicLocalData};
+pub use atomic::{AtomicArray, __AtomicByteArray, AtomicLocalData};
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
-    GenericAtomicArray, __GenericAtomicByteArray, __GenericAtomicByteArrayWeak, __GenericAtomicLocalData,
+    GenericAtomicArray, __GenericAtomicByteArray, __GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
-    NativeAtomicArray, __NativeAtomicByteArray, __NativeAtomicByteArrayWeak, __NativeAtomicLocalData,
+    NativeAtomicArray, __NativeAtomicByteArray, __NativeAtomicLocalData,
 };
 
 pub(crate) mod network_atomic;
 pub use network_atomic::{
-    NetworkAtomicArray, __NetworkAtomicByteArray, __NetworkAtomicByteArrayWeak, __NetworkAtomicLocalData,
+    NetworkAtomicArray, __NetworkAtomicByteArray, __NetworkAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    LocalLockArray, __LocalLockByteArray, __LocalLockByteArrayWeak, LocalLockLocalChunks,
+    LocalLockArray, __LocalLockByteArray, LocalLockLocalChunks,
     LocalLockLocalChunksMut, LocalLockLocalData, LocalLockMutLocalData, LocalLockReadGuard,
     LocalLockWriteGuard,
 };
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
-    GlobalLockArray, __GlobalLockByteArray, __GlobalLockByteArrayWeak, GlobalLockLocalData,
+    GlobalLockArray, __GlobalLockByteArray, GlobalLockLocalData,
     GlobalLockMutLocalData, GlobalLockReadGuard, GlobalLockWriteGuard,
 };
 
@@ -202,8 +202,8 @@ pub struct ReduceKey {
 }
 crate::inventory::collect!(ReduceKey);
 
-// lamellar_impl::generate_reductions_for_type_rt!(true, u8,usize);
-// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8,usize);
+lamellar_impl::generate_reductions_for_type_rt!(true, u8,usize);
+lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8,usize);
 
 // lamellar_impl::generate_reductions_for_type_rt!(true, isize);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, isize);
@@ -214,25 +214,25 @@ crate::inventory::collect!(ReduceKey);
 // lamellar_impl::generate_reductions_for_type_rt!(true, i64);
 // lamellar_impl::generate_ops_for_type_rt!(true, true, true, i64);
 
-// lamellar_impl::generate_reductions_for_type_rt!(false, f64);
-// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f64);
+lamellar_impl::generate_reductions_for_type_rt!(false, f64);
+lamellar_impl::generate_ops_for_type_rt!(false, false, false, f64);
 
 // lamellar_impl::generate_reductions_for_type_rt!(false, i128);
 // lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 // // //------------------------------------
 
-lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_reductions_for_type_rt!(false, u128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, u128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, u8, u16, u32, u64, usize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, u128);
 
-lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_reductions_for_type_rt!(false, i128);
-lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
-lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
+// lamellar_impl::generate_reductions_for_type_rt!(true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_reductions_for_type_rt!(false, i128);
+// lamellar_impl::generate_ops_for_type_rt!(true, true, true, i8, i16, i32, i64, isize);
+// lamellar_impl::generate_ops_for_type_rt!(true, false, true, i128);
 
-lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
-lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
+// lamellar_impl::generate_reductions_for_type_rt!(false, f32, f64);
+// lamellar_impl::generate_ops_for_type_rt!(false, false, false, f32, f64);
 
 lamellar_impl::generate_ops_for_bool_rt!();
 

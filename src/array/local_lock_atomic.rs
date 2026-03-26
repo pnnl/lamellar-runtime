@@ -11,7 +11,7 @@ use handle::{
 pub(crate) mod operations;
 mod rdma;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
+use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::array::AsyncFrom;
 use crate::barrier::BarrierHandle;
 use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
@@ -68,29 +68,6 @@ pub struct __LocalLockByteArray {
 }
 
 impl __LocalLockByteArray {
-    pub fn downgrade(array: &__LocalLockByteArray) -> __LocalLockByteArrayWeak {
-        __LocalLockByteArrayWeak {
-            lock: array.lock.clone(),
-            array: __UnsafeByteArray::downgrade(&array.array),
-        }
-    }
-}
-
-/// Internal runtime weak-reference wrapper for `__LocalLockByteArray` used by the runtime.
-/// Not intended for direct use by library users.
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct __LocalLockByteArrayWeak {
-    lock: LocalRwDarc<()>,
-    pub(crate) array: __UnsafeByteArrayWeak,
-}
-
-impl __LocalLockByteArrayWeak {
-    pub fn upgrade(&self) -> Option<__LocalLockByteArray> {
-        Some(__LocalLockByteArray {
-            lock: self.lock.clone(),
-            array: self.array.upgrade()?,
-        })
-    }
 }
 
 /// Provides mutable access to a PEs local data to provide "local" indexing while maintaining safety guarantees of the array type.

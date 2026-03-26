@@ -43,31 +43,8 @@ pub struct __ReadOnlyByteArray {
     pub(crate) array: __UnsafeByteArray,
 }
 impl __ReadOnlyByteArray {
-    pub fn downgrade(array: &__ReadOnlyByteArray) -> __ReadOnlyByteArrayWeak {
-        __ReadOnlyByteArrayWeak {
-            array: __UnsafeByteArray::downgrade(&array.array),
-        }
-    }
     pub fn local_data<T: Dist>(&self) -> &[T] {
         self.array.local_data()
-    }
-}
-
-/// Internal runtime weak-reference wrapper for `__ReadOnlyByteArray` used by the runtime.
-///
-/// Active message payloads use this weak variant to retain handles to the read-only data while
-/// the receiver does not know the exact generic arguments; use the public array types for
-/// application logic.
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct __ReadOnlyByteArrayWeak {
-    pub(crate) array: __UnsafeByteArrayWeak,
-}
-
-impl __ReadOnlyByteArrayWeak {
-    pub fn upgrade(&self) -> Option<__ReadOnlyByteArray> {
-        Some(__ReadOnlyByteArray {
-            array: self.array.upgrade()?,
-        })
     }
 }
 

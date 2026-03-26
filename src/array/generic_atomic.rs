@@ -9,7 +9,7 @@ mod rdma;
 use crate::array::atomic::AtomicElement;
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
+use crate::array::r#unsafe::__UnsafeByteArray;
 use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::Darc;
@@ -303,31 +303,6 @@ impl __GenericAtomicByteArray {
         self.locks[index].lock()
     }
 
-    //#[doc(hidden)]
-    pub fn downgrade(array: &__GenericAtomicByteArray) -> __GenericAtomicByteArrayWeak {
-        __GenericAtomicByteArrayWeak {
-            locks: array.locks.clone(),
-            array: __UnsafeByteArray::downgrade(&array.array),
-        }
-    }
-}
-
-/// Internal runtime weak-reference wrapper for `__GenericAtomicByteArray` used by the runtime.
-/// Not intended for direct use by library users.
-#[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct __GenericAtomicByteArrayWeak {
-    locks: Darc<Vec<Mutex<()>>>,
-    pub(crate) array: __UnsafeByteArrayWeak,
-}
-
-impl __GenericAtomicByteArrayWeak {
-    //#[doc(hidden)]
-    pub fn upgrade(&self) -> Option<__GenericAtomicByteArray> {
-        Some(__GenericAtomicByteArray {
-            locks: self.locks.clone(),
-            array: self.array.upgrade()?,
-        })
-    }
 }
 
 #[derive(Clone, Debug)]
