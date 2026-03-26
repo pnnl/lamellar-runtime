@@ -1861,7 +1861,7 @@ pub trait UnsafeArithmeticOps<T: Dist + ElementArithmeticOps>:
 }
 
 #[doc(hidden)]
-// #[enum_dispatch(LamellarMutLocalData<T>)]
+// #[enum_dispatch(__LamellarMutLocalData<T>)]
 pub trait LocalArithmeticOps<T: Dist + ElementArithmeticOps> {
     //the user facing trait enforces ElementArithmeticOps + ArrayOps so we don't apply those constraints here
     fn local_add(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
@@ -1914,24 +1914,24 @@ macro_rules! impl_local_arithmetic_op {
             fetch: bool,
         ) -> Option<Vec<T>> {
             match self {
-                LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
-                LamellarMutLocalData::LocalLock(ref mut data) => {
+                __LamellarMutLocalData::Slice(data) => data.$op(idx_vals, fetch),
+                __LamellarMutLocalData::LocalLock(ref mut data) => {
                     let mut slice: &mut [T] = &mut *data;
                     slice.$op(idx_vals, fetch)
                 }
-                LamellarMutLocalData::GlobalLock(ref mut data) => {
+                __LamellarMutLocalData::GlobalLock(ref mut data) => {
                     let mut slice: &mut [T] = &mut *data;
                     slice.$op(idx_vals, fetch)
                 }
-                LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
-                LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                __LamellarMutLocalData::NativeAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                __LamellarMutLocalData::GenericAtomic(ref mut data) => data.$op(idx_vals, fetch),
+                __LamellarMutLocalData::NetworkAtomic(ref mut data) => data.$op(idx_vals, fetch),
             }
         }
     };
 }
 
-impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for LamellarMutLocalData<'_, T> {
+impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for __LamellarMutLocalData<'_, T> {
     impl_local_arithmetic_op!(local_fetch_add);
     impl_local_arithmetic_op!(local_fetch_sub);
     impl_local_arithmetic_op!(local_fetch_mul);
