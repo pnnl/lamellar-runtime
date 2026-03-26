@@ -212,7 +212,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         let req = self.exec_am_pe_tg(
             pe,
             NativeAtomicRemotePePutAm {
-                array: Into::<NetworkAtomicByteArray>::into(self.clone()).into(),
+                array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
                 start_index: offset,
                 data: buf.into().to_bytes(),
             },
@@ -233,7 +233,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         let _ = self.exec_am_pe_tg(
             pe,
             NativeAtomicRemotePePutAm {
-                array: Into::<NetworkAtomicByteArray>::into(self.clone()).into(),
+                array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
                 start_index: offset,
                 data: buf.into().to_bytes(),
             },
@@ -262,7 +262,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
         _: Sealed,
     ) -> ArrayRdmaPutHandle<T> {
         let req = self.exec_am_all_tg(NativeAtomicRemotePePutAm {
-            array: Into::<NetworkAtomicByteArray>::into(self.clone()).into(),
+            array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
             start_index: offset,
             data: buf.into().to_bytes(),
         });
@@ -280,7 +280,7 @@ impl<T: Dist> LamellarRdmaPut<T> for NetworkAtomicArray<T> {
     ) {
         let _ = self
             .exec_am_all_tg(NativeAtomicRemotePePutAm {
-                array: Into::<NetworkAtomicByteArray>::into(self.clone()).into(),
+                array: Into::<__NetworkAtomicByteArray>::into(self.clone()).into(),
                 start_index: offset,
                 data: buf.into().to_bytes(),
             })
@@ -514,7 +514,7 @@ impl<T: Dist + 'static> LamellarAm for NetworkAtomicInitGetBufferAm<T> {
 }
 #[lamellar_impl::AmDataRT(Debug)]
 struct NetworkAtomicRemoteGetBufferAm {
-    array: NetworkAtomicByteArray, //inner of the indices we need to place data into
+    array: __NetworkAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -553,7 +553,7 @@ impl LamellarAm for NetworkAtomicRemoteGetBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NetworkAtomicRemoteGetBufferPeAm {
-    array: NetworkAtomicByteArray, //inner of the indices we need to place data into
+    array: __NetworkAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     num_elems: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -649,7 +649,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NetworkAtomicRemoteGetIntoBufferAm {
-    array: NetworkAtomicByteArray, //inner of the indices we need to place data into
+    array: __NetworkAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
 }
@@ -686,7 +686,7 @@ impl LamellarAm for NetworkAtomicRemoteGetIntoBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NetworkAtomicRemoteGetIntoBufferPeAm {
-    array: NetworkAtomicByteArray, //inner of the indices we need to place data into
+    array: __NetworkAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     num_elems: usize,
 }
@@ -735,8 +735,8 @@ impl<T: Dist + 'static> LamellarAm for NetworkAtomicInitPutBufferAm<T> {
                         ) {
                             // let u8_buf_len = len * std::mem::size_of::<T>();
                             // println!("pe {:?} index: {:?} len {:?} buflen {:?} putting {:?}",pe,self.index,len, self.buf.len(),&u8_buf.as_slice().unwrap()[cur_index..(cur_index+u8_buf_len)]);
-                            let remote_am = NativeAtomicRemotePutAm {
-                                array: Into::<NetworkAtomicByteArray>::into(self.array.clone())
+                                let remote_am = NativeAtomicRemotePutAm {
+                                array: Into::<__NetworkAtomicByteArray>::into(self.array.clone())
                                     .into(),
                                 start_index: self.index,
                                 len: self.buf.len(),
@@ -790,7 +790,7 @@ impl<T: Dist + 'static> LamellarAm for NetworkAtomicInitPutBufferAm<T> {
                     for (pe, vec) in pe_u8_vecs.drain() {
                         // println!("pe {:?} vec {:?}",pe,vec);
                         let remote_am = NativeAtomicRemotePutAm {
-                            array: Into::<NetworkAtomicByteArray>::into(self.array.clone()).into(), //inner of the indices we need to place data into
+                            array: Into::<__NetworkAtomicByteArray>::into(self.array.clone()).into(), //inner of the indices we need to place data into
                             start_index: self.index,
                             len: self.buf.len(),
                             data: vec,

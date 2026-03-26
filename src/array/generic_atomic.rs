@@ -9,7 +9,7 @@ mod rdma;
 use crate::array::atomic::AtomicElement;
 // use crate::array::private::LamellarArrayPrivate;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
 use crate::array::*;
 use crate::barrier::BarrierHandle;
 use crate::darc::Darc;
@@ -284,14 +284,15 @@ impl<T: Remote> crate::active_messaging::DarcSerde for GenericAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct GenericAtomicByteArray {
+pub struct __GenericAtomicByteArray {
     locks: Darc<Vec<Mutex<()>>>,
-    pub(crate) array: UnsafeByteArray,
+    pub(crate) array: __UnsafeByteArray,
 }
 
-impl GenericAtomicByteArray {
+impl __GenericAtomicByteArray {
     //#[doc(hidden)]
     pub fn lock_index(&self, index: usize) -> MutexGuard<'_, ()> {
         let index = self
@@ -303,48 +304,56 @@ impl GenericAtomicByteArray {
     }
 
     //#[doc(hidden)]
-    pub fn downgrade(array: &GenericAtomicByteArray) -> GenericAtomicByteArrayWeak {
-        GenericAtomicByteArrayWeak {
+    pub fn downgrade(array: &__GenericAtomicByteArray) -> __GenericAtomicByteArrayWeak {
+        __GenericAtomicByteArrayWeak {
             locks: array.locks.clone(),
-            array: UnsafeByteArray::downgrade(&array.array),
+            array: __UnsafeByteArray::downgrade(&array.array),
         }
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__GenericAtomicByteArray` used by the runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct GenericAtomicByteArrayWeak {
+pub struct __GenericAtomicByteArrayWeak {
     locks: Darc<Vec<Mutex<()>>>,
-    pub(crate) array: UnsafeByteArrayWeak,
+    pub(crate) array: __UnsafeByteArrayWeak,
 }
 
-impl GenericAtomicByteArrayWeak {
+impl __GenericAtomicByteArrayWeak {
     //#[doc(hidden)]
-    pub fn upgrade(&self) -> Option<GenericAtomicByteArray> {
-        Some(GenericAtomicByteArray {
+    pub fn upgrade(&self) -> Option<__GenericAtomicByteArray> {
+        Some(__GenericAtomicByteArray {
             locks: self.locks.clone(),
             array: self.array.upgrade()?,
         })
     }
 }
 
-#[doc(hidden)]
 #[derive(Clone, Debug)]
-pub struct GenericAtomicLocalData<T: Dist> {
+/// Internal runtime local-data wrapper for GenericAtomic arrays.
+/// Not intended for direct use by library users.
+/// Users should interact with the public `AtomicLocalData` API instead;
+/// see [AtomicLocalData][crate::array::atomic::AtomicLocalData].
+pub struct __GenericAtomicLocalData<T: Dist> {
     pub(crate) array: GenericAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
 
-#[doc(hidden)]
+
+/// Internal iterator for `__GenericAtomicLocalData`.
+/// Not intended for direct use by library users.
+/// Users should iterate via the public `AtomicLocalDataIter` type instead;
+/// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
 #[derive(Debug)]
-pub struct GenericAtomicLocalDataIter<T: Dist> {
+pub struct __GenericAtomicLocalDataIter<T: Dist> {
     array: GenericAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
 
-impl<T: Dist> GenericAtomicLocalData<T> {
+impl<T: Dist> __GenericAtomicLocalData<T> {
     pub fn at(&self, index: usize) -> GenericAtomicElement<T> {
         GenericAtomicElement {
             array: self.array.clone(),
@@ -363,16 +372,16 @@ impl<T: Dist> GenericAtomicLocalData<T> {
         unsafe { self.array.__local_as_mut_slice().len() }
     }
 
-    pub fn iter(&self) -> GenericAtomicLocalDataIter<T> {
-        GenericAtomicLocalDataIter {
+    pub fn iter(&self) -> __GenericAtomicLocalDataIter<T> {
+        __GenericAtomicLocalDataIter {
             array: self.array.clone(),
             index: self.start_index,
             end_index: self.end_index,
         }
     }
 
-    pub fn sub_data(&self, start_index: usize, end_index: usize) -> GenericAtomicLocalData<T> {
-        GenericAtomicLocalData {
+    pub fn sub_data(&self, start_index: usize, end_index: usize) -> __GenericAtomicLocalData<T> {
+        __GenericAtomicLocalData {
             array: self.array.clone(),
             start_index,
             end_index: std::cmp::min(end_index, self.array.num_elems_local()),
@@ -380,7 +389,7 @@ impl<T: Dist> GenericAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist + serde::Serialize> serde::Serialize for GenericAtomicLocalData<T> {
+impl<T: Dist + serde::Serialize> serde::Serialize for __GenericAtomicLocalData<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -393,11 +402,11 @@ impl<T: Dist + serde::Serialize> serde::Serialize for GenericAtomicLocalData<T> 
     }
 }
 
-impl<T: Dist> IntoIterator for GenericAtomicLocalData<T> {
+impl<T: Dist> IntoIterator for __GenericAtomicLocalData<T> {
     type Item = GenericAtomicElement<T>;
-    type IntoIter = GenericAtomicLocalDataIter<T>;
+    type IntoIter = __GenericAtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
-        GenericAtomicLocalDataIter {
+        __GenericAtomicLocalDataIter {
             array: self.array,
             index: self.start_index,
             end_index: self.end_index,
@@ -405,7 +414,7 @@ impl<T: Dist> IntoIterator for GenericAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist> Iterator for GenericAtomicLocalDataIter<T> {
+impl<T: Dist> Iterator for __GenericAtomicLocalDataIter<T> {
     type Item = GenericAtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
@@ -478,8 +487,8 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     //#[doc(hidden)]
-    pub fn local_data(&self) -> GenericAtomicLocalData<T> {
-        GenericAtomicLocalData {
+    pub fn local_data(&self) -> __GenericAtomicLocalData<T> {
+        __GenericAtomicLocalData {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
@@ -487,8 +496,8 @@ impl<T: Dist> GenericAtomicArray<T> {
     }
 
     //#[doc(hidden)]
-    pub fn mut_local_data(&self) -> GenericAtomicLocalData<T> {
-        GenericAtomicLocalData {
+    pub fn mut_local_data(&self) -> __GenericAtomicLocalData<T> {
+        __GenericAtomicLocalData {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
@@ -580,9 +589,9 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<GenericAtomicArray<T>> for GenericAtomicByteArray {
+impl<T: Dist> From<GenericAtomicArray<T>> for __GenericAtomicByteArray {
     fn from(array: GenericAtomicArray<T>) -> Self {
-        GenericAtomicByteArray {
+        __GenericAtomicByteArray {
             locks: array.locks.clone(),
             array: array.array.into(),
         }
@@ -591,7 +600,7 @@ impl<T: Dist> From<GenericAtomicArray<T>> for GenericAtomicByteArray {
 
 impl<T: Dist> From<GenericAtomicArray<T>> for LamellarByteArray {
     fn from(array: GenericAtomicArray<T>) -> Self {
-        LamellarByteArray::GenericAtomicArray(GenericAtomicByteArray {
+        LamellarByteArray::GenericAtomicArray(__GenericAtomicByteArray {
             locks: array.locks.clone(),
             array: array.array.into(),
         })
@@ -608,16 +617,16 @@ impl<T: Dist> From<LamellarByteArray> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<GenericAtomicArray<T>> for AtomicByteArray {
+impl<T: Dist> From<GenericAtomicArray<T>> for __AtomicByteArray {
     fn from(array: GenericAtomicArray<T>) -> Self {
-        AtomicByteArray::GenericAtomicByteArray(GenericAtomicByteArray {
+        __AtomicByteArray::GenericAtomicByteArray(__GenericAtomicByteArray {
             locks: array.locks.clone(),
             array: array.array.into(),
         })
     }
 }
-impl<T: Dist> From<GenericAtomicByteArray> for GenericAtomicArray<T> {
-    fn from(array: GenericAtomicByteArray) -> Self {
+impl<T: Dist> From<__GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: __GenericAtomicByteArray) -> Self {
         GenericAtomicArray {
             locks: array.locks.clone(),
             array: array.array.into(),
@@ -625,19 +634,19 @@ impl<T: Dist> From<GenericAtomicByteArray> for GenericAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<&GenericAtomicByteArray> for GenericAtomicArray<T> {
-    fn from(array: &GenericAtomicByteArray) -> Self {
+impl<T: Dist> From<&__GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: &__GenericAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
 
-impl<T: Dist> From<&mut GenericAtomicByteArray> for GenericAtomicArray<T> {
-    fn from(array: &mut GenericAtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __GenericAtomicByteArray> for GenericAtomicArray<T> {
+    fn from(array: &mut __GenericAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
-impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
-    fn from(array: GenericAtomicByteArray) -> Self {
+impl<T: Dist> From<__GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: __GenericAtomicByteArray) -> Self {
         GenericAtomicArray {
             locks: array.locks.clone(),
             array: array.array.into(),
@@ -645,14 +654,14 @@ impl<T: Dist> From<GenericAtomicByteArray> for AtomicArray<T> {
         .into()
     }
 }
-impl<T: Dist> From<&GenericAtomicByteArray> for AtomicArray<T> {
-    fn from(array: &GenericAtomicByteArray) -> Self {
+impl<T: Dist> From<&__GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &__GenericAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
 
-impl<T: Dist> From<&mut GenericAtomicByteArray> for AtomicArray<T> {
-    fn from(array: &mut GenericAtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __GenericAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut __GenericAtomicByteArray) -> Self {
         array.clone().into()
     }
 }

@@ -992,7 +992,7 @@ impl<T: Dist> LamellarRdmaGet<T> for UnsafeArray<T> {
     }
 }
 
-impl UnsafeByteArray {
+impl __UnsafeByteArray {
     pub(crate) unsafe fn local_elements_for_range(
         &self,
         index: usize,
@@ -1228,7 +1228,7 @@ impl UnsafeArrayInner {
 
 // #[lamellar_impl::AmLocalDataRT(Debug)]
 // struct UnsafeBlockGetAm {
-//     array: UnsafeByteArray, //inner of the indices we need to place data into
+//     array: __UnsafeByteArray, //inner of the indices we need to place data into
 //     offset: usize,
 //     data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
 //     pe: usize,
@@ -1256,7 +1256,7 @@ impl UnsafeArrayInner {
 
 // #[lamellar_impl::AmLocalDataRT(Debug)]
 // struct UnsafeCyclicGetAm {
-//     array: UnsafeByteArray, //inner of the indices we need to place data into
+//     array: __UnsafeByteArray, //inner of the indices we need to place data into
 //     data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
 //     // temp_data: LamellarMemoryRegion<u8>,
 //     num_elems: usize,
@@ -1382,7 +1382,7 @@ impl UnsafeArrayInner {
 
 // #[lamellar_impl::AmDataRT(Debug)]
 // struct UnsafeRemoteSmallGetAm {
-//     array: UnsafeByteArray, //inner of the indices we need to place data into
+//     array: __UnsafeByteArray, //inner of the indices we need to place data into
 //     start_index: usize,
 //     len: usize,
 // }
@@ -1414,7 +1414,7 @@ impl UnsafeArrayInner {
 
 // #[lamellar_impl::AmDataRT(Debug)]
 // struct UnsafePutAm {
-//     array: UnsafeByteArray,         //byte representation of the array
+//     array: __UnsafeByteArray,         //byte representation of the array
 //     start_index: usize,             //index with respect to inner (of type T)
 //     len: usize,                     //len of buf (with respect to original type T)
 //     data: LamellarMemoryRegion<u8>, //change this to an enum which is a vector or OneSidedMemoryRegion depending on data size
@@ -1435,7 +1435,7 @@ impl UnsafeArrayInner {
 
 // #[lamellar_impl::AmDataRT(Debug)]
 // struct UnsafeSmallPutAm {
-//     array: UnsafeByteArray, //byte representation of the array
+//     array: __UnsafeByteArray, //byte representation of the array
 //     start_index: usize,     //index with respect to inner (of type T)
 //     len: usize,             //len of buf (with respect to original type T)
 //     #[serde(with = "serde_bytes")]

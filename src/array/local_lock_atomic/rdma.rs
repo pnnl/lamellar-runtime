@@ -487,7 +487,7 @@ impl<T: Dist> LamellarRdmaGet<T> for LocalLockArray<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockGetPeAm {
-    array: LocalLockByteArray, //sub array specific to the elements we need to get
+    array: __LocalLockByteArray, //sub array specific to the elements we need to get
                                // local_index: usize,        //local index
 }
 
@@ -551,7 +551,7 @@ impl<T: Dist + 'static> LamellarAm for LocalLockInitGetBufferAm<T> {
 }
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetBufferAm {
-    array: LocalLockByteArray, //sub array specific to the elements we need to get
+    array: __LocalLockByteArray, //sub array specific to the elements we need to get
     // start_index: usize,
     // len: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -650,7 +650,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm for LocalLockInitGetI
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetIntoBufferAm {
-    array: LocalLockByteArray, //sub array specific to the elements we need to get
+    array: __LocalLockByteArray, //sub array specific to the elements we need to get
                                // start_index: usize,
                                // len: usize,
 }
@@ -680,7 +680,7 @@ impl LamellarAm for LocalLockRemoteGetIntoBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetBufferPeAm {
-    array: LocalLockByteArray, //Not a sub array specific to the elements we need to get
+    array: __LocalLockByteArray, //Not a sub array specific to the elements we need to get
     offset: usize,
     num_elems: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -707,7 +707,7 @@ impl LamellarAm for LocalLockRemoteGetBufferPeAm {
 }
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemoteGetIntoBufferPeAm {
-    array: LocalLockByteArray, //Not a sub array specific to the elements we need to get
+    array: __LocalLockByteArray, //Not a sub array specific to the elements we need to get
     offset: usize,
     num_elems: usize,
 }
@@ -828,7 +828,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutBufferAm<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemotePutAm {
-    array: LocalLockByteArray, //inner of the indices we need to place data into
+    array: __LocalLockByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     #[serde(with = "serde_bytes")]
@@ -863,7 +863,7 @@ impl LamellarAm for LocalLockRemotePutAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct LocalLockRemotePePutAm {
-    array: LocalLockByteArray, //inner of the indices we need to place data into
+    array: __LocalLockByteArray, //inner of the indices we need to place data into
     byte_start_index: usize,
     #[serde(with = "serde_bytes")]
     data: Vec<u8>,

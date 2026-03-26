@@ -9,7 +9,7 @@ pub(crate) mod rdma;
 use crate::array::atomic::AtomicElement;
 
 // use crate::array::private::LamellarArrayPrivate;
-use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
 use crate::{array::*, Darc};
 // use crate::darc::Darc;
 use crate::array::private::ArrayExecAm;
@@ -831,56 +831,65 @@ impl<T: Remote> crate::active_messaging::DarcSerde for NativeAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct NativeAtomicByteArray {
-    pub(crate) array: UnsafeByteArray,
+pub struct __NativeAtomicByteArray {
+    pub(crate) array: __UnsafeByteArray,
     pub(crate) orig_t: NativeAtomicType,
 }
-impl NativeAtomicByteArray {
-    pub fn downgrade(array: &NativeAtomicByteArray) -> NativeAtomicByteArrayWeak {
-        NativeAtomicByteArrayWeak {
-            array: UnsafeByteArray::downgrade(&array.array),
+impl __NativeAtomicByteArray {
+    pub fn downgrade(array: &__NativeAtomicByteArray) -> __NativeAtomicByteArrayWeak {
+        __NativeAtomicByteArrayWeak {
+            array: __UnsafeByteArray::downgrade(&array.array),
             orig_t: array.orig_t,
         }
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__NativeAtomicByteArray` used by the runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct NativeAtomicByteArrayWeak {
-    pub(crate) array: UnsafeByteArrayWeak,
+pub struct __NativeAtomicByteArrayWeak {
+    pub(crate) array: __UnsafeByteArrayWeak,
     pub(crate) orig_t: NativeAtomicType,
 }
 
-impl NativeAtomicByteArrayWeak {
-    pub fn upgrade(&self) -> Option<NativeAtomicByteArray> {
-        Some(NativeAtomicByteArray {
+impl __NativeAtomicByteArrayWeak {
+    pub fn upgrade(&self) -> Option<__NativeAtomicByteArray> {
+        Some(__NativeAtomicByteArray {
             array: self.array.upgrade()?,
             orig_t: self.orig_t,
         })
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime local-data wrapper for NativeAtomic arrays.
+/// Not intended for direct use by library users.
+/// Users should interact with the public `AtomicLocalData` API instead;
+/// see [AtomicLocalData][crate::array::atomic::AtomicLocalData].
 #[derive(Clone, Debug)]
-pub struct NativeAtomicLocalData<T: Remote> {
+pub struct __NativeAtomicLocalData<T: Remote> {
     // + NativeAtomicOps> {
     pub(crate) array: NativeAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
 
-#[doc(hidden)]
+
+/// Internal iterator for `__NativeAtomicLocalData`.
+/// Not intended for direct use by library users.
+/// Users should iterate via the public `AtomicLocalDataIter` type instead;
+/// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
 #[derive(Debug)]
-pub struct NativeAtomicLocalDataIter<T: Dist> {
+pub struct __NativeAtomicLocalDataIter<T: Dist> {
     //+ NativeAtomicOps> {
     array: NativeAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
 
-impl<T: Dist> NativeAtomicLocalData<T> {
+impl<T: Dist> __NativeAtomicLocalData<T> {
     pub fn at(&self, index: usize) -> NativeAtomicElement<T> {
         NativeAtomicElement {
             array: self.array.clone(),
@@ -899,16 +908,16 @@ impl<T: Dist> NativeAtomicLocalData<T> {
         self.end_index - self.start_index
     }
 
-    pub fn iter(&self) -> NativeAtomicLocalDataIter<T> {
-        NativeAtomicLocalDataIter {
+    pub fn iter(&self) -> __NativeAtomicLocalDataIter<T> {
+        __NativeAtomicLocalDataIter {
             array: self.array.clone(),
             index: self.start_index,
             end_index: self.end_index,
         }
     }
 
-    pub fn sub_data(&self, start_index: usize, end_index: usize) -> NativeAtomicLocalData<T> {
-        NativeAtomicLocalData {
+    pub fn sub_data(&self, start_index: usize, end_index: usize) -> __NativeAtomicLocalData<T> {
+        __NativeAtomicLocalData {
             array: self.array.clone(),
             start_index,
             end_index: std::cmp::min(end_index, self.array.num_elems_local()),
@@ -1001,7 +1010,7 @@ impl<T: Dist> NativeAtomicLocalData<T> {
     // }
 }
 
-impl<T: Dist + serde::Serialize> serde::Serialize for NativeAtomicLocalData<T> {
+impl<T: Dist + serde::Serialize> serde::Serialize for __NativeAtomicLocalData<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -1014,11 +1023,11 @@ impl<T: Dist + serde::Serialize> serde::Serialize for NativeAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist> IntoIterator for NativeAtomicLocalData<T> {
+impl<T: Dist> IntoIterator for __NativeAtomicLocalData<T> {
     type Item = NativeAtomicElement<T>;
-    type IntoIter = NativeAtomicLocalDataIter<T>;
+    type IntoIter = __NativeAtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
-        NativeAtomicLocalDataIter {
+        __NativeAtomicLocalDataIter {
             array: self.array,
             index: self.start_index,
             end_index: self.end_index,
@@ -1026,7 +1035,7 @@ impl<T: Dist> IntoIterator for NativeAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist> Iterator for NativeAtomicLocalDataIter<T> {
+impl<T: Dist> Iterator for __NativeAtomicLocalDataIter<T> {
     type Item = NativeAtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
@@ -1098,16 +1107,16 @@ impl<T: Dist> NativeAtomicArray<T> {
         }
     }
 
-    pub fn local_data(&self) -> NativeAtomicLocalData<T> {
-        NativeAtomicLocalData {
+    pub fn local_data(&self) -> __NativeAtomicLocalData<T> {
+        __NativeAtomicLocalData {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
         }
     }
 
-    pub fn mut_local_data(&self) -> NativeAtomicLocalData<T> {
-        NativeAtomicLocalData {
+    pub fn mut_local_data(&self) -> __NativeAtomicLocalData<T> {
+        __NativeAtomicLocalData {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
@@ -1163,9 +1172,9 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NativeAtomicArray<T> {
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
+impl<T: Dist> From<NativeAtomicArray<T>> for __NativeAtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
-        NativeAtomicByteArray {
+        __NativeAtomicByteArray {
             array: array.array.into(),
             orig_t: array.orig_t,
         }
@@ -1175,7 +1184,7 @@ impl<T: Dist> From<NativeAtomicArray<T>> for NativeAtomicByteArray {
 //#[doc(hidden)]
 impl<T: Dist> From<NativeAtomicArray<T>> for LamellarByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
-        LamellarByteArray::NativeAtomicArray(NativeAtomicByteArray {
+        LamellarByteArray::NativeAtomicArray(__NativeAtomicByteArray {
             array: array.array.into(),
             orig_t: array.orig_t,
         })
@@ -1194,9 +1203,9 @@ impl<T: Dist> From<LamellarByteArray> for NativeAtomicArray<T> {
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
+impl<T: Dist> From<NativeAtomicArray<T>> for __AtomicByteArray {
     fn from(array: NativeAtomicArray<T>) -> Self {
-        AtomicByteArray::NativeAtomicByteArray(NativeAtomicByteArray {
+        __AtomicByteArray::NativeAtomicByteArray(__NativeAtomicByteArray {
             array: array.array.into(),
             orig_t: array.orig_t,
         })
@@ -1204,8 +1213,8 @@ impl<T: Dist> From<NativeAtomicArray<T>> for AtomicByteArray {
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
-    fn from(array: NativeAtomicByteArray) -> Self {
+impl<T: Dist> From<__NativeAtomicByteArray> for NativeAtomicArray<T> {
+    fn from(array: __NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
             array: array.array.into(),
             orig_t: array.orig_t,
@@ -1213,20 +1222,20 @@ impl<T: Dist> From<NativeAtomicByteArray> for NativeAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<&NativeAtomicByteArray> for NativeAtomicArray<T> {
-    fn from(array: &NativeAtomicByteArray) -> Self {
+impl<T: Dist> From<&__NativeAtomicByteArray> for NativeAtomicArray<T> {
+    fn from(array: &__NativeAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
-impl<T: Dist> From<&mut NativeAtomicByteArray> for NativeAtomicArray<T> {
-    fn from(array: &mut NativeAtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __NativeAtomicByteArray> for NativeAtomicArray<T> {
+    fn from(array: &mut __NativeAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
-    fn from(array: NativeAtomicByteArray) -> Self {
+impl<T: Dist> From<__NativeAtomicByteArray> for AtomicArray<T> {
+    fn from(array: __NativeAtomicByteArray) -> Self {
         NativeAtomicArray {
             array: array.array.into(),
             orig_t: array.orig_t,
@@ -1234,13 +1243,13 @@ impl<T: Dist> From<NativeAtomicByteArray> for AtomicArray<T> {
         .into()
     }
 }
-impl<T: Dist> From<&NativeAtomicByteArray> for AtomicArray<T> {
-    fn from(array: &NativeAtomicByteArray) -> Self {
+impl<T: Dist> From<&__NativeAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &__NativeAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
-impl<T: Dist> From<&mut NativeAtomicByteArray> for AtomicArray<T> {
-    fn from(array: &mut NativeAtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __NativeAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut __NativeAtomicByteArray) -> Self {
         array.clone().into()
     }
 }

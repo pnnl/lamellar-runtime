@@ -488,7 +488,7 @@ impl<T: Dist> LamellarRdmaGet<T> for GenericAtomicArray<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicGetPeAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     local_index: usize,            //local index
 }
 
@@ -561,7 +561,7 @@ impl<T: Dist + 'static> LamellarAm for GenericAtomicInitGetBufferAm<T> {
 }
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicRemoteGetBufferAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -616,7 +616,7 @@ impl LamellarAm for GenericAtomicRemoteGetBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicRemoteGetBufferPeAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     num_elems: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -722,7 +722,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicRemoteGetIntoBufferAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
 }
@@ -774,7 +774,7 @@ impl LamellarAm for GenericAtomicRemoteGetIntoBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicRemoteGetIntoBufferPeAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     num_elems: usize,
 }
@@ -905,7 +905,7 @@ impl<T: Dist + 'static> LamellarAm for InitPutBufferAm<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct GenericAtomicRemotePutAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     #[serde(with = "serde_bytes")]
@@ -964,7 +964,7 @@ impl LamellarAm for GenericAtomicRemotePutAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 pub(crate) struct GenericAtomicRemotePePutAm {
-    array: GenericAtomicByteArray, //inner of the indices we need to place data into
+    array: __GenericAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     elem_size: usize,
     #[serde(with = "serde_bytes")]

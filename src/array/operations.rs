@@ -4,7 +4,7 @@ use crate::array::generic_atomic::*;
 use crate::array::global_lock_atomic::*;
 use crate::array::local_lock_atomic::*;
 use crate::array::native_atomic::*;
-use crate::array::NetworkAtomicLocalData;
+use crate::array::network_atomic::*;
 use crate::array::{AmDist, Dist, LamellarEnv, LamellarWriteArray};
 use crate::config;
 
@@ -290,11 +290,11 @@ pub enum OpInputEnum<'a, T: Dist> {
     Val(T),
     Slice(&'a [T]),
     Vec(Vec<T>),
-    NativeAtomicLocalData(NativeAtomicLocalData<T>),
-    GenericAtomicLocalData(GenericAtomicLocalData<T>),
+    NativeAtomicLocalData(__NativeAtomicLocalData<T>),
+    GenericAtomicLocalData(__GenericAtomicLocalData<T>),
     LocalLockLocalData(LocalLockLocalData<T>),
     GlobalLockLocalData(GlobalLockLocalData<T>),
-    NetworkAtomicLocalData(NetworkAtomicLocalData<T>),
+    NetworkAtomicLocalData(__NetworkAtomicLocalData<T>),
     // Iter(Box<dyn Iterator<Item = T> + 'a>),
 
     // while it would be convienient to directly use the following, doing so
@@ -857,7 +857,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for AtomicLocalData<T> {
 //     }
 // }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &__GenericAtomicLocalData<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
@@ -895,13 +895,13 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &GenericAtomicLocalData<T> {
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for GenericAtomicLocalData<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __GenericAtomicLocalData<T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &__NativeAtomicLocalData<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
@@ -944,13 +944,13 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NativeAtomicLocalData<T> {
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NativeAtomicLocalData<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __NativeAtomicLocalData<T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NetworkAtomicLocalData<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &__NetworkAtomicLocalData<T> {
     #[tracing::instrument(skip_all, level = "debug")]
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         // let slice = unsafe { self.__local_as_slice() };
@@ -993,7 +993,7 @@ impl<'a, T: Dist + ElementOps> OpInput<'a, T> for &NetworkAtomicLocalData<T> {
     }
 }
 
-impl<'a, T: Dist + ElementOps> OpInput<'a, T> for NetworkAtomicLocalData<T> {
+impl<'a, T: Dist + ElementOps> OpInput<'a, T> for __NetworkAtomicLocalData<T> {
     fn as_op_input(self) -> (Vec<OpInputEnum<'a, T>>, usize) {
         (&self).as_op_input()
     }

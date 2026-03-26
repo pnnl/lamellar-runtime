@@ -696,45 +696,50 @@ impl<T: Dist> ActiveMessaging for AtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime enum representing the byte-array variants for atomic-backed arrays.
+///
+/// Active messages serialize and route atomic arrays through this enum so the receiver can
+/// reconstruct the payload without knowing the generic parameters upfront. It remains public
+/// solely for generated runtime code while application logic should use the public
+/// `AtomicArray`/`AtomicLocalData` APIs.
 #[enum_dispatch]
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-pub enum AtomicByteArray {
-    NativeAtomicByteArray(NativeAtomicByteArray),
-    GenericAtomicByteArray(GenericAtomicByteArray),
-    NetworkAtomicByteArray(NetworkAtomicByteArray),
+pub enum __AtomicByteArray {
+    NativeAtomicByteArray(__NativeAtomicByteArray),
+    GenericAtomicByteArray(__GenericAtomicByteArray),
+    NetworkAtomicByteArray(__NetworkAtomicByteArray),
 }
 
-impl AtomicByteArray {
+impl __AtomicByteArray {
     //#[doc(hidden)]
-    pub fn downgrade(array: &AtomicByteArray) -> AtomicByteArrayWeak {
+    pub fn downgrade(array: &__AtomicByteArray) -> __AtomicByteArrayWeak {
         match array {
-            AtomicByteArray::NativeAtomicByteArray(array) => {
-                AtomicByteArrayWeak::NativeAtomicByteArrayWeak(NativeAtomicByteArray::downgrade(
-                    array,
-                ))
+            __AtomicByteArray::NativeAtomicByteArray(array) => {
+                __AtomicByteArrayWeak::NativeAtomicByteArrayWeak(
+                    __NativeAtomicByteArray::downgrade(array),
+                )
             }
-            AtomicByteArray::GenericAtomicByteArray(array) => {
-                AtomicByteArrayWeak::GenericAtomicByteArrayWeak(GenericAtomicByteArray::downgrade(
-                    array,
-                ))
+            __AtomicByteArray::GenericAtomicByteArray(array) => {
+                __AtomicByteArrayWeak::GenericAtomicByteArrayWeak(
+                    __GenericAtomicByteArray::downgrade(array),
+                )
             }
-            AtomicByteArray::NetworkAtomicByteArray(array) => {
-                AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(NetworkAtomicByteArray::downgrade(
-                    array,
-                ))
+            __AtomicByteArray::NetworkAtomicByteArray(array) => {
+                __AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(
+                    __NetworkAtomicByteArray::downgrade(array),
+                )
             }
         }
     }
     pub(crate) fn team(&self) -> Darc<LamellarTeamRT> {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => {
+            __AtomicByteArray::NativeAtomicByteArray(array) => {
                 array.array.inner.data.inner().darc_rt_team()
             }
-            AtomicByteArray::GenericAtomicByteArray(array) => {
+            __AtomicByteArray::GenericAtomicByteArray(array) => {
                 array.array.inner.data.inner().darc_rt_team()
             }
-            AtomicByteArray::NetworkAtomicByteArray(array) => {
+            __AtomicByteArray::NetworkAtomicByteArray(array) => {
                 array.array.inner.data.inner().darc_rt_team()
             }
         }
@@ -742,19 +747,21 @@ impl AtomicByteArray {
 
     pub(crate) fn num_elems_local(&self) -> usize {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.num_elems_local(),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.array.inner.num_elems_local(),
-            AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.num_elems_local(),
+            __AtomicByteArray::NativeAtomicByteArray(array) => array.array.inner.num_elems_local(),
+            __AtomicByteArray::GenericAtomicByteArray(array) => {
+                array.array.inner.num_elems_local()
+            }
+            __AtomicByteArray::NetworkAtomicByteArray(array) => array.array.inner.num_elems_local(),
         }
     }
 }
 
-impl crate::active_messaging::DarcSerde for AtomicByteArray {
+impl crate::active_messaging::DarcSerde for __AtomicByteArray {
     fn ser(&self, num_pes: usize, darcs: &mut Vec<RemotePtr>) {
         match self {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, darcs),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, darcs),
-            AtomicByteArray::NetworkAtomicByteArray(array) => array.ser(num_pes, darcs),
+            __AtomicByteArray::NativeAtomicByteArray(array) => array.ser(num_pes, darcs),
+            __AtomicByteArray::GenericAtomicByteArray(array) => array.ser(num_pes, darcs),
+            __AtomicByteArray::NetworkAtomicByteArray(array) => array.ser(num_pes, darcs),
         }
     }
 
@@ -766,27 +773,30 @@ impl crate::active_messaging::DarcSerde for AtomicByteArray {
     // }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference enum for atomic byte-array variants.
+///
+/// Active messages capture weak references via this enum so the handler can upgrade them even when
+/// the generic parameters are unknown; rely on the public array types for high-level code.
 #[enum_dispatch]
 #[derive(Clone)]
-pub enum AtomicByteArrayWeak {
-    NativeAtomicByteArrayWeak(NativeAtomicByteArrayWeak),
-    GenericAtomicByteArrayWeak(GenericAtomicByteArrayWeak),
-    NetworkAtomicByteArrayWeak(NetworkAtomicByteArrayWeak),
+pub enum __AtomicByteArrayWeak {
+    NativeAtomicByteArrayWeak(__NativeAtomicByteArrayWeak),
+    GenericAtomicByteArrayWeak(__GenericAtomicByteArrayWeak),
+    NetworkAtomicByteArrayWeak(__NetworkAtomicByteArrayWeak),
 }
 
-impl AtomicByteArrayWeak {
+impl __AtomicByteArrayWeak {
     //#[doc(hidden)]
-    pub fn upgrade(&self) -> Option<AtomicByteArray> {
+    pub fn upgrade(&self) -> Option<__AtomicByteArray> {
         match self {
-            AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
-                Some(AtomicByteArray::NativeAtomicByteArray(array.upgrade()?))
+            __AtomicByteArrayWeak::NativeAtomicByteArrayWeak(array) => {
+                Some(__AtomicByteArray::NativeAtomicByteArray(array.upgrade()?))
             }
-            AtomicByteArrayWeak::GenericAtomicByteArrayWeak(array) => {
-                Some(AtomicByteArray::GenericAtomicByteArray(array.upgrade()?))
+            __AtomicByteArrayWeak::GenericAtomicByteArrayWeak(array) => {
+                Some(__AtomicByteArray::GenericAtomicByteArray(array.upgrade()?))
             }
-            AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(array) => {
-                Some(AtomicByteArray::NetworkAtomicByteArray(array.upgrade()?))
+            __AtomicByteArrayWeak::NetworkAtomicByteArrayWeak(array) => {
+                Some(__AtomicByteArray::NetworkAtomicByteArray(array.upgrade()?))
             }
         }
     }
@@ -1389,7 +1399,7 @@ impl<T: Dist + 'static> AsyncFrom<UnsafeArray<T>> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<AtomicArray<T>> for AtomicByteArray {
+impl<T: Dist> From<AtomicArray<T>> for __AtomicByteArray {
     fn from(array: AtomicArray<T>) -> Self {
         match array {
             AtomicArray::NativeAtomicArray(array) => array.into(),
@@ -1419,32 +1429,32 @@ impl<T: Dist> From<LamellarByteArray> for AtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<AtomicByteArray> for AtomicArray<T> {
-    fn from(array: AtomicByteArray) -> Self {
+impl<T: Dist> From<__AtomicByteArray> for AtomicArray<T> {
+    fn from(array: __AtomicByteArray) -> Self {
         match array {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
-            AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
         }
     }
 }
 
-impl<T: Dist> From<&AtomicByteArray> for AtomicArray<T> {
-    fn from(array: &AtomicByteArray) -> Self {
+impl<T: Dist> From<&__AtomicByteArray> for AtomicArray<T> {
+    fn from(array: &__AtomicByteArray) -> Self {
         match array {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
-            AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
         }
     }
 }
 
-impl<T: Dist> From<&mut AtomicByteArray> for AtomicArray<T> {
-    fn from(array: &mut AtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __AtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut __AtomicByteArray) -> Self {
         match array {
-            AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
-            AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
-            AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::NativeAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::GenericAtomicByteArray(array) => array.into(),
+            __AtomicByteArray::NetworkAtomicByteArray(array) => array.into(),
         }
     }
 }

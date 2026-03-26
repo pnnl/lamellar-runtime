@@ -9,7 +9,7 @@ mod iteration;
 pub(crate) mod operations;
 mod rdma;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
 use crate::barrier::BarrierHandle;
 use crate::darc::global_rw_darc::{
     GlobalRwDarc, GlobalRwDarcCollectiveWriteGuard, GlobalRwDarcReadGuard, GlobalRwDarcWriteGuard,
@@ -74,32 +74,34 @@ impl<T: Remote> crate::active_messaging::DarcSerde for GlobalLockArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct GlobalLockByteArray {
+pub struct __GlobalLockByteArray {
     lock: GlobalRwDarc<()>,
-    pub(crate) array: UnsafeByteArray,
+    pub(crate) array: __UnsafeByteArray,
 }
 
-impl GlobalLockByteArray {
-    pub fn downgrade(array: &GlobalLockByteArray) -> GlobalLockByteArrayWeak {
-        GlobalLockByteArrayWeak {
+impl __GlobalLockByteArray {
+    pub fn downgrade(array: &__GlobalLockByteArray) -> __GlobalLockByteArrayWeak {
+        __GlobalLockByteArrayWeak {
             lock: array.lock.clone(),
-            array: UnsafeByteArray::downgrade(&array.array),
+            array: __UnsafeByteArray::downgrade(&array.array),
         }
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__GlobalLockByteArray` used by the runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct GlobalLockByteArrayWeak {
+pub struct __GlobalLockByteArrayWeak {
     lock: GlobalRwDarc<()>,
-    pub(crate) array: UnsafeByteArrayWeak,
+    pub(crate) array: __UnsafeByteArrayWeak,
 }
 
-impl GlobalLockByteArrayWeak {
-    pub fn upgrade(&self) -> Option<GlobalLockByteArray> {
-        Some(GlobalLockByteArray {
+impl __GlobalLockByteArrayWeak {
+    pub fn upgrade(&self) -> Option<__GlobalLockByteArray> {
+        Some(__GlobalLockByteArray {
             lock: self.lock.clone(),
             array: self.array.upgrade()?,
         })
@@ -850,9 +852,9 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for GlobalLockArray<T> {
     }
 }
 
-impl<T: Dist> From<GlobalLockArray<T>> for GlobalLockByteArray {
+impl<T: Dist> From<GlobalLockArray<T>> for __GlobalLockByteArray {
     fn from(array: GlobalLockArray<T>) -> Self {
-        GlobalLockByteArray {
+        __GlobalLockByteArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         }
@@ -860,7 +862,7 @@ impl<T: Dist> From<GlobalLockArray<T>> for GlobalLockByteArray {
 }
 impl<T: Dist> From<GlobalLockArray<T>> for LamellarByteArray {
     fn from(array: GlobalLockArray<T>) -> Self {
-        LamellarByteArray::GlobalLockArray(GlobalLockByteArray {
+        LamellarByteArray::GlobalLockArray(__GlobalLockByteArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         })
@@ -877,8 +879,8 @@ impl<T: Dist> From<LamellarByteArray> for GlobalLockArray<T> {
     }
 }
 
-impl<T: Dist> From<GlobalLockByteArray> for GlobalLockArray<T> {
-    fn from(array: GlobalLockByteArray) -> Self {
+impl<T: Dist> From<__GlobalLockByteArray> for GlobalLockArray<T> {
+    fn from(array: __GlobalLockByteArray) -> Self {
         GlobalLockArray {
             lock: array.lock.clone(),
             array: array.array.into(),
@@ -886,14 +888,14 @@ impl<T: Dist> From<GlobalLockByteArray> for GlobalLockArray<T> {
     }
 }
 
-impl<T: Dist> From<&GlobalLockByteArray> for GlobalLockArray<T> {
-    fn from(array: &GlobalLockByteArray) -> Self {
+impl<T: Dist> From<&__GlobalLockByteArray> for GlobalLockArray<T> {
+    fn from(array: &__GlobalLockByteArray) -> Self {
         array.clone().into()
     }
 }
 
-impl<T: Dist> From<&mut GlobalLockByteArray> for GlobalLockArray<T> {
-    fn from(array: &mut GlobalLockByteArray) -> Self {
+impl<T: Dist> From<&mut __GlobalLockByteArray> for GlobalLockArray<T> {
+    fn from(array: &mut __GlobalLockByteArray) -> Self {
         array.clone().into()
     }
 }

@@ -1438,27 +1438,27 @@ fn create_buffered_ops(
     let mut atomic_array_types: Vec<(syn::Ident, syn::Ident, syn::Ident)> = vec![
         (
             quote::format_ident!("LocalLockArray"),
-            quote::format_ident!("LocalLockByteArrayWeak"),
-            quote::format_ident!("LocalLockByteArray"),
+            quote::format_ident!("__LocalLockByteArrayWeak"),
+            quote::format_ident!("__LocalLockByteArray"),
         ),
         (
             quote::format_ident!("GlobalLockArray"),
-            quote::format_ident!("GlobalLockByteArrayWeak"),
-            quote::format_ident!("GlobalLockByteArray"),
+            quote::format_ident!("__GlobalLockByteArrayWeak"),
+            quote::format_ident!("__GlobalLockByteArray"),
         ),
     ];
 
     if native {
         atomic_array_types.push((
             quote::format_ident!("NativeAtomicArray"),
-            quote::format_ident!("NativeAtomicByteArrayWeak"),
-            quote::format_ident!("NativeAtomicByteArray"),
+            quote::format_ident!("__NativeAtomicByteArrayWeak"),
+            quote::format_ident!("__NativeAtomicByteArray"),
         ));
     } else {
         atomic_array_types.push((
             quote::format_ident!("GenericAtomicArray"),
-            quote::format_ident!("GenericAtomicByteArrayWeak"),
-            quote::format_ident!("GenericAtomicByteArray"),
+            quote::format_ident!("__GenericAtomicByteArrayWeak"),
+            quote::format_ident!("__GenericAtomicByteArray"),
         ));
     }
 
@@ -1469,7 +1469,7 @@ fn create_buffered_ops(
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("ReadOnlyArray"),
-        quote::format_ident!("ReadOnlyByteArray"),
+        quote::format_ident!("__ReadOnlyByteArray"),
         &ro_optypes,
         rt,
     );
@@ -1478,7 +1478,7 @@ fn create_buffered_ops(
     let buf_op_impl = create_buf_ops(
         typeident.clone(),
         quote::format_ident!("UnsafeArray"),
-        quote::format_ident!("UnsafeByteArray"),
+        quote::format_ident!("__UnsafeByteArray"),
         &optypes,
         rt,
     );
@@ -2278,11 +2278,11 @@ pub(crate) fn __derive_arrayops(input: TokenStream) -> TokenStream {
             use __lamellar::array::{
                 ArrayOpCmd,
                 IdxVal,
-                ReadOnlyByteArray,
-                UnsafeByteArray,
-                LocalLockByteArray,
-                GlobalLockByteArray,
-                GenericAtomicByteArray,
+                __ReadOnlyByteArray,
+                __UnsafeByteArray,
+                __LocalLockByteArray,
+                __GlobalLockByteArray,
+                __GenericAtomicByteArray,
             };
             use __lamellar::active_messaging::RemoteActiveMessage;
 

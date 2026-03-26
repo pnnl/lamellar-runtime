@@ -150,15 +150,19 @@ impl<T: Remote> crate::active_messaging::DarcSerde for UnsafeArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime for active message serialization.
+///
+/// The struct is exposed so that active messages and serializers can describe a concrete
+/// `UnsafeArray` payload at runtime without requiring the receiver to know the generic
+/// parameters ahead of time. It is not intended for direct use in user code.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct UnsafeByteArray {
+pub struct __UnsafeByteArray {
     pub(crate) inner: UnsafeArrayInner,
 }
 
-impl UnsafeByteArray {
-    pub(crate) fn downgrade(array: &UnsafeByteArray) -> UnsafeByteArrayWeak {
-        UnsafeByteArrayWeak {
+impl __UnsafeByteArray {
+    pub(crate) fn downgrade(array: &__UnsafeByteArray) -> __UnsafeByteArrayWeak {
+        __UnsafeByteArrayWeak {
             inner: UnsafeArrayInner::downgrade(&array.inner),
         }
     }
@@ -178,16 +182,19 @@ impl UnsafeByteArray {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__UnsafeByteArray` used by the runtime.
+///
+/// Active message payloads rely on this weak wrapper to hold references without owning the array;
+/// use the public array types for application logic.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct UnsafeByteArrayWeak {
+pub struct __UnsafeByteArrayWeak {
     pub(crate) inner: UnsafeArrayInnerWeak,
 }
 
-impl UnsafeByteArrayWeak {
-    pub fn upgrade(&self) -> Option<UnsafeByteArray> {
+impl __UnsafeByteArrayWeak {
+    pub fn upgrade(&self) -> Option<__UnsafeByteArray> {
         if let Some(inner) = self.inner.upgrade() {
-            Some(UnsafeByteArray { inner })
+            Some(__UnsafeByteArray { inner })
         } else {
             None
         }
@@ -1031,8 +1038,8 @@ impl<T: Dist> AsyncFrom<NetworkAtomicArray<T>> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + 'static> From<UnsafeByteArray> for UnsafeArray<T> {
-    fn from(array: UnsafeByteArray) -> Self {
+impl<T: Dist + 'static> From<__UnsafeByteArray> for UnsafeArray<T> {
+    fn from(array: __UnsafeByteArray) -> Self {
         let inner = array.inner;
         let mem_region = unsafe { inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
@@ -1049,8 +1056,8 @@ impl<T: Dist + 'static> From<UnsafeByteArray> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist + 'static> From<&UnsafeByteArray> for UnsafeArray<T> {
-    fn from(array: &UnsafeByteArray) -> Self {
+impl<T: Dist + 'static> From<&__UnsafeByteArray> for UnsafeArray<T> {
+    fn from(array: &__UnsafeByteArray) -> Self {
         let mem_region = unsafe { array.inner.data.mem_region.as_base::<T>() };
         let sample = mem_region.as_slice()[0];
         let atomic_support = UnsafeArray::<T>::detect_atomic_support(
@@ -1066,15 +1073,15 @@ impl<T: Dist + 'static> From<&UnsafeByteArray> for UnsafeArray<T> {
     }
 }
 
-impl<T: Dist> From<UnsafeArray<T>> for UnsafeByteArray {
+impl<T: Dist> From<UnsafeArray<T>> for __UnsafeByteArray {
     fn from(array: UnsafeArray<T>) -> Self {
-        UnsafeByteArray { inner: array.inner }
+        __UnsafeByteArray { inner: array.inner }
     }
 }
 
-impl<T: Dist> From<&UnsafeArray<T>> for UnsafeByteArray {
+impl<T: Dist> From<&UnsafeArray<T>> for __UnsafeByteArray {
     fn from(array: &UnsafeArray<T>) -> Self {
-        UnsafeByteArray {
+        __UnsafeByteArray {
             inner: array.inner.clone(),
         }
     }

@@ -18,7 +18,7 @@ impl<T: ElementComparePartialEqOps + 'static> CompareExchangeEpsilonOps<T>
 {
 }
 
-impl<T: Dist + ElementOps> LocalAccessOps<T> for GenericAtomicLocalData<T> {
+impl<T: Dist + ElementOps> LocalAccessOps<T> for __GenericAtomicLocalData<T> {
     fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         idx_vals.for_each(|(i, val)| {
             self.at(i).store(val);
@@ -29,7 +29,7 @@ impl<T: Dist + ElementOps> LocalAccessOps<T> for GenericAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for GenericAtomicLocalData<T> {
+impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for __GenericAtomicLocalData<T> {
     fn local_fetch_add(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -106,7 +106,7 @@ impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for GenericAtomicLoca
     }
 }
 
-impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for GenericAtomicLocalData<T> {
+impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for __GenericAtomicLocalData<T> {
     fn local_fetch_bit_and(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -153,13 +153,13 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for GenericAtomicLocalData<
     }
 }
 
-impl<T: ElementOps> LocalReadOnlyOps<T> for GenericAtomicLocalData<T> {
+impl<T: ElementOps> LocalReadOnlyOps<T> for __GenericAtomicLocalData<T> {
     fn local_load(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         idx_vals.map(|(i, _val)| self.at(i).load()).collect()
     }
 }
 
-impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for GenericAtomicLocalData<T> {
+impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for __GenericAtomicLocalData<T> {
     fn local_fetch_shl(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -191,7 +191,7 @@ impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for GenericAtomicLocalData<T> {
     }
 }
 
-impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for GenericAtomicLocalData<T> {
+impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for __GenericAtomicLocalData<T> {
     fn local_compare_exchange(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -204,7 +204,7 @@ impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for GenericAtomicLocalDa
 }
 
 impl<T: ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
-    for GenericAtomicLocalData<T>
+    for __GenericAtomicLocalData<T>
 {
     fn local_compare_exchange_epsilon(
         &mut self,

@@ -7,7 +7,7 @@ mod rdma;
 use crate::array::atomic::AtomicElement;
 use crate::array::native_atomic::NativeAtomicType;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
 use crate::array::r#unsafe::UnsafeAtomicOpSupport;
 use crate::barrier::BarrierHandle;
 use crate::darc::DarcMode;
@@ -798,56 +798,65 @@ impl<T: Remote> crate::active_messaging::DarcSerde for NetworkAtomicArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct NetworkAtomicByteArray {
-    pub(crate) array: UnsafeByteArray,
+pub struct __NetworkAtomicByteArray {
+    pub(crate) array: __UnsafeByteArray,
     pub(crate) orig_t: NetworkAtomicType,
 }
-impl NetworkAtomicByteArray {
-    pub fn downgrade(array: &NetworkAtomicByteArray) -> NetworkAtomicByteArrayWeak {
-        NetworkAtomicByteArrayWeak {
-            array: UnsafeByteArray::downgrade(&array.array),
+impl __NetworkAtomicByteArray {
+    pub fn downgrade(array: &__NetworkAtomicByteArray) -> __NetworkAtomicByteArrayWeak {
+        __NetworkAtomicByteArrayWeak {
+            array: __UnsafeByteArray::downgrade(&array.array),
             orig_t: array.orig_t,
         }
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__NetworkAtomicByteArray` used by the runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct NetworkAtomicByteArrayWeak {
-    pub(crate) array: UnsafeByteArrayWeak,
+pub struct __NetworkAtomicByteArrayWeak {
+    pub(crate) array: __UnsafeByteArrayWeak,
     pub(crate) orig_t: NetworkAtomicType,
 }
 
-impl NetworkAtomicByteArrayWeak {
-    pub fn upgrade(&self) -> Option<NetworkAtomicByteArray> {
-        Some(NetworkAtomicByteArray {
+impl __NetworkAtomicByteArrayWeak {
+    pub fn upgrade(&self) -> Option<__NetworkAtomicByteArray> {
+        Some(__NetworkAtomicByteArray {
             array: self.array.upgrade()?,
             orig_t: self.orig_t,
         })
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime local-data wrapper for NetworkAtomic arrays.
+/// Not intended for direct use by library users.
+/// Users should interact with the public `AtomicLocalData` API instead;
+/// see [AtomicLocalData][crate::array::atomic::AtomicLocalData].
 #[derive(Clone, Debug)]
-pub struct NetworkAtomicLocalData<T: Remote> {
+pub struct __NetworkAtomicLocalData<T: Remote> {
     // + NetworkAtomicOps> {
     pub(crate) array: NetworkAtomicArray<T>,
     start_index: usize,
     end_index: usize,
 }
 
-#[doc(hidden)]
+
+/// Internal iterator for `__NetworkAtomicLocalData`.
+/// Not intended for direct use by library users.
+/// Users should iterate via the public `AtomicLocalDataIter` type instead;
+/// see [AtomicLocalDataIter][crate::array::atomic::AtomicLocalDataIter].
 #[derive(Debug)]
-pub struct NetworkAtomicLocalDataIter<T: Dist> {
+pub struct __NetworkAtomicLocalDataIter<T: Dist> {
     //+ NetworkAtomicOps> {
     array: NetworkAtomicArray<T>,
     index: usize,
     end_index: usize,
 }
 
-impl<T: Dist> NetworkAtomicLocalData<T> {
+impl<T: Dist> __NetworkAtomicLocalData<T> {
     pub fn at(&self, index: usize) -> NetworkAtomicElement<T> {
         NetworkAtomicElement {
             array: self.array.clone(),
@@ -866,16 +875,16 @@ impl<T: Dist> NetworkAtomicLocalData<T> {
         self.end_index - self.start_index
     }
 
-    pub fn iter(&self) -> NetworkAtomicLocalDataIter<T> {
-        NetworkAtomicLocalDataIter {
+    pub fn iter(&self) -> __NetworkAtomicLocalDataIter<T> {
+        __NetworkAtomicLocalDataIter {
             array: self.array.clone(),
             index: self.start_index,
             end_index: self.end_index,
         }
     }
 
-    pub fn sub_data(&self, start_index: usize, end_index: usize) -> NetworkAtomicLocalData<T> {
-        NetworkAtomicLocalData {
+    pub fn sub_data(&self, start_index: usize, end_index: usize) -> __NetworkAtomicLocalData<T> {
+        __NetworkAtomicLocalData {
             array: self.array.clone(),
             start_index: start_index,
             end_index: std::cmp::min(end_index, self.array.num_elems_local()),
@@ -968,7 +977,7 @@ impl<T: Dist> NetworkAtomicLocalData<T> {
     // }
 }
 
-impl<T: Dist + serde::Serialize> serde::Serialize for NetworkAtomicLocalData<T> {
+impl<T: Dist + serde::Serialize> serde::Serialize for __NetworkAtomicLocalData<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -981,11 +990,11 @@ impl<T: Dist + serde::Serialize> serde::Serialize for NetworkAtomicLocalData<T> 
     }
 }
 
-impl<T: Dist> IntoIterator for NetworkAtomicLocalData<T> {
+impl<T: Dist> IntoIterator for __NetworkAtomicLocalData<T> {
     type Item = NetworkAtomicElement<T>;
-    type IntoIter = NetworkAtomicLocalDataIter<T>;
+    type IntoIter = __NetworkAtomicLocalDataIter<T>;
     fn into_iter(self) -> Self::IntoIter {
-        NetworkAtomicLocalDataIter {
+        __NetworkAtomicLocalDataIter {
             array: self.array,
             index: self.start_index,
             end_index: self.end_index,
@@ -993,7 +1002,7 @@ impl<T: Dist> IntoIterator for NetworkAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist> Iterator for NetworkAtomicLocalDataIter<T> {
+impl<T: Dist> Iterator for __NetworkAtomicLocalDataIter<T> {
     type Item = NetworkAtomicElement<T>;
     fn next(&mut self) -> Option<Self::Item> {
         if self.index < self.end_index {
@@ -1087,16 +1096,16 @@ impl<T: Dist> NetworkAtomicArray<T> {
         }
     }
 
-    pub fn local_data(&self) -> NetworkAtomicLocalData<T> {
-        NetworkAtomicLocalData {
+    pub fn local_data(&self) -> __NetworkAtomicLocalData<T> {
+        __NetworkAtomicLocalData {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
         }
     }
 
-    pub fn mut_local_data(&self) -> NetworkAtomicLocalData<T> {
-        NetworkAtomicLocalData {
+    pub fn mut_local_data(&self) -> __NetworkAtomicLocalData<T> {
+        __NetworkAtomicLocalData {
             array: self.clone(),
             start_index: 0,
             end_index: self.array.num_elems_local(),
@@ -1153,9 +1162,9 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for NetworkAtomicArray<T> {
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NetworkAtomicArray<T>> for NetworkAtomicByteArray {
+impl<T: Dist> From<NetworkAtomicArray<T>> for __NetworkAtomicByteArray {
     fn from(array: NetworkAtomicArray<T>) -> Self {
-        NetworkAtomicByteArray {
+        __NetworkAtomicByteArray {
             array: array.array.into(),
             orig_t: array.orig_t,
         }
@@ -1165,7 +1174,7 @@ impl<T: Dist> From<NetworkAtomicArray<T>> for NetworkAtomicByteArray {
 //#[doc(hidden)]
 impl<T: Dist> From<NetworkAtomicArray<T>> for LamellarByteArray {
     fn from(array: NetworkAtomicArray<T>) -> Self {
-        LamellarByteArray::NetworkAtomicArray(NetworkAtomicByteArray {
+        LamellarByteArray::NetworkAtomicArray(__NetworkAtomicByteArray {
             array: array.array.into(),
             orig_t: array.orig_t,
         })
@@ -1183,9 +1192,9 @@ impl<T: Dist> From<LamellarByteArray> for NetworkAtomicArray<T> {
     }
 }
 
-impl From<NetworkAtomicByteArray> for NativeAtomicByteArray {
-    fn from(array: NetworkAtomicByteArray) -> Self {
-        NativeAtomicByteArray {
+impl From<__NetworkAtomicByteArray> for __NativeAtomicByteArray {
+    fn from(array: __NetworkAtomicByteArray) -> Self {
+        __NativeAtomicByteArray {
             array: array.array,
             orig_t: array.orig_t.into(),
         }
@@ -1193,9 +1202,9 @@ impl From<NetworkAtomicByteArray> for NativeAtomicByteArray {
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NetworkAtomicArray<T>> for AtomicByteArray {
+impl<T: Dist> From<NetworkAtomicArray<T>> for __AtomicByteArray {
     fn from(array: NetworkAtomicArray<T>) -> Self {
-        AtomicByteArray::NetworkAtomicByteArray(NetworkAtomicByteArray {
+        __AtomicByteArray::NetworkAtomicByteArray(__NetworkAtomicByteArray {
             array: array.array.into(),
             orig_t: array.orig_t,
         })
@@ -1203,8 +1212,8 @@ impl<T: Dist> From<NetworkAtomicArray<T>> for AtomicByteArray {
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NetworkAtomicByteArray> for NetworkAtomicArray<T> {
-    fn from(array: NetworkAtomicByteArray) -> Self {
+impl<T: Dist> From<__NetworkAtomicByteArray> for NetworkAtomicArray<T> {
+    fn from(array: __NetworkAtomicByteArray) -> Self {
         let array: UnsafeArray<T> = array.array.into();
         NetworkAtomicArray {
             orig_t: NetworkAtomicType::of::<T>(),
@@ -1214,20 +1223,20 @@ impl<T: Dist> From<NetworkAtomicByteArray> for NetworkAtomicArray<T> {
     }
 }
 
-impl<T: Dist> From<&NetworkAtomicByteArray> for NetworkAtomicArray<T> {
-    fn from(array: &NetworkAtomicByteArray) -> Self {
+impl<T: Dist> From<&__NetworkAtomicByteArray> for NetworkAtomicArray<T> {
+    fn from(array: &__NetworkAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
-impl<T: Dist> From<&mut NetworkAtomicByteArray> for NetworkAtomicArray<T> {
-    fn from(array: &mut NetworkAtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __NetworkAtomicByteArray> for NetworkAtomicArray<T> {
+    fn from(array: &mut __NetworkAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
 
 //#[doc(hidden)]
-impl<T: Dist> From<NetworkAtomicByteArray> for AtomicArray<T> {
-    fn from(array: NetworkAtomicByteArray) -> Self {
+impl<T: Dist> From<__NetworkAtomicByteArray> for AtomicArray<T> {
+    fn from(array: __NetworkAtomicByteArray) -> Self {
         let array: UnsafeArray<T> = array.array.into();
         NetworkAtomicArray {
             orig_t: NetworkAtomicType::of::<T>(),
@@ -1237,13 +1246,13 @@ impl<T: Dist> From<NetworkAtomicByteArray> for AtomicArray<T> {
         .into()
     }
 }
-impl<T: Dist> From<&NetworkAtomicByteArray> for AtomicArray<T> {
-    fn from(array: &NetworkAtomicByteArray) -> Self {
+impl<T: Dist> From<&__NetworkAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &__NetworkAtomicByteArray) -> Self {
         array.clone().into()
     }
 }
-impl<T: Dist> From<&mut NetworkAtomicByteArray> for AtomicArray<T> {
-    fn from(array: &mut NetworkAtomicByteArray) -> Self {
+impl<T: Dist> From<&mut __NetworkAtomicByteArray> for AtomicArray<T> {
+    fn from(array: &mut __NetworkAtomicByteArray) -> Self {
         array.clone().into()
     }
 }

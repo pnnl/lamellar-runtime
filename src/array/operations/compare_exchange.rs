@@ -739,29 +739,29 @@ pub trait LocalCompareExchangeOps<T: ElementCompareEqOps> {
     ) -> Vec<Result<T, T>>;
 }
 
-impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for LamellarMutLocalData<'_, T> {
+impl<T: ElementCompareEqOps> LocalCompareExchangeOps<T> for __LamellarMutLocalData<'_, T> {
     fn local_compare_exchange(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
         current: T,
     ) -> Vec<Result<T, T>> {
         match self {
-            LamellarMutLocalData::Slice(data) => data.local_compare_exchange(idx_vals, current),
-            LamellarMutLocalData::LocalLock(ref mut data) => {
+            __LamellarMutLocalData::Slice(data) => data.local_compare_exchange(idx_vals, current),
+            __LamellarMutLocalData::LocalLock(ref mut data) => {
                 let mut slice: &mut [T] = &mut *data;
                 slice.local_compare_exchange(idx_vals, current)
             }
-            LamellarMutLocalData::GlobalLock(ref mut data) => {
+            __LamellarMutLocalData::GlobalLock(ref mut data) => {
                 let mut slice: &mut [T] = &mut *data;
                 slice.local_compare_exchange(idx_vals, current)
             }
-            LamellarMutLocalData::NativeAtomic(ref mut data) => {
+            __LamellarMutLocalData::NativeAtomic(ref mut data) => {
                 data.local_compare_exchange(idx_vals, current)
             }
-            LamellarMutLocalData::GenericAtomic(ref mut data) => {
+            __LamellarMutLocalData::GenericAtomic(ref mut data) => {
                 data.local_compare_exchange(idx_vals, current)
             }
-            LamellarMutLocalData::NetworkAtomic(ref mut data) => {
+            __LamellarMutLocalData::NetworkAtomic(ref mut data) => {
                 data.local_compare_exchange(idx_vals, current)
             }
         }
@@ -798,7 +798,7 @@ pub trait LocalCompareExchangeOpsEpsilon<T: ElementComparePartialEqOps> {
 }
 
 impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
-    for LamellarMutLocalData<'_, T>
+    for __LamellarMutLocalData<'_, T>
 {
     fn local_compare_exchange_epsilon(
         &mut self,
@@ -807,24 +807,24 @@ impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
         eps: T,
     ) -> Vec<Result<T, T>> {
         match self {
-            LamellarMutLocalData::Slice(data) => {
+            __LamellarMutLocalData::Slice(data) => {
                 data.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
-            LamellarMutLocalData::LocalLock(ref mut data) => {
+            __LamellarMutLocalData::LocalLock(ref mut data) => {
                 let mut slice: &mut [T] = &mut *data;
                 slice.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
-            LamellarMutLocalData::GlobalLock(ref mut data) => {
+            __LamellarMutLocalData::GlobalLock(ref mut data) => {
                 let mut slice: &mut [T] = &mut *data;
                 slice.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
-            LamellarMutLocalData::NativeAtomic(ref mut data) => {
+            __LamellarMutLocalData::NativeAtomic(ref mut data) => {
                 data.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
-            LamellarMutLocalData::GenericAtomic(ref mut data) => {
+            __LamellarMutLocalData::GenericAtomic(ref mut data) => {
                 data.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
-            LamellarMutLocalData::NetworkAtomic(ref mut data) => {
+            __LamellarMutLocalData::NetworkAtomic(ref mut data) => {
                 data.local_compare_exchange_epsilon(idx_vals, current, eps)
             }
         }

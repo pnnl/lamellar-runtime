@@ -120,39 +120,39 @@ pub use r#unsafe::{
         multi_val_single_idx_ops_new, single_val_multi_idx_ops, single_val_multi_idx_ops_new,
         BatchReturnType,
     },
-    UnsafeArray, UnsafeByteArray, UnsafeByteArrayWeak,
+    UnsafeArray, __UnsafeByteArray, __UnsafeByteArrayWeak,
 };
 pub(crate) mod read_only;
-pub use read_only::{ReadOnlyArray, ReadOnlyByteArray, ReadOnlyByteArrayWeak, ReadOnlyLocalChunks};
+pub use read_only::{ReadOnlyArray, __ReadOnlyByteArray, __ReadOnlyByteArrayWeak, ReadOnlyLocalChunks};
 
 pub(crate) mod atomic;
-pub use atomic::{AtomicArray, AtomicByteArray, AtomicByteArrayWeak, AtomicLocalData};
+pub use atomic::{AtomicArray, __AtomicByteArray, __AtomicByteArrayWeak, AtomicLocalData};
 
 pub(crate) mod generic_atomic;
 pub use generic_atomic::{
-    GenericAtomicArray, GenericAtomicByteArray, GenericAtomicByteArrayWeak, GenericAtomicLocalData,
+    GenericAtomicArray, __GenericAtomicByteArray, __GenericAtomicByteArrayWeak, __GenericAtomicLocalData,
 };
 
 pub(crate) mod native_atomic;
 pub use native_atomic::{
-    NativeAtomicArray, NativeAtomicByteArray, NativeAtomicByteArrayWeak, NativeAtomicLocalData,
+    NativeAtomicArray, __NativeAtomicByteArray, __NativeAtomicByteArrayWeak, __NativeAtomicLocalData,
 };
 
 pub(crate) mod network_atomic;
 pub use network_atomic::{
-    NetworkAtomicArray, NetworkAtomicByteArray, NetworkAtomicByteArrayWeak, NetworkAtomicLocalData,
+    NetworkAtomicArray, __NetworkAtomicByteArray, __NetworkAtomicByteArrayWeak, __NetworkAtomicLocalData,
 };
 
 pub(crate) mod local_lock_atomic;
 pub use local_lock_atomic::{
-    LocalLockArray, LocalLockByteArray, LocalLockByteArrayWeak, LocalLockLocalChunks,
+    LocalLockArray, __LocalLockByteArray, __LocalLockByteArrayWeak, LocalLockLocalChunks,
     LocalLockLocalChunksMut, LocalLockLocalData, LocalLockMutLocalData, LocalLockReadGuard,
     LocalLockWriteGuard,
 };
 
 pub(crate) mod global_lock_atomic;
 pub use global_lock_atomic::{
-    GlobalLockArray, GlobalLockByteArray, GlobalLockByteArrayWeak, GlobalLockLocalData,
+    GlobalLockArray, __GlobalLockByteArray, __GlobalLockByteArrayWeak, GlobalLockLocalData,
     GlobalLockMutLocalData, GlobalLockReadGuard, GlobalLockWriteGuard,
 };
 
@@ -647,15 +647,10 @@ where
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 #[serde(bound = "T: Dist + serde::Serialize + serde::de::DeserializeOwned + 'static")]
 pub enum LamellarReadArray<T: Dist + 'static> {
-    ///
     UnsafeArray(UnsafeArray<T>),
-    ///
     ReadOnlyArray(ReadOnlyArray<T>),
-    ///
     AtomicArray(AtomicArray<T>),
-    ///
     LocalLockArray(LocalLockArray<T>),
-    ///
     GlobalLockArray(GlobalLockArray<T>),
 }
 
@@ -664,41 +659,33 @@ pub enum LamellarReadArray<T: Dist + 'static> {
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum LamellarByteArray {
     //we intentially do not include "byte" in the variant name to ease construciton in the proc macros
-    //#[doc(hidden)]
-    UnsafeArray(UnsafeByteArray),
-    //#[doc(hidden)]
-    ReadOnlyArray(ReadOnlyByteArray),
-    //#[doc(hidden)]
-    AtomicArray(AtomicByteArray),
-    //#[doc(hidden)]
-    NativeAtomicArray(NativeAtomicByteArray),
-    //#[doc(hidden)]
-    GenericAtomicArray(GenericAtomicByteArray),
-    //#[doc(hidden)]
-    NetworkAtomicArray(NetworkAtomicByteArray),
-    //#[doc(hidden)]
-    LocalLockArray(LocalLockByteArray),
-    //#[doc(hidden)]
-    GlobalLockArray(GlobalLockByteArray),
+    UnsafeArray(__UnsafeByteArray),
+    ReadOnlyArray(__ReadOnlyByteArray),
+    AtomicArray(__AtomicByteArray),
+    NativeAtomicArray(__NativeAtomicByteArray),
+    GenericAtomicArray(__GenericAtomicByteArray),
+    NetworkAtomicArray(__NetworkAtomicByteArray),
+    LocalLockArray(__LocalLockByteArray),
+    GlobalLockArray(__GlobalLockByteArray),
 }
 
 impl LamellarByteArray {
     pub fn type_id(&self) -> std::any::TypeId {
         match self {
-            LamellarByteArray::UnsafeArray(_) => std::any::TypeId::of::<UnsafeByteArray>(),
-            LamellarByteArray::ReadOnlyArray(_) => std::any::TypeId::of::<ReadOnlyByteArray>(),
-            LamellarByteArray::AtomicArray(_) => std::any::TypeId::of::<AtomicByteArray>(),
+            LamellarByteArray::UnsafeArray(_) => std::any::TypeId::of::<__UnsafeByteArray>(),
+            LamellarByteArray::ReadOnlyArray(_) => std::any::TypeId::of::<__ReadOnlyByteArray>(),
+            LamellarByteArray::AtomicArray(_) => std::any::TypeId::of::<__AtomicByteArray>(),
             LamellarByteArray::NativeAtomicArray(_) => {
-                std::any::TypeId::of::<NativeAtomicByteArray>()
+                std::any::TypeId::of::<__NativeAtomicByteArray>()
             }
             LamellarByteArray::GenericAtomicArray(_) => {
-                std::any::TypeId::of::<GenericAtomicByteArray>()
+                std::any::TypeId::of::<__GenericAtomicByteArray>()
             }
-            LamellarByteArray::LocalLockArray(_) => std::any::TypeId::of::<LocalLockByteArray>(),
-            LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<GlobalLockByteArray>(),
+            LamellarByteArray::LocalLockArray(_) => std::any::TypeId::of::<__LocalLockByteArray>(),
+            LamellarByteArray::GlobalLockArray(_) => std::any::TypeId::of::<__GlobalLockByteArray>(),
 
             LamellarByteArray::NetworkAtomicArray(_) => {
-                std::any::TypeId::of::<NetworkAtomicByteArray>()
+                std::any::TypeId::of::<__NetworkAtomicByteArray>()
             }
         }
     }
@@ -741,74 +728,74 @@ impl LamellarByteArray {
         }
     }
 
-    async fn local_data<'a, T: Dist>(&'a self) -> LamellarLocalData<'a, T> {
+    async fn local_data<'a, T: Dist>(&'a self) -> __LamellarLocalData<'a, T> {
         match self {
-            LamellarByteArray::UnsafeArray(array) => LamellarLocalData::Slice(array.local_data()),
-            LamellarByteArray::ReadOnlyArray(array) => LamellarLocalData::Slice(array.local_data()),
+            LamellarByteArray::UnsafeArray(array) => __LamellarLocalData::Slice(array.local_data()),
+            LamellarByteArray::ReadOnlyArray(array) => __LamellarLocalData::Slice(array.local_data()),
             LamellarByteArray::AtomicArray(array) => match AtomicArray::from(array) {
                 AtomicArray::NativeAtomicArray(array) => {
-                    LamellarLocalData::NativeAtomic(array.local_data())
+                    __LamellarLocalData::NativeAtomic(array.local_data())
                 }
                 AtomicArray::GenericAtomicArray(array) => {
-                    LamellarLocalData::GenericAtomic(array.local_data())
+                    __LamellarLocalData::GenericAtomic(array.local_data())
                 }
                 AtomicArray::NetworkAtomicArray(array) => {
-                    LamellarLocalData::NetworkAtomic(array.local_data())
+                    __LamellarLocalData::NetworkAtomic(array.local_data())
                 }
             },
             LamellarByteArray::NativeAtomicArray(array) => {
-                LamellarLocalData::NativeAtomic(NativeAtomicArray::from(array).local_data())
+                __LamellarLocalData::NativeAtomic(NativeAtomicArray::from(array).local_data())
             }
             LamellarByteArray::GenericAtomicArray(array) => {
-                LamellarLocalData::GenericAtomic(GenericAtomicArray::from(array).local_data())
+                __LamellarLocalData::GenericAtomic(GenericAtomicArray::from(array).local_data())
             }
             LamellarByteArray::LocalLockArray(array) => {
-                LamellarLocalData::LocalLock(LocalLockArray::from(array).read_local_data().await)
+                __LamellarLocalData::LocalLock(LocalLockArray::from(array).read_local_data().await)
             }
             LamellarByteArray::GlobalLockArray(array) => {
-                LamellarLocalData::GlobalLock(GlobalLockArray::from(array).read_local_data().await)
+                __LamellarLocalData::GlobalLock(GlobalLockArray::from(array).read_local_data().await)
             }
             LamellarByteArray::NetworkAtomicArray(array) => {
-                LamellarLocalData::NetworkAtomic(NetworkAtomicArray::from(array).local_data())
+                __LamellarLocalData::NetworkAtomic(NetworkAtomicArray::from(array).local_data())
             }
         }
     }
 
-    async fn mut_local_data<'a, T: Dist>(&'a mut self) -> LamellarMutLocalData<'a, T> {
+    async fn mut_local_data<'a, T: Dist>(&'a mut self) -> __LamellarMutLocalData<'a, T> {
         match self {
             LamellarByteArray::UnsafeArray(ref mut array) => {
-                LamellarMutLocalData::Slice(array.mut_local_data())
+                __LamellarMutLocalData::Slice(array.mut_local_data())
             }
             LamellarByteArray::ReadOnlyArray(ref mut _array) => {
                 panic!("ReadOnlyArray does not support mut_local_data")
             }
             LamellarByteArray::AtomicArray(ref mut array) => match AtomicArray::from(array) {
                 AtomicArray::NativeAtomicArray(ref mut array) => {
-                    LamellarMutLocalData::NativeAtomic(array.mut_local_data())
+                    __LamellarMutLocalData::NativeAtomic(array.mut_local_data())
                 }
                 AtomicArray::GenericAtomicArray(ref mut array) => {
-                    LamellarMutLocalData::GenericAtomic(array.mut_local_data())
+                    __LamellarMutLocalData::GenericAtomic(array.mut_local_data())
                 }
                 AtomicArray::NetworkAtomicArray(ref mut array) => {
-                    LamellarMutLocalData::NetworkAtomic(array.mut_local_data())
+                    __LamellarMutLocalData::NetworkAtomic(array.mut_local_data())
                 }
             },
             LamellarByteArray::NativeAtomicArray(ref mut array) => {
-                LamellarMutLocalData::NativeAtomic(NativeAtomicArray::from(array).mut_local_data())
+                __LamellarMutLocalData::NativeAtomic(NativeAtomicArray::from(array).mut_local_data())
             }
             LamellarByteArray::GenericAtomicArray(ref mut array) => {
-                LamellarMutLocalData::GenericAtomic(
+                __LamellarMutLocalData::GenericAtomic(
                     GenericAtomicArray::from(array).mut_local_data(),
                 )
             }
-            LamellarByteArray::LocalLockArray(ref mut array) => LamellarMutLocalData::LocalLock(
+            LamellarByteArray::LocalLockArray(ref mut array) => __LamellarMutLocalData::LocalLock(
                 LocalLockArray::from(array).write_local_data().await,
             ),
-            LamellarByteArray::GlobalLockArray(ref mut array) => LamellarMutLocalData::GlobalLock(
+            LamellarByteArray::GlobalLockArray(ref mut array) => __LamellarMutLocalData::GlobalLock(
                 GlobalLockArray::from(array).write_local_data().await,
             ),
             LamellarByteArray::NetworkAtomicArray(ref mut array) => {
-                LamellarMutLocalData::NetworkAtomic(
+                __LamellarMutLocalData::NetworkAtomic(
                     NetworkAtomicArray::from(array).mut_local_data(),
                 )
             }
@@ -841,24 +828,35 @@ impl crate::active_messaging::DarcSerde for LamellarByteArray {
     //     }
     // }
 }
-#[doc(hidden)]
-enum LamellarMutLocalData<'a, T: Dist> {
+
+/// Internal runtime representation of mutable local buffers.
+///
+/// These variants exist so that active messages and other runtime components can have
+/// direct access to the underlying storage, which requires the enum and its variants
+/// to be public within the crate. User code should not construct or depend on this enum
+/// directly; prefer `AtomicLocalData`/`LamellarArray::mut_local_data` for public APIs.
+enum __LamellarMutLocalData<'a, T: Dist> {
     Slice(&'a mut [T]),
     LocalLock(LocalLockMutLocalData<T>),
     GlobalLock(GlobalLockMutLocalData<T>),
-    NativeAtomic(NativeAtomicLocalData<T>),
-    GenericAtomic(GenericAtomicLocalData<T>),
-    NetworkAtomic(NetworkAtomicLocalData<T>),
+    NativeAtomic(__NativeAtomicLocalData<T>),
+    GenericAtomic(__GenericAtomicLocalData<T>),
+    NetworkAtomic(__NetworkAtomicLocalData<T>),
+    
 }
 
-#[doc(hidden)]
-enum LamellarLocalData<'a, T: Dist> {
+/// Internal runtime representation of read-only local buffers used by active messages.
+///
+/// The enum exists to expose storage (slices, local locks, atomics) to serialization and
+/// AM dispatch logic, even though user code should remain on the public-facing
+/// `AtomicLocalData`/`LamellarArray::local_data` APIs.
+enum __LamellarLocalData<'a, T: Dist> {
     Slice(&'a [T]),
     LocalLock(LocalLockLocalData<T>),
     GlobalLock(GlobalLockLocalData<T>),
-    NativeAtomic(NativeAtomicLocalData<T>),
-    GenericAtomic(GenericAtomicLocalData<T>),
-    NetworkAtomic(NetworkAtomicLocalData<T>),
+    NativeAtomic(__NativeAtomicLocalData<T>),
+    GenericAtomic(__GenericAtomicLocalData<T>),
+    NetworkAtomic(__NetworkAtomicLocalData<T>),
 }
 
 impl<T: Dist + 'static> crate::active_messaging::DarcSerde for LamellarReadArray<T> {

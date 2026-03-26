@@ -972,7 +972,7 @@ ImplNetworkAtomicOps!(i32, AtomicI32);
 ImplNetworkAtomicOps!(i64, AtomicI64);
 ImplNetworkAtomicOps!(isize, AtomicIsize);
 
-impl<T: Dist> NetworkAtomicLocalData<T> {
+impl<T: Dist> __NetworkAtomicLocalData<T> {
     fn inner_op<A: NetworkAtomicOps<T, A>>(
         &self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -1094,7 +1094,7 @@ macro_rules! local_op {
     }};
 }
 
-impl<T: Dist + ElementOps> LocalAccessOps<T> for NetworkAtomicLocalData<T> {
+impl<T: Dist + ElementOps> LocalAccessOps<T> for __NetworkAtomicLocalData<T> {
     fn local_store(&mut self, idx_vals: impl Iterator<Item = (usize, T)>) {
         local_op!(self, idx_vals, false, store);
     }
@@ -1104,7 +1104,7 @@ impl<T: Dist + ElementOps> LocalAccessOps<T> for NetworkAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for NetworkAtomicLocalData<T> {
+impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for __NetworkAtomicLocalData<T> {
     fn local_fetch_add(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -1146,7 +1146,7 @@ impl<T: Dist + ElementArithmeticOps> LocalArithmeticOps<T> for NetworkAtomicLoca
     }
 }
 
-impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for NetworkAtomicLocalData<T> {
+impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for __NetworkAtomicLocalData<T> {
     fn local_fetch_bit_and(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -1172,13 +1172,13 @@ impl<T: Dist + ElementBitWiseOps> LocalBitWiseOps<T> for NetworkAtomicLocalData<
     }
 }
 
-impl<T: ElementOps> LocalReadOnlyOps<T> for NetworkAtomicLocalData<T> {
+impl<T: ElementOps> LocalReadOnlyOps<T> for __NetworkAtomicLocalData<T> {
     fn local_load<'a>(&self, idx_vals: impl Iterator<Item = (usize, T)>) -> Vec<T> {
         local_op!(self, idx_vals, true, load).unwrap()
     }
 }
 
-impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for NetworkAtomicLocalData<T> {
+impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for __NetworkAtomicLocalData<T> {
     fn local_fetch_shl(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -1196,7 +1196,7 @@ impl<T: Dist + ElementShiftOps> LocalShiftOps<T> for NetworkAtomicLocalData<T> {
     }
 }
 
-impl<T: Dist + ElementCompareEqOps> LocalCompareExchangeOps<T> for NetworkAtomicLocalData<T> {
+impl<T: Dist + ElementCompareEqOps> LocalCompareExchangeOps<T> for __NetworkAtomicLocalData<T> {
     fn local_compare_exchange(
         &mut self,
         idx_vals: impl Iterator<Item = (usize, T)>,
@@ -1270,7 +1270,7 @@ impl<T: Dist + ElementCompareEqOps> LocalCompareExchangeOps<T> for NetworkAtomic
 }
 
 impl<T: Dist + ElementComparePartialEqOps> LocalCompareExchangeOpsEpsilon<T>
-    for NetworkAtomicLocalData<T>
+    for __NetworkAtomicLocalData<T>
 {
     fn local_compare_exchange_epsilon(
         &mut self,

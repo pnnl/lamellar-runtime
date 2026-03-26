@@ -11,7 +11,7 @@ use handle::{
 pub(crate) mod operations;
 mod rdma;
 use crate::array::private::ArrayExecAm;
-use crate::array::r#unsafe::{UnsafeByteArray, UnsafeByteArrayWeak};
+use crate::array::r#unsafe::{__UnsafeByteArray, __UnsafeByteArrayWeak};
 use crate::array::AsyncFrom;
 use crate::barrier::BarrierHandle;
 use crate::darc::local_rw_darc::LocalRwDarcWriteGuard;
@@ -59,32 +59,34 @@ impl<T: Remote> crate::active_messaging::DarcSerde for LocalLockArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct LocalLockByteArray {
+pub struct __LocalLockByteArray {
     lock: LocalRwDarc<()>,
-    pub(crate) array: UnsafeByteArray,
+    pub(crate) array: __UnsafeByteArray,
 }
 
-impl LocalLockByteArray {
-    pub fn downgrade(array: &LocalLockByteArray) -> LocalLockByteArrayWeak {
-        LocalLockByteArrayWeak {
+impl __LocalLockByteArray {
+    pub fn downgrade(array: &__LocalLockByteArray) -> __LocalLockByteArrayWeak {
+        __LocalLockByteArrayWeak {
             lock: array.lock.clone(),
-            array: UnsafeByteArray::downgrade(&array.array),
+            array: __UnsafeByteArray::downgrade(&array.array),
         }
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__LocalLockByteArray` used by the runtime.
+/// Not intended for direct use by library users.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct LocalLockByteArrayWeak {
+pub struct __LocalLockByteArrayWeak {
     lock: LocalRwDarc<()>,
-    pub(crate) array: UnsafeByteArrayWeak,
+    pub(crate) array: __UnsafeByteArrayWeak,
 }
 
-impl LocalLockByteArrayWeak {
-    pub fn upgrade(&self) -> Option<LocalLockByteArray> {
-        Some(LocalLockByteArray {
+impl __LocalLockByteArrayWeak {
+    pub fn upgrade(&self) -> Option<__LocalLockByteArray> {
+        Some(__LocalLockByteArray {
             lock: self.lock.clone(),
             array: self.array.upgrade()?,
         })
@@ -801,9 +803,9 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for LocalLockArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalLockArray<T>> for LocalLockByteArray {
+impl<T: Dist> From<LocalLockArray<T>> for __LocalLockByteArray {
     fn from(array: LocalLockArray<T>) -> Self {
-        LocalLockByteArray {
+        __LocalLockByteArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         }
@@ -811,7 +813,7 @@ impl<T: Dist> From<LocalLockArray<T>> for LocalLockByteArray {
 }
 impl<T: Dist> From<LocalLockArray<T>> for LamellarByteArray {
     fn from(array: LocalLockArray<T>) -> Self {
-        LamellarByteArray::LocalLockArray(LocalLockByteArray {
+        LamellarByteArray::LocalLockArray(__LocalLockByteArray {
             lock: array.lock.clone(),
             array: array.array.into(),
         })
@@ -828,8 +830,8 @@ impl<T: Dist> From<LamellarByteArray> for LocalLockArray<T> {
     }
 }
 
-impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
-    fn from(array: LocalLockByteArray) -> Self {
+impl<T: Dist> From<__LocalLockByteArray> for LocalLockArray<T> {
+    fn from(array: __LocalLockByteArray) -> Self {
         LocalLockArray {
             lock: array.lock.clone(),
             array: array.array.into(),
@@ -837,14 +839,14 @@ impl<T: Dist> From<LocalLockByteArray> for LocalLockArray<T> {
     }
 }
 
-impl<T: Dist> From<&LocalLockByteArray> for LocalLockArray<T> {
-    fn from(array: &LocalLockByteArray) -> Self {
+impl<T: Dist> From<&__LocalLockByteArray> for LocalLockArray<T> {
+    fn from(array: &__LocalLockByteArray) -> Self {
         array.clone().into()
     }
 }
 
-impl<T: Dist> From<&mut LocalLockByteArray> for LocalLockArray<T> {
-    fn from(array: &mut LocalLockByteArray) -> Self {
+impl<T: Dist> From<&mut __LocalLockByteArray> for LocalLockArray<T> {
+    fn from(array: &mut __LocalLockByteArray) -> Self {
         array.clone().into()
     }
 }

@@ -484,7 +484,7 @@ impl<T: Dist> LamellarRdmaGet<T> for NativeAtomicArray<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicGetPeAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     local_index: usize,           //local index
 }
 
@@ -557,7 +557,7 @@ impl<T: Dist + 'static> LamellarAm for NativeAtomicInitGetBufferAm<T> {
 }
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicRemoteGetBufferAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -596,7 +596,7 @@ impl LamellarAm for NativeAtomicRemoteGetBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicRemoteGetBufferPeAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     num_elems: usize,
     buf: OneSidedMemoryRegion<u8>,
@@ -692,7 +692,7 @@ impl<T: Dist + 'static, B: AsLamellarBuffer<T>> LamellarAm
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicRemoteGetIntoBufferAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     start_index: usize,
     len: usize,
 }
@@ -729,7 +729,7 @@ impl LamellarAm for NativeAtomicRemoteGetIntoBufferAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 struct NativeAtomicRemoteGetIntoBufferPeAm {
-    array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     offset: usize,
     num_elems: usize,
 }
@@ -851,7 +851,7 @@ impl<T: Dist + 'static> LamellarAm for NativeAtomicInitPutBufferAm<T> {
 
 #[lamellar_impl::AmDataRT(Debug)]
 pub(crate) struct NativeAtomicRemotePutAm {
-    pub(crate) array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    pub(crate) array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     pub(crate) start_index: usize,
     pub(crate) len: usize,
     #[serde(with = "serde_bytes")]
@@ -885,7 +885,7 @@ impl LamellarAm for NativeAtomicRemotePutAm {
 
 #[lamellar_impl::AmDataRT(Debug)]
 pub(crate) struct NativeAtomicRemotePePutAm {
-    pub(crate) array: NativeAtomicByteArray, //inner of the indices we need to place data into
+    pub(crate) array: __NativeAtomicByteArray, //inner of the indices we need to place data into
     pub(crate) start_index: usize,
     #[serde(with = "serde_bytes")]
     pub(crate) data: Vec<u8>,

@@ -33,15 +33,19 @@ impl<T: Remote> crate::active_messaging::DarcSerde for ReadOnlyArray<T> {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime data struct used by the Lamellar runtime for active message serialization.
+///
+/// The struct is exposed so the runtime can describe a concrete read-only payload without
+/// carrying the generic argument state across the transport layer. Application code should remain
+/// on the public `ReadOnlyArray` APIs.
 #[lamellar_impl::AmDataRT(Clone, Debug)]
-pub struct ReadOnlyByteArray {
-    pub(crate) array: UnsafeByteArray,
+pub struct __ReadOnlyByteArray {
+    pub(crate) array: __UnsafeByteArray,
 }
-impl ReadOnlyByteArray {
-    pub fn downgrade(array: &ReadOnlyByteArray) -> ReadOnlyByteArrayWeak {
-        ReadOnlyByteArrayWeak {
-            array: UnsafeByteArray::downgrade(&array.array),
+impl __ReadOnlyByteArray {
+    pub fn downgrade(array: &__ReadOnlyByteArray) -> __ReadOnlyByteArrayWeak {
+        __ReadOnlyByteArrayWeak {
+            array: __UnsafeByteArray::downgrade(&array.array),
         }
     }
     pub fn local_data<T: Dist>(&self) -> &[T] {
@@ -49,15 +53,19 @@ impl ReadOnlyByteArray {
     }
 }
 
-#[doc(hidden)]
+/// Internal runtime weak-reference wrapper for `__ReadOnlyByteArray` used by the runtime.
+///
+/// Active message payloads use this weak variant to retain handles to the read-only data while
+/// the receiver does not know the exact generic arguments; use the public array types for
+/// application logic.
 #[lamellar_impl::AmLocalDataRT(Clone, Debug)]
-pub struct ReadOnlyByteArrayWeak {
-    pub(crate) array: UnsafeByteArrayWeak,
+pub struct __ReadOnlyByteArrayWeak {
+    pub(crate) array: __UnsafeByteArrayWeak,
 }
 
-impl ReadOnlyByteArrayWeak {
-    pub fn upgrade(&self) -> Option<ReadOnlyByteArray> {
-        Some(ReadOnlyByteArray {
+impl __ReadOnlyByteArrayWeak {
+    pub fn upgrade(&self) -> Option<__ReadOnlyByteArray> {
+        Some(__ReadOnlyByteArray {
             array: self.array.upgrade()?,
         })
     }
@@ -450,15 +458,15 @@ impl<T: Dist> AsyncFrom<UnsafeArray<T>> for ReadOnlyArray<T> {
     }
 }
 
-impl<T: Dist> From<ReadOnlyArray<T>> for ReadOnlyByteArray {
+impl<T: Dist> From<ReadOnlyArray<T>> for __ReadOnlyByteArray {
     fn from(array: ReadOnlyArray<T>) -> Self {
-        ReadOnlyByteArray {
+        __ReadOnlyByteArray {
             array: array.array.into(),
         }
     }
 }
-impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
-    fn from(array: ReadOnlyByteArray) -> Self {
+impl<T: Dist> From<__ReadOnlyByteArray> for ReadOnlyArray<T> {
+    fn from(array: __ReadOnlyByteArray) -> Self {
         ReadOnlyArray {
             array: array.array.into(),
         }
@@ -466,7 +474,7 @@ impl<T: Dist> From<ReadOnlyByteArray> for ReadOnlyArray<T> {
 }
 impl<T: Dist> From<ReadOnlyArray<T>> for LamellarByteArray {
     fn from(array: ReadOnlyArray<T>) -> Self {
-        LamellarByteArray::ReadOnlyArray(ReadOnlyByteArray {
+        LamellarByteArray::ReadOnlyArray(__ReadOnlyByteArray {
             array: array.array.into(),
         })
     }
